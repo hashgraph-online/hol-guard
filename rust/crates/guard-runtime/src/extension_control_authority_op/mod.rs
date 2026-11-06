@@ -38,6 +38,7 @@ mod plans;
 mod plans_tests;
 mod policy_clear;
 pub(crate) mod records;
+mod reset;
 mod resume;
 mod seals;
 #[cfg(test)]
@@ -128,6 +129,7 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "migrate" => return migrate::migrate_op(request, key),
         "bootstrap" => return commit::bootstrap_op(request, key),
         "write_manifest" => return commit::write_manifest_op(request, key),
+        "reset" => return reset::reset_op(request),
         _ => return Err(INVALID.to_owned()),
     };
     Ok(outcome.unwrap_or_else(|fault| fault_value(&fault, Vec::new())))

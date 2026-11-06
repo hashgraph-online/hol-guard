@@ -184,9 +184,23 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// authority committed under `catalog_digest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_activation: Option<ExtensionControlManagedActivationV1>,
+    /// `reset`: why the authority is reset, and whether the catalog
+    /// manifests the lost key authenticated go with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset: Option<ExtensionControlResetV1>,
     /// `clear_policy`: the remote policy authority a clear removes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_clear: Option<ExtensionControlPolicyClearV1>,
+}
+
+/// An authority reset: the rows whose chain cannot be verified are archived
+/// under `reason` and removed so a fresh authority can be bootstrapped.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlResetV1 {
+    pub reason: String,
+    /// The key that authenticated the catalog manifests was lost.
+    pub drop_manifest: bool,
 }
 
 /// `clear_policy_bundle_authority`. Without `managed_revision` the resident

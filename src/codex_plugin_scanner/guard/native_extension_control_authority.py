@@ -140,6 +140,7 @@ def _required_feature(op: str) -> str:
         "resume",
         "migrate",
         "queue_change",
+        "reset",
         "write_anchor",
         "write_manifest",
     }:
