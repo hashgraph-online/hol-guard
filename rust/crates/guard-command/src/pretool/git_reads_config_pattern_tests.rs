@@ -14,6 +14,10 @@ fn proven(text: &str) -> bool {
 /// path screen's question -- could this glob select a private file? -- has no
 /// answer here, and asking it sent every pattern holding a `*` to review:
 /// `remote.*url` is the spelling a read of the configured remotes uses.
+///
+/// The directory options are not exercised here: `PathContext::default()` has
+/// no roots, so `-C <path>` is screened by the route that owns it and tested
+/// beside that route.
 #[test]
 fn a_configuration_pattern_holding_a_star_is_not_a_glob_over_the_working_tree() {
     for text in [
@@ -21,7 +25,6 @@ fn a_configuration_pattern_holding_a_star_is_not_a_glob_over_the_working_tree() 
         "config --get-regexp .*",
         "config --get-regexp remote*",
         "config --get-regexp remote\\..*\\.url",
-        "-C /tmp/checkout config --get-regexp remote.*url",
         "config get --regexp remote.*url",
     ] {
         assert!(proven(text), "{text}");
