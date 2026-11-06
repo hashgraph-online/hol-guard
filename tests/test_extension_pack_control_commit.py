@@ -87,7 +87,8 @@ def test_approved_control_commit_and_anchored_retry_install_the_same_pack_record
         assert activation_store.read(store) is None
         monkeypatch.setattr(store, "_write_and_verify_anchor", write_anchor)
         if failure in {"key-unavailable", "lineage-conflict"}:
-            from codex_plugin_scanner.guard.catalog_delivery import activation_journal
+            from codex_plugin_scanner.guard import native_command_control_authority_store
+            from codex_plugin_scanner.guard.catalog_delivery import active_security
             from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 
             table_names = (
@@ -115,9 +116,10 @@ def test_approved_control_commit_and_anchored_retry_install_the_same_pack_record
                 raise NativePolicySnapshotError(code)
 
             with monkeypatch.context() as transient:
-                transient.setattr(
-                    activation_journal, "_key" if failure == "key-unavailable" else "write_in_transaction", unavailable
-                )
+                if failure == "key-unavailable":
+                    transient.setattr(native_command_control_authority_store, "_key", unavailable)
+                else:
+                    transient.setattr(active_security, "read", unavailable)
                 with pytest.raises(NativePolicySnapshotError, match=code):
                     store.recover_extension_control_authority(
                         catalog_digest=registry.catalog_digest, migration_registry=registry

@@ -273,7 +273,10 @@ pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
-pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub(crate) use git_read_after_allow::{
+    git_reads_after_allowed_steps, git_step_overwrites_what_runs_next,
+    step_preserves_later_programs,
+};
 pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]

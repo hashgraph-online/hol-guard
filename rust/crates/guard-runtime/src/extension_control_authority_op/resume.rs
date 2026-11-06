@@ -376,7 +376,7 @@ impl Ctx<'_> {
     }
 
     /// `_export_last_good_authority` for the committed anchor just written.
-    fn export_last_good(&self, anchor: &Anchor) -> Res<()> {
+    pub(super) fn export_last_good(&self, anchor: &Anchor) -> Res<()> {
         let Some(snapshot) = self.snapshot_row()? else {
             return Ok(());
         };

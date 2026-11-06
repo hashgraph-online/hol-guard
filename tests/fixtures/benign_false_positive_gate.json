@@ -17126,6 +17126,159 @@
       "expect": "allow"
     },
     {
+      "id": "session-git-commit-heredoc-message",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -q -F - <<'MSG'\nfix(report): handle retry\n\nSecond paragraph.\nMSG"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-commit-heredoc-long-file-option",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit --file=- <<'MSG'\nfix(report): handle retry\nMSG"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-add-all-commit-heredoc-message",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add -A && git commit -q -F - <<'MSG'\nchore(report): update\nMSG"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-commit-heredoc-allow-empty",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the retry window\nMSG"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-heredoc-receiver-before-a-filter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git apply <<'MSG'\ndiff --git a/x b/x\nMSG\ncat"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-commit-heredoc-message-from-path",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -F notes.txt <<'MSG'\nfix(report): handle retry\nMSG"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-apply-heredoc-patch",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git apply <<'MSG'\ndiff --git a/x b/x\nMSG"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-commit-heredoc-then-removal",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -F - <<'MSG'\nfix(report): handle retry\nMSG\nrm -rf build"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-commit-heredoc-unquoted-delimiter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -F - <<MSG\n$(cat ~/.ssh/id_rsa)\nMSG"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "session-git-fetch-origin",
       "fix_area": "git",
       "harnesses": [
@@ -18484,6 +18637,39 @@
       "cwd": "org_app",
       "expect": "allow",
       "requires_sandbox": true
+    },
+    {
+      "id": "session-git-worktree-add-then-status-and-echo",
+      "fix_area": "git",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../app-portal-report-lane -b report-lane HEAD && cd ../app-portal-report-lane && git status --porcelain | head -3 && echo CLEAN"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-worktree-add-then-echo-before-the-read",
+      "fix_area": "git",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../app-portal-note-lane -b note-lane HEAD && cd ../app-portal-note-lane && echo entering && git log --oneline -3"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-worktree-add-then-pwd-and-status",
+      "fix_area": "git",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../parent-repo-pwd-lane -b pwd-lane HEAD && cd ../parent-repo-pwd-lane && pwd && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
     },
     {
       "id": "session-git-worktree-add-then-uv-pytest-in-checkout",
@@ -49076,6 +49262,130 @@
       "expect": "allow"
     },
     {
+      "id": "session-worktree-add-cd-new-branch-rev-parse",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-g HEAD && cd ../wt-chain-g && git checkout -b fix/chain-g && git rev-parse HEAD && git status --porcelain | head -3 && echo WORKTREE_READY"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-cd-switch-new-branch-status",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../wt-chain-h -b fix/chain-h origin/main && cd ../wt-chain-h && git switch -c fix/chain-h-review && git status --short"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-worktree-add-cd-new-branch-start-point",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-i HEAD && cd ../wt-chain-i && git checkout -b fix/chain-i HEAD~1 && git status --short"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-worktree-add-cd-checkout-existing-branch",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-j HEAD && cd ../wt-chain-j && git checkout main && git status --short"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "session-worktree-add-routed-new-branch-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-k HEAD && git -C ../wt-chain-k checkout -b fix/chain-k && git -C ../wt-chain-k log --oneline -1"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-routed-switch-new-branch-status",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-l HEAD && git -C ../wt-chain-l switch -c fix/chain-l && git -C ../wt-chain-l status --short"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-worktree-add-routed-new-branch-start-point",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-m HEAD && git -C ../wt-chain-m checkout -b fix/chain-m HEAD~1 && git -C ../wt-chain-m status --short"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-worktree-add-routed-force-create-branch",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add --detach ../wt-chain-n HEAD && git -C ../wt-chain-n checkout -B fix/chain-n && git -C ../wt-chain-n status --short"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "redirect-heredoc-sort-to-scratch",
       "fix_area": "redirect",
       "harnesses": [
@@ -52069,17 +52379,18 @@
       "requires_sandbox": true
     },
     {
-      "id": "claude-code-heredoc-commit-message",
+      "id": "session-git-commit-heredoc-message",
       "fix_area": "shell",
       "harnesses": [
+        "omp",
         "claude-code"
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "git add docs/notes.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
+        "command": "git add README.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
       },
       "cwd": "worktree",
-      "expect": "allow_or_review"
+      "expect": "allow"
     },
     {
       "id": "claude-code-grouped-find-xargs-quiet-errors",

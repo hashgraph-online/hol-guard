@@ -1244,6 +1244,21 @@ fn evaluate_envelope(
     // A cluster listing that names only inventory columns runs directly; the
     // rule that reviews it covers the whole `databases` group.
     super::doctl_reads::settle(&mut result, command_model, controls);
+    // A proven worktree chain that creates its branch in the checkout it
+    // just made: the catalog's own `checkout`/`switch` rule reviews over the
+    // allow `decide` already reached, so lift it before containment runs.
+    super::worktree_add::chain::settle(
+        &mut result,
+        command_model,
+        controls,
+        super::PathContext {
+            home_dir,
+            cwd,
+            ..context
+        },
+        deadline,
+        execution_environment,
+    );
     super::workspace_contained::convert(
         &mut result,
         &pre_floor,

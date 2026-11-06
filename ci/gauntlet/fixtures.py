@@ -18,6 +18,7 @@ from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
+from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
 from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
@@ -421,6 +422,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     checks.update(branch_return_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))
     checks.update(git_allow_checks(fixture.workspace, scenario_id))
+    checks.update(extension_allow_checks(fixture.workspace, scenario_id, EXECUTED_FLAG))
     checks.update(session_folder_checks(fixture.home, scenario_id))
     checks.update(worktree_checks(fixture.home, fixture.workspace, scenario_id, SETTINGS_BEFORE, SETTINGS_AFTER))
     if scenario_id in BUSINESS_CLI_CASES:
