@@ -650,6 +650,7 @@
       "src/pretool/workspace_contained_script_tests.rs",
       "src/pretool/workspace_contained_settings.rs",
       "src/pretool/workspace_contained_sibling.rs",
+      "src/pretool/workspace_contained_sibling_list.rs",
       "src/pretool/workspace_contained_vendored.rs",
       "src/pretool/workspace_git_config.rs",
       "src/pretool/workspace_git_config_echoed.rs",

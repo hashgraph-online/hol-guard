@@ -12368,6 +12368,86 @@
       "expect": "allow"
     },
     {
+      "id": "queue-sibling-dashboard-vite-build-chain",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/service-api/dashboard && ./node_modules/.bin/vite build && ./node_modules/.bin/vite build --mode staging"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-sibling-dashboard-vite-chain-bounded",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/service-api/dashboard && ./node_modules/.bin/vite build 2>&1 | head -20 && ./node_modules/.bin/vite build --mode staging 2>&1 | tail -5"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sibling-dashboard-vite-chain-unbounded-filter",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/service-api/dashboard && ./node_modules/.bin/vite build 2>&1 | cut -c1-80 && ./node_modules/.bin/vite build"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-dashboard-vite-chain-second-cd",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/service-api/dashboard && ./node_modules/.bin/vite build && cd ${HOME}"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-dashboard-vite-chain-outside-read",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/service-api/dashboard && ./node_modules/.bin/vite build && cat ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-sibling-dashboard-abs-vite-build",
       "fix_area": "shell",
       "harnesses": [

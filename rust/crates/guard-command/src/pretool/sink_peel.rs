@@ -181,7 +181,12 @@ pub(super) fn peel(
         let into_sibling_root = root.as_deref() == Some(directory.as_path()) && !within;
         tokens.drain(..3);
         wrapped = true;
-        if into_sibling_root {
+        // A `cd` below a sibling root leaves no single core to peel once a
+        // second command follows, and the edge roots that call's sandbox at
+        // the repository anyway, so the list is rejoined there as it is after
+        // a `cd` to the root itself. A lone command keeps the peel it has.
+        let listed = tokens.iter().any(|token| operator(token) == Some("&&"));
+        if into_sibling_root || (root.is_some() && !within && listed) {
             // `cd <sibling root> && a && b` is re-authorized whole in that
             // root. A filter after `a && b` would apply to `b` alone, so none
             // is peeled there; it stays in the text the root runs.
