@@ -294,6 +294,12 @@ fn screened_search_path(
         return false;
     };
     std::env::split_paths(&search_path).all(|directory| {
+        // On Windows an empty entry names no folder: Git Bash drops it when
+        // it converts the search path, and Git skips it when it looks a
+        // program up, so neither reads it as the shell's own directory.
+        if cfg!(windows) && directory.as_os_str().is_empty() {
+            return true;
+        }
         if directory.is_absolute() {
             return !entry_in_checkout(&directory, destination);
         }
