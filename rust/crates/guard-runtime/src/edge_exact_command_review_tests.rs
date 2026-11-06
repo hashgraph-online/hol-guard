@@ -128,7 +128,12 @@ fn a_cloud_review_rule_asks_before_its_exact_command() {
 #[test]
 fn another_command_runs_as_before() {
     let home = home(&[rule("git status")]);
-    for command in ["git status --short", "git  status", "git status "] {
+    for command in [
+        "git status --short",
+        "echo git status",
+        "git log; echo 'git status'",
+        "git -C status",
+    ] {
         assert_eq!(
             apply(home.path(), &call(command), Some(NOW), allowed()),
             allowed(),
@@ -273,8 +278,148 @@ fn a_local_rule_names_itself() {
 }
 
 #[test]
-fn other_rule_actions_are_left_to_the_daemon() {
-    for action in ["block", "allow", "warn"] {
+fn another_spelling_of_the_command_asks() {
+    let home = home(&[rule("git status")]);
+    for command in [
+        "git  status",
+        "git status ",
+        "git status;",
+        "GIT_PAGER=cat git status",
+        "/usr/bin/git status",
+        "(git status)",
+        "true && git status",
+        "bash -c 'git status'",
+    ] {
+        let raised = apply(home.path(), &call(command), Some(NOW), allowed());
+        assert_eq!(raised.minimum_action, "review", "{command}");
+        assert_eq!(
+            raised.reason_code, "policy_exact_command_review",
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_cloud_block_denies_every_spelling() {
+    let home = home(&[Row {
+        action: "block",
+        ..rule("npm publish")
+    }]);
+    for command in [
+        "npm publish",
+        "  npm publish",
+        "npm  publish",
+        "npm publish;",
+        "npm test && npm publish",
+        "npm test; npm publish",
+        "CI=1 npm publish",
+        "(npm publish)",
+        "bash -c 'npm publish'",
+        "/usr/local/bin/npm publish",
+    ] {
+        for minimum in [
+            "allow",
+            "warn",
+            "review",
+            "require-reapproval",
+            "sandbox-required",
+        ] {
+            let blocked = apply(
+                home.path(),
+                &call(command),
+                Some(NOW),
+                result(PreToolActionTypeV1::Package, minimum),
+            );
+            assert_eq!(blocked.minimum_action, "block", "{command} {minimum}");
+            assert_eq!(blocked.policy_action, "block", "{command} {minimum}");
+            assert_eq!(blocked.decision, "deny", "{command} {minimum}");
+            assert!(!blocked.explicitly_benign);
+            assert_eq!(blocked.reason_code, "policy_exact_command_block");
+            validate_pre_tool_result_matrix(&blocked).unwrap();
+        }
+    }
+}
+
+#[test]
+fn a_block_leaves_other_commands_alone() {
+    let home = home(&[Row {
+        action: "block",
+        ..rule("npm publish")
+    }]);
+    for command in [
+        "npm publish --dry-run",
+        "echo npm publish",
+        "git commit -m 'npm publish'",
+        "echo \"x; npm publish\"",
+        "cat <<EOF\nnpm publish\nEOF",
+        "npm pack",
+    ] {
+        assert_eq!(
+            apply(home.path(), &call(command), Some(NOW), allowed()),
+            allowed(),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_block_wins_over_a_review_and_names_its_source() {
+    let home = home(&[
+        rule("npm publish"),
+        Row {
+            action: "block",
+            source: "approval-gate",
+            ..rule("npm publish")
+        },
+    ]);
+    let blocked = apply(home.path(), &call("npm  publish"), Some(NOW), allowed());
+    assert_eq!(blocked.minimum_action, "block");
+    assert_eq!(blocked.reason_code, "saved_exact_command_block");
+}
+
+#[test]
+fn an_expired_or_foreign_block_does_not_apply() {
+    let expired = home(&[Row {
+        action: "block",
+        expires_at: Some("2026-10-31T23:59:59Z"),
+        ..rule("npm publish")
+    }]);
+    assert_eq!(
+        apply(expired.path(), &call("npm  publish"), Some(NOW), allowed()),
+        allowed()
+    );
+    let foreign = home(&[Row {
+        action: "block",
+        harness: "codex",
+        ..rule("npm publish")
+    }]);
+    assert_eq!(
+        apply(foreign.path(), &call("npm  publish"), Some(NOW), allowed()),
+        allowed()
+    );
+}
+
+#[test]
+fn a_blocked_result_is_kept() {
+    let home = home(&[Row {
+        action: "block",
+        ..rule("npm publish")
+    }]);
+    let blocked = result(PreToolActionTypeV1::Command, "block");
+    assert_eq!(
+        apply(
+            home.path(),
+            &call("npm publish"),
+            Some(NOW),
+            blocked.clone()
+        ),
+        blocked
+    );
+}
+
+#[test]
+fn allow_and_warn_rows_change_nothing() {
+    for action in ["allow", "warn"] {
         let home = home(&[Row {
             action,
             ..rule("git status")

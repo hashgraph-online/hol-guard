@@ -396,6 +396,7 @@ mod discovery_placement_op;
 mod durable_runtime_collapse;
 mod edge;
 mod edge_exact_command_review;
+mod edge_exact_command_spelling;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
