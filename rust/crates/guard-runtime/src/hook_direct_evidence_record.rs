@@ -18,8 +18,8 @@ use crate::edge_receipt::{DIRECT_ACTIVITY_RECORDED, DIRECT_RECEIPT_RECORDED};
 
 /// Record the receipts, and the activity the bound daemon allowed, that the
 /// paged records still leave to the daemon, and mark them on the page and in
-/// the queue. Returns the store failure the writer holds, or `None` when no
-/// record needed the writer or it could not run.
+/// the queue. Returns the store failure the writer holds, or `None` when the
+/// writer could not run, or no record needed it and none is running.
 pub(super) fn leftovers(
     queue: &DirectEvidenceQueue,
     guard_home: &str,
@@ -33,7 +33,9 @@ pub(super) fn leftovers(
                 || (paged.activity && !flagged(&paged.record, DIRECT_ACTIVITY_RECORDED)))
     };
     if !paged.iter().any(pending) {
-        return None;
+        // The writer saves on its own thread, so a store failure can follow
+        // the page that gave it the last record.
+        return crate::hook_evidence_writer_op::drained_fatal(Path::new(guard_home));
     }
     let (marks, fatal) =
         crate::hook_evidence_writer_op::record_drained(Path::new(guard_home), source, |writer| {

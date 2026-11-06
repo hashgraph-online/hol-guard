@@ -407,6 +407,21 @@ pub(crate) fn record_drained<T>(
     .ok()
 }
 
+/// The store failure the writer already running for `guard_home` holds, for
+/// a drain page that gave it nothing to record. It reports the failure until
+/// the client acknowledges it, so a recovery that failed is asked for again.
+/// A slot busy starting or draining a writer is not waited on, and no writer
+/// is started.
+pub(crate) fn drained_fatal(guard_home: &Path) -> Option<Value> {
+    let slot = slot(&canonical_home(guard_home));
+    let held = match slot.writer.try_lock() {
+        Ok(held) => held,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return None,
+    };
+    held.as_ref().map(|resident| resident.fatal.peek())
+}
+
 /// Run `act` while this Guard home's writer slot is held, as starting a
 /// writer or draining one holds it.
 #[cfg(test)]
