@@ -82,6 +82,41 @@ def test_daemon_headless_refresh_syncs_at_once_when_cloud_policy_moves(
     assert daemon._headless_cloud_sync_thread is None
 
 
+@pytest.mark.daemon_headless_refresh
+def test_daemon_shutdown_wakes_the_sync_loop_before_joining_workers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    synced = threading.Event()
+
+    def _fake_sync(*, store: GuardStore) -> dict[str, object]:
+        del store
+        synced.set()
+        return {"status": "synced"}
+
+    patch_daemon_global(monkeypatch, "_run_headless_cloud_sync", _fake_sync)
+    daemon = guard_daemon_module.GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60)
+    daemon._headless_cloud_sync_interval_seconds = 600
+    join_workers = daemon._join_service_background_threads
+    woken_before_join: list[bool] = []
+
+    def _join_after_slower_workers() -> bool:
+        # Earlier workers can use the whole join deadline, so the idle sync
+        # loop must already be on its way out when joining starts.
+        woken_before_join.append(daemon._headless_cloud_sync_wake.is_set())
+        return join_workers()
+
+    daemon._join_service_background_threads = _join_after_slower_workers
+    daemon.start()
+    try:
+        assert synced.wait(timeout=5)
+    finally:
+        daemon.stop()
+
+    assert woken_before_join == [True]
+    assert daemon._headless_cloud_sync_thread is None
+
+
 @pytest.mark.daemon_aibom_refresh
 @pytest.mark.daemon_bundle_refresh
 @pytest.mark.daemon_headless_refresh

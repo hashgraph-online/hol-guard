@@ -3978,6 +3978,11 @@ class GuardDaemonServer:
     def _finish_service_locked(self) -> bool:
         self._owned_service_ready = False
         self._shutdown_started.set()
+        # The sync loop sleeps on its wake, not on shutdown. Wake it now so it
+        # exits while the other workers stop, before its join's deadline.
+        sync_wake = getattr(self, "_headless_cloud_sync_wake", None)
+        if sync_wake is not None:
+            sync_wake.set()
         contained = True
         close_discovery = getattr(getattr(self._server, "local_cli_api", None), "close_discovery", None)
         if callable(close_discovery):
@@ -4085,10 +4090,6 @@ class GuardDaemonServer:
             getattr(self, "_extension_control_refresh_thread", None),
             deadline=deadline,
         )
-        # The sync loop sleeps on its wake, not on shutdown, so stopping wakes it.
-        sync_wake = getattr(self, "_headless_cloud_sync_wake", None)
-        if sync_wake is not None:
-            sync_wake.set()
         self._headless_cloud_sync_thread = self._join_service_thread(
             getattr(self, "_headless_cloud_sync_thread", None),
             deadline=deadline,
