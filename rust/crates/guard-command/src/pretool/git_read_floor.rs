@@ -285,7 +285,19 @@ fn verdict(
                     !super::git_helper_context::routes_to_no_repository(
                         segments[index],
                         read_context,
-                    ) && super::git_config::probe_unanswered(
+                    )
+                    // Every way the probe refuses before it reaches the
+                    // configuration -- a home or working directory it cannot
+                    // resolve, a `-C ~` target under another home, an
+                    // environment it cannot vouch for, a Git binary it does
+                    // not trust -- is a program or a layout Guard cannot see,
+                    // not a question left open, so it is never unanswered.
+                    && super::git_config::trusted_launch(
+                        executable,
+                        read_context,
+                        execution_environment,
+                    )
+                    && super::git_config::probe_unanswered(
                         executable,
                         &arguments[index],
                         read_context,
@@ -396,6 +408,7 @@ fn verdict(
                     )))
     };
     let mut unsettled = Vec::new();
+    let mut refused: Option<ReviewCause> = None;
     for (index, segment) in segments.iter().enumerate() {
         let git = segment
             .executable
@@ -418,12 +431,21 @@ fn verdict(
         // A refused read either runs a helper the probe read out of the
         // configuration, which no allow answers for, or was left unproven by
         // a probe that could not answer, which the read's own allow does.
+        // Every refusal in the command is weighed, because one read whose
+        // helper Guard found is reason enough for the whole command: stopping
+        // at the first refusal would let an unanswered probe in an earlier
+        // step hand the allow a helper found in a later one.
         if inspection == Some(false) {
-            return Verdict::Review(if proofs[index].unanswered {
+            let cause = if proofs[index].unanswered {
                 ReviewCause::UnansweredProbe
             } else {
                 ReviewCause::Other
+            };
+            refused = Some(match refused {
+                Some(ReviewCause::Other) => ReviewCause::Other,
+                _ => cause,
             });
+            continue;
         }
         // Only inspection operations have a configuration proof to
         // invalidate. Other Git operations retain their own native
@@ -431,6 +453,9 @@ fn verdict(
         if inspection.is_some() {
             unsettled.extend((0..index).filter(|prior| !settled(*prior, segment)));
         }
+    }
+    if let Some(cause) = refused {
+        return Verdict::Review(cause);
     }
     unsettled.sort_unstable();
     unsettled.dedup();

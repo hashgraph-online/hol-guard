@@ -470,7 +470,15 @@ fn probe(
     if !(status.success() || status.code() == Some(1) && output.is_empty()) {
         return None;
     }
-    let output = std::str::from_utf8(&output).ok()?;
+    // Git spells configuration keys in ASCII, so a value whose bytes are not
+    // text never hides the key it belongs to. Reading the reply lossily keeps
+    // every helper key in view: a helper whose value did not decode is read
+    // as a helper that was found, not as a question the probe never asked.
+    // Refusing the whole reply here instead would turn one undecodable value
+    // anywhere in the configuration into an unanswered probe, which an
+    // explicit allow settles -- and a monitor or pager beside it would run.
+    let output = String::from_utf8_lossy(&output);
+    let output: &str = &output;
     let options = remaining
         .iter()
         .skip(1)
