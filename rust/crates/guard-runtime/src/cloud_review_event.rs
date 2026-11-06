@@ -55,6 +55,52 @@ fn optional(value: Option<&Value>) -> Result<Value, &'static str> {
     Ok(text(value)?.map_or(Value::Null, Value::String))
 }
 
+/// Row text a risk level is read from, in the order
+/// `review_contracts._risk_category` reads it.
+const RISK_TEXT_KEYS: [&str; 3] = ["risk_headline", "risk_summary", "policy_action"];
+/// Word stems naming each level, highest first. A word names a level when it
+/// is a stem or a stem with one of `RISK_WORD_SUFFIXES`, so "blocked" and
+/// "reviewing" count while "follow" and "highlight" do not. The claim builder
+/// in `review_contracts._risk_category` applies the same rule.
+const RISK_LEVEL_STEMS: [(&str, &[&str]); 3] = [
+    ("high", &["critical", "high", "block", "destructive"]),
+    ("medium", &["medium", "review", "reapproval"]),
+    ("low", &["low", "allow"]),
+];
+const RISK_WORD_SUFFIXES: [&str; 4] = ["", "s", "ed", "ing"];
+
+fn names_risk_level(word: &str, stems: &[&str]) -> bool {
+    stems.iter().any(|stem| {
+        word.strip_prefix(stem)
+            .is_some_and(|rest| RISK_WORD_SUFFIXES.contains(&rest))
+    })
+}
+
+/// The row's own `risk_category`, or else the level its risk text names. The
+/// local store keeps no risk column, so a Cloud card would otherwise always
+/// read Unknown. A row whose text names no level sends null and stays Unknown.
+fn risk_category(item: &Map<String, Value>) -> Result<Value, &'static str> {
+    if let Some(category) = text(item.get("risk_category"))? {
+        return Ok(Value::String(category));
+    }
+    for key in RISK_TEXT_KEYS {
+        let Some(value) = item.get(key).and_then(Value::as_str) else {
+            continue;
+        };
+        let lowered = value.to_lowercase();
+        let words: Vec<&str> = lowered
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        for (level, stems) in RISK_LEVEL_STEMS {
+            if words.iter().any(|word| names_risk_level(word, stems)) {
+                return Ok(Value::String(level.to_owned()));
+            }
+        }
+    }
+    Ok(Value::Null)
+}
+
 fn exact<'a>(value: &'a Value, keys: &[&str]) -> Result<&'a Map<String, Value>, &'static str> {
     let fields = args_object(value)?;
     if fields.len() != keys.len() || !keys.iter().all(|key| fields.contains_key(*key)) {
@@ -130,7 +176,7 @@ pub(crate) fn review_event(
         "continuationHookAttached": hook_attached,
         "continuationOpaqueTargetId": target,
         "continuationWaitDeadline": deadline,
-        "riskCategory": optional(item.get("risk_category"))?,
+        "riskCategory": risk_category(item)?,
         "policyAction": optional(item.get("policy_action"))?,
         "recommendedScope": optional(item.get("recommended_scope"))?,
         "localCreatedAt": created_at,
