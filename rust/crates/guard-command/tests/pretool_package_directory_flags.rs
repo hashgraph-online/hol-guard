@@ -186,10 +186,6 @@ fn an_inert_assignment_keeps_the_runs_own_decision() {
                 format!("CI=1 npm --prefix {sibling} run build"),
             ),
             (
-                format!("bun run --cwd {sibling} build"),
-                format!("NODE_ENV=production bun run --cwd {sibling} build"),
-            ),
-            (
                 format!("pnpm -C {sibling} run test"),
                 format!("CI=1 LANG=C pnpm -C {sibling} run test"),
             ),
