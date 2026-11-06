@@ -86,12 +86,19 @@ fn shadowing_manager_earlier_in_path_changes_the_executable_digest() {
     assert_ne!(baseline, shadowed);
 }
 
-fn uv_digest(root: &Path, arguments: &[&str]) -> String {
+/// Write the manager once per test. `modified_time_ns` is part of the
+/// executable identity, so rewriting the binary between two calls would change
+/// the digest on its own and hide what the arguments did.
+fn write_uv(root: &Path) {
     let manager_bin = root.join("uv-bin");
     std::fs::create_dir_all(&manager_bin).unwrap();
     let path = manager_bin.join("uv");
     std::fs::write(&path, "#!/bin/sh\n# uv-v1\n").unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+fn uv_digest(root: &Path, arguments: &[&str]) -> String {
+    let manager_bin = root.join("uv-bin");
     let workspace = root.join("workspace");
     std::fs::create_dir_all(&workspace).unwrap();
     let home = root.join("home");
@@ -130,6 +137,7 @@ fn uv_digest(root: &Path, arguments: &[&str]) -> String {
 #[test]
 fn a_quiet_spelling_keeps_the_executable_digest() {
     let root = tempfile::tempdir().unwrap();
+    write_uv(root.path());
     let loud = uv_digest(root.path(), &["sync", "--frozen", "--extra", "dev"]);
     let quiet = uv_digest(root.path(), &["sync", "-q", "--frozen", "--extra", "dev"]);
 
@@ -139,6 +147,7 @@ fn a_quiet_spelling_keeps_the_executable_digest() {
 #[test]
 fn an_install_affecting_option_changes_the_executable_digest() {
     let root = tempfile::tempdir().unwrap();
+    write_uv(root.path());
     let plain = uv_digest(root.path(), &["sync", "--frozen"]);
     let with_extra = uv_digest(root.path(), &["sync", "--frozen", "--extra", "dev"]);
 
