@@ -183,7 +183,7 @@ fn a_common_plain_word_places_nothing_unless_a_file_defines_it() {
     assert_eq!(mapped_text(&[("src/read.py", uses)], &terms), None);
     let defines = "class Token:\n    pass\n";
     let text = mapped_text(&[("src/read.py", uses), ("src/token.py", defines)], &terms).unwrap();
-    assert!(text.contains("src/token.py (lines 1-2)"), "{text}");
+    assert!(text.contains("src/token.py:1-2 class Token:"), "{text}");
 }
 
 /// Definitions run from their decorators over a long signature to the end
