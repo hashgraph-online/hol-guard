@@ -97,6 +97,19 @@ pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &st
     }
 }
 
+/// A command already heading for a review keeps that action when the check
+/// runs out of time, so `strengthen` never rewrites its prose. The agent
+/// still has to learn the check did not run, because the way out differs:
+/// wait and run the same command again rather than rewrite it. The timeout
+/// explanation therefore wins a tie at review, and a stronger floor, such as
+/// an administrator disable, is never reached here.
+pub(super) fn explain_timed_out_review(result: &mut PreToolResultV1, timed_out: bool) {
+    if timed_out && result.minimum_action == "review" {
+        result.reason_code = "native_command_extension_evaluation_timed_out".to_owned();
+        result.reason = TIMED_OUT_REVIEW_REASON.to_owned();
+    }
+}
+
 /// An extension check that ran out of time is not a command Guard cannot
 /// match, so the agent is told to try again rather than to rewrite it.
 pub(super) fn explain_expired_deadline(result: &mut PreToolResultV1, deadline: Option<Instant>) {

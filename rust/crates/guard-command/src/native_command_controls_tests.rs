@@ -437,6 +437,55 @@ fn diagnostic_shell_commands_preserve_an_approvable_review() {
 }
 
 #[test]
+fn an_expired_deadline_keeps_an_administrator_disable_blocked() {
+    let program = packaged_command_program().unwrap();
+    let rule = program
+        .rules
+        .iter()
+        .find(|item| item.rule_id == "command.git.hard-reset")
+        .unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest,
+        "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest,
+        "health": "protected", "revision": 1, "managed_revision": 0,
+        "effective_digest": "",
+        "layers": [{
+            "schema_version": "1.0.0", "kind": "local-admin",
+            "catalog_digest": program.catalog_digest, "global_lockdown": false,
+            "controls": [{
+                "target_kind": "permission",
+                "target_id": rule.permission_id,
+                "state": "disabled"
+            }]
+        }]
+    }))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let controls = CompiledNativeCommandControls::new(&binding).unwrap();
+    let intrinsic = crate::pretool::evaluate_pre_tool_envelope(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "mcp__filesystem__read_file", "tool_input": {"path": "fixture.txt"}}),
+    );
+    let result = controls.apply_with_tool(
+        None,
+        intrinsic,
+        Some("mcp__filesystem__read_file"),
+        &[],
+        Some(Instant::now() - std::time::Duration::from_secs(1)),
+    );
+    // An administrator disable is not the user's to clear, and an unfinished
+    // check cannot show this command falls outside it, so the block stands.
+    assert_eq!(result.minimum_action, "block");
+    assert_eq!(
+        result.reason_code,
+        "native_command_extension_evaluation_failed"
+    );
+}
+
+#[test]
 fn delegated_deadline_failure_is_not_an_administrator_disable() {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({

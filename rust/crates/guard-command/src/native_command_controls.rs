@@ -233,6 +233,12 @@ impl CompiledNativeCommandControls {
         // evidence field stays one value for both, because consumers pin it;
         // this flag carries the difference to the floor below.
         let mut deadline_expired = false;
+        // An administrator disable is a floor the user cannot clear, and a
+        // check that ran out of time cannot show the command falls outside
+        // it. Where anything is disabled, a timeout keeps the block rather
+        // than offering an approval that would override that decision.
+        let admin_disabled =
+            !self.blocked_permissions.is_empty() || !self.blocked_extensions.is_empty();
         let (mut batch, unmodeled) = match observed {
             Ok(observed) => observed,
             Err(error) => {
@@ -251,11 +257,20 @@ impl CompiledNativeCommandControls {
                 Ok(action) => action,
                 Err(error) => {
                     deadline_expired = is_deadline_error(error);
-                    batch = NativeCommandObservationBatchV1 {
-                        evaluation_error: Some("native_command_evaluation_failed".into()),
-                        ..Default::default()
-                    };
                     if deadline_expired {
+                        // The main pass already finished. A disabled rule or a
+                        // critical one it recorded still has to raise the floor
+                        // below, so keep those observations instead of dropping
+                        // them along with the delegated pass.
+                        batch.evaluation_error =
+                            Some("native_command_evaluation_failed".to_owned());
+                    } else {
+                        batch = NativeCommandObservationBatchV1 {
+                            evaluation_error: Some("native_command_evaluation_failed".into()),
+                            ..Default::default()
+                        };
+                    }
+                    if deadline_expired && !admin_disabled {
                         "review"
                     } else {
                         "block"
@@ -273,7 +288,7 @@ impl CompiledNativeCommandControls {
         let mut reason = if self.global_block {
             "native_command_control_authority_block"
         } else if batch.evaluation_error.is_some() {
-            evaluation_error_reason(deadline_expired)
+            evaluation_error_reason(deadline_expired && !admin_disabled)
         } else if delegated_floor == "block" {
             "native_command_permission_disabled"
         } else {
@@ -419,14 +434,20 @@ impl CompiledNativeCommandControls {
             // evaluates fine once the machine is less busy. Settling it at a
             // review keeps Allow once and Always allow on the card, instead of
             // a block no approval can clear. Every other evaluation failure
-            // still blocks.
-            let error_floor = if deadline_expired { "review" } else { "block" };
+            // still blocks, and so does a timeout while an administrator has
+            // disabled anything the unfinished check could not rule out.
+            let softened = deadline_expired && !admin_disabled;
+            let error_floor = if softened { "review" } else { "block" };
             if rank(floor) < rank(error_floor) {
                 floor = error_floor;
-                reason = evaluation_error_reason(deadline_expired);
+                reason = evaluation_error_reason(softened);
             }
         }
         strengthen(&mut result, floor, reason);
+        floor::explain_timed_out_review(
+            &mut result,
+            evaluation_error.is_some() && deadline_expired && !admin_disabled && !self.global_block,
+        );
         self.enforce_quarantine(command, tool, &mut result);
         floor::explain_home_redirect(&mut result, command, |probe| {
             self.observe_command(probe, deadline, context, environment)
