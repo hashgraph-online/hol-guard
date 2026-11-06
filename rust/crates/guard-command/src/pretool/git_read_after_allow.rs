@@ -64,6 +64,37 @@ const CONFIG_STABLE_STEPS: &[&str] = &[
 /// leaves unsettled may replace a file a configuration include names.
 const TREE_PRESERVING_STEPS: &[&str] = &["add", "branch", "commit", "fetch", "push", "tag"];
 
+/// Git verbs that write nothing a later step could read: no tracked file, no
+/// configuration, no new path at all. A step on this list leaves the program,
+/// the configuration and the bind-mounted file a later step starts exactly as
+/// Guard read them, so coverage that reads a whole extension as allowed walks
+/// past it. `diff` is left out on purpose: `git diff --output=<file>` writes
+/// wherever it is pointed, and so can replace a later step's program.
+const WRITES_NOTHING_STEPS: &[&str] = &[
+    "blame",
+    "cat-file",
+    "check-attr",
+    "check-ref-format",
+    "describe",
+    "for-each-ref",
+    "grep",
+    "log",
+    "ls-files",
+    "ls-remote",
+    "ls-tree",
+    "merge-base",
+    "name-rev",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "show-branch",
+    "show-ref",
+    "status",
+    "var",
+    "whatchanged",
+];
+
 /// `git worktree` actions that write no file at a new path. Removing a linked
 /// worktree deletes files, which can drop configuration but never adds a
 /// program to it; `add` and `move` write where an absolute include may point.
@@ -261,6 +292,200 @@ fn ref_read(
         && super::segment_proof::exact_safe_segment_with_context(model, segment, true, context)
 }
 
+/// Whether `segment` leaves what a later step runs as Guard read it.
+///
+/// A Git step that rewrites tracked files can replace the program, the
+/// configuration or the bind-mounted file a later step starts, so coverage
+/// that reads a whole extension as allowed stops at it. Only a Git step whose
+/// verb rewrites nothing is answered here; every other program -- `ln`, `cp`,
+/// `mv`, `tee`, `gh pr checkout` -- can replace the same files without Guard
+/// modelling how, so it ends the walk unless the caller already proved that
+/// segment benign.
+pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
+    let arguments = &segment.arguments;
+    git_segment(segment)
+        && !points_output_at_a_protected_file(arguments)
+        && (preserves_tree(arguments) || writes_nothing(arguments))
+}
+
+/// Whether `segment` is a Git step that writes its output over a file a later
+/// step runs under.
+///
+/// An extension-wide Allow answers for Git's own work, and packaging a tree
+/// into a file the workspace names -- `git archive -o snapshot.tar HEAD` --
+/// is part of that work. Pointing the same output at `.git/config`, a hook,
+/// or a path that leaves the workspace is not: it rewrites what the next Git
+/// step runs, so that step keeps the review it had.
+pub(crate) fn git_step_overwrites_what_runs_next(segment: &crate::CommandSegmentV1) -> bool {
+    git_segment(segment) && points_output_at_a_protected_file(&segment.arguments)
+}
+
+/// Whether a Git step, wherever its global options route it, writes nothing a
+/// later step reads. A global option the shared Git parser does not know
+/// leaves the subcommand unknown, so the step does not qualify.
+fn writes_nothing(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    arguments
+        .get(index)
+        .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
+}
+
+/// Verbs that read a short `-o` as the file to write.
+///
+/// Everywhere else the same letter means something that writes nothing:
+/// `git ls-files -o` lists untracked files and `git push -o` carries a push
+/// option to the remote, so refusing `-o` outright would stop ordinary work.
+const SHORT_OUTPUT_VERBS: &[&str] = &["archive", "bundle", "format-patch"];
+
+/// Whether a step points its output at a file that decides what runs next.
+///
+/// Git's diff options reach every verb that can show a diff, so `log`, `show`,
+/// `whatchanged` and `rev-list` all take `--output=<file>` and write wherever
+/// it points. Git resolves any unambiguous long-option abbreviation, so every
+/// spelling from `--out` up is read as that option; the short form is read as
+/// the output file for the verbs that package a tree.
+///
+/// The file the option names decides the answer. A workspace-relative path
+/// Git packages into is the ordinary shape of the option and stays inside an
+/// Allow on the Git extension; a path Guard cannot place, or one that names
+/// Git's own tree, does not.
+fn points_output_at_a_protected_file(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    let Some(operation) = arguments.get(index).map(String::as_str) else {
+        return false;
+    };
+    let short_writes = SHORT_OUTPUT_VERBS.contains(&operation);
+    let rest = arguments.get(index + 1..).unwrap_or_default();
+    rest.iter().enumerate().any(|(position, argument)| {
+        let (value, names_a_file) = match output_option_value(argument, short_writes) {
+            Some(value) => (value, true),
+            None => match verb_destination_value(operation, argument) {
+                Some((value, names_a_file)) => (value, names_a_file),
+                None => return false,
+            },
+        };
+        let target = match value {
+            Some(value) => Some(value),
+            None => rest.get(position + 1).map(String::as_str),
+        };
+        target.is_none_or(|target| {
+            if names_a_file {
+                !output_target_is_inert(target)
+            } else {
+                !output_target_is_placed(target)
+            }
+        })
+    })
+}
+
+/// Long options that name where one verb writes, beside the `--output` every
+/// diff-showing verb takes.
+///
+/// `git fast-export --export-marks=<file>` and
+/// `git read-tree --index-output=<file>` write a file wherever they are
+/// pointed, which is the same escape `git archive -o` keeps its review for.
+/// `--object-dir` moves the files `git commit-graph write` and
+/// `git multi-pack-index write` produce into another directory.
+///
+/// The flag says whether the value names a file Git chooses nothing about. A
+/// directory Git writes its own fixed names into cannot become the
+/// configuration, hook or attribute file a later step runs under, so
+/// `--object-dir .git/objects` -- the ordinary spelling -- stays inside the
+/// Allow, and only a path that leaves the workspace keeps its review.
+const VERB_DESTINATION_OPTIONS: &[(&str, &str, bool)] = &[
+    ("commit-graph", "object-dir", false),
+    ("fast-export", "export-marks", true),
+    ("multi-pack-index", "object-dir", false),
+    ("read-tree", "index-output", true),
+];
+
+/// The destination a verb-specific long option points at, as
+/// [`output_option_value`] reports one, with whether it names a file.
+///
+/// Git resolves any unambiguous long-option abbreviation, so every spelling
+/// from the first letter up is read as that option.
+fn verb_destination_value<'a>(
+    operation: &str,
+    argument: &'a str,
+) -> Option<(Option<&'a str>, bool)> {
+    let long = argument.strip_prefix("--")?;
+    let (name, attached) = match long.split_once('=') {
+        Some((name, value)) => (name, Some(value)),
+        None => (long, None),
+    };
+    if name.is_empty() {
+        return None;
+    }
+    VERB_DESTINATION_OPTIONS
+        .iter()
+        .find(|(verb, option, _)| *verb == operation && option.starts_with(name))
+        .map(|(_, _, names_a_file)| (attached, *names_a_file))
+}
+
+/// The file a single argument points Git's output at, when it is that option.
+///
+/// `Some(Some(path))` carries the value in the argument itself,
+/// `Some(None)` means the option is there and the next word carries its
+/// value, and `None` means the argument is not an output option at all.
+///
+/// Git's own option parser lets short flags travel in one cluster, so
+/// `git format-patch -no ../outside` writes exactly where `-n -o ../outside`
+/// would. The letter is therefore read wherever it sits in a single-dash
+/// run, not only at its head; a cluster the verb refuses outright fails
+/// before it writes anything, so reading one as an output option costs
+/// nothing.
+fn output_option_value(argument: &str, short_writes: bool) -> Option<Option<&str>> {
+    if let Some(rest) = argument.strip_prefix("--out") {
+        return Some(rest.split_once('=').map(|(_, value)| value));
+    }
+    if short_writes {
+        let cluster = argument
+            .strip_prefix('-')
+            .filter(|rest| !rest.starts_with('-'))?;
+        let position = cluster.find('o')?;
+        let rest = &cluster[position + 'o'.len_utf8()..];
+        return Some((!rest.is_empty()).then_some(rest));
+    }
+    None
+}
+
+/// Whether a path Git writes its output to leaves what a later step runs as
+/// Guard read it.
+///
+/// `snapshot.tar` or `patches/0001.patch` below the workspace is what
+/// `git archive -o` and `git format-patch -o` are for, and an Allow on the
+/// Git extension answers for them. A path that climbs out of the workspace or
+/// names `.git` -- `.git/config`, `.git/hooks/pre-commit`, `.gitattributes` --
+/// changes the configuration, hook or filter the next Git step runs under, so
+/// it keeps its review. A value Guard cannot place, because it is absent,
+/// home-relative or still carries a shell expansion, is treated the same way.
+fn output_target_is_inert(target: &str) -> bool {
+    output_target_is_placed(target)
+        && !target
+            .split(['/', '\\'])
+            .any(|component| component.starts_with(".git"))
+}
+
+/// Whether Guard can place a destination below the workspace. A path that
+/// climbs out of it, or one that is absolute, home-relative, drive-rooted or
+/// still carries a shell expansion, lands where Guard read nothing.
+fn output_target_is_placed(target: &str) -> bool {
+    if target.is_empty() || target.starts_with('-') || target.starts_with('~') {
+        return false;
+    }
+    if target.starts_with('/') || target.starts_with('\\') || target.contains('$') {
+        return false;
+    }
+    if target.len() > 1 && target.as_bytes()[1] == b':' {
+        return false;
+    }
+    !target.split(['/', '\\']).any(|component| component == "..")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{preserves_tree, REF_READS};
@@ -274,6 +499,123 @@ mod tests {
 
     fn words(command: &str) -> Vec<String> {
         command.split_whitespace().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn a_read_leaves_a_later_step_running_what_guard_read() {
+        for command in [
+            "status --short --branch",
+            "log --oneline -5",
+            "ls-remote --heads origin",
+        ] {
+            assert!(super::writes_nothing(&words(command)), "{command}");
+        }
+        // Each of these writes somewhere a later step could read.
+        for command in [
+            "diff --output=hook",
+            "archive -o out.tar HEAD",
+            "config a.b c",
+        ] {
+            assert!(!super::writes_nothing(&words(command)), "{command}");
+        }
+    }
+
+    #[test]
+    fn an_output_file_that_decides_what_runs_next_is_not_a_read() {
+        // Git's diff options reach every verb that shows a diff, and the
+        // short form is the output file for the verbs that package a tree.
+        // Each of these lands on Git's own tree, climbs out of the workspace
+        // or is a value Guard cannot place.
+        for command in [
+            "log -1 --output=.git/config",
+            "show --output .git/hooks/pre-commit HEAD",
+            "whatchanged --out=.git/config",
+            "rev-list --output=.git/config HEAD",
+            "diff --output=.gitattributes",
+            "archive -o ../out.tar HEAD",
+            "archive -o /tmp/out.tar HEAD",
+            "archive -o ~/out.tar HEAD",
+            "archive -o $DEST/out.tar HEAD",
+            "format-patch -o .git/hooks HEAD~1",
+            // Git reads a clustered short flag exactly as the separate
+            // spelling, so `-no DIR` writes where `-n -o DIR` would.
+            "format-patch -no ../outside HEAD~1",
+            "format-patch -sno .git/hooks HEAD~1",
+            "format-patch -no../outside HEAD~1",
+            "archive --output",
+        ] {
+            assert!(
+                super::points_output_at_a_protected_file(&words(command)),
+                "{command}"
+            );
+        }
+        // Packaging a tree into a file the workspace names is the ordinary
+        // shape of the option. The same letter means something that writes
+        // nothing below, and a long option that merely starts with the same
+        // letters names no file.
+        for command in [
+            "archive -o out.tar HEAD",
+            "archive -oout.tar HEAD",
+            "archive --output=snapshot.tar HEAD",
+            "format-patch -o patches HEAD~1",
+            "format-patch -no patches HEAD~1",
+            "format-patch -nopatches HEAD~1",
+            "diff --output=hook",
+            "ls-files -o --exclude-standard",
+            "push -o ci.skip origin main",
+            "status --short --branch",
+            "log --oneline -5",
+            "log --one-line",
+        ] {
+            assert!(
+                !super::points_output_at_a_protected_file(&words(command)),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_destination_option_outside_the_workspace_is_not_a_read() {
+        // These verbs write where the option points, so the same rule that
+        // holds `git archive -o ../out.tar` holds them.
+        for command in [
+            "fast-export --export-marks=../outside/marks --all",
+            "fast-export --export-marks ../outside/marks --all",
+            "fast-export --export-marks=.git/hooks/pre-commit --all",
+            "fast-export --export=/tmp/marks --all",
+            "read-tree --index-output=../outside/index HEAD",
+            "read-tree --index-output=.git/config HEAD",
+            "commit-graph write --object-dir=../outside",
+            "commit-graph write --object-dir ../outside",
+            "multi-pack-index --object-dir=/tmp/objects write",
+            "fast-export --export-marks",
+        ] {
+            assert!(
+                super::points_output_at_a_protected_file(&words(command)),
+                "{command}"
+            );
+        }
+        // The ordinary spellings. `git commit-graph` and
+        // `git multi-pack-index` write their own fixed names, so a directory
+        // inside the repository replaces no hook or configuration file, and
+        // the option name belongs to one verb only.
+        for command in [
+            "fast-export --export-marks=marks --all",
+            "fast-export --all",
+            "read-tree --index-output=tmp-index HEAD",
+            "read-tree -m -u HEAD",
+            "commit-graph write",
+            "commit-graph write --object-dir=.git/objects",
+            "commit-graph write --object-dir .git/objects",
+            "multi-pack-index --object-dir=.git/objects write",
+            "log --export-marks=../outside/marks",
+            "fast-export --reencode=yes --all",
+        ] {
+            assert!(
+                !super::points_output_at_a_protected_file(&words(command)),
+                "{command}"
+            );
+        }
     }
 
     #[test]

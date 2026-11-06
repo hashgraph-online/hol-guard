@@ -14,6 +14,9 @@ pub(crate) mod git_helper_fixture;
 #[path = "support/business_properties.rs"]
 pub(crate) mod business_properties;
 
+#[path = "support/worktree_chain_fixture.rs"]
+pub(crate) mod worktree_chain_fixture;
+
 #[path = "../../../test_support/unique_nanos.rs"]
 pub(crate) mod unique_nanos;
 
@@ -88,6 +91,7 @@ pub mod pretool_env_prefix_controls;
 pub mod pretool_extension_allow_git_order;
 pub mod pretool_extension_allow_guard_named_checkout;
 pub mod pretool_extension_allow_merge;
+pub mod pretool_extension_allow_unmodelled_git;
 pub mod pretool_extension_allow_worktree_entry;
 pub mod pretool_fd_bracket_route_root;
 pub mod pretool_fd_hidden_home_root;
@@ -117,6 +121,7 @@ pub mod pretool_git_filter_config;
 pub mod pretool_git_global_config;
 pub mod pretool_git_hash_object;
 pub mod pretool_git_helper_config;
+pub mod pretool_git_heredoc_message;
 pub mod pretool_git_history_reads;
 pub mod pretool_git_init_chain;
 pub mod pretool_git_large_listing;
@@ -147,6 +152,7 @@ pub mod pretool_git_textconv_config;
 pub mod pretool_git_worktree;
 pub mod pretool_git_worktree_add_checks;
 pub mod pretool_git_worktree_chain;
+pub mod pretool_git_worktree_chain_search_path;
 pub mod pretool_git_worktree_large_config;
 pub mod pretool_git_worktree_link_chain;
 pub mod pretool_git_worktree_remote_branch;

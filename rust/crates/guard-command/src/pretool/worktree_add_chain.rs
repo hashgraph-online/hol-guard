@@ -10,12 +10,12 @@
 //! checkout too. Anything else after the `cd` (a write, a push, a path read
 //! the repository's own copy could not stand in for) keeps its review.
 //!
-//! `git worktree add <path> <ref> && git -C <path> status` is the same read
-//! without the `cd`: each read names the new checkout with `-C`, and only
-//! a proven `mkdir` may run between them, in the shell's own directory.
+//! `git worktree add <path> <ref> && git -C <path> status` is the same work
+//! without the `cd`: each read, and the branch the chain creates, names the
+//! new checkout with `-C`, and only a proven `mkdir` may run between them,
+//! in the shell's own directory.
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
-use std::path::Path;
 use std::time::Instant;
 
 /// Whether the whole command is proven `origin` fetches, one proven
@@ -154,6 +154,27 @@ fn prove(
     if entered && super::chain_route::cd_target(next, context).as_ref() != Some(&destination) {
         return false;
     }
+    // After the `cd` the shell looks every program up again, `git` among
+    // them, so a search path entry inside the new checkout decides what the
+    // chain's own reads run. The add refuses an existing destination, so
+    // nothing but the ref it checks out fills such an entry.
+    //
+    // A chain that routes its steps with `git -C <checkout>` reaches the
+    // same directory without entering it, and looks `git` up on the same
+    // search path, so it answers for the same entry. Its own directory does
+    // not move, which is what lets a relative entry be read here at all.
+    let screened = if entered {
+        super::chain_route::search_path_outside(&destination, execution_environment)
+    } else {
+        super::chain_route::routed_search_path_outside(
+            &destination,
+            context.cwd.map(std::path::Path::new),
+            execution_environment,
+        )
+    };
+    if !screened {
+        return false;
+    }
     // Reads are proven in the repository the checkout belongs to. If the
     // `cd` fails, a read after `;` runs in the shell's own directory, so `;`
     // is accepted only when that directory is the proven repository. A
@@ -175,6 +196,16 @@ fn prove(
     {
         return false;
     }
+    // A step that only prints rides along a chain whose Git reads carry the
+    // proof. On its own it reads nothing of the new checkout, so entering
+    // the checkout and then only listing it keeps the review it had.
+    let reads_git = segments[first..].iter().any(|segment| {
+        let name = segment
+            .executable
+            .as_deref()
+            .map(super::super::executable_basename);
+        segment.pipeline_index == 0 && matches!(name, Some("git" | "gh"))
+    });
     let mut links = Vec::new();
     (first..segments.len()).all(|index| {
         let joined = super::separator_between(model, index - 1, index);
@@ -193,16 +224,25 @@ fn prove(
             return super::chain_route::stdin_stage(segment, repository, execution_environment);
         }
         if entered {
-            return super::chain_route::unrouted_read(
+            if super::chain_route::unrouted_read(
                 model,
                 index,
                 repository,
                 deadline,
                 execution_environment,
-            );
+            ) {
+                return true;
+            }
+            // The branch the chain creates in the checkout it just made.
+            if super::chain_route::new_branch_step(segment) {
+                return true;
+            }
+            return reads_git
+                && super::chain_route::inert_step(segment)
+                && super::chain_route::resolved_outside(segment, &destination);
         }
         if segment.executable.as_deref() == Some("mkdir") {
-            return proven_mkdir(segment, &destination, context);
+            return super::chain_route::proven_mkdir(segment, &destination, context);
         }
         if segment.executable.as_deref() == Some("ln") {
             return super::links::proven_link(
@@ -220,7 +260,7 @@ fn prove(
         if super::links::listing_through_links(segment, &links, &destination, context) {
             return true;
         }
-        routed_read(
+        routed_step(
             model,
             index,
             context,
@@ -231,74 +271,11 @@ fn prove(
     })
 }
 
-/// A `mkdir` the write screens admit that creates nothing in or below the
-/// new checkout. The screens read the disk before the add runs, so a
-/// tracked symlink the checkout brings (`notes -> ~/.ssh`) could otherwise
-/// lead `mkdir -p` out of it.
-fn proven_mkdir(
-    segment: &CommandSegmentV1,
-    destination: &Path,
-    context: super::super::PathContext<'_>,
-) -> bool {
-    segment.environment_names.is_empty()
-        && segment.wrapper_chain.is_empty()
-        && !segment.path_overridden
-        && !segment
-            .arguments
-            .iter()
-            .any(|argument| super::super::sensitive_path_argument(argument))
-        && super::super::directory_targets::home_targets_unquoted(segment)
-        && super::super::safe_reads::safe_file_mutation_arguments(
-            "mkdir",
-            &segment.arguments,
-            context,
-        )
-        && segment
-            .arguments
-            .last()
-            .is_some_and(|target| created_outside(target, destination, context))
-}
-
-/// Whether `target` resolves outside `destination`: through the deepest
-/// path that exists now, which must not be a dangling link, and then the
-/// names still to be created.
-fn created_outside(
-    target: &str,
-    destination: &Path,
-    context: super::super::PathContext<'_>,
-) -> bool {
-    let expanded = if target.starts_with('~') {
-        super::super::read_paths::expand_home_read_path(target, context.home_dir)
-    } else {
-        Some(target.to_owned())
-    };
-    let (Some(expanded), Some(cwd)) = (
-        expanded,
-        context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok()),
-    ) else {
-        return false;
-    };
-    let mut existing = cwd.join(expanded);
-    let mut missing = Vec::new();
-    while std::fs::symlink_metadata(&existing).is_err() {
-        let Some(name) = existing.file_name().map(ToOwned::to_owned) else {
-            return false;
-        };
-        missing.push(name);
-        if !existing.pop() {
-            return false;
-        }
-    }
-    let Ok(mut resolved) = std::fs::canonicalize(&existing) else {
-        return false;
-    };
-    resolved.extend(missing.iter().rev());
-    !resolved.starts_with(destination)
-}
-
-/// `git -C <checkout> <read>`: the read Git runs after entering the new
-/// checkout, proven as the same read without `-C` in its repository.
-fn routed_read(
+/// `git -C <checkout> <step>`: the read or new branch Git runs after
+/// entering the new checkout, proven as the same step without `-C` in its
+/// repository. Agents write the whole setup this way as readily as with a
+/// `cd`, and `-C` reaches exactly the directory the `cd` would enter.
+fn routed_step(
     model: &CanonicalCommandV1,
     index: usize,
     context: super::super::PathContext<'_>,
@@ -313,13 +290,14 @@ fn routed_read(
     stripped.segments[index]
         .arguments
         .drain(position..position + 2);
-    super::chain_route::unrouted_read(
-        &stripped,
-        index,
-        repository,
-        deadline,
-        execution_environment,
-    )
+    super::chain_route::new_branch_step(&stripped.segments[index])
+        || super::chain_route::unrouted_read(
+            &stripped,
+            index,
+            repository,
+            deadline,
+            execution_environment,
+        )
 }
 
 /// The position of segment `index`'s `-C` when it routes Git into the
@@ -420,15 +398,6 @@ fn entered_checkout(
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return None;
     }
-    // After the `cd` the shell looks up `git` and `gh` again, and a relative
-    // search path entry then names a folder of the new checkout, whose
-    // contents come from the ref it checks out.
-    let search_path = execution_environment
-        .map(|environment| std::ffi::OsString::from(&environment.path))
-        .or_else(|| std::env::var_os("PATH"))?;
-    if !std::env::split_paths(&search_path).all(|directory| directory.is_absolute()) {
-        return None;
-    }
     let is = |segment: &CommandSegmentV1, names: &[&str]| {
         segment.executable.as_deref().is_some_and(|value| {
             let basename = super::super::executable_basename(value);
@@ -447,6 +416,12 @@ fn entered_checkout(
         let Some((_, destination, _)) = super::planned_checkout(segment, context) else {
             continue;
         };
+        // After the `cd` the shell looks up `git` and `gh` again, and a
+        // search path entry that is relative, or that names a folder of the
+        // new checkout, then resolves to what the ref it checks out supplies.
+        if !super::chain_route::search_path_outside(&destination, execution_environment) {
+            return None;
+        }
         let after = after_creation(model, add);
         let next = model.segments.get(after)?;
         if next.executable.as_deref() != Some("cd") || next.pipeline_index != 0 {
@@ -456,24 +431,12 @@ fn entered_checkout(
             .as_deref()
             .map(str::trim)
             .is_some_and(|separator| matches!(separator, "&&" | ";"));
-        // A relative path after the `cd` names a file of the new checkout,
-        // which the ref supplies. A bare name uses the search path checked
-        // above. The add refuses an existing destination, so an absolute
-        // path that resolves now names a program outside it; one that does
-        // not resolve could only come from the checkout.
-        let resolved_outside = |later: &CommandSegmentV1| {
-            later.executable.as_deref().is_some_and(|value| {
-                !value.contains(['/', '\\'])
-                    || (Path::new(value).is_absolute()
-                        && std::fs::canonicalize(value)
-                            .is_ok_and(|resolved| !resolved.starts_with(&destination)))
-            })
-        };
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
         let rest_is_git = model.segments[after + 1..].iter().all(|later| {
-            resolved_outside(later)
+            super::chain_route::resolved_outside(later, &destination)
                 && (is(later, &["git", "gh"])
+                    || super::chain_route::inert_step(later)
                     || (later.pipeline_index > 0
                         && super::chain_route::stdin_stage(later, context, execution_environment)))
         });
@@ -493,4 +456,91 @@ fn entered_checkout(
         .then_some((add, after));
     }
     None
+}
+
+/// The declarative review rules a proven chain's own steps may raise. The
+/// chain proof above constrains every segment, so a rule here can only have
+/// matched a step it proved: `command.git.worktree` the bounded add,
+/// `command.git.fetch` an `origin` fetch before it, and
+/// `command.git.checkout` or `command.git.switch` the one shape
+/// [`chain_route::new_branch_step`] admits, `-b`/`-c` with a single new
+/// branch name and nothing else.
+const RULES: &[&str] = &[
+    "command.git.worktree",
+    "command.git.fetch",
+    "command.git.checkout",
+    "command.git.switch",
+];
+
+/// Turn the catalog's generic review of a proven chain into an allow.
+///
+/// [`super::exact_safe_command`] already allows this command inside
+/// `pretool::decide`, but a packaged rule whose own mode reviews — the
+/// catalog ships `command.git.checkout` and `command.git.switch` that way —
+/// raises a floor over that allow afterwards, so a chain that creates its
+/// branch in the checkout it just made still stopped at review. Only the
+/// chain's own rules are lifted: another rule that asks for more than allow,
+/// a permission the user keeps under review, a disabled extension and any
+/// uncertain match keep their verdict.
+pub(in crate::pretool) fn settle(
+    result: &mut guard_contracts::PreToolResultV1,
+    model: Option<&CanonicalCommandV1>,
+    controls: Option<&crate::native_command_controls::CompiledNativeCommandControls>,
+    context: super::super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) {
+    if result.minimum_action != "review"
+        || !matches!(
+            result.reason_code.as_str(),
+            "native_command_review_required" | "native_command_extension_review"
+        )
+        || result.action.action_type != guard_contracts::PreToolActionTypeV1::Command
+        || result.action.sensitive_target
+    {
+        return;
+    }
+    let Some(model) = model else {
+        return;
+    };
+    let Some(extensions) = result.command_extensions.as_ref() else {
+        return;
+    };
+    if extensions.binding.uncertainty_count != 0
+        || extensions.evaluation_error.is_some()
+        || !extensions
+            .permission_observations
+            .iter()
+            .all(|observation| {
+                observation.uncertainty_reasons.is_empty()
+                    && controls.is_some_and(|controls| {
+                        controls.permission_settles_at_allow(
+                            &observation.extension_id,
+                            &observation.permission_id,
+                        )
+                    })
+            })
+        || !extensions.observations.iter().all(|observation| {
+            observation.uncertainty_reasons.is_empty()
+                && (RULES.contains(&observation.rule_id.as_str())
+                    || controls.is_some_and(|controls| {
+                        controls.rule_settles_at_allow(&observation.rule_id)
+                    }))
+        })
+    {
+        return;
+    }
+    if !proven(model, context, deadline, execution_environment) {
+        return;
+    }
+    result.minimum_action = "allow".into();
+    result.policy_action = "allow".into();
+    result.decision = "allow".into();
+    result.explicitly_benign = true;
+    result.reason_code = "native_exact_safe_worktree_add".into();
+    result.reason = concat!(
+        "The Rust command authority proved this bounded worktree creation has a fresh ",
+        "contained destination, a local ref, and no executable Git routes.",
+    )
+    .into();
 }

@@ -40,9 +40,10 @@ impl Ctx<'_> {
         };
         let sealed = anchor_json(&anchor, key)?;
         self.write_anchor(&sealed)?;
-        if anchor.phase == Phase::Committed {
-            // Best effort, as in `_export_last_good_authority`.
-            let _ = self.export_last_good(&anchor);
+        // The export is best effort, as in `_export_last_good_authority`; the
+        // caller warns when it failed.
+        if anchor.phase == Phase::Committed && self.export_last_good(&anchor).is_err() {
+            return Ok(json!({ "anchor_json": sealed, "last_good_exported": false }));
         }
         Ok(json!({ "anchor_json": sealed }))
     }
