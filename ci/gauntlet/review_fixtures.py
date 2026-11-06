@@ -112,6 +112,13 @@ GUARD_NAMED_REPOSITORY_CALLS = (
     ("api", "--method", "POST", _GUARD_NAMED_RUN),
     ("--hostname", "github.com", "api", "--method", "POST", _GUARD_NAMED_NEXT_RUN),
 )
+# One recorded argv per gh invocation the directory-change command makes, in order. The read
+# after the `;` runs whatever the merge returned, so both argvs prove the whole line reached the
+# stand-in rather than stopping at the merge.
+DIRECTORY_CHANGE_CALLS = (
+    ("pr", "merge", "12", "--repo", "example-org/example-repo", "--squash"),
+    ("pr", "view", "12", "--repo", "example-org/example-repo", "--json", "state,mergedAt"),
+)
 
 
 def gh_stub_script(log: Path) -> str:
@@ -189,6 +196,9 @@ def github_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     if scenario_id == GITHUB_GUARD_NAMED_REPOSITORY_CASE:
         calls = recorded_gh_calls(workspace)
         return {"github-guard-named-repository-call-exact": calls == list(GUARD_NAMED_REPOSITORY_CALLS)}
+    if scenario_id == GITHUB_DIRECTORY_CHANGE_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-directory-change-calls-exact": calls == list(DIRECTORY_CHANGE_CALLS)}
     if scenario_id == GITHUB_LOOKUP_CASE:
         calls = recorded_gh_calls(workspace)
         return {"github-lookup-ran-once": calls is not None and len(calls) == 1 and _is_lookup_call(calls[0])}
