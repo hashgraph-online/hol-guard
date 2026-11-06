@@ -280,6 +280,7 @@ mod context_assistance_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
 mod context_assistance_prompt_ignore;
+mod context_assistance_prompt_words;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
