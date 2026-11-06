@@ -7,21 +7,24 @@ This specification defines the architectural model, discovery invariants, MCP pr
 ## Overview
 
 HOL Guard integrates with the Antigravity harness through:
-1. **Rust Native Runner Authority (`antigravity_detect`)**: High-performance, zero-allocation discovery of settings, extensions, MCP configurations, and multi-root skills.
+1. **Rust Native Runner Authority (`antigravity_detect`)**: High-performance discovery of settings, extensions, MCP configurations, and multi-root skills.
 2. **Python Adapter Layer (`AntigravityHarnessAdapter`)**: Thin launcher and lifecycle coordinator integrating with workspace AIBOM (AI Bill of Materials).
-3. **Managed MCP Proxy Relay**: Transparent stdio interception for registered MCP servers, enabling pre-tool execution evaluation and user approval routing.
+3. **Planned Managed MCP Proxy Relay (Phase 1 Target)**: Transparent stdio interception for registered MCP servers, enabling pre-tool execution evaluation and user approval routing.
 
 ---
 
 ## Supported Surfaces & Protection Matrix
 
-| Surface | Detection Source | Enforcement Mechanism | Target Grade |
-| :--- | :--- | :--- | :--- |
-| **User Settings** | `~/.config/antigravity/user/settings.json`<br>`~/.config/Antigravity/User/settings.json`<br>`~/Library/Application Support/Antigravity/User/settings.json`<br>`%APPDATA%\Antigravity\User\settings.json` | Preflight configuration validation & drift detection | `verified` |
-| **Extensions** | `~/.antigravity/extensions/extensions.json` | Manifest scanning & supply-chain provenance check | `verified` |
-| **Skills (Multi-Root)** | `.gemini/antigravity/skills/` (`skills`)<br>`.gemini/antigravity/builtin/skills/` (`builtin-skills`)<br>`.gemini/config/plugins/*/skills/` (`plugin-skills`)<br>Workspace `.agents/skills/` (`agents-skills`) | Recursive directory hashing, symlink traversal containment, and script integrity | `verified` |
-| **MCP Servers** | `.gemini/antigravity/mcp_config.json`<br>Settings `mcpServers` | Native Managed stdio MCP Proxy Relay (`hol-guard mcp-relay`) | `managed_proxy_active` |
-| **Subagents** | Dynamic subagent invocation (`invoke_subagent`, `define_subagent`) | Workspace mode isolation enforcement (`branch`, `share`, `inherit`) | `enforceable_guard` |
+> [!NOTE]
+> Antigravity is currently classified as `observe_only_degraded` in `release-3-0-harness-grades.md` with pre-launch detection and artifact hashing. Active runtime interception is planned for subsequent phases as detailed below.
+
+| Surface | Detection Source | Enforcement Mechanism | Current Grade | Target Grade (Roadmap) |
+| :--- | :--- | :--- | :--- | :--- |
+| **User Settings** | `~/.config/antigravity/user/settings.json`<br>`~/.config/Antigravity/User/settings.json`<br>`~/Library/Application Support/Antigravity/User/settings.json`<br>`~/AppData/Roaming/Antigravity/User/settings.json` | Preflight configuration validation & drift detection | `observe_only_degraded` | `verified` |
+| **Extensions** | `~/.antigravity/extensions/extensions.json` | Manifest scanning & supply-chain provenance check | `observe_only_degraded` | `verified` |
+| **Skills (Multi-Root)** | `.gemini/antigravity/skills/` (`skills`)<br>`.gemini/antigravity/builtin/skills/` (`builtin-skills`)<br>`.gemini/config/plugins/*/skills/` (`plugin-skills`)<br>Workspace `.agents/skills/` (`agents-skills`) | Recursive directory hashing, symlink traversal containment, and script integrity | `observe_only_degraded` | `verified` |
+| **MCP Servers** | `.gemini/antigravity/mcp_config.json`<br>Settings `mcpServers` | Planned native Managed stdio MCP Proxy Relay (`hol-guard mcp-relay`) | `observe_only_degraded` | `managed_proxy_active` (Phase 1) |
+| **Subagents** | Dynamic subagent invocation (`invoke_subagent`, `define_subagent`) | Planned workspace mode isolation enforcement (`branch`, `share`, `inherit`) | `observe_only_degraded` | `enforceable_guard` (Phase 2) |
 
 ---
 
@@ -40,21 +43,21 @@ Skill discovery in `antigravity_detect.rs` binds approval and inventory identity
 
 ## XDG Case-Insensitivity & Path Normalization
 
-On case-insensitive filesystems (such as standard macOS APFS and Windows NTFS), the lowercase path `~/.config/antigravity/user/settings.json` and uppercase path `~/.config/Antigravity/User/settings.json` resolve to the same underlying inode:
+On case-insensitive filesystems (such as standard macOS APFS and Windows NTFS), the lowercase path `~/.config/antigravity/user/settings.json` and uppercase path `~/.config/Antigravity/User/settings.json` resolve to the same underlying file:
 - If both entries point to the same physical file, Guard emits a single deduplicated artifact (`settings:xdg-user`).
 - If the underlying filesystem is case-sensitive and both files exist independently, Guard tracks both files with distinct scoped artifact IDs (`settings:xdg-user` and `settings:xdg-user-lower`).
 
 ---
 
-## Managed Stdio MCP Proxy Relay
+## Planned Managed Stdio MCP Proxy Relay (Phase 1 Proposal)
 
-To elevate Antigravity from preflight observation to active runtime protection:
+Phase 1 will elevate Antigravity from preflight observation (`observe_only_degraded`) to active runtime protection:
 
 ### 1. Transparent Configuration Rewrite
 When `hol-guard apps connect antigravity` or `hol-guard run antigravity` runs:
 1. Guard reads `.gemini/antigravity/mcp_config.json` and eligible `mcpServers` declarations.
 2. An atomic journal backup is written to `.guard/backup/antigravity_mcp_backup.json`.
-3. Stdio server commands are rewritten to target Guard's native relay:
+3. Stdio server commands are rewritten to target Guard's native relay according to the repository's native relay contract:
    ```json
    {
      "mcpServers": {
@@ -65,11 +68,12 @@ When `hol-guard apps connect antigravity` or `hol-guard run antigravity` runs:
      }
    }
    ```
+   *(Exact CLI invocation arguments remain subject to final design stabilization before Phase 1 ships).*
 
 ### 2. Zero-Overhead Tool Call Interception
-- All JSON-RPC `tools/call` requests from Antigravity pass through the native Rust resident (`guard-runtime`).
+- JSON-RPC `tools/call` requests from rewritten eligible stdio servers pass through the native Rust resident (`guard-runtime`). Calls to other MCP servers do not pass through this relay.
 - The evaluation engine checks tool parameters against policy (destructive filesystem operations, sensitive credential exfiltration, suspicious outbound network commands).
-- **Sub-3ms Decision Path**: Evaluated locally via Rust zero-copy framing without external network or LLM roundtrips.
+- **Decision Path**: Evaluated locally via Rust framing without external network or LLM roundtrips.
 
 ---
 
@@ -77,7 +81,7 @@ When `hol-guard apps connect antigravity` or `hol-guard run antigravity` runs:
 
 Every tool invocation intercepted by Guard strictly honors the repository **Approval Invariant** (`docs/guard/approval-invariant.md`):
 1. **Allow Once**: Authorizes the specific invocation attempt. The retry binding incorporates the tool name, arguments, working directory, and session context.
-2. **Always Allow**: Persisted permanently against the cryptographic hash of the action and parameters. Subsequent invocations matching the hash proceed without prompting.
+2. **Always Allow**: Persisted against the hash of the action and parameters until the user removes it or that hash changes. Subsequent invocations matching the hash proceed without prompting.
 3. Guard never presents a review choice that cannot be approved or executed.
 
 ---
@@ -107,8 +111,11 @@ All Antigravity implementations must pass:
   - `test_antigravity_detect_xdg_lowercase_settings`
   - `test_xdg_case_variants_keep_distinct_mcp_ids_when_both_files_exist`
   - `test_same_skill_name_in_two_roots_keeps_distinct_ids`
-  - `test_antigravity_mcp_relay_rewrite_and_atomic_restore` (New for Phase 1)
-- Rust unit tests in `guard-runtime`:
-  - `test_antigravity_detect_clean_tree`
-  - `test_antigravity_detect_symlink_ceiling`
-
+  - `test_antigravity_mcp_relay_rewrite_and_atomic_restore` (Planned for Phase 1)
+- Rust unit tests in `rust/crates/guard-runtime/src/adapters/detection/antigravity_detect.rs`:
+  - `lowercase_xdg_source_stays_distinct_when_the_path_is_only_the_suffix`
+  - `lowercase_xdg_settings_keep_a_distinct_mcp_id`
+  - `xdg_case_variants_do_not_collapse_when_they_are_different_files` (Unix)
+  - `home_agents_skills_are_not_antigravity_and_do_not_admit_editor_settings`
+  - `workspace_agents_skills_and_builtin_skills_keep_distinct_ids`
+  - `nested_primary_skills_do_not_reuse_other_root_ids`
