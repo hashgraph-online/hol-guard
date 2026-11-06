@@ -114,7 +114,15 @@ fn call(
     args: Value,
 ) -> StoreResult<Value> {
     let args: Map<String, Value> = args.as_object().unwrap().clone();
-    write(connection, &Args(&args))
+    // The dispatcher runs every write in one transaction, so a refusal
+    // leaves nothing behind.
+    connection.execute_batch("savepoint call").unwrap();
+    let result = write(connection, &Args(&args));
+    if result.is_err() {
+        connection.execute_batch("rollback to call").unwrap();
+    }
+    connection.execute_batch("release call").unwrap();
+    result
 }
 
 fn refusal(result: StoreResult<Value>) -> String {
