@@ -42,6 +42,8 @@ GIT_ALLOW_HOOKS_WORKTREE_CASE = "git-allow-worktree-into-hooks-folder"
 GIT_ALLOW_MIXED_WORKTREE_CASE = "git-allow-worktree-then-secret-read"
 # Git work the catalog carries no rule for, run under a full git Allow.
 GIT_ALLOW_UNMODELLED_CASE = "git-allow-unmodelled-reads-against-origin"
+# Git's own plumbing names for work the porcelain above already settles.
+GIT_ALLOW_PLUMBING_CASE = "git-allow-plumbing-reads-under-allow"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
@@ -52,6 +54,7 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_HOOKS_WORKTREE_CASE,
         GIT_ALLOW_MIXED_WORKTREE_CASE,
         GIT_ALLOW_UNMODELLED_CASE,
+        GIT_ALLOW_PLUMBING_CASE,
     }
 )
 GIT_EXTENSION_ID = "command.git"
@@ -67,6 +70,7 @@ HOOKS_WORKTREE = ".git/hooks/review-wt"
 MIXED_WORKTREE = "mixed-wt"
 UNMODELLED_ORIGIN = "origin.git"
 UNMODELLED_ARCHIVE = "snapshot.tar"
+PLUMBING_ARCHIVE = "plumbing.tar"
 _IDENTITY = {
     "GIT_AUTHOR_NAME": "Gauntlet Fixture",
     "GIT_AUTHOR_EMAIL": "gauntlet@example.invalid",
@@ -176,6 +180,11 @@ def git_allow_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
         return {"git-allow-sibling-worktree-at-origin": heads is not None and heads[0] == heads[1]}
     if scenario_id == GIT_ALLOW_HOOKS_WORKTREE_CASE:
         return {"git-allow-hooks-worktree-absent": not (workspace / HOOKS_WORKTREE).exists()}
+    if scenario_id == GIT_ALLOW_PLUMBING_CASE:
+        # The archive is the last step, so it exists only if the plumbing
+        # reads before it ran rather than waiting for the user.
+        archive = workspace / PLUMBING_ARCHIVE
+        return {"git-allow-plumbing-reads-ran": archive.is_file() and archive.stat().st_size > 0}
     if scenario_id == GIT_ALLOW_UNMODELLED_CASE:
         # The archive is the second step, so it exists only if the ls-remote
         # before it ran rather than waiting for the user.

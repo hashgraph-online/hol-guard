@@ -70,55 +70,124 @@ const INERT_KEYS: &[&str] = &[
 ];
 
 /// Git built-ins whose program-running options the scan below holds, so an
-/// explicit Git Allow may settle uncertainty about them. Anything else keeps
-/// its review: `send-email`, `instaweb`, `daemon`, `credential*`, `help`,
-/// bridges such as `p4`, `svn` and `cvs*`, `maintenance` (which installs
-/// scheduler jobs), and `git <name>` resolving to a `git-<name>` on `PATH`.
+/// explicit Git Allow may settle uncertainty about them.
+///
+/// A user who allows Git means Git, not the porcelain subset. Plumbing is the
+/// same program reading the same repository, so `git whatchanged`, `git fsck`
+/// and `git verify-pack` belong here next to `git log`; leaving them out is
+/// what makes an Allow stop partway through ordinary work.
+///
+/// Anything else keeps its review, and the reasons are these:
+///
+/// - Starts a program the user configured rather than Git: `credential*`,
+///   `difftool`, `mergetool`, `hook`, `remote-ext`, `remote-fd`, `instaweb`,
+///   `web--browse`, `send-email`, `citool`, `gui`, `filter-branch`, `help`
+///   (which opens a pager or a browser), and the `p4`, `svn` and `cvs*`
+///   bridges.
+/// - Serves or consumes whatever a peer sends: `upload-pack`,
+///   `upload-archive*`, `receive-pack`, `send-pack`, `fetch-pack`,
+///   `fast-import`, `daemon`, `http-backend`, `shell`.
+/// - Keeps running, or installs a schedule: `fsmonitor--daemon`,
+///   `maintenance`.
+/// - Packages configuration and environment into a report: `bugreport`,
+///   `diagnose`.
+/// - Runs a further Git command this contract never read: `for-each-repo`,
+///   `submodule--helper`.
+/// - Rewrites history wholesale: `replay`.
+/// - Runs a program named on its own command line: `merge-index`, which
+///   executes its first operand once per unmerged path.
+/// - Writes to a destination this contract never read, so an Allow would
+///   carry the same escape `git archive -o` keeps its review for: `bundle`,
+///   `checkout-index` (`--prefix` is not one of the output options the scan
+///   reads), `index-pack`, `mailinfo`, `mailsplit`, `merge-file`,
+///   `pack-objects`, and the `checkout--worker` helper that takes its paths
+///   from a pipe.
+/// - Spells a command whose floors read only the other spelling: `init-db`,
+///   where the `init` template and destination checks never see the alias.
+///
+/// `git <name>` resolving to a `git-<name>` on `PATH` is not a built-in and
+/// is never settled here.
 const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "add",
-    "annotate",
     "am",
+    "annotate",
     "apply",
     "archive",
+    "backfill",
     "bisect",
     "blame",
     "branch",
     "cat-file",
     "check-attr",
+    "check-ignore",
     "check-mailmap",
     "check-ref-format",
     "checkout",
+    "cherry",
     "cherry-pick",
     "clean",
     "clone",
+    "column",
     "commit",
+    "commit-graph",
+    "commit-tree",
     "config",
     "count-objects",
     "describe",
     "diff",
+    "diff-files",
+    "diff-index",
+    "diff-pairs",
+    "diff-tree",
+    "fast-export",
     "fetch",
+    "fmt-merge-msg",
     "for-each-ref",
     "format-patch",
+    "fsck",
+    "fsck-objects",
     "gc",
+    "get-tar-commit-id",
     "grep",
+    "hash-object",
     "init",
     "interpret-trailers",
+    "last-modified",
     "log",
     "ls-files",
     "ls-remote",
+    "ls-tree",
     "merge",
     "merge-base",
+    "merge-ours",
+    "merge-recursive",
+    "merge-recursive-ours",
+    "merge-recursive-theirs",
+    "merge-subtree",
+    "merge-tree",
+    "mktag",
+    "mktree",
+    "multi-pack-index",
     "mv",
     "name-rev",
     "notes",
+    "pack-redundant",
+    "pack-refs",
     "patch-id",
+    "pickaxe",
+    "prune",
+    "prune-packed",
     "pull",
     "push",
     "range-diff",
+    "read-tree",
     "rebase",
     "reflog",
+    "refs",
     "remote",
     "replace",
+    "repo",
+    "rerere",
     "reset",
     "restore",
     "rev-list",
@@ -128,8 +197,10 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "shortlog",
     "show",
     "show-branch",
+    "show-index",
     "show-ref",
     "sparse-checkout",
+    "stage",
     "stash",
     "status",
     "stripspace",
@@ -137,8 +208,19 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "switch",
     "symbolic-ref",
     "tag",
+    "unpack-file",
+    "unpack-objects",
+    "update-index",
+    "update-ref",
+    "update-server-info",
     "var",
+    "verify-commit",
+    "verify-pack",
+    "verify-tag",
+    "version",
+    "whatchanged",
     "worktree",
+    "write-tree",
 ];
 
 /// Merge strategies built into Git. Any other `-s <name>` runs a
@@ -484,3 +566,7 @@ mod archive_format_tests {
         assert!(runs(&["archive", "--format"]));
     }
 }
+
+#[cfg(test)]
+#[path = "git_allow_scope/settleable_subcommand_tests.rs"]
+mod settleable_subcommand_tests;
