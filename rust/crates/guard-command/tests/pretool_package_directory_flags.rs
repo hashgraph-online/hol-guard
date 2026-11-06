@@ -170,3 +170,76 @@ fn directory_flags_outside_a_repository_or_installing_stay_reviewed() {
         }
     }
 }
+
+/// An inert assignment the shell applies to the manager steers nothing, so
+/// the flagged run keeps the decision it has without the prefix. A name that
+/// does steer the run keeps the owners' floor, prefix or not.
+#[test]
+fn an_inert_assignment_keeps_the_runs_own_decision() {
+    let root = fixture();
+    let sibling = root.join("sibling");
+    let sibling = sibling.to_str().unwrap();
+    for harness in ["omp", "claude-code", "codex"] {
+        for (plain, prefixed) in [
+            (
+                format!("npm --prefix {sibling} run build"),
+                format!("CI=1 npm --prefix {sibling} run build"),
+            ),
+            (
+                format!("bun run --cwd {sibling} build"),
+                format!("NODE_ENV=production bun run --cwd {sibling} build"),
+            ),
+            (
+                format!("pnpm -C {sibling} run test"),
+                format!("CI=1 LANG=C pnpm -C {sibling} run test"),
+            ),
+        ] {
+            let expected = classify(&root, harness, &plain);
+            let result = classify(&root, harness, &prefixed);
+            assert_eq!(
+                (&result.decision, &result.minimum_action),
+                (&expected.decision, &expected.minimum_action),
+                "{harness}: {prefixed}"
+            );
+        }
+        // A port number names no host, so the prefixed run keeps the
+        // decision the same run has without it.
+        for (plain, prefixed) in [
+            (
+                format!("npm --prefix {sibling} run build"),
+                format!("PORT=3000 npm --prefix {sibling} run build"),
+            ),
+            (
+                format!("bun run --cwd {sibling} build"),
+                format!("APP_PORT=3027 POSTGRES_PORT=55477 bun run --cwd {sibling} build"),
+            ),
+        ] {
+            let expected = classify(&root, harness, &plain);
+            let result = classify(&root, harness, &prefixed);
+            assert_eq!(
+                (&result.decision, &result.minimum_action),
+                (&expected.decision, &expected.minimum_action),
+                "{harness}: {prefixed}"
+            );
+        }
+        // A value that names a host moves the connection off this machine,
+        // so it still takes the owners' floor the `cd` form takes.
+        for value in ["db.example.test:5432", "99999"] {
+            let steered = classify(
+                &root,
+                harness,
+                &format!("PORT={value} npm --prefix {sibling} run build"),
+            );
+            let cd_form = classify(
+                &root,
+                harness,
+                &format!("cd {sibling} && PORT={value} npm run build"),
+            );
+            assert_eq!(
+                (&steered.decision, &steered.minimum_action),
+                (&cd_form.decision, &cd_form.minimum_action),
+                "{harness}: PORT={value}"
+            );
+        }
+    }
+}
