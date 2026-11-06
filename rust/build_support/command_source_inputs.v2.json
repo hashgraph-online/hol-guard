@@ -324,6 +324,7 @@
       "src/pretool/contained_exact_shape.rs",
       "src/pretool/contained_output_filters.rs",
       "src/pretool/contained_publish.rs",
+      "src/pretool/contained_sed_script.rs",
       "src/pretool/contained_worktree_add.rs",
       "src/pretool/contained_wrapper.rs",
       "src/pretool/contained_wrapper_plan.rs",

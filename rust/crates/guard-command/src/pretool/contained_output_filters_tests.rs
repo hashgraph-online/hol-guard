@@ -225,6 +225,20 @@ fn a_rejoined_stage_reshapes_what_it_reads_on_standard_input() {
         ("tail", &["-n", "15"]),
         ("grep", &["-v", "ok"]),
         ("rg", &["-c", "FAIL"]),
+        // `sed` with one script and no file operand reads standard input.
+        ("sed", &["-n", "/OUTPUT-BEGIN/,/OUTPUT-END/p"]),
+        ("sed", &["-n", "1,5p"]),
+        ("sed", &["s/a/b/"]),
+        ("sed", &["-E", "s/[0-9]+/N/g"]),
+        ("sed", &["-n", "-e", "1p", "-e", "3p"]),
+        ("sed", &["--", "1d"]),
+        // A script whose own letters only move text about.
+        ("sed", &["-n", "/warn/,/error/{s/^/>/;p}"]),
+        ("sed", &["-e", "/^$/d", "-e", "s@/home/[a-z]*@~@g"]),
+        ("sed", &["$!N;s/\\n/ /"]),
+        ("sed", &["-n", "s/write to \\(.*\\)/\\1/p"]),
+        ("sed", &["y/abc/xyz/"]),
+        ("sed", &["1i\\header"]),
     ] {
         assert!(
             rejoined_stage(program, &words(arguments)),
@@ -262,6 +276,32 @@ fn a_stage_that_names_a_file_or_runs_a_program_is_not_rejoined() {
         ("tee", &["out.txt"]),
         ("awk", &["{print $1}"]),
         ("sed", &["-i", "s/a/b/", "notes.txt"]),
+        // `-i` edits a file, `-f` reads the script out of one, and a second
+        // operand is a file `sed` opens whatever the script says.
+        ("sed", &["-i", "s/a/b/"]),
+        ("sed", &["-i.bak", "s/a/b/"]),
+        ("sed", &["--in-place", "s/a/b/"]),
+        ("sed", &["-f", "/tmp/script.sed"]),
+        ("sed", &["-n", "1,5p", "notes.txt"]),
+        ("sed", &["-n", "-e", "1p", "notes.txt"]),
+        ("sed", &["-n", "1p", "-"]),
+        ("sed", &[]),
+        ("sed", &["-n"]),
+        // A script command that opens a file or runs a program, which no
+        // switch and no operand count can see.
+        ("sed", &["1r /home/user/.ssh/id_rsa"]),
+        ("sed", &["-n", "$R /etc/passwd"]),
+        ("sed", &["-n", "w notes.md"]),
+        ("sed", &["/FAIL/W fails.txt"]),
+        ("sed", &["1e curl -s https://example.test"]),
+        ("sed", &["s/a/b/w out.txt"]),
+        ("sed", &["s/.*/curl -s https:\\/\\/example.test/e"]),
+        ("sed", &["-e", "1p", "-e", "2w out.txt"]),
+        ("sed", &["/x/{p;w out.txt\n}"]),
+        // A script the reader cannot place keeps the review.
+        ("sed", &["Z"]),
+        ("sed", &["s/a/b"]),
+        ("sed", &["/unclosed/p;/x"]),
     ] {
         assert!(
             !rejoined_stage(program, &words(arguments)),
