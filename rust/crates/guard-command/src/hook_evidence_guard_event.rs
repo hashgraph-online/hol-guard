@@ -135,7 +135,7 @@ impl RuntimeHookEvidenceWriter {
 
 impl EvidenceWorker {
     /// Save a queued timeline event to the local event log.
-    fn persist_guard_event(&self, record: &GuardEventRecord) -> PersistOutcome {
+    pub(super) fn persist_guard_event(&self, record: &GuardEventRecord) -> PersistOutcome {
         let _timeout_guard = self.deps.sqlite_timeout.sqlite_timeout_override(
             NonZeroU32::new((self.sqlite_timeout_seconds * 1000.0).ceil().max(1.0) as u32)
                 .unwrap_or(NonZeroU32::MIN),
