@@ -319,13 +319,25 @@ fn equality_literals_ok(expression: &[u8]) -> bool {
 /// Whether every quoted literal in `text` reads as a mode or a label, as in
 /// `if token == "--" {` or `if (secret === 'none' || mode !== 'prod')`. An
 /// unclosed literal hides however much the cursor never read, so it never
-/// qualifies. A value this rejects is still matched on its own line wherever it
+/// qualifies, and literals joined by `+` spell out one value between them, so
+/// the pieces are read as that value rather than as labels. A value this rejects is still matched on its own line wherever it
 /// is spelled out, so the check loses no credential by reading only labels here.
 fn every_literal_is_a_label(text: &[u8]) -> bool {
     let mut at = 0usize;
     while at < text.len() {
         let quote = text[at];
         if !matches!(quote, b'"' | b'\'' | b'`') {
+            // A trailing comment is prose. An apostrophe in `don't` is not an
+            // unclosed literal, so reading on would reject a line whose code
+            // holds nothing but labels.
+            if text[at..].starts_with(b"//") || text[at..].starts_with(b"/*") {
+                return true;
+            }
+            // Joined pieces spell out one value between them, so none of them
+            // is a label however short each piece is on its own.
+            if quote == b'+' {
+                return false;
+            }
             at += 1;
             continue;
         }
