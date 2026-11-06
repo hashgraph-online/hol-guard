@@ -96,18 +96,20 @@ def _session_claims(location: str) -> dict[str, object]:
 
 
 def test_opening_the_link_late_never_extends_access_past_the_code() -> None:
+    import time
     from datetime import datetime
 
-    link = build_approval_handoff_url(REVIEW_URL, auth_token=AUTH, now=NOW)
+    # One clock: a link issued almost twelve hours ago, opened now.
+    issued = int(time.time()) - HANDOFF_TTL_SECONDS + 30
+    link = build_approval_handoff_url(REVIEW_URL, auth_token=AUTH, now=issued)
     assert link is not None
-    expires = NOW + HANDOFF_TTL_SECONDS
+    expires = issued + HANDOFF_TTL_SECONDS
     path = link.split("127.0.0.1:5474", 1)[1]
 
-    late = approval_handoff_location(path, auth_token=AUTH, now=expires - 30)
+    late = approval_handoff_location(path, auth_token=AUTH)
 
     assert late is not None and "=" in late
     claims = _session_claims(late)
-    assert datetime.fromisoformat(str(claims["expires_at"])).timestamp() <= expires
-    started = datetime.fromisoformat(str(claims["session_started_at"])).timestamp()
-    assert started == NOW
+    assert datetime.fromisoformat(str(claims["expires_at"])).timestamp() <= expires + 1
+    assert datetime.fromisoformat(str(claims["session_started_at"])).timestamp() == issued
     assert approval_handoff_location(path, auth_token=AUTH, now=expires + 1) == f"/requests/{REQUEST_ID}"

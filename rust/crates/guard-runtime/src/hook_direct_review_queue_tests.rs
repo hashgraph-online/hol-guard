@@ -851,7 +851,11 @@ fn a_queued_cursor_review_reaches_the_agent_with_one_signed_link() {
     let rendered: Value = serde_json::from_str(&stdout).unwrap();
     for field in ["user_message", "agent_message"] {
         let message = rendered[field].as_str().unwrap();
-        assert_eq!(message.matches(&format!("{raw_url}/")).count(), 1, "{message}");
+        assert_eq!(
+            message.matches(&format!("{raw_url}/")).count(),
+            1,
+            "{message}"
+        );
         assert!(!message.contains("#guard-token="), "{message}");
         assert_eq!(message, response["reason"].as_str().unwrap());
     }
