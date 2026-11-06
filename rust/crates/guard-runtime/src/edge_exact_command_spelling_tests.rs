@@ -175,3 +175,21 @@ fn shell_options_before_the_script_are_skipped() {
     }
     assert!(!spellings("bash -c").complete);
 }
+
+#[test]
+fn a_comment_does_not_start_a_heredoc_or_quote() {
+    for command in [
+        "(true) # <<EOF\nnpm publish\nEOF",
+        "(true) # <<'E O F'\nnpm publish\nE O F",
+        "(true) # it's done\nnpm publish",
+    ] {
+        assert!(has(command, "npm publish"), "{command:?}");
+        assert!(spellings(command).complete, "{command:?}");
+    }
+}
+
+#[test]
+fn arithmetic_that_lists_itself_is_complete() {
+    let read = spellings("(( i++ ))");
+    assert!(read.complete);
+}

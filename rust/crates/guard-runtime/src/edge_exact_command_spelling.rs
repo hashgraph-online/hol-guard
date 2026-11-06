@@ -138,7 +138,11 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
             }
             for step in found {
                 out.push(seen, collapse(&step));
-                visit(&step, depth + 1, out, seen);
+                // `(( i++ ))` read as groups lists itself; reading it again
+                // would only repeat this pass.
+                if step != text.trim() {
+                    visit(&step, depth + 1, out, seen);
+                }
             }
         }
     }
@@ -256,10 +260,23 @@ fn steps(text: &str, read_arithmetic: bool) -> (Vec<String>, bool) {
     // `((` and `$((` hold arithmetic, where `<<` is a shift, not a heredoc.
     let mut arithmetic = 0usize;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
+    // A `#` that starts a word comments out the rest of the line, where
+    // quotes and `<<` start nothing. Its text is still split into steps, so a
+    // shell that reads it differently cannot hide a step from the rules.
+    let mut comment = false;
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
         let next = chars.get(i + 1).copied();
+        if comment && c != '\n' {
+            if matches!(c, ';' | '&' | '|' | '(' | ')' | '\r' | '`') {
+                steps.push(std::mem::take(&mut current));
+            } else {
+                current.push(c);
+            }
+            i += 1;
+            continue;
+        }
         match (quote, c) {
             (Some('\''), '\'') | (Some('"'), '"') => {
                 quote = None;
@@ -275,6 +292,12 @@ fn steps(text: &str, read_arithmetic: bool) -> (Vec<String>, bool) {
             (Some(_), _) => current.push(c),
             (None, '\'' | '"') => {
                 quote = Some(c);
+                current.push(c);
+            }
+            (None, '#')
+                if arithmetic == 0 && (current.is_empty() || current.ends_with([' ', '\t'])) =>
+            {
+                comment = true;
                 current.push(c);
             }
             (None, '(') if read_arithmetic && next == Some('(') => {
@@ -301,6 +324,7 @@ fn steps(text: &str, read_arithmetic: bool) -> (Vec<String>, bool) {
                 }
             }
             (None, '\n') => {
+                comment = false;
                 steps.push(std::mem::take(&mut current));
                 i = skip_heredoc_bodies(&chars, i + 1, &mut heredocs);
                 continue;

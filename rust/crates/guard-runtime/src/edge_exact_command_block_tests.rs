@@ -155,6 +155,7 @@ fn a_heredoc_or_shift_does_not_hide_the_blocked_step() {
         "cat <<EOF\nnpm publish",
         "cat <<'E O F'\nx\nE O F\nnpm publish",
         "((npm publish); true)",
+        "(true) # <<EOF\nnpm publish\nEOF",
         "bash -euo pipefail -c 'npm publish'",
     ] {
         let blocked = apply(home.path(), &call(command), Some(NOW), allowed());
