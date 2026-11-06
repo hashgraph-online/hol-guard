@@ -152,7 +152,8 @@ def _write_private(store: GuardStore, name: str, wire: bytes, limit: int, deadli
     _remaining(deadline)
     if not wire or len(wire) > limit:
         raise _error("native_business_source_installation_write_failed")
-    error = write_native_private_state(store, name, wire)
+    # The resident call may not outlive the mutation's approval window.
+    error = write_native_private_state(store, name, wire, timeout_seconds=min(10.0, _remaining(deadline)))
     if error == "native_private_state_write_mismatch":
         raise _error("native_business_source_installation_write_mismatch")
     if error is not None:

@@ -75,6 +75,7 @@ def extension_control_authority(
     op: str,
     key: bytes | None,
     store: GuardStore | None = None,
+    timeout_seconds: float = _TIMEOUT_SECONDS,
     **fields: object,
 ) -> dict[str, object]:
     """The resident's answer to ``op``; raises on an outage or a fault.
@@ -118,7 +119,7 @@ def extension_control_authority(
             operation="extension_control_authority",
             request=wire,
             guard_home=guard_home,
-            timeout_seconds=_TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
             required_feature=_required_feature(op),
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
@@ -133,11 +134,14 @@ def extension_control_authority(
     return payload
 
 
-def write_private_state(store: GuardStore, name: str, payload: bytes) -> str | None:
+def write_private_state(
+    store: GuardStore, name: str, payload: bytes, *, timeout_seconds: float = _TIMEOUT_SECONDS
+) -> str | None:
     """Have the resident publish one native runtime authority file.
 
     The resident writes ``payload`` atomically under ``name`` and reads it back
     byte for byte. Returns ``None`` once written, or the code it refused with.
+    ``timeout_seconds`` lets a caller bound the write by its own deadline.
     """
 
     guard_home = Path(store.guard_home)
@@ -146,6 +150,8 @@ def write_private_state(store: GuardStore, name: str, payload: bytes) -> str | N
         guard_home=guard_home,
         op="write_private_state",
         key=None,
+        store=store,
+        timeout_seconds=timeout_seconds,
         state={"name": name, "content_b64": base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")},
     )
     error = reply.get("error")
