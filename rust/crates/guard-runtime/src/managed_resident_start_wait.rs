@@ -176,13 +176,7 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let invalid_scope = root.join("not-a-directory");
         std::fs::write(&invalid_scope, b"invalid scope").unwrap();
-        for (scope, expected) in [
-            (&root, Ok(())),
-            (
-                &invalid_scope,
-                Err("native_resident_spawn_containment_failed".to_owned()),
-            ),
-        ] {
+        for scope in [&root, &invalid_scope] {
             let mut child = std::process::Command::new("/bin/false").spawn().unwrap();
             // Synchronize the fixture, avoiding a scheduler-dependent exit race.
             assert!(!child.wait().unwrap().success());
@@ -199,7 +193,7 @@ mod tests {
                     &[0; crate::AUTH_TOKEN_BYTES],
                     deadline(),
                 ),
-                expected
+                Err("native_resident_spawn_containment_failed".to_owned())
             );
             assert!(child.try_wait().unwrap().is_some());
         }
