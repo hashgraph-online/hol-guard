@@ -34,14 +34,21 @@ pub struct ExtractedOutput {
     pub truncated: bool,
 }
 
-fn collect_output_text(value: &Value) -> ExtractedOutput {
+/// Collect the text under `value`, counting `used` characters as already
+/// spent. The caller passes the running total so one payload's keys share a
+/// single character budget: both returned forms then cover the same content,
+/// and the separator allowance the scan adds back stays a count of
+/// separators rather than of everything the budget cut.
+fn collect_output_text(value: &Value, used: usize) -> ExtractedOutput {
     fn append(parts: &mut Vec<String>, chars: &mut usize, truncated: &mut bool, text: &str) {
         if *truncated || text.is_empty() {
             return;
         }
         let remaining = MAX_OUTPUT_CHARS.saturating_sub(*chars);
         if text.chars().count() > remaining {
-            parts.push(text.chars().take(remaining).collect());
+            if remaining > 0 {
+                parts.push(text.chars().take(remaining).collect());
+            }
             *chars = MAX_OUTPUT_CHARS;
             *truncated = true;
             return;
@@ -118,7 +125,7 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
     }
 
     let mut parts = Vec::new();
-    let mut chars = 0usize;
+    let mut chars = used;
     let mut truncated = false;
     let mut seen = HashSet::new();
     traverse(value, 0, &mut parts, &mut chars, &mut truncated, &mut seen);
@@ -148,9 +155,16 @@ pub fn extract_payload_output(payload: &Value) -> ExtractedOutput {
     let mut parts = Vec::new();
     let mut boundary_parts = Vec::new();
     let mut truncated = false;
+    // One budget across every key. Capping only the concatenated form left
+    // the separated form carrying whole keys the cap had already dropped, so
+    // the scan allowance below counted cut content as separators and sent an
+    // output that used to come back as a reviewed excerpt past the scan
+    // budget into a deny.
+    let mut used = 0usize;
     for key in PAYLOAD_OUTPUT_KEYS {
         if let Some(value) = record.get(*key) {
-            let result = collect_output_text(value);
+            let result = collect_output_text(value, used);
+            used = result.chars;
             truncated |= result.truncated;
             if !result.text.is_empty() {
                 parts.push(result.text);

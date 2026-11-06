@@ -87,7 +87,7 @@ fn file_mutation_text(request: &NativeHookRequestV1) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
     let mut truncated = false;
     let mut collect = |value: &Value| {
-        let extracted = collect_output_text(value);
+        let extracted = collect_output_text(value, 0);
         truncated |= extracted.truncated;
         if !extracted.text.is_empty() {
             // The separated form: this text is scanned, never digested. The
