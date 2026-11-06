@@ -19,9 +19,11 @@ from .approval_retry_marker import assessment as marker_assessment
 from .approval_retry_marker import collect as collect_approval_marker
 from .approval_retry_marker import stage as stage_approval_marker
 from .approval_retry_persistent import CASE as APPROVAL_PERSISTENT_CASE
+from .approval_retry_persistent import PACKAGE_CASE as APPROVAL_PERSISTENT_PACKAGE_CASE
 from .approval_retry_persistent import assessment as persistent_assessment
 from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
+from .approval_retry_persistent import write_package_review_config
 from .approval_rows import approval_rows
 from .catalog import Scenario
 from .input_evidence import redact_value
@@ -49,10 +51,14 @@ class OmpReview:
         stage_approval_persistent(fixture.workspace, scenario.id, case)
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
-        case["review_policy"] = write_review_config(
-            self.guard_home,
-            file_tool="bash" not in scenario.required_tools,
-            intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
+        case["review_policy"] = (
+            write_package_review_config(self.guard_home)
+            if scenario.id == APPROVAL_PERSISTENT_PACKAGE_CASE
+            else write_review_config(
+                self.guard_home,
+                file_tool="bash" not in scenario.required_tools,
+                intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
+            )
         )
 
     def approver(self, worker: Any) -> ReviewApprover:

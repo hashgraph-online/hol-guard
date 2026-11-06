@@ -31572,9 +31572,16 @@ function nonPortableReason(value) {
       return "Guard could not verify every package execution input";
   }
 }
+const UNREUSABLE_LAUNCH_MESSAGE = "Guard can't reuse this approval, not even for one retry, because it can't confirm how the package manager starts. A NODE_OPTIONS value that loads code (such as --require or --import), PYTHONINSPECT, or a shell startup file such as BASH_ENV usually causes this. Remove it and run the install again, then approve it.";
+function nonPortableMessage(value) {
+  if (value === "package_manager_launch_identity_unavailable") {
+    return UNREUSABLE_LAUNCH_MESSAGE;
+  }
+  return `This approval is limited to one retry because ${nonPortableReason(value)}.`;
+}
 function packageExecutionContextMessages(context) {
   const messages = [
-    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : `This approval is limited to one retry because ${nonPortableReason(context.non_portable_reason)}.`
+    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : nonPortableMessage(context.non_portable_reason)
   ];
   const changedComponents = context.changed_components ?? [];
   if (changedComponents.length > 0) {

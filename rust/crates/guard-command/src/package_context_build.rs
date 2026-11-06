@@ -29,6 +29,8 @@ mod executable;
 #[cfg(test)]
 mod executable_tests;
 mod fs;
+#[cfg(test)]
+mod node_options_tests;
 mod ports;
 mod repository;
 
