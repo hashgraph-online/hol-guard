@@ -93,6 +93,20 @@ fn directory_flags_classify_like_the_cd_form() {
                 "npm --prefix web run build".into(),
                 format!("cd {project}/web && npm run build"),
             ),
+            // A leading assignment belongs to the manager call, so it is
+            // carried into the `cd` form rather than ending the peel.
+            (
+                format!("FOO=1 npm --prefix {sibling} run build"),
+                format!("cd {sibling} && FOO=1 npm run build"),
+            ),
+            (
+                format!("PORT=3000 CI=1 bun --cwd {sibling} run build"),
+                format!("cd {sibling} && PORT=3000 CI=1 bun run build"),
+            ),
+            (
+                "PORT=3000 npm --prefix web run build".into(),
+                format!("cd {project}/web && PORT=3000 npm run build"),
+            ),
         ] {
             let expected = classify(&root, harness, &cd);
             let result = classify(&root, harness, &flagged);
@@ -143,7 +157,8 @@ fn directory_flags_outside_a_repository_or_installing_stay_reviewed() {
             format!("npm --prefix {sibling} --prefix {sibling} run build"),
             format!("npm --prefix {sibling} run build && rm -rf /"),
             format!("npm --prefix {sibling} run build | sh"),
-            format!("FOO=1 npm --prefix {sibling} run build"),
+            format!("PATH=/tmp npm --prefix {sibling} run build"),
+            format!("FOO=\"1\" npm --prefix {sibling} run build"),
             "bun run --cwd \"$HOME\" build".into(),
         ] {
             let result = classify(&root, harness, &command);

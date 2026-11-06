@@ -533,6 +533,17 @@ fn filter_chain(tokens: &[Token]) -> Result<Vec<Vec<String>>, &'static str> {
 /// lexically, as the package manager's `path.resolve` does, then resolved on
 /// disk. Other spellings return `None` and keep the unwrapped path.
 fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathBuf, PathBuf)> {
+    // Leading `NAME=value` assignments belong to the manager call, not to the
+    // directory flag. Native authority carries them across the same rewrite
+    // (`package_directory_flags.rs`), so the sink peels past them here and
+    // keeps them ahead of the manager in the rewritten core. Peeling them off
+    // instead would hand the sandbox a different command from the one the
+    // classifier admitted.
+    let assignments = tokens
+        .iter()
+        .take_while(|token| !token.1 && environment_assignment(word(token)))
+        .count();
+    let (prefix, tokens) = tokens.split_at(assignments);
     let manager = tokens.first().map(word)?;
     let flags = directory_flags(manager);
     let root_flags = workspace_root_flags(manager);
@@ -597,10 +608,28 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
             .filter(|directory| directory.is_dir())?;
         (resolved, lexical(&base.join(value)))
     };
-    let mut rewritten = vec![tokens[0].clone()];
+    let mut rewritten = prefix.to_vec();
+    rewritten.push(tokens[0].clone());
     rewritten.extend(rest.iter().map(|value| ((*value).to_owned(), false)));
     rewritten.extend_from_slice(&tokens[end..]);
     Some((rewritten, resolved, joined))
+}
+
+/// A leading `NAME=value` assignment, read the way the classifier reads one.
+/// `PATH` is not one of them: native authority refuses a command that sets it
+/// (`path_overridden`), so the sink must not peel past it either.
+fn environment_assignment(value: &str) -> bool {
+    let Some((name, _)) = value.split_once('=') else {
+        return false;
+    };
+    name != "PATH"
+        && name
+            .chars()
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
 /// Any spelling of a directory flag: `--cwd`, `--cwd=x`, `-C`, `-Cx`.
