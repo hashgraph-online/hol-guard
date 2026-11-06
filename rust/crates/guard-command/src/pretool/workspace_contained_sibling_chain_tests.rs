@@ -34,6 +34,11 @@ fn a_list_of_runs_below_a_sibling_root_stays_contained() {
             "cd {0}/scripts && ./report.sh 2>&1 | head -20 && ./report.sh | tail -5",
             tree.display()
         ),
+        // A run may drop its standard error, as long as a bound follows it.
+        format!(
+            "cd {0}/scripts && ./report.sh 2>/dev/null | head -20 && ./report.sh",
+            tree.display()
+        ),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -78,6 +83,18 @@ fn a_list_outside_that_grammar_keeps_its_review() {
             "cd {0}/scripts && ./report.sh && cd {1}/plain",
             tree.display(),
             projects.display()
+        ),
+        // The sink rejoins a dropped standard error only under a bound, so a
+        // run holding one with no stage after it keeps its review. The parse
+        // leaves this redirect out of the segment's words, so the grammar
+        // reads it from the segment's own text.
+        format!(
+            "cd {0}/scripts && ./report.sh 2>/dev/null && ./report.sh",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh && ./report.sh 2>/dev/null",
+            tree.display()
         ),
     ] {
         assert!(

@@ -27,6 +27,7 @@ pub(super) fn joined_core(
         || !model.wrapper_chain.is_empty()
         || commands < 3
         || !rejoinable_words(model)
+        || !bounded_stderr_sinks(model)
         || !joined_filters(model, context)
     {
         return None;
@@ -59,7 +60,10 @@ fn rejoinable_words(model: &CanonicalCommandV1) -> bool {
     })
 }
 
-/// A segment's words with a trailing `2>&1` or `2>/dev/null` removed.
+/// A segment's words with a trailing `2>&1` removed. An unquoted
+/// `2>/dev/null` never reaches here: the parse drops it from the words
+/// before the segment is built, which is what `bounded_stderr_sinks` reads
+/// the segment's own text for.
 fn words_without_stderr(segment: &CommandSegmentV1) -> &[String] {
     let tokens = segment.tokens.as_slice();
     if let [rest @ .., last] = tokens {
@@ -67,10 +71,31 @@ fn words_without_stderr(segment: &CommandSegmentV1) -> &[String] {
             return rest;
         }
     }
-    if let [rest @ .., redirect, target] = tokens {
-        if redirect == "2>" && target == "/dev/null" {
-            return rest;
-        }
-    }
     tokens
+}
+
+/// Whether every run that sends its standard error to the null device is
+/// followed by the bound the sink needs to rejoin it.
+///
+/// The sink writes a stderr redirect back only when a filter stage follows
+/// it, the same rule `joined_filters` applies to `2>&1`. The parse drops an
+/// unquoted `2>/dev/null` from a segment's words, so that rule never saw this
+/// spelling and the list was admitted here while the sink declined to rejoin
+/// it -- a review approving it could not clear.
+fn bounded_stderr_sinks(model: &CanonicalCommandV1) -> bool {
+    model.segments.iter().enumerate().all(|(index, segment)| {
+        segment.pipeline_index != 0
+            || !sends_stderr_to_the_null_device(&segment.text)
+            || model
+                .segments
+                .get(index + 1)
+                .is_some_and(|next| next.pipeline_index == 1)
+    })
+}
+
+/// Whether a segment's text holds the one stderr sink the parse drops.
+fn sends_stderr_to_the_null_device(text: &str) -> bool {
+    let characters: Vec<char> = text.chars().collect();
+    (0..characters.len())
+        .any(|start| crate::parser_segments::is_stderr_to_null_redirect(&characters, start, false))
 }
