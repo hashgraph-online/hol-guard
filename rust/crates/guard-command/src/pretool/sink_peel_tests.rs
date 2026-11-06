@@ -45,6 +45,12 @@ fn the_peeled_core_keeps_the_assignments_the_caller_typed() {
             "_UNDERSCORE=1 npm --prefix web run build",
             "_UNDERSCORE=1 npm run build",
         ),
+        // A static value in double quotes is one word by the time the
+        // program is called, so the peel carries it across unquoted.
+        (
+            "PORT=\"3000\" bun --cwd web run build",
+            "PORT=3000 bun run build",
+        ),
     ] {
         assert_eq!(
             peeled(command, &root),
@@ -88,14 +94,16 @@ fn an_assignment_that_sets_the_search_path_is_not_peeled() {
 }
 
 /// An assignment the peel cannot copy over as the word the source holds is
-/// not peeled either: a quoted or expanded value is read by the shell, not by
-/// the sink.
+/// not peeled either: an expansion is read by the shell, so the sink does not
+/// know the value the program would see. A word that is not an assignment at
+/// all leaves no manager call to peel.
 #[test]
 fn an_assignment_the_sink_cannot_read_exactly_is_not_peeled() {
     let root = fixture("unreadable");
     for command in [
-        "PORT=\"3000\" bun --cwd web run build",
         "PORT=$OTHER bun --cwd web run build",
+        "PORT=\"$OTHER\" bun --cwd web run build",
+        "PORT=$(cat .port) bun --cwd web run build",
         "3PORT=3000 bun --cwd web run build",
     ] {
         assert_eq!(peeled(command, &root), None, "{command}");
