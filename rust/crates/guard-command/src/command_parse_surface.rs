@@ -145,11 +145,12 @@ pub(crate) fn parse_command_unbound(
 /// files first and `zsh` reads `~/.zshenv` whatever option it is given, so
 /// those run code this text does not hold and keep the wrapper's own
 /// uncertainty. The bounded shape is what keeps the rest true: a known shell,
-/// options that end in `-c` and say only how the script reacts to a failure,
-/// one script word, and no expansion the parser would have to guess at.
-/// Anything else — an extra operand, `-s`, `-o pipefail`, a prefix, a shell
-/// this text only names — keeps that uncertainty too, as does a script this
-/// parser cannot model exactly.
+/// options that end in `-c` and say only how the script reacts to a failure or
+/// what it traces (`-e`, `-u`, `-x`, `-o pipefail` and their long names,
+/// `--norc`), one script word, and no expansion the parser would have to guess
+/// at. Anything else — an extra operand, `-s`, `-O extglob`, `-o noglob`, a
+/// prefix, a shell this text only names — keeps that uncertainty too, as does
+/// a script this parser cannot model exactly.
 ///
 /// A Windows agent runs PowerShell, which reads quotes differently from the
 /// shell this text names: `''` closes and reopens a POSIX single-quoted word

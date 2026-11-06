@@ -27,6 +27,7 @@ use serde_json::{json, Map, Value};
 
 use crate::command_tokens::executable_name;
 use crate::env_wrapper::parse_env_wrapper;
+pub use crate::launch_identity_common::package_binding_argv_digest;
 pub use crate::launch_identity_common::package_request_launch_identity_material;
 use crate::launch_identity_common::{
     context_opaque_digest_strict, expand_user, launch_argv_digest, normalized_launch_cwd,
