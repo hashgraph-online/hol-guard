@@ -1,0 +1,455 @@
+"""Phase 14 — approval store scale: indexes, cursor pagination, bulk ops, and migrations."""
+
+from __future__ import annotations
+
+import dataclasses
+import sqlite3
+import tempfile
+import time
+import uuid
+from pathlib import Path
+
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_approvals import approval_index_statements
+from tests.coverage_ci import under_coverage_scale
+from tests.native_approval_writes import (
+    _store_for,
+    add_approval_request,
+    get_approval_request,
+    list_approval_requests,
+    native_approval_connection,
+    native_store,
+    page_cursor,
+    resolve_request_with_queue_result,
+    seed_pending_approval_rows,
+)
+
+
+def _make_conn() -> sqlite3.Connection:
+    return native_approval_connection()
+
+
+def _make_request(
+    *,
+    harness: str = "codex",
+    workspace: str | None = "ws-a",
+    artifact_id: str | None = None,
+    policy_action: str = "require-reapproval",
+    source_scope: str = "project",
+) -> GuardApprovalRequest:
+    aid = artifact_id or f"codex:project:tool-{uuid.uuid4().hex[:8]}"
+    rid = str(uuid.uuid4())
+    return GuardApprovalRequest(
+        request_id=rid,
+        harness=harness,
+        artifact_id=aid,
+        artifact_name="tool",
+        artifact_type="mcp_server",
+        artifact_hash="abc123",
+        publisher=None,
+        policy_action=policy_action,
+        recommended_scope="session",
+        changed_fields=frozenset(["args"]),
+        source_scope=source_scope,
+        config_path="/tmp/config.toml",
+        workspace=workspace,
+        launch_target=None,
+        transport="stdio",
+        risk_summary="risk",
+        risk_signals=[],
+        artifact_label=None,
+        source_label=None,
+        trigger_summary=None,
+        why_now=None,
+        launch_summary=None,
+        risk_headline=None,
+        action_envelope_json=None,
+        decision_v2_json=None,
+        review_command=f"hol-guard review {rid}",
+        approval_url=f"http://localhost:4455/approve/{rid}",
+    )
+
+
+def _insert(conn: sqlite3.Connection, req: GuardApprovalRequest, now: str = "2026-01-01T00:00:00Z") -> str:
+    return add_approval_request(conn, req, now)
+
+
+class TestApprovalIndexStatements:
+    def test_index_statements_returns_nonempty_list(self) -> None:
+        stmts = approval_index_statements()
+        assert isinstance(stmts, list)
+        assert len(stmts) >= 6
+
+    def test_index_statements_are_create_index(self) -> None:
+        for stmt in approval_index_statements():
+            assert "create index" in stmt.lower()
+
+    def test_indexes_execute_without_error(self) -> None:
+        _make_conn()
+
+
+class TestCursorPagination:
+    def test_list_returns_all_when_no_cursor(self) -> None:
+        conn = _make_conn()
+        for i in range(5):
+            _insert(conn, _make_request(), f"2026-01-0{i + 1}T00:00:00Z")
+        rows = list_approval_requests(conn, status="pending", limit=10)
+        assert len(rows) == 5
+
+    def test_list_respects_limit(self) -> None:
+        conn = _make_conn()
+        for i in range(10):
+            _insert(conn, _make_request(), f"2026-01-{i + 1:02d}T00:00:00Z")
+        rows = list_approval_requests(conn, status="pending", limit=3)
+        assert len(rows) == 3
+
+    def test_cursor_after_skips_earlier_records(self) -> None:
+        conn = _make_conn()
+        for i in range(6):
+            _insert(conn, _make_request(), f"2026-01-{i + 1:02d}T00:00:00Z")
+        page1 = list_approval_requests(conn, status="pending", limit=3)
+        assert len(page1) == 3
+        cursor = page_cursor(page1[-1])
+        page2 = _store_for(conn).list_approval_requests(status="pending", limit=3, cursor=cursor)
+        assert len(page2) == 3
+        dates_p1 = {r["created_at"] for r in page1}
+        dates_p2 = {r["created_at"] for r in page2}
+        assert dates_p1.isdisjoint(dates_p2)
+
+    def test_cursor_after_last_page_returns_empty(self) -> None:
+        conn = _make_conn()
+        for i in range(3):
+            _insert(conn, _make_request(), f"2026-01-0{i + 1}T00:00:00Z")
+        page1 = list_approval_requests(conn, status="pending", limit=3)
+        cursor = page_cursor(page1[-1])
+        page2 = _store_for(conn).list_approval_requests(status="pending", limit=3, cursor=cursor)
+        assert page2 == []
+
+
+class TestQueueScaleTargets:
+    def test_listing_first_queue_page_with_100k_rows_stays_under_100ms(self) -> None:
+        conn = _make_conn()
+        seed_pending_approval_rows(conn, 100_000)
+        store = native_store(conn)
+        store.count_approval_requests()  # starts the resident outside the timed read
+
+        started = time.perf_counter()
+        page = store.list_pending_approval_summaries(limit=25)
+        elapsed = time.perf_counter() - started
+
+        assert len(page["items"]) == 25
+        assert page["total_pending_count"] == 100_000
+        assert elapsed < 0.1
+
+    def test_resolving_one_request_with_100k_rows_stays_under_100ms(self) -> None:
+        conn = _make_conn()
+        seed_pending_approval_rows(conn, 100_000)
+        # Starts the resident for this connection's guard home outside the timed
+        # resolve, as the listing target above does: a resolution projects its
+        # rows through the resident, and the first call to a fresh home pays for
+        # starting it once, which is not the queue cost this target measures.
+        get_approval_request(conn, "req-000001")
+
+        started = time.perf_counter()
+        result = resolve_request_with_queue_result(
+            conn,
+            "req-099999",
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-01-02T00:00:00Z",
+        )
+        elapsed = time.perf_counter() - started
+
+        assert result["resolved"] is True
+        assert result["remaining_pending_count"] == 99_999
+        assert result["next_selectable_request_id"] == "req-099998"
+        assert elapsed < 0.1
+
+    def test_resolving_duplicates_stays_within_oauth_source(self) -> None:
+        home = Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-"))
+        request = _make_request(artifact_id="codex:project:shared-tool")
+        first_id = GuardStore(home, source="source-a").add_approval_request(request, "2026-01-01T00:00:00Z")
+        second = dataclasses.replace(request, request_id=str(uuid.uuid4()))
+        second_id = GuardStore(home, source="source-b").add_approval_request(second, "2026-01-01T00:00:01Z")
+        assert second_id != first_id
+        conn = native_approval_connection(home)
+
+        result = resolve_request_with_queue_result(
+            conn,
+            first_id,
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-01-02T00:00:00Z",
+        )
+
+        assert result["resolved_duplicate_ids"] == []
+        assert get_approval_request(conn, second_id)["status"] == "pending"
+
+    def test_listing_queue_page_without_totals_skips_count_queries(self) -> None:
+        conn = _make_conn()
+        seed_pending_approval_rows(conn, 50)
+
+        page = native_store(conn).list_pending_approval_summaries(limit=10, include_totals=False)
+
+        assert len(page["items"]) == 10
+        assert "total_pending_count" not in page
+        assert "total_count" not in page
+
+    def test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows(self) -> None:
+        conn = _make_conn()
+        seed_pending_approval_rows(conn, 100_000)
+        store = native_store(conn)
+        store.count_approval_requests()  # starts the resident outside the timed read
+
+        started = time.perf_counter()
+        page = store.list_pending_approval_summaries(limit=25, include_totals=False)
+        elapsed = time.perf_counter() - started
+
+        assert len(page["items"]) == 25
+        assert elapsed < 0.05 * under_coverage_scale(4.0)
+
+
+class TestSearchFilter:
+    def test_search_matches_artifact_name(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        base = dataclasses.asdict(req)
+        req2 = GuardApprovalRequest(
+            **{
+                **base,
+                "request_id": str(uuid.uuid4()),
+                "artifact_name": "special-tool",
+                "artifact_id": "codex:project:special-tool",
+                "changed_fields": ("args",),
+            }
+        )
+        _insert(conn, req)
+        _insert(conn, req2)
+        results = _store_for(conn).list_approval_requests(search="special")
+        assert len(results) == 1
+        assert results[0]["artifact_name"] == "special-tool"
+
+    def test_search_is_case_insensitive(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        base = dataclasses.asdict(req)
+        mod = GuardApprovalRequest(
+            **{
+                **base,
+                "request_id": str(uuid.uuid4()),
+                "artifact_name": "SpecialTool",
+                "artifact_id": "codex:project:SpecialTool",
+                "changed_fields": ("args",),
+            }
+        )
+        _insert(conn, mod)
+        results = _store_for(conn).list_approval_requests(search="specialtool")
+        assert len(results) == 1
+
+    def test_search_matches_raw_command_text_in_queue_pages(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        base = dataclasses.asdict(req)
+        mod = GuardApprovalRequest(
+            **{
+                **base,
+                "request_id": str(uuid.uuid4()),
+                "artifact_name": "Bash",
+                "artifact_id": "codex:project:bash",
+                "raw_command_text": "hol-guard approvals bulk allow once",
+            }
+        )
+        _insert(conn, req)
+        _insert(conn, mod)
+
+        page = native_store(conn).list_pending_approval_summaries(search="bulk")
+
+        assert page["total_count"] == 1
+        assert page["items"][0]["request_id"] == mod.request_id
+        assert page["items"][0]["raw_command_text"] == "hol-guard approvals bulk allow once"
+
+    def test_search_matches_fallback_cli_command(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        base = dataclasses.asdict(req)
+        mod = GuardApprovalRequest(
+            **{
+                **base,
+                "request_id": str(uuid.uuid4()),
+                "artifact_name": "Bash",
+                "artifact_id": "codex:project:bash",
+                "fallback_cli_command": "hol-guard approvals approve --reason bulk-import",
+            }
+        )
+        _insert(conn, req)
+        _insert(conn, mod)
+
+        results = _store_for(conn).list_approval_requests(search="bulk-import")
+
+        assert len(results) == 1
+        assert results[0]["request_id"] == mod.request_id
+
+    def test_search_no_match_returns_empty(self) -> None:
+        conn = _make_conn()
+        _insert(conn, _make_request())
+        results = _store_for(conn).list_approval_requests(search="xyznotfound")
+        assert results == []
+
+
+def _mark_resolved(conn: sqlite3.Connection, request_id: str) -> None:
+    conn.execute(
+        "update approval_requests set status = 'resolved', resolution_action = 'allow', "
+        "resolution_scope = 'session', resolved_at = '2026-01-02T00:00:00Z' where request_id = ?",
+        (request_id,),
+    )
+
+
+class TestStatusFilterList:
+    def test_multiple_statuses_returned(self) -> None:
+        conn = _make_conn()
+        req1 = _make_request()
+        req2 = _make_request()
+        _insert(conn, req1)
+        _insert(conn, req2)
+        _mark_resolved(conn, req1.request_id)
+        rows = list_approval_requests(conn, status=None)
+        statuses = {r["status"] for r in rows}
+        assert "pending" in statuses
+        assert "resolved" in statuses
+
+    def test_status_list_filters_correctly(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        _insert(conn, req)
+        _mark_resolved(conn, req.request_id)
+        rows = list_approval_requests(conn, status="pending")
+        assert rows == []
+        rows = list_approval_requests(conn, status="resolved")
+        assert len(rows) == 1
+
+
+class TestHarnessFilter:
+    def test_harness_filter_excludes_other_harnesses(self) -> None:
+        conn = _make_conn()
+        _insert(conn, _make_request(harness="codex"))
+        _insert(conn, _make_request(harness="claude"))
+        rows = list_approval_requests(conn, harness="codex")
+        assert all(r["harness"] == "codex" for r in rows)
+        assert len(rows) == 1
+
+
+class TestCountFilter:
+    def test_count_matches_status_filter(self) -> None:
+        conn = _make_conn()
+        req1 = _make_request()
+        req2 = _make_request()
+        _insert(conn, req1)
+        _insert(conn, req2)
+        _mark_resolved(conn, req1.request_id)
+        pending_count = native_store(conn).count_approval_requests(status="pending")
+        resolved_count = native_store(conn).count_approval_requests(status="resolved")
+        assert pending_count == 1
+        assert resolved_count == 1
+
+    def test_count_with_harness_filter(self) -> None:
+        conn = _make_conn()
+        _insert(conn, _make_request(harness="codex"))
+        _insert(conn, _make_request(harness="claude"))
+        assert native_store(conn).count_approval_requests(status="pending", harness="codex") == 1
+        assert native_store(conn).count_approval_requests(status="pending", harness="claude") == 1
+
+
+class TestMigrationFromOldSchema:
+    def test_migration_from_schema_without_indexes(self) -> None:
+        conn = native_approval_connection()
+        req = _make_request()
+        add_approval_request(conn, req, "2026-01-01T00:00:00Z")
+        index_query = (
+            "select name from sqlite_master where type = 'index' and tbl_name = 'approval_requests' and sql is not null"
+        )
+        # The store creates every approval index; drop them to start from the
+        # legacy schema the index statements upgrade.
+        for (name,) in conn.execute(index_query).fetchall():
+            conn.execute(f'drop index "{name}"')
+        assert conn.execute(index_query).fetchall() == []
+        for stmt in approval_index_statements():
+            conn.execute(stmt)
+        assert conn.execute(index_query).fetchall()
+        rows = list_approval_requests(conn, status="pending")
+        assert len(rows) == 1
+
+    def test_migration_idempotent_double_index_creation(self) -> None:
+        conn = _make_conn()
+        for stmt in approval_index_statements():
+            conn.execute(stmt)
+
+
+class TestCorruptionRecovery:
+    def test_risk_signal_payloads_are_safe_and_legacy_browser_labels_are_repaired(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        _insert(conn, req)
+        conn.execute(
+            "update approval_requests set risk_signals_json = ? where request_id = ?",
+            ("not-valid-json", req.request_id),
+        )
+        row = get_approval_request(conn, req.request_id)
+        assert row is not None
+        assert isinstance(row["risk_signals"], list)
+
+        cases = (
+            ("click", "page element", "browser interaction on"),
+            ("browser_click", "page element", "browser interaction on"),
+            ("fill_form", "page elements", "browser interaction on"),
+            ("new_page", "current page", "browser navigation to"),
+            ("take_snapshot", "current page", "browser inspection of"),
+            ("get_network_request", "network request", "browser inspection of"),
+            ("list_console_messages", "console messages", "browser inspection of"),
+        )
+        request_ids: set[str] = set()
+        for index, (operation, target, risk_prefix) in enumerate(cases, start=1):
+            legacy = dataclasses.replace(
+                _make_request(artifact_id=f"codex:project:chrome-devtools:{operation}"),
+                artifact_name=operation,
+                artifact_type="tool_call",
+                launch_target=f"chrome-devtools {operation} unknown",
+                risk_signals=[f"{risk_prefix} unknown target"],
+            )
+            _insert(conn, legacy, now=f"2026-01-02T00:00:0{index}Z")
+            request_ids.add(legacy.request_id)
+            detail = get_approval_request(conn, legacy.request_id)
+            assert detail is not None
+            assert detail["launch_target"] == f"chrome-devtools {operation} {target}"
+            assert detail["risk_signals"] == [f"{risk_prefix} {target}"]
+            stored = conn.execute(
+                "select launch_target, risk_signals_json from approval_requests where request_id = ?",
+                (legacy.request_id,),
+            ).fetchone()
+            assert stored is not None
+            assert stored["launch_target"] == f"chrome-devtools {operation} unknown"
+            assert stored["risk_signals_json"] == f'["{risk_prefix} unknown target"]'
+
+        page = native_store(conn).list_pending_approval_summaries(limit=10)
+        summaries = page["items"]
+        assert isinstance(summaries, list)
+        repaired: set[object] = set()
+        for item in summaries:
+            assert isinstance(item, dict)
+            if item.get("request_id") in request_ids:
+                repaired.add(item.get("launch_target"))
+        assert repaired == {f"chrome-devtools {operation} {target}" for operation, target, _prefix in cases}
+
+    def test_malformed_changed_fields_json_falls_back_gracefully(self) -> None:
+        conn = _make_conn()
+        req = _make_request()
+        _insert(conn, req)
+        conn.execute(
+            "update approval_requests set changed_fields_json = ? where request_id = ?",
+            ("{bad json}", req.request_id),
+        )
+        row = get_approval_request(conn, req.request_id)
+        assert row is not None
+        assert isinstance(row["changed_fields"], list)

@@ -32,6 +32,7 @@ def _tether_payload() -> dict[str, object]:
     return payload
 
 
+
 def _dev_mcp_payload() -> dict[str, object]:
     payload = json.loads(_DEV_MCP.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
@@ -73,7 +74,7 @@ def test_tether_unknown_tool_inherits_policy() -> None:
 
 
 def test_dev_mcp_contribution_is_external_opt_in() -> None:
-    """Keep dev-mcp bound to its published package and explicit local opt-in."""
+    """Keep dev-mcp pinned to its publisher repository and explicitly opt-in."""
     payload = _dev_mcp_payload()
     validate_mcp_contribution(payload, filename=_DEV_MCP.name)
     assert payload["id"] == "mcp.dev-mcp"
@@ -86,8 +87,8 @@ def test_dev_mcp_contribution_is_external_opt_in() -> None:
     }
 
 
-def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
-    """Require destructive, terminal execution, desktop and state-mutating tools on review."""
+def test_dev_mcp_sensitive_tools_require_review() -> None:
+    """Keep execution, filesystem, Git, and project-state mutations review-gated."""
     payload = _dev_mcp_payload()
     tools = payload.get("tools")
     assert isinstance(tools, list)
@@ -98,7 +99,11 @@ def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
         "desktop_click",
         "desktop_type",
         "desktop_press",
+        "desktop_scroll",
         "desktop_launch",
+        "desktop_close_app",
+        "desktop_focus_window",
+        "desktop_clipboard",
         "delete_path",
         "delete_recursive",
         "reset_project_brain",
@@ -107,6 +112,20 @@ def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
         "edit_file",
         "batch_replace",
         "create_directory",
+        "git_add",
+        "git_commit",
+        "git_create_branch",
+        "install_git_hooks",
+        "commit_changes",
+        "adopt_existing_project",
+        "bootstrap_project",
+        "create_project_workspace",
+        "archive_project_brain",
+        "init_context",
+        "update_context",
+        "update_prd",
+        "add_to_context_list",
+        "remove_context_item",
         "add_key_file",
         "add_decision",
         "get_context",
@@ -123,17 +142,21 @@ def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
         "extract_requirements",
         "sync_workspace",
         "export_context_markdown",
-        "git_add",
-        "git_commit",
-        "git_create_branch",
-        "install_git_hooks",
     }
     assert review_tools <= declared.keys()
     for tool_name in review_tools:
         assert declared[tool_name] == "review"
         assert mcp_tool_state(payload, tool_name) == "review"
+
+
+def test_dev_mcp_unlisted_tools_default_to_review() -> None:
+    """Keep future/unlisted dev-mcp tools on the conservative review fallback."""
+    payload = _dev_mcp_payload()
+    tools = payload.get("tools")
+    assert isinstance(tools, list)
+    declared = {item["name"]: item["state"] for item in tools}
     assert declared["other"] == "review"
-    assert mcp_tool_state(payload, "unlisted_diagnostic_tool") == "review"
+    assert mcp_tool_state(payload, "unlisted_future_tool") == "review"
 
 
 def test_filesystem_contribution_cannot_self_declare_trusted_library() -> None:

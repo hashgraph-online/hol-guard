@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.evernode-mcp",
+  "version": "1.0.0",
+  "name": "Evernode MCP",
+  "description": "Reviews Evernode MCP tools that look up live hosts on api.onledger.net or generate contract files, deploy commands, and an unsigned Hook install command. Offline linting, pattern advice, and lease math are allowed. The server never signs, submits, or holds keys. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.hugegreencandle",
+    "displayName": "Hugegreencandle (Kairo Vault Technologies G.K.)",
+    "url": "https://github.com/Hugegreencandle"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#0F172A" },
+  "homepage": "https://github.com/Hugegreencandle/evernode-mcp#readme",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "evernode-mcp"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "deploy-command-generation",
+    "generated-source-code"
+  ],
+  "tools": [
+    { "name": "list_templates", "state": "allow" },
+    { "name": "check_determinism", "state": "allow" },
+    { "name": "check_contract_api", "state": "allow" },
+    { "name": "recommend_pattern", "state": "allow" },
+    { "name": "check_hook_compat", "state": "allow" },
+    { "name": "estimate_lease_cost", "state": "allow" },
+    { "name": "explain_error", "state": "allow" },
+    { "name": "generate_contract", "state": "review" },
+    { "name": "generate_settlement", "state": "review" },
+    { "name": "generate_deploy_commands", "state": "review" },
+    { "name": "recommend_hosts", "state": "review" },
+    { "name": "host_diagnostics", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/Hugegreencandle/evernode-mcp",
+    "https://www.npmjs.com/package/evernode-mcp"
+  ],
+  "saferAlternatives": [
+    "Pass a hosts list to recommend_hosts or a host object to host_diagnostics to rank or diagnose offline instead of fetching from api.onledger.net.",
+    "Read generated package.json scripts and evdevkit or xahc commands before running them; evdevkit acquire leases hosts and spends EVR."
+  ]
+}

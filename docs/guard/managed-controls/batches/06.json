@@ -1,0 +1,15 @@
+{
+  "batch": 6,
+  "evidence": [
+    "src/codex_plugin_scanner/guard/managed_controls_policy_fields.py",
+    "tests/test_managed_controls_policy_fields.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 90,
+    "start": 76
+  },
+  "theme": "Signed bundle extension fields and unknown-target rejection"
+}

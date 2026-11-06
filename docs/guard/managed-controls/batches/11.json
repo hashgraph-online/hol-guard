@@ -1,0 +1,15 @@
+{
+  "batch": 11,
+  "evidence": [
+    "dashboard/src/managed-controls/local-protection-model.ts",
+    "dashboard/src/managed-controls/local-protection-model.test.ts"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 165,
+    "start": 151
+  },
+  "theme": "Low-cognitive-load Local Extension posture and provenance model"
+}

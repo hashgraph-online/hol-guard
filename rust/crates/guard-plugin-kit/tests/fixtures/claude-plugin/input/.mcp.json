@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "pdf": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@acme/pdf-mcp@1.4.0"
+      ],
+      "env": {
+        "PDF_API_KEY": "${PDF_API_KEY}"
+      }
+    },
+    "docs": {
+      "type": "http",
+      "url": "https://mcp.acme.example/docs"
+    }
+  }
+}

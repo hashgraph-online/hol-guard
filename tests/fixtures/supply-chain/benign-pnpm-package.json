@@ -1,0 +1,8 @@
+{
+  "name": "benign-pnpm-package",
+  "version": "2.0.0",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  }
+}

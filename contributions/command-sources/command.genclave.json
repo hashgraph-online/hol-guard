@@ -1,0 +1,813 @@
+{
+  "extension": {
+    "action_classes": [
+      "gEnclave credential mutation command",
+      "gEnclave policy modification command",
+      "gEnclave session authorization command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews gEnclave (ge) security enclave operations that mutate credentials, modify access policies, or unlock persistent sessions.",
+    "ecosystem_ids": [],
+    "executables": [
+      "ge",
+      "ge.cmd",
+      "ge.exe"
+    ],
+    "extension_id": "command.genclave",
+    "homepage": "https://gitlab.com/renich/genclave",
+    "icon": {
+      "background": "#059669",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "GPL-3.0-or-later",
+    "name": "gEnclave command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "gEnclave credential mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies gEnclave commands that permanently delete, generate, import, or mutate cryptographic credentials, keys, and secrets.",
+        "example_command": "ge passkey delete key-1",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "gEnclave credential and secret mutation",
+        "permission_id": "command.genclave.permission.mutate",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List and inspect existing keys or credentials with read-only subcommands before mutating or deleting them.",
+          "Verify backup or recovery shares before rekeying or removing credentials."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "gEnclave policy modification command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies gEnclave commands that modify credential caching policies, authorization TTLs, or authentication persistence.",
+        "example_command": "ge policy set key-1 15m",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "gEnclave policy modification",
+        "permission_id": "command.genclave.permission.policy",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect current caching and confirmation policies with ge policy show <id> before making changes.",
+          "Avoid setting infinite cache TTLs on sensitive credentials."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "gEnclave session authorization command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies gEnclave commands that unlock or pre-warm authentication sessions and cryptographic caches.",
+        "example_command": "ge unlock",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "gEnclave session unlock and pre-warming",
+        "permission_id": "command.genclave.permission.session-auth",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Use default ephemeral per-operation prompts instead of unlocking persistent sessions.",
+          "Lock the session immediately after batch operations with ge lock."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Rénich Bon Ćirić",
+      "id": "community.renich",
+      "url": "https://github.com/renich"
+    },
+    "reference_urls": [
+      "https://gitlab.com/renich/genclave"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "policy_bypass"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "gEnclave credential mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies gEnclave commands that permanently delete, generate, import, or mutate cryptographic credentials, keys, and secrets.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "ge",
+                  "ge.cmd",
+                  "ge.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--global",
+                  "--require-confirm",
+                  "--shred",
+                  "--stdin",
+                  "-v",
+                  "--version"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--algorithm",
+                  "-a",
+                  "--bits",
+                  "-b",
+                  "--cache-ttl",
+                  "--comment",
+                  "-c",
+                  "--duration",
+                  "--email",
+                  "-e",
+                  "--key-type",
+                  "-t",
+                  "--name",
+                  "-n",
+                  "--pcr",
+                  "--pin",
+                  "--timeout"
+                ],
+                "paths": [
+                  [
+                    "gpg",
+                    "add"
+                  ],
+                  [
+                    "gpg",
+                    "generate"
+                  ],
+                  [
+                    "gpg",
+                    "import"
+                  ],
+                  [
+                    "gpg",
+                    "remove"
+                  ],
+                  [
+                    "passkey",
+                    "delete"
+                  ],
+                  [
+                    "rekey"
+                  ],
+                  [
+                    "secret",
+                    "delete"
+                  ],
+                  [
+                    "secret",
+                    "set"
+                  ],
+                  [
+                    "set-secret"
+                  ],
+                  [
+                    "ssh",
+                    "add"
+                  ],
+                  [
+                    "ssh",
+                    "generate"
+                  ],
+                  [
+                    "ssh",
+                    "import"
+                  ],
+                  [
+                    "ssh",
+                    "remove"
+                  ],
+                  [
+                    "webauthn",
+                    "delete"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.genclave.permission.mutate",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.genclave.mutate",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "ge",
+                      "ge.cmd",
+                      "ge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--global",
+                      "--require-confirm",
+                      "--shred",
+                      "--stdin",
+                      "-v",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--algorithm",
+                      "-a",
+                      "--bits",
+                      "-b",
+                      "--cache-ttl",
+                      "--comment",
+                      "-c",
+                      "--duration",
+                      "--email",
+                      "-e",
+                      "--key-type",
+                      "-t",
+                      "--name",
+                      "-n",
+                      "--pcr",
+                      "--pin",
+                      "--timeout"
+                    ],
+                    "paths": [
+                      [
+                        "gpg",
+                        "add"
+                      ],
+                      [
+                        "gpg",
+                        "generate"
+                      ],
+                      [
+                        "gpg",
+                        "import"
+                      ],
+                      [
+                        "gpg",
+                        "remove"
+                      ],
+                      [
+                        "passkey",
+                        "delete"
+                      ],
+                      [
+                        "rekey"
+                      ],
+                      [
+                        "secret",
+                        "delete"
+                      ],
+                      [
+                        "secret",
+                        "set"
+                      ],
+                      [
+                        "set-secret"
+                      ],
+                      [
+                        "ssh",
+                        "add"
+                      ],
+                      [
+                        "ssh",
+                        "generate"
+                      ],
+                      [
+                        "ssh",
+                        "import"
+                      ],
+                      [
+                        "ssh",
+                        "remove"
+                      ],
+                      [
+                        "webauthn",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "gEnclave mutation command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "ge",
+                      "ge.cmd",
+                      "ge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--global",
+                      "--require-confirm",
+                      "--shred",
+                      "--stdin",
+                      "-v",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--algorithm",
+                      "-a",
+                      "--bits",
+                      "-b",
+                      "--cache-ttl",
+                      "--comment",
+                      "-c",
+                      "--duration",
+                      "--email",
+                      "-e",
+                      "--key-type",
+                      "-t",
+                      "--name",
+                      "-n",
+                      "--pcr",
+                      "--pin",
+                      "--timeout"
+                    ],
+                    "paths": [
+                      [
+                        "gpg",
+                        "add"
+                      ],
+                      [
+                        "gpg",
+                        "generate"
+                      ],
+                      [
+                        "gpg",
+                        "import"
+                      ],
+                      [
+                        "gpg",
+                        "remove"
+                      ],
+                      [
+                        "passkey",
+                        "delete"
+                      ],
+                      [
+                        "rekey"
+                      ],
+                      [
+                        "secret",
+                        "delete"
+                      ],
+                      [
+                        "secret",
+                        "set"
+                      ],
+                      [
+                        "set-secret"
+                      ],
+                      [
+                        "ssh",
+                        "add"
+                      ],
+                      [
+                        "ssh",
+                        "generate"
+                      ],
+                      [
+                        "ssh",
+                        "import"
+                      ],
+                      [
+                        "ssh",
+                        "remove"
+                      ],
+                      [
+                        "webauthn",
+                        "delete"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "gEnclave mutation command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "List and inspect existing keys or credentials with read-only subcommands before mutating or deleting them.",
+          "Verify backup or recovery shares before rekeying or removing credentials."
+        ],
+        "severity": "high",
+        "title": "gEnclave credential and secret mutation"
+      },
+      {
+        "action_classes": [
+          "gEnclave policy modification command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies gEnclave commands that modify credential caching policies, authorization TTLs, or authentication persistence.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "ge",
+                  "ge.cmd",
+                  "ge.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "-v",
+                  "--version"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "identity",
+                    "set-cache-ttl"
+                  ],
+                  [
+                    "policy",
+                    "set"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.genclave.permission.policy",
+        "risk_classes": [
+          "policy_bypass"
+        ],
+        "rule_id": "command.genclave.policy",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "ge",
+                      "ge.cmd",
+                      "ge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-v",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "identity",
+                        "set-cache-ttl"
+                      ],
+                      [
+                        "policy",
+                        "set"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "gEnclave policy command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "ge",
+                      "ge.cmd",
+                      "ge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "-v",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "identity",
+                        "set-cache-ttl"
+                      ],
+                      [
+                        "policy",
+                        "set"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "gEnclave policy command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect current caching and confirmation policies with ge policy show <id> before making changes.",
+          "Avoid setting infinite cache TTLs on sensitive credentials."
+        ],
+        "severity": "high",
+        "title": "gEnclave policy modification"
+      },
+      {
+        "action_classes": [
+          "gEnclave session authorization command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies gEnclave commands that unlock or pre-warm authentication sessions and cryptographic caches.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "ge",
+                  "ge.cmd",
+                  "ge.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--global",
+                  "--stdin",
+                  "-v",
+                  "--version"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--duration",
+                  "--timeout"
+                ],
+                "paths": [
+                  [
+                    "prewarm"
+                  ],
+                  [
+                    "unlock"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.genclave.permission.session-auth",
+        "risk_classes": [
+          "policy_bypass"
+        ],
+        "rule_id": "command.genclave.session-auth",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "ge",
+                      "ge.cmd",
+                      "ge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--global",
+                      "--stdin",
+                      "-v",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--duration",
+                      "--timeout"
+                    ],
+                    "paths": [
+                      [
+                        "prewarm"
+                      ],
+                      [
+                        "unlock"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "gEnclave session command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "ge",
+                      "ge.cmd",
+                      "ge.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--global",
+                      "--stdin",
+                      "-v",
+                      "--version"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--duration",
+                      "--timeout"
+                    ],
+                    "paths": [
+                      [
+                        "prewarm"
+                      ],
+                      [
+                        "unlock"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "gEnclave session command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Use default ephemeral per-operation prompts instead of unlocking persistent sessions.",
+          "Lock the session immediately after batch operations with ge lock."
+        ],
+        "severity": "medium",
+        "title": "gEnclave session unlock and prewarm"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect current keys, credentials, and policies with read-only subcommands before mutating them.",
+      "Use default ephemeral per-operation authentication prompts instead of persistent unlock sessions."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

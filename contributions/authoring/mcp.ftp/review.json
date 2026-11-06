@@ -1,0 +1,105 @@
+{
+  "discoveryDigest": "45749e2424fb998141a62f51b76d35859f09a5d56463482172b7f4432bf748f9",
+  "entries": {
+    "tool-0459ac60b70fd95b": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-74ac9b77dafea3dc": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-77a03e7ba341a31f": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-946e44311658b527": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-bcccebc0835cd2bf": {
+      "evidenceUrl": "https://github.com/alxspiker/mcp-server-ftp/blob/5ae3ff81d6b48c412ac486aac1e244f9b8281e71/src/sftp-client.ts#L179-L186",
+      "rationale": "The registered handler calls deleteDirectory(remotePath). FTP uses basic-ftp removeDir; SFTP uses rmdir(remotePath, true), recursively deleting the directory and its contents. Require review before this operation.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List the exact remote directory and inspect its contents before approving recursive deletion.",
+      "state": "review"
+    },
+    "tool-c503ad6b4d293269": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-cb3d2fdfccd8d57e": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-ed87721d7457b578": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    },
+    "tool-fea7b13f3a27a56c": {
+      "evidenceUrl": "",
+      "rationale": "",
+      "reviewed": false,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "inherit"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}

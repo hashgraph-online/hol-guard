@@ -1,0 +1,204 @@
+use super::*;
+
+fn policy() -> EffectiveNativePolicyV3 {
+    EffectiveNativePolicyV3 {
+        protection_posture: "protected".into(),
+        security_level: "balanced".into(),
+        default_action: "warn".into(),
+        unknown_publisher_action: "review".into(),
+        changed_hash_action: "require-reapproval".into(),
+        new_network_domain_action: "warn".into(),
+        subprocess_action: "warn".into(),
+        risk_actions: BTreeMap::new(),
+        harness_risk_actions: BTreeMap::new(),
+        harness_actions: BTreeMap::new(),
+        publisher_actions: BTreeMap::new(),
+        artifact_actions: BTreeMap::new(),
+        mcp_tool_actions: BTreeMap::new(),
+        mcp_provider_actions: BTreeMap::new(),
+        mcp_provider_catalog_hash: None,
+        sandbox_analysis: "off".into(),
+        receipt_redaction_level: "full".into(),
+    }
+}
+
+pub(super) fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
+    let effective_policy = policy();
+    let mut result = PolicySnapshotV3 {
+        schema: POLICY_SNAPSHOT_SCHEMA.into(),
+        version: 3,
+        generation,
+        policy_digest: String::new(),
+        config_digest: config_digest(&effective_policy).unwrap(),
+        rule_digest: "b".repeat(64),
+        runtime_identity: "a".repeat(64),
+        protocol_version: 1,
+        mode: "enforce".into(),
+        scope_contract: ScopeContractV3 {
+            schema: "guard-native-scope.v1".into(),
+            kind: "guard-home".into(),
+            scope_digest: "c".repeat(64),
+            workspace_binding: "request-source".into(),
+        },
+        effective_policy,
+        command_extensions: None,
+        business_policy: None,
+        issued_at_ms: 100,
+        expires_at_ms: 1_000,
+        integrity: SnapshotIntegrityV3 {
+            algorithm: POLICY_SNAPSHOT_INTEGRITY_ALGORITHM.into(),
+            key_id: verifier_key_id(key),
+            mac: String::new(),
+        },
+    };
+    result.policy_digest = policy_digest(&result).unwrap();
+    result.integrity.mac = integrity_mac(&result, key).unwrap();
+    result
+}
+
+#[test]
+fn validates_authenticated_v3_snapshot() {
+    let key = [7u8; 32];
+    let snapshot = snapshot(1, &key);
+    assert!(validate_v3(&snapshot, 1, &"a".repeat(64), &"b".repeat(64), &key, 200).is_ok());
+}
+
+#[test]
+fn provider_restrictions_are_authenticated_and_cannot_authorize_unverified_accounts() {
+    let key = [7u8; 32];
+    let selector = "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE";
+    let mut bound = snapshot(1, &key);
+    bound
+        .effective_policy
+        .mcp_provider_actions
+        .insert(selector.into(), "block".into());
+    bound.config_digest = config_digest(&bound.effective_policy).unwrap();
+    bound.policy_digest = policy_digest(&bound).unwrap();
+    bound.integrity.mac = integrity_mac(&bound, &key).unwrap();
+    assert!(validate_v3(&bound, 1, &"a".repeat(64), &"b".repeat(64), &key, 200).is_ok());
+    let mut forged = bound.clone();
+    forged
+        .effective_policy
+        .mcp_provider_actions
+        .insert(selector.into(), "review".into());
+    assert_eq!(
+        validate_v3(&forged, 1, &"a".repeat(64), &"b".repeat(64), &key, 200),
+        Err(SnapshotError::DigestMismatch)
+    );
+    assert!(!observed_mcp::validate_mcp_provider_actions(
+        &BTreeMap::from([(selector.into(), "allow".into()),])
+    ));
+    let over_capacity = (0..=POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS)
+        .map(|index| {
+            (
+                format!("codex:mcp__server__:composio:all-accounts:ACTION_{index}"),
+                "block".into(),
+            )
+        })
+        .collect();
+    assert!(!observed_mcp::validate_mcp_provider_actions(&over_capacity));
+    let mut changed_catalog = bound.clone();
+    changed_catalog.effective_policy.mcp_provider_catalog_hash = Some("c".repeat(64));
+    assert_eq!(
+        validate_v3(
+            &changed_catalog,
+            1,
+            &"a".repeat(64),
+            &"b".repeat(64),
+            &key,
+            200
+        ),
+        Err(SnapshotError::DigestMismatch)
+    );
+}
+
+#[test]
+fn rejects_mutated_effective_policy_and_mac() {
+    let key = [7u8; 32];
+    let mut snapshot = snapshot(1, &key);
+    snapshot.effective_policy.default_action = "block".into();
+    assert_eq!(
+        validate_v3(&snapshot, 1, &"a".repeat(64), &"b".repeat(64), &key, 200),
+        Err(SnapshotError::DigestMismatch)
+    );
+}
+
+#[test]
+fn rejects_expired_and_replayed_generation() {
+    let key = [7u8; 32];
+    let snapshot = snapshot(1, &key);
+    assert_eq!(
+        validate_v3(&snapshot, 1, &"a".repeat(64), &"b".repeat(64), &key, 1_000),
+        Err(SnapshotError::Expired)
+    );
+    assert_eq!(
+        validate_v3(&snapshot, 2, &"a".repeat(64), &"b".repeat(64), &key, 200),
+        Err(SnapshotError::Downgrade)
+    );
+}
+
+#[test]
+fn rejects_runtime_rule_and_protocol_mismatch() {
+    let key = [7u8; 32];
+    let snapshot = snapshot(1, &key);
+    assert_eq!(
+        validate_v3(&snapshot, 1, &"c".repeat(64), &"b".repeat(64), &key, 200),
+        Err(SnapshotError::RuntimeIdentity)
+    );
+    assert_eq!(
+        validate_v3(&snapshot, 1, &"a".repeat(64), &"c".repeat(64), &key, 200),
+        Err(SnapshotError::RuleDigest)
+    );
+    let mut incompatible = snapshot;
+    incompatible.protocol_version = 2;
+    assert_eq!(
+        validate_v3(
+            &incompatible,
+            1,
+            &"a".repeat(64),
+            &"b".repeat(64),
+            &key,
+            200,
+        ),
+        Err(SnapshotError::Protocol)
+    );
+}
+
+#[test]
+fn rejects_unknown_risk_selector_and_conflicting_harness_aliases() {
+    let key = [7u8; 32];
+    let mut unknown = snapshot(1, &key);
+    unknown
+        .effective_policy
+        .risk_actions
+        .insert("future-risk".into(), "allow".into());
+    assert_eq!(
+        validate_v3(&unknown, 1, &"a".repeat(64), &"b".repeat(64), &key, 200),
+        Err(SnapshotError::Policy)
+    );
+
+    let mut conflicting = snapshot(1, &key);
+    conflicting
+        .effective_policy
+        .harness_actions
+        .insert("claude".into(), "allow".into());
+    conflicting
+        .effective_policy
+        .harness_actions
+        .insert("claude-code".into(), "block".into());
+    conflicting.policy_digest = policy_digest(&conflicting).unwrap();
+    conflicting.integrity.mac = integrity_mac(&conflicting, &key).unwrap();
+    assert_eq!(
+        validate_v3(&conflicting, 1, &"a".repeat(64), &"b".repeat(64), &key, 200,),
+        Err(SnapshotError::Policy)
+    );
+}
+
+#[test]
+fn canonical_json_sorts_object_keys() {
+    let value = serde_json::json!({"z": 1, "a": {"b": true, "a": null}});
+    assert_eq!(
+        String::from_utf8(canonical_json_bytes(&value).unwrap()).unwrap(),
+        r#"{"a":{"a":null,"b":true},"z":1}"#
+    );
+}

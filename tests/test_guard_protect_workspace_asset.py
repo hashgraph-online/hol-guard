@@ -1,0 +1,88 @@
+"""Protect workspace recovery and display contracts."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from tests.dashboard_bundle_support import CHUNKS_DIR, dashboard_chunk
+
+_CHUNKS = CHUNKS_DIR
+_ASSET = dashboard_chunk("fleet-workspace")
+_AUTHORITATIVE_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-workspace.tsx"
+_DETECTION_SOURCE = Path(__file__).parents[1] / "dashboard/src/harness-detection.ts"
+_RECOVERY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery.tsx"
+_RECOVERY_PARTS_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-parts.tsx"
+_COPY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-copy.ts"
+
+
+def _detection_asset() -> Path:
+    # Rollup names a shared chunk after one of its modules, so find it by content.
+    matches = [
+        path for path in sorted(_CHUNKS.glob("*.js")) if "function useHarnessDetection(" in path.read_text("utf-8")
+    ]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def _source() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in (_ASSET, _detection_asset()))
+
+
+def _authoritative_source() -> str:
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            _AUTHORITATIVE_SOURCE,
+            _DETECTION_SOURCE,
+            _RECOVERY_SOURCE,
+            _RECOVERY_PARTS_SOURCE,
+            _COPY_SOURCE,
+        )
+    )
+
+
+def test_repair_message_does_not_blame_apps_for_shared_evidence_failure() -> None:
+    app_source = Path(__file__).parents[1].joinpath("dashboard/src/app.tsx").read_text(encoding="utf-8")
+    health_source = Path(__file__).parents[1].joinpath("dashboard/src/protection-health.ts").read_text(encoding="utf-8")
+    flow_source = (
+        Path(__file__).parents[1].joinpath("dashboard/src/protection-repair-flow.ts").read_text(encoding="utf-8")
+    )
+    assert "remainingProtectionRepairParts" in health_source
+    assert "remainingProtectionRepairMessage(remainingHealth, input.displayName)" in flow_source
+    assert "Command evidence still needs repair." in health_source
+    assert "Connect an AI app to start local protection." in health_source
+    assert 'app.checks.some((check) => check.status === "fail")' not in app_source
+
+
+def test_degraded_protection_exposes_recovery_actions() -> None:
+    source = _source()
+    authoritative_source = _authoritative_source()
+
+    assert "Restore local protection" in source
+    assert "protection-recovery" in source
+    assert "View repair details" in source
+    assert "Needs repair" in source
+    assert "Repair protection" in source
+    assert "Connect an app" in authoritative_source
+    assert "Repair failed checks" not in source
+    assert "Open diagnostics" not in source
+    assert "Guard could not confirm integrity protection yet." not in source
+    assert 'hookCheck?.status !== "pass"' in source
+    assert 'check.check_id === "harness_hooks")?.status !== "pass"' in source
+    assert "Restore local protection" in authoritative_source
+
+
+def test_protection_repair_requires_local_auth_token(native_approval_reuse_runtime: Path) -> None:
+    from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
+
+    assert native_route_facts(
+        "POST", "/v1/protection/repair", guard_home=native_approval_reuse_runtime
+    ).requires_header_token
+
+
+def test_protect_metrics_use_locale_grouping() -> None:
+    source = _source()
+
+    assert "formatCount(props.runtime.pending_count)" in source
+    assert "formatCount(props.runtime.receipt_count)" in source
+    assert "formatCount(watchedHarnesses.length)" in source

@@ -1,0 +1,61 @@
+{
+  "schema": "guard-native-business-dispatch-receipt-fixtures.v1",
+  "cases": [
+    {
+      "id": "api_accepted_recorded",
+      "receipt": {
+        "schema": "guard-native-business-dispatch-receipt.v1",
+        "version": 1,
+        "decision_binding": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_binding": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "attempt": "api_accepted",
+        "journal": "recorded",
+        "provider_effect": "not_checked",
+        "retry_authority": "none",
+        "acknowledgement_binding": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "id": "api_accepted_unconfirmed",
+      "receipt": {
+        "schema": "guard-native-business-dispatch-receipt.v1",
+        "version": 1,
+        "decision_binding": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_binding": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "attempt": "api_accepted",
+        "journal": "unconfirmed",
+        "provider_effect": "not_checked",
+        "retry_authority": "none",
+        "acknowledgement_binding": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "id": "outcome_unknown_recorded",
+      "receipt": {
+        "schema": "guard-native-business-dispatch-receipt.v1",
+        "version": 1,
+        "decision_binding": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_binding": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "attempt": "outcome_unknown",
+        "journal": "recorded",
+        "provider_effect": "not_checked",
+        "retry_authority": "none",
+        "acknowledgement_binding": null
+      }
+    },
+    {
+      "id": "outcome_unknown_unconfirmed",
+      "receipt": {
+        "schema": "guard-native-business-dispatch-receipt.v1",
+        "version": 1,
+        "decision_binding": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_binding": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "attempt": "outcome_unknown",
+        "journal": "unconfirmed",
+        "provider_effect": "not_checked",
+        "retry_authority": "none",
+        "acknowledgement_binding": null
+      }
+    }
+  ]
+}

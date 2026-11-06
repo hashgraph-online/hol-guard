@@ -1,0 +1,9 @@
+name: malicious-action
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run step
+        run: echo "hello"

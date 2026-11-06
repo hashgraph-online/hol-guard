@@ -1,0 +1,951 @@
+{
+ "_source": "Recorded from the Python Codex hook bridge before the native port.",
+ "shape": [
+  {
+   "response": "{}",
+   "event": "PreToolUse",
+   "expected": "{}"
+  },
+  {
+   "response": "{}",
+   "event": "PostToolUse",
+   "expected": "{}"
+  },
+  {
+   "response": "{}",
+   "event": "PermissionRequest",
+   "expected": "{}"
+  },
+  {
+   "response": "{}",
+   "event": "UserPromptSubmit",
+   "expected": "{}"
+  },
+  {
+   "response": "{}",
+   "event": "Stop",
+   "expected": "{}"
+  },
+  {
+   "response": "{}",
+   "event": "SessionStart",
+   "expected": "{}"
+  },
+  {
+   "response": "{\"continue\":true}",
+   "event": "PreToolUse",
+   "expected": "{\"continue\":true}"
+  },
+  {
+   "response": "{\"continue\":true}",
+   "event": "PostToolUse",
+   "expected": "{\"continue\":true}"
+  },
+  {
+   "response": "{\"continue\":true}",
+   "event": "PermissionRequest",
+   "expected": "{\"continue\":true}"
+  },
+  {
+   "response": "{\"continue\":true}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"continue\":true}"
+  },
+  {
+   "response": "{\"continue\":true}",
+   "event": "Stop",
+   "expected": "{\"continue\":true}"
+  },
+  {
+   "response": "{\"continue\":true}",
+   "event": "SessionStart",
+   "expected": "{\"continue\":true}"
+  },
+  {
+   "response": "{\"continue\":true,\"systemMessage\":\"hi\",\"extra\":1,\"decision\":\"block\",\"reason\":\"r\"}",
+   "event": "PreToolUse",
+   "expected": "{\"continue\":true,\"systemMessage\":\"hi\"}"
+  },
+  {
+   "response": "{\"continue\":true,\"systemMessage\":\"hi\",\"extra\":1,\"decision\":\"block\",\"reason\":\"r\"}",
+   "event": "PostToolUse",
+   "expected": "{\"continue\":true,\"systemMessage\":\"hi\",\"decision\":\"block\",\"reason\":\"r\"}"
+  },
+  {
+   "response": "{\"continue\":true,\"systemMessage\":\"hi\",\"extra\":1,\"decision\":\"block\",\"reason\":\"r\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"continue\":true,\"systemMessage\":\"hi\"}"
+  },
+  {
+   "response": "{\"continue\":true,\"systemMessage\":\"hi\",\"extra\":1,\"decision\":\"block\",\"reason\":\"r\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"continue\":true,\"systemMessage\":\"hi\"}"
+  },
+  {
+   "response": "{\"continue\":true,\"systemMessage\":\"hi\",\"extra\":1,\"decision\":\"block\",\"reason\":\"r\"}",
+   "event": "Stop",
+   "expected": "{\"continue\":true,\"systemMessage\":\"hi\"}"
+  },
+  {
+   "response": "{\"continue\":true,\"systemMessage\":\"hi\",\"extra\":1,\"decision\":\"block\",\"reason\":\"r\"}",
+   "event": "SessionStart",
+   "expected": "{\"continue\":true,\"systemMessage\":\"hi\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"},\"policy_action\":\"warn\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"},\"systemMessage\":\"ok\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"},\"policy_action\":\"warn\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"},\"policy_action\":\"warn\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"},\"policy_action\":\"warn\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"},\"policy_action\":\"warn\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"},\"policy_action\":\"warn\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\" ALLOW \",\"permissionDecisionReason\":\"ok\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"},\"policy_action\":\"warn\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"},\"policy_action\":\"warn\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"},\"policy_action\":\"warn\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"},\"policy_action\":\"warn\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"},\"policy_action\":\"warn\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"},\"policy_action\":\"warn\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"  \"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"keep\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"},\"systemMessage\":\"keep\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"keep\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{},\"systemMessage\":\"keep\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"keep\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"keep\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"keep\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"keep\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"keep\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"keep\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"keep\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"keep\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"},\"systemMessage\":\"w\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{},\"systemMessage\":\"\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"policy_action\":\"warn\",\"systemMessage\":\"\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"w\"},\"systemMessage\":\"\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}},\"policy_action\":\"warn\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}},\"policy_action\":\"warn\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}},\"policy_action\":\"warn\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}},\"policy_action\":\"warn\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}},\"policy_action\":\"warn\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}},\"policy_action\":\"warn\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":{\"command\":\"ls\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"updatedInput\":\"nope\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Ask\",\"permissionDecisionReason\":\"\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":3}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"},\"policy_action\":\"deny\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"},\"policy_action\":\"deny\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"},\"policy_action\":\"deny\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"},\"policy_action\":\"deny\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"},\"policy_action\":\"deny\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"},\"policy_action\":\"deny\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":7},\"policy_action\":\"deny\",\"permissionDecisionReason\":\"x\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":7},\"policy_action\":\"deny\",\"permissionDecisionReason\":\"x\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":7},\"policy_action\":\"deny\",\"permissionDecisionReason\":\"x\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":7}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":7},\"policy_action\":\"deny\",\"permissionDecisionReason\":\"x\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":7}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":7},\"policy_action\":\"deny\",\"permissionDecisionReason\":\"x\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":7}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":7},\"policy_action\":\"deny\",\"permissionDecisionReason\":\"x\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":7}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"defer\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"},\"systemMessage\":\"m\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}",
+   "event": "PostToolUse",
+   "expected": "{\"systemMessage\":\"m\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":\"text\",\"systemMessage\":\"m\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":null}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":null}",
+   "event": "PostToolUse",
+   "expected": "{}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":null}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":null}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":null}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":null}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":null}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":null}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":null}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":null}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":[1,2]}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":[1,2]}",
+   "event": "PostToolUse",
+   "expected": "{}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":[1,2]}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":[1,2]}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":[1,2]}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":[1,2]}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":[1,2]}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":[1,2]}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":[1,2]}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":[1,2]}"
+  },
+  {
+   "response": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}",
+   "event": "PreToolUse",
+   "expected": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}"
+  },
+  {
+   "response": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}",
+   "event": "PostToolUse",
+   "expected": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1}},\"suppressOutput\":false,\"stopReason\":\"sr\"}"
+  },
+  {
+   "response": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}"
+  },
+  {
+   "response": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}"
+  },
+  {
+   "response": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}",
+   "event": "Stop",
+   "expected": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}"
+  },
+  {
+   "response": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}",
+   "event": "SessionStart",
+   "expected": "{\"systemMessage\":\"s\",\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"ctx\",\"updatedMCPToolOutput\":{\"a\":1},\"permissionDecision\":\"allow\"},\"suppressOutput\":false,\"stopReason\":\"sr\"}"
+  },
+  {
+   "response": "{\"decision\":\"block\",\"reason\":\"post\",\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"decision\":\"block\",\"reason\":\"post\",\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}",
+   "event": "PostToolUse",
+   "expected": "{\"decision\":\"block\",\"reason\":\"post\",\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}"
+  },
+  {
+   "response": "{\"decision\":\"block\",\"reason\":\"post\",\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}"
+  },
+  {
+   "response": "{\"decision\":\"block\",\"reason\":\"post\",\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}"
+  },
+  {
+   "response": "{\"decision\":\"block\",\"reason\":\"post\",\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}"
+  },
+  {
+   "response": "{\"decision\":\"block\",\"reason\":\"post\",\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"additionalContext\":\"c\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"},\"policy_action\":\"warn\"}",
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"},\"systemMessage\":\"\\u00e9\\u2028\"}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"},\"policy_action\":\"warn\"}",
+   "event": "PostToolUse",
+   "expected": "{\"hookSpecificOutput\":{}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"},\"policy_action\":\"warn\"}",
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"},\"policy_action\":\"warn\"}",
+   "event": "UserPromptSubmit",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"},\"policy_action\":\"warn\"}",
+   "event": "Stop",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"}}"
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"},\"policy_action\":\"warn\"}",
+   "event": "SessionStart",
+   "expected": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"\\u00e9\\u2028\"}}"
+  }
+ ],
+ "fail_closed": [
+  {
+   "event": "PreToolUse",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}}"
+  },
+  {
+   "event": "PostToolUse",
+   "expected": "{\"continue\":true,\"systemMessage\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}"
+  },
+  {
+   "event": "PermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"deny\",\"message\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}}}"
+  },
+  {
+   "event": "UserPromptSubmit",
+   "expected": "{\"continue\":true,\"systemMessage\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}"
+  },
+  {
+   "event": "Stop",
+   "expected": "{\"continue\":true,\"systemMessage\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}"
+  },
+  {
+   "event": "SessionStart",
+   "expected": "{\"continue\":true,\"systemMessage\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}"
+  },
+  {
+   "event": "permission_request",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"deny\",\"message\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}}}"
+  },
+  {
+   "event": "PermissionRequestV2",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"deny\",\"message\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}}}"
+  },
+  {
+   "event": "copilotPermissionRequest",
+   "expected": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"deny\",\"message\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}}}"
+  },
+  {
+   "event": "",
+   "expected": "{\"continue\":true,\"systemMessage\":\"HOL Guard could not authenticate the local daemon. Run `hol-guard daemon repair` from a terminal, then retry.\"}"
+  }
+ ],
+ "event_names": [
+  {
+   "payload": "{}",
+   "expected": "PreToolUse"
+  },
+  {
+   "payload": "{\"hook_event_name\":\"PreToolUse\"}",
+   "expected": "PreToolUse"
+  },
+  {
+   "payload": "{\"hook_event_name\":\" post_tool-use \"}",
+   "expected": "PostToolUse"
+  },
+  {
+   "payload": "{\"event\":\"\",\"hookEventName\":\"prompt\"}",
+   "expected": "UserPromptSubmit"
+  },
+  {
+   "payload": "{\"eventName\":3,\"hook_name\":\"beforeShellExecution\"}",
+   "expected": "PreToolUse"
+  },
+  {
+   "payload": "{\"hookName\":\"afterMCPExecution\"}",
+   "expected": "PostToolUse"
+  },
+  {
+   "payload": "{\"hook_event_name\":\"Stop\"}",
+   "expected": "Stop"
+  },
+  {
+   "payload": "{\"hook_event_name\":\"PERMISSION-REQUEST\"}",
+   "expected": "PermissionRequest"
+  },
+  {
+   "payload": "{\"event\":\"  SessionStart\\t\"}",
+   "expected": "SessionStart"
+  },
+  {
+   "payload": "{\"hook_event_name\":\"userPromptSubmitted\"}",
+   "expected": "UserPromptSubmit"
+  },
+  {
+   "payload": "{\"event\":\"\\u0130x\"}",
+   "expected": "\u0130x"
+  },
+  {
+   "payload": "{\"hook_event_name\":\"pre\\u00adtool\"}",
+   "expected": "pre\u00adtool"
+  }
+ ],
+ "request_timeouts": [
+  {
+   "hook_timeouts": {
+    "PreToolUse": 30
+   },
+   "event": "PreToolUse",
+   "expected": 28
+  },
+  {
+   "hook_timeouts": {
+    "PreToolUse": 30,
+    "Stop": 5
+   },
+   "event": "PostToolUse",
+   "expected": 3
+  },
+  {
+   "hook_timeouts": {
+    "Stop": 3
+   },
+   "event": "Stop",
+   "expected": 1
+  },
+  {
+   "hook_timeouts": {
+    "Stop": 3,
+    "PreToolUse": 600
+   },
+   "event": "UserPromptSubmit",
+   "expected": 1
+  }
+ ],
+ "configs": [
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": {
+    "state_path": "/h/daemon-state.json",
+    "query": "a=b",
+    "hook_timeouts": [
+     [
+      "PreToolUse",
+      30
+     ]
+    ]
+   }
+  },
+  {
+   "argument": "{\"state_path\":\"\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": {
+    "state_path": "",
+    "query": "a=b",
+    "hook_timeouts": [
+     [
+      "PreToolUse",
+      30
+     ]
+    ]
+   }
+  },
+  {
+   "argument": "{\"state_path\":3,\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": {
+    "state_path": "/h/daemon-state.json",
+    "query": "",
+    "hook_timeouts": [
+     [
+      "PreToolUse",
+      30
+     ]
+    ]
+   }
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":null,\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"a\",1],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":\"y\",\"hook_timeouts\":{\"PreToolUse\":30}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"A\":2,\"B\":true,\"C\":3.5,\"D\":\"9\"}}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"A\":2,\"B\":3,\"C\":-4}}",
+   "expected": {
+    "state_path": "/h/daemon-state.json",
+    "query": "a=b",
+    "hook_timeouts": [
+     [
+      "B",
+      3
+     ]
+    ]
+   }
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":[1]}",
+   "expected": null
+  },
+  {
+   "argument": "[]",
+   "expected": null
+  },
+  {
+   "argument": "{",
+   "expected": null
+  },
+  {
+   "argument": "{}",
+   "expected": null
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30},\"extra\":{\"k\":1}}",
+   "expected": {
+    "state_path": "/h/daemon-state.json",
+    "query": "a=b",
+    "hook_timeouts": [
+     [
+      "PreToolUse",
+      30
+     ]
+    ]
+   }
+  },
+  {
+   "argument": "{\"state_path\":\"/h/daemon-state.json\",\"manifest_path\":\"/h/m.json\",\"query\":\"a=b\",\"fallback_command\":[\"x\"],\"start_command\":[\"y\"],\"hook_timeouts\":{\"PreToolUse\":30},\"query\":\"dup\"}",
+   "expected": {
+    "state_path": "/h/daemon-state.json",
+    "query": "dup",
+    "hook_timeouts": [
+     [
+      "PreToolUse",
+      30
+     ]
+    ]
+   }
+  }
+ ]
+}

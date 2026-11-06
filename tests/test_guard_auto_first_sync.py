@@ -1,0 +1,800 @@
+from __future__ import annotations
+
+import pytest
+
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli.connect_flow import CONNECT_SYNC_AUTH_CONTEXT_KEY
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
+from codex_plugin_scanner.guard.daemon import server_control_connect_flow as _ctl_connect_flow
+from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
+from tests.test_guard_headless_daemon_api import _dashboard_token, _read_json_response, _request
+
+
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
+def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_transient_sync_error(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_runtime_error(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        assert auth_context is None
+        raise RuntimeError("temporary receipt sync failure")
+
+    monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_runtime_error)
+
+    payload = guard_commands_module._finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == "temporary receipt sync failure"
+    assert "retry automatically" in str(payload["repair_message"])
+
+    latest_state = payload["latest_connect_state"]
+    assert isinstance(latest_state, dict)
+    assert latest_state["status"] == "connected"
+    assert latest_state["milestone"] == "first_sync_pending"
+
+
+def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_lock_timeout(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_timeout_error(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        assert auth_context is None
+        raise TimeoutError("Timed out waiting for cloud sync lock.")
+
+    monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_timeout_error)
+
+    payload = guard_commands_module._finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == "Timed out waiting for cloud sync lock."
+    assert "retry automatically" in str(payload["repair_message"])
+
+
+def test_finalize_guard_connect_payload_uses_fresh_oauth_access_token_once(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+    sync_calls: list[dict[str, object] | None] = []
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _fake_sync(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        sync_calls.append(auth_context)
+        return {
+            "synced_at": "2026-06-04T12:00:05+00:00",
+            "runtime_session_id": "session-1",
+            "runtime_session_synced_at": "2026-06-04T12:00:05+00:00",
+            "runtime_sessions_visible": 1,
+            "receipts_stored": 0,
+        }
+
+    monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _fake_sync)
+
+    payload = guard_commands_module._finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={
+            "status": "connected",
+            CONNECT_SYNC_AUTH_CONTEXT_KEY: {
+                "access_token": "access-token-1",
+                "dpop_key_material": "dpop",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+            },
+        },
+        now=now,
+    )
+
+    assert sync_calls == [
+        {
+            "access_token": "access-token-1",
+            "dpop_key_material": "dpop",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+    ]
+    assert CONNECT_SYNC_AUTH_CONTEXT_KEY not in payload
+
+
+def test_finalize_guard_connect_payload_marks_not_configured_oauth_as_retry_required(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    _seed_guard_cloud(store)
+    monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: None)
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": False, "state": "not_configured"},
+    )
+
+    payload = guard_commands_module._finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == (
+        "Guard Cloud authorization did not persist locally. Run hol-guard connect again to repair local sign-in."
+    )
+    assert payload["repair_message"] == payload["sync_error"]
+    latest_state = payload["latest_connect_state"]
+    assert isinstance(latest_state, dict)
+    assert latest_state["status"] == "retry_required"
+    assert latest_state["milestone"] == "first_sync_failed"
+    assert store.get_cloud_sync_profile() is None
+
+
+def test_daemon_finalize_guard_connect_payload_uses_fresh_oauth_access_token_once(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+    sync_calls: list[dict[str, object] | None] = []
+    supply_chain_calls: list[dict[str, object] | None] = []
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _fake_sync(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        sync_calls.append(auth_context)
+        return {
+            "synced_at": "2026-06-04T12:00:05+00:00",
+            "runtime_session_id": "session-1",
+            "runtime_session_synced_at": "2026-06-04T12:00:05+00:00",
+            "runtime_sessions_visible": 1,
+            "receipts_stored": 0,
+        }
+
+    patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", _fake_sync)
+    patch_daemon_global(
+        monkeypatch,
+        "sync_supply_chain_cloud_state",
+        lambda _store, *, auth_context=None: supply_chain_calls.append(auth_context) or {"packages": []},
+    )
+
+    payload = _ctl_connect_flow._finalize_daemon_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={
+            "status": "connected",
+            CONNECT_SYNC_AUTH_CONTEXT_KEY: {
+                "access_token": "access-token-1",
+                "dpop_key_material": "dpop",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+            },
+        },
+        now=now,
+    )
+
+    assert sync_calls == [
+        {
+            "access_token": "access-token-1",
+            "dpop_key_material": "dpop",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+    ]
+    assert supply_chain_calls == [
+        {
+            "access_token": "access-token-1",
+            "dpop_key_material": "dpop",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+    ]
+    assert CONNECT_SYNC_AUTH_CONTEXT_KEY not in payload
+
+
+def test_daemon_finalize_guard_connect_payload_marks_not_configured_oauth_as_retry_required(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    _seed_guard_cloud(store)
+    monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: None)
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": False, "state": "not_configured"},
+    )
+
+    payload = _ctl_connect_flow._finalize_daemon_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == (
+        "Guard Cloud authorization did not persist locally. Start Guard Cloud connect again to repair local sign-in."
+    )
+    assert payload["repair_message"] == payload["sync_error"]
+    latest_state = payload["latest_connect_state"]
+    assert isinstance(latest_state, dict)
+    assert latest_state["status"] == "retry_required"
+    assert latest_state["milestone"] == "first_sync_failed"
+    assert store.get_cloud_sync_profile() is None
+
+
+def test_daemon_finalize_guard_connect_payload_keeps_first_sync_pending_on_sync_lock_timeout(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_timeout_error(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        assert auth_context is None
+        raise TimeoutError("Timed out waiting for cloud sync lock.")
+
+    patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", _raise_timeout_error)
+
+    payload = _ctl_connect_flow._finalize_daemon_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == "Timed out waiting for cloud sync lock."
+    assert "retry while the daemon is running" in str(payload["repair_message"])
+
+
+@pytest.mark.daemon_headless_queue
+def test_queue_headless_cloud_sync_respects_same_process_in_flight_marker(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+
+    store_key = _ctl_cloud_sync._headless_cloud_sync_store_key(store)
+    with _ctl_cloud_sync._HEADLESS_CLOUD_SYNC_STATE_LOCK:
+        _ctl_cloud_sync._HEADLESS_CLOUD_SYNC_IN_FLIGHT.add(store_key)
+    try:
+        payload = _ctl_cloud_sync._queue_headless_cloud_sync(store=store)
+    finally:
+        with _ctl_cloud_sync._HEADLESS_CLOUD_SYNC_STATE_LOCK:
+            _ctl_cloud_sync._HEADLESS_CLOUD_SYNC_IN_FLIGHT.discard(store_key)
+
+    assert payload == {
+        "status": "in_progress",
+        "message": "Cloud sync already running.",
+    }
+
+
+@pytest.mark.daemon_headless_queue
+def test_queue_headless_cloud_sync_respects_cross_process_sync_lock(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+
+    with store.hold_cloud_sync_lock():
+        payload = _ctl_cloud_sync._queue_headless_cloud_sync(store=store)
+
+    assert payload == {
+        "status": "in_progress",
+        "message": "Cloud sync already running.",
+    }
+
+
+def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _record_queue(*, store: GuardStore) -> dict[str, object]:
+        calls.append(str(store.guard_home))
+        return {"status": "queued", "message": "Cloud sync started."}
+
+    patch_daemon_global(monkeypatch, "_queue_headless_cloud_sync", _record_queue)
+
+    assert _ctl_cloud_sync._maybe_queue_first_cloud_sync(store=store) == {
+        "status": "queued",
+        "message": "Cloud sync started.",
+    }
+    assert calls == [str(store.guard_home)]
+    calls.clear()
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    try:
+        daemon.start()
+        assert calls == []
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/runtime",
+                method="GET",
+                token=_dashboard_token(auth_token),
+            ),
+        )
+        assert status == 200
+        assert payload["cloud_state"] == "paired_waiting"
+    finally:
+        daemon.stop()
+
+
+def test_finalize_guard_connect_payload_keeps_reauth_failures_in_retry_required_state(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_auth_expired(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        assert auth_context is None
+        raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
+
+    monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_auth_expired)
+
+    payload = guard_commands_module._finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == "reauth required"
+    assert payload["repair_message"] == "Run hol-guard connect again to refresh Guard Cloud authorization."
+
+
+def test_headless_first_sync_auth_expiry_marks_connect_state_for_repair(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+    queued_calls: list[str] = []
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_auth_expired(
+        _store: GuardStore,
+        *,
+        auth_context: dict[str, object] | None = None,
+        now: str | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
+
+    def _record_queue(*, store: GuardStore) -> dict[str, object]:
+        queued_calls.append(str(store.guard_home))
+        return {"status": "queued", "message": "Cloud sync started."}
+
+    patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", _raise_auth_expired)
+    patch_daemon_global(
+        monkeypatch,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: {
+            "access_token": "access-token-1",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+    )
+    patch_daemon_global(monkeypatch, "_queue_headless_cloud_sync", _record_queue)
+
+    _ctl_cloud_sync._run_headless_cloud_sync(store=store)
+
+    latest_state = store.get_effective_guard_connect_state(now="2026-06-04T12:05:00+00:00")
+    assert latest_state is not None
+    assert latest_state["status"] == "retry_required"
+    assert latest_state["milestone"] == "first_sync_failed"
+    assert latest_state["reason"] == "reauth required"
+    assert _ctl_cloud_sync._maybe_queue_first_cloud_sync(store=store) is None
+    assert queued_calls == []
+
+
+def test_headless_cloud_sync_repairs_storage_and_records_sync_success(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+
+    resolve_calls = {"count": 0}
+
+    def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
+        resolve_calls["count"] += 1
+        if resolve_calls["count"] == 1:
+            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+        return {
+            "access_token": "access-token-1",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+
+    def _sync_receipts(
+        _store: GuardStore,
+        auth_context: dict[str, object] | None = None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        assert auth_context is not None
+        return {
+            "receipts_stored": 3,
+            "runtime_session_id": "runtime-1",
+            "runtime_session_synced_at": now,
+            "runtime_sessions_visible": True,
+            "synced_at": now,
+        }
+
+    patch_daemon_global(monkeypatch, "_resolve_guard_sync_auth_context", _resolve_with_repair)
+    patch_daemon_global(
+        monkeypatch,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: {
+            "existing_sign_in_valid": True,
+            "repaired_storage": True,
+        },
+    )
+    patch_daemon_global(
+        monkeypatch,
+        "prepare_guard_cloud_connect_authorization",
+        lambda _store: (_ for _ in ()).throw(
+            AssertionError("explicit reconnect repair must stay out of background sync"),
+        ),
+    )
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    patch_daemon_global(
+        monkeypatch,
+        "_sync_local_guard_cloud_proof_with_optional_auth_context",
+        _sync_receipts,
+    )
+    patch_daemon_global(
+        monkeypatch,
+        "_sync_supply_chain_cloud_state_with_optional_auth_context",
+        lambda _store, _auth_context: {"status": "synced"},
+    )
+
+    summary = _ctl_cloud_sync._run_headless_cloud_sync(store=store)
+
+    assert resolve_calls["count"] == 2
+    assert summary["status"] == "synced"
+    latest_state = store.get_effective_guard_connect_state(now="2026-06-04T12:05:00+00:00")
+    assert latest_state is not None
+    assert latest_state["status"] == "connected"
+    assert latest_state["milestone"] == "first_sync_succeeded"
+
+
+def test_headless_cloud_sync_survives_storage_repair_failure(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+
+    patch_daemon_global(
+        monkeypatch,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: (_ for _ in ()).throw(
+            daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in."),
+        ),
+    )
+    patch_daemon_global(
+        monkeypatch,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("repair failed")),
+    )
+
+    summary = _ctl_cloud_sync._run_headless_cloud_sync(store=store)
+
+    assert summary["status"] == "not_configured"
+    repair = summary["authorization_repair"]
+    assert isinstance(repair, dict)
+    assert repair["repair_error"] == "repair failed"
+
+
+def test_headless_cloud_sync_retry_unexpected_error_becomes_pending(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+    resolve_calls = {"count": 0}
+
+    def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
+        resolve_calls["count"] += 1
+        if resolve_calls["count"] == 1:
+            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+        return {
+            "access_token": "access-token-1",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        }
+
+    patch_daemon_global(monkeypatch, "_resolve_guard_sync_auth_context", _resolve_with_repair)
+    patch_daemon_global(
+        monkeypatch,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: {
+            "cleared_stale_sign_in": False,
+            "existing_sign_in_valid": True,
+            "repaired_storage": True,
+        },
+    )
+    patch_daemon_global(
+        monkeypatch,
+        "_sync_local_guard_cloud_proof_with_optional_auth_context",
+        lambda _store, auth_context=None, **_kwargs: (_ for _ in ()).throw(RuntimeError("retry exploded")),
+    )
+
+    summary = _ctl_cloud_sync._run_headless_cloud_sync(store=store)
+
+    assert resolve_calls["count"] == 2
+    assert summary["status"] == "pending"
+    assert summary["message"] == "retry exploded"
+
+
+@pytest.mark.daemon_headless_queue
+def test_queue_headless_cloud_sync_repairs_degraded_profile_before_queueing(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    profile_calls = {"count": 0}
+
+    def _profile() -> dict[str, str] | None:
+        profile_calls["count"] += 1
+        if profile_calls["count"] == 1:
+            return None
+        return {"sync_url": "https://hol.org/api/guard/receipts/sync"}
+
+    monkeypatch.setattr(store, "get_cloud_sync_profile", _profile)
+    patch_daemon_global(
+        monkeypatch,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: {
+            "existing_sign_in_valid": True,
+            "repaired_storage": True,
+        },
+    )
+    patch_daemon_global(
+        monkeypatch,
+        "prepare_guard_cloud_connect_authorization",
+        lambda _store: (_ for _ in ()).throw(
+            AssertionError("explicit reconnect repair must stay out of background sync"),
+        ),
+    )
+    monkeypatch.setattr(store, "cloud_sync_in_progress", lambda: False)
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, *, target, daemon, name):
+            started.append((target, daemon, name))
+            self._target = target
+
+        def start(self) -> None:
+            return None
+
+    monkeypatch.setattr(daemon_server_module.threading, "Thread", _FakeThread)
+
+    result = _ctl_cloud_sync._queue_headless_cloud_sync(store=store)
+
+    assert result["status"] == "queued"
+    assert profile_calls["count"] >= 2
+    assert started
+
+
+def test_maybe_queue_first_cloud_sync_returns_none_when_repair_raises(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: None)
+    patch_daemon_global(
+        monkeypatch,
+        "repair_guard_cloud_connect_storage",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("repair failed")),
+    )
+
+    assert _ctl_cloud_sync._maybe_queue_first_cloud_sync(store=store) is None

@@ -1,0 +1,152 @@
+"""Constants for the native policy snapshot protocol."""
+
+from __future__ import annotations
+
+import sys
+
+_STATE_SCHEMA = "hol-guard-native-policy-generation.v1"
+_STATE_NAME = "native-policy-generation.json"
+_LOCK_NAME = "native-policy-generation.lock"
+_MAX_STATE_BYTES = 4 * 1024
+_MAX_GENERATION = (1 << 64) - 1
+
+# v3 is the only snapshot contract accepted by the managed Rust resident. The
+# v1 helpers below remain intentionally isolated for explicit differential
+# tests; production native hooks never call them.
+POLICY_SNAPSHOT_V3_SCHEMA = "hol-guard-native-policy.v3"
+# Compatibility alias for callers that used the schema name while the v3
+# implementation was being introduced. It intentionally points only at v3.
+POLICY_SNAPSHOT_SCHEMA = POLICY_SNAPSHOT_V3_SCHEMA
+POLICY_SNAPSHOT_PUSH_SCHEMA = "guard-policy-snapshot-push.v1"
+POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION = "native_policy_snapshot_requires_new_generation"
+POLICY_SNAPSHOT_UNAVAILABLE_ERRORS = frozenset(
+    {
+        "native_policy_snapshot_native_disabled",
+        "native_policy_snapshot_runtime_unavailable",
+        "native_policy_snapshot_protocol_unsupported",
+        "native_policy_snapshot_integrity_key_unavailable",
+        "native_policy_snapshot_ack_mismatch",
+    }
+)
+# Errors the installed files cannot recover from on their own. A runtime and
+# a command catalog that came from different builds reject every snapshot the
+# publisher sends, so retrying only spends the publish timeout on each hook
+# call. The install has to be repaired.
+POLICY_SNAPSHOT_PERSISTENT_ERRORS = frozenset({"native_command_program_binding_mismatch"})
+POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS = POLICY_SNAPSHOT_UNAVAILABLE_ERRORS | POLICY_SNAPSHOT_PERSISTENT_ERRORS
+POLICY_SNAPSHOT_MAX_BYTES = 256 * 1024
+POLICY_SNAPSHOT_MAX_STRING_BYTES = 4 * 1024
+POLICY_SNAPSHOT_MAX_MAP_ENTRIES = 256
+POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS = 1024
+POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES = 64
+POLICY_SNAPSHOT_MAX_JSON_DEPTH = 32
+POLICY_SNAPSHOT_MAX_JSON_COLLECTION_ITEMS = 4_096
+POLICY_SNAPSHOT_MAX_JSON_STRING_BYTES = 1024 * 1024
+POLICY_SNAPSHOT_MAX_EXPIRY_MS = 24 * 60 * 60 * 1000
+
+# Keep these bytes byte-for-byte aligned with guard-policy-snapshot. Rust's
+# HMAC helper authenticates ``domain || message`` rather than using a second
+# HMAC field, so the Python functions below do the same concatenation.
+POLICY_SNAPSHOT_INTEGRITY_DOMAIN = b"hol-guard-native-policy-snapshot-v3\0"
+POLICY_SNAPSHOT_FLOOR_DOMAIN = b"hol-guard-native-policy-floor-v1\0"
+POLICY_SNAPSHOT_VERIFIER_DERIVATION_DOMAIN = b"hol-guard-native-policy-verifier-v1\0"
+POLICY_SNAPSHOT_AUTHORITY_SCHEMA = "guard-policy-snapshot-authority.v3"
+POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES = POLICY_SNAPSHOT_MAX_BYTES + 16 * 1024
+
+NATIVE_RUNTIME_STATE_DIRECTORY = "native-runtime"
+NATIVE_POLICY_VERIFIER_KEY_NAME = "policy-verifier.key"
+_RUST_GENERATION_FLOOR_NAME = "policy-snapshot-generation-floor.json"
+_RUST_SNAPSHOT_STATE_NAME = "policy-snapshot-v3.json"
+NATIVE_POLICY_SNAPSHOT_CACHE_NAME = "policy-snapshot-publisher-v3.json"
+_VERIFIER_KEY_BYTES = 32
+_PUBLISH_RETRY_SECONDS = 0.25
+_PUBLISH_TIMEOUT_SECONDS = 8.0 if sys.platform == "win32" else 2.0
+_PUBLISH_STARTUP_TIMEOUT_SECONDS = 9.0
+# One business-policy native exchange: runtime probe plus compile or codec call.
+# A cold native start on a slow Windows host can use most of the 5 s budget alone.
+BUSINESS_NATIVE_TIMEOUT_SECONDS = 15.0 if sys.platform == "win32" else 5.0
+_MAX_ACK_BYTES = 4 * 1024
+_RENEWAL_LEAD_SECONDS = 5 * 60
+_RENEWAL_JITTER_MAX_SECONDS = 30.0
+_PUBLISH_RETRY_MAX_SECONDS = 5.0
+# Another writer or the resident moved while a candidate was in flight, so the
+# next publish usually succeeds. A hook waits for that ACK inside a deadline of
+# a few seconds, so the backoff for these codes stays well under it. Every
+# other failure keeps the exponential delay.
+TRANSIENT_PUBLICATION_ERRORS = frozenset(
+    {
+        "native_policy_snapshot_resident_changed",
+        "native_resident_restart_budget_busy",
+        "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
+        "native_command_control_binding_changed",
+        "native_command_pack_projection_changed",
+        "native_business_source_mutation_in_progress",
+        "native_business_source_binding_changed",
+        "native_local_cli_revision_changed",
+        "native_provider_catalog_changed",
+    }
+)
+_TRANSIENT_PUBLISH_RETRY_MAX_SECONDS = 0.5
+_REQUIRED_PUBLISH_FEATURES = frozenset(
+    {
+        "policy-snapshot-v3",
+        "policy-snapshot-push-v1",
+        "policy-snapshot-resident-generation-v1",
+        "native-policy-in-memory-v1",
+        "native-resident-client-v1",
+        "native-command-program-v1",
+        "native-command-control-fence-v1",
+    }
+)
+_VALID_INPUT_MODES = frozenset({"observe", "prompt", "enforce"})
+_MAX_U64 = (1 << 64) - 1
+
+# Windows verifier state uses the same protected explicit owner+SYSTEM DACL
+# contract as the Rust resident-state helper.  These constants are kept local
+# to avoid making ctypes part of the normal POSIX import path's API.
+_WINDOWS_GENERIC_READ = 0x80000000
+_WINDOWS_GENERIC_WRITE = 0x40000000
+_WINDOWS_FILE_ADD_FILE = 0x00000002
+_WINDOWS_FILE_TRAVERSE = 0x00000020
+_WINDOWS_FILE_READ_ATTRIBUTES = 0x00000080
+_WINDOWS_FILE_SHARE_READ = 0x00000001
+_WINDOWS_FILE_SHARE_WRITE = 0x00000002
+_WINDOWS_FILE_SHARE_DELETE = 0x00000004
+_WINDOWS_CREATE_NEW = 1
+_WINDOWS_OPEN_EXISTING = 3
+_WINDOWS_FILE_ATTRIBUTE_NORMAL = 0x00000080
+_WINDOWS_FILE_ATTRIBUTE_DIRECTORY = 0x00000010
+_WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400
+_WINDOWS_FILE_TYPE_DISK = 0x0001
+_WINDOWS_FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+_WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+_WINDOWS_FILE_FLAG_WRITE_THROUGH = 0x80000000
+_WINDOWS_DELETE = 0x00010000
+_WINDOWS_WRITE_DAC = 0x00040000
+_WINDOWS_WRITE_OWNER = 0x00080000
+_WINDOWS_ERROR_FILE_NOT_FOUND = 2
+_WINDOWS_ERROR_PATH_NOT_FOUND = 3
+_WINDOWS_ERROR_FILE_EXISTS = 80
+_WINDOWS_ERROR_ALREADY_EXISTS = 183
+_WINDOWS_SE_FILE_OBJECT = 1
+_WINDOWS_OWNER_SECURITY_INFORMATION = 0x00000001
+_WINDOWS_DACL_SECURITY_INFORMATION = 0x00000004
+_WINDOWS_PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000
+_WINDOWS_SECURITY_INFORMATION = _WINDOWS_DACL_SECURITY_INFORMATION | _WINDOWS_PROTECTED_DACL_SECURITY_INFORMATION
+_WINDOWS_SE_DACL_PROTECTED = 0x1000
+_WINDOWS_ACCESS_ALLOWED_ACE_TYPE = 0
+_WINDOWS_INHERITED_ACE = 0x10
+_WINDOWS_FILE_ALL_ACCESS = 0x001F01FF
+_WINDOWS_SYSTEM_SID = "S-1-5-18"
+
+
+class NativePolicySnapshotError(RuntimeError):
+    """Raised when the durable native-policy generation cannot be trusted."""
+
+
+__all__ = [
+    name
+    for name in globals()
+    if (name.isupper() or name.startswith("_") or name == "NativePolicySnapshotError") and not name.startswith("__")
+]

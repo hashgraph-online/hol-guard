@@ -1,0 +1,1811 @@
+{
+ "add_event": [
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{}"
+    }
+   ],
+   "name": "empty_payload",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{}"
+    }
+   ],
+   "name": "empty_payload",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"z\": null, \"a\": \"text\", \"m\": 7, \"neg\": -12, \"t\": true, \"f\": false, \"empty\": \"\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"z\":null,\"a\":\"text\",\"m\":7,\"neg\":-12,\"t\":true,\"f\":false,\"empty\":\"\"}"
+    }
+   ],
+   "name": "scalar_values",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"z\": null, \"a\": \"text\", \"m\": 7, \"neg\": -12, \"t\": true, \"f\": false, \"empty\": \"\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"z\":null,\"a\":\"text\",\"m\":7,\"neg\":-12,\"t\":true,\"f\":false,\"empty\":\"\"}"
+    }
+   ],
+   "name": "scalar_values",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "metric",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"half\": 0.5, \"whole\": 2.0, \"tiny\": 1e-07, \"big\": 1e+16, \"neg_zero\": -0.0, \"pi\": 3.141592653589793, \"nan\": NaN, \"inf\": Infinity, \"ninf\": -Infinity}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "metric",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"half\":0.5,\"whole\":2.0,\"tiny\":1e-07,\"big\":1e+16,\"neg_zero\":-0.0,\"pi\":3.141592653589793,\"nan\":NaN,\"inf\":Infinity,\"ninf\":-Infinity}"
+    }
+   ],
+   "name": "floats",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "metric",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"half\": 0.5, \"whole\": 2.0, \"tiny\": 1e-07, \"big\": 1e+16, \"neg_zero\": -0.0, \"pi\": 3.141592653589793, \"nan\": NaN, \"inf\": Infinity, \"ninf\": -Infinity}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "metric",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"half\":0.5,\"whole\":2.0,\"tiny\":1e-07,\"big\":1e+16,\"neg_zero\":-0.0,\"pi\":3.141592653589793,\"nan\":NaN,\"inf\":Infinity,\"ninf\":-Infinity}"
+    }
+   ],
+   "name": "floats",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "metric",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"n\": 10000000000000000000000000000000000000000, \"m\": -1000000000000000000000000000000}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "metric",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"n\":10000000000000000000000000000000000000000,\"m\":-1000000000000000000000000000000}"
+    }
+   ],
+   "name": "large_integer",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "metric",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"n\": 10000000000000000000000000000000000000000, \"m\": -1000000000000000000000000000000}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "metric",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"n\":10000000000000000000000000000000000000000,\"m\":-1000000000000000000000000000000}"
+    }
+   ],
+   "name": "large_integer",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"caf\\u00e9 \\u2014 \\u65e5\\u672c \\ud83d\\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \\u2028\\ufeff\": \"caf\\u00e9 \\u2014 \\u65e5\\u672c \\ud83d\\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \\u2028\\ufeff\", \"plain\": \"\\u00e9\\ud83d\\ude00\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"caf\u00e9 \u2014 \u65e5\u672c \ud83d\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \u2028\ufeff\":\"caf\u00e9 \u2014 \u65e5\u672c \ud83d\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \u2028\ufeff\",\"plain\":\"\u00e9\ud83d\ude00\"}"
+    }
+   ],
+   "name": "unicode_values_and_keys",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"caf\\u00e9 \\u2014 \\u65e5\\u672c \\ud83d\\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \\u2028\\ufeff\": \"caf\\u00e9 \\u2014 \\u65e5\\u672c \\ud83d\\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \\u2028\\ufeff\", \"plain\": \"\\u00e9\\ud83d\\ude00\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"caf\u00e9 \u2014 \u65e5\u672c \ud83d\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \u2028\ufeff\":\"caf\u00e9 \u2014 \u65e5\u672c \ud83d\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \u2028\ufeff\",\"plain\":\"\u00e9\ud83d\ude00\"}"
+    }
+   ],
+   "name": "unicode_values_and_keys",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "evt.\u00e9\ud83d\udd12",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"k\": \"v\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "evt.\u00e9\ud83d\udd12",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"k\":\"v\"}"
+    }
+   ],
+   "name": "unicode_event_name",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "evt.\u00e9\ud83d\udd12",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"k\": \"v\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "evt.\u00e9\ud83d\udd12",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"k\":\"v\"}"
+    }
+   ],
+   "name": "unicode_event_name",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"k\": \"v\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"k\":\"v\"}"
+    }
+   ],
+   "name": "empty_event_name",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"k\": \"v\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"k\":\"v\"}"
+    }
+   ],
+   "name": "empty_event_name",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "policy.cloud.applied",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"zeta\": {\"b\": 1, \"a\": [3, {\"y\": null, \"x\": \"\\u00e9\"}], \"c\": {}}, \"alpha\": [], \"mid\": [[], [1, 2.5, \"s\"], {\"q\": false}]}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "policy.cloud.applied",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"zeta\":{\"b\":1,\"a\":[3,{\"y\":null,\"x\":\"\u00e9\"}],\"c\":{}},\"alpha\":[],\"mid\":[[],[1,2.5,\"s\"],{\"q\":false}]}"
+    }
+   ],
+   "name": "nested_insertion_order",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "policy.cloud.applied",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"zeta\": {\"b\": 1, \"a\": [3, {\"y\": null, \"x\": \"\\u00e9\"}], \"c\": {}}, \"alpha\": [], \"mid\": [[], [1, 2.5, \"s\"], {\"q\": false}]}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "policy.cloud.applied",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"zeta\":{\"b\":1,\"a\":[3,{\"y\":null,\"x\":\"\u00e9\"}],\"c\":{}},\"alpha\":[],\"mid\":[[],[1,2.5,\"s\"],{\"q\":false}]}"
+    }
+   ],
+   "name": "nested_insertion_order",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-1\"}"
+     },
+     {
+      "event_id": 2,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-1\"}"
+     },
+     {
+      "event_id": 3,
+      "event_name": "approval.resolved",
+      "occurred_at": "2026-03-01T12:05:00.123456+00:00",
+      "payload_json": "{\"request_id\": \"r-1\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 3
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"request_id\":\"r-1\"}"
+    },
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"request_id\":\"r-1\"}"
+    },
+    {
+     "event_name": "approval.resolved",
+     "now": "2026-03-01T12:05:00.123456+00:00",
+     "payload_text": "{\"request_id\":\"r-1\"}"
+    }
+   ],
+   "name": "repeated_events",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-1\"}"
+     },
+     {
+      "event_id": 2,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"r-1\"}"
+     },
+     {
+      "event_id": 3,
+      "event_name": "approval.resolved",
+      "occurred_at": "2026-03-01T12:05:00.123456+00:00",
+      "payload_json": "{\"request_id\": \"r-1\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 3
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"request_id\":\"r-1\"}"
+    },
+    {
+     "event_name": "approval.created",
+     "now": "2026-03-01T12:00:00+00:00",
+     "payload_text": "{\"request_id\":\"r-1\"}"
+    },
+    {
+     "event_name": "approval.resolved",
+     "now": "2026-03-01T12:05:00.123456+00:00",
+     "payload_text": "{\"request_id\":\"r-1\"}"
+    }
+   ],
+   "name": "repeated_events",
+   "source": "Cloud-Sync"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "x",
+      "occurred_at": "not-a-timestamp \u00e9",
+      "payload_json": "{\"k\": 1}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "x",
+     "now": "not-a-timestamp \u00e9",
+     "payload_text": "{\"k\":1}"
+    }
+   ],
+   "name": "arbitrary_now_text",
+   "source": "guard"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "x",
+      "occurred_at": "not-a-timestamp \u00e9",
+      "payload_json": "{\"k\": 1}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "events": [
+    {
+     "event_name": "x",
+     "now": "not-a-timestamp \u00e9",
+     "payload_text": "{\"k\":1}"
+    }
+   ],
+   "name": "arbitrary_now_text",
+   "source": "Cloud-Sync"
+  }
+ ],
+ "add_event_digit_limit": {
+  "after": {
+   "guard_events": [],
+   "sqlite_sequence": []
+  },
+  "error": "ValueError",
+  "int_digits": 4301
+ },
+ "approval_created": [
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "stored_request",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null, \"created_at\": \"2026-03-01T12:00:00+00:00\", \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"caf\\u00e9 \\u2014 \\u65e5\\u672c \\ud83d\\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \\u2028\\ufeff\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": \"acme \\u00e9\"}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "publisher_and_unicode",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"caf\\u00e9 \\u2014 \\u65e5\\u672c \\ud83d\\udd12 \\u0007\\u001f\\t\\n\\r\\\"\\\\/ \\u2028\\ufeff\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": \"acme \\u00e9\", \"created_at\": \"2026-03-01T12:00:00+00:00\", \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:05:00.123456+00:00",
+      "payload_json": "{\"request_id\": \"req-2\", \"harness\": null, \"artifact_id\": null, \"artifact_name\": null, \"artifact_type\": null, \"policy_action\": null, \"recommended_scope\": null, \"source_scope\": null, \"workspace\": null, \"publisher\": null}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "missing_fields",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-2\", \"created_at\": \"2026-03-01T12:05:00.123456+00:00\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": 12, \"publisher\": true}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "integer_and_bool_values",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": 12, \"publisher\": true, \"created_at\": \"2026-03-01T12:00:00+00:00\", \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": [\"a\", 1, null]}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "list_value",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": [\"a\", 1, null], \"created_at\": \"2026-03-01T12:00:00+00:00\", \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": 1.5}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "float_value",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": 1.5, \"created_at\": \"2026-03-01T12:00:00+00:00\", \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T13:00:00.654321+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "created_at_missing",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null, \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T13:00:00.654321+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "created_at_empty",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null, \"created_at\": \"\", \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T13:00:00.654321+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "created_at_not_text",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null, \"created_at\": 5, \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T13:00:00.654321+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "created_at_none",
+   "native_defers": false,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null, \"created_at\": null, \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  },
+  {
+   "after": {
+    "guard_events": [
+     {
+      "event_id": 1,
+      "event_name": "approval.created",
+      "occurred_at": "2026-03-01T12:00:00+00:00",
+      "payload_json": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": {\"b\": 1, \"a\": 2}}"
+     }
+    ],
+    "sqlite_sequence": [
+     {
+      "name": "guard_events",
+      "seq": 1
+     }
+    ]
+   },
+   "name": "object_value",
+   "native_defers": true,
+   "queued_text": "{\"request_id\": \"req-1\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"require-reapproval\", \"recommended_scope\": \"once\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": {\"b\": 1, \"a\": 2}, \"created_at\": \"2026-03-01T12:00:00+00:00\", \"status\": \"pending\", \"launch_target\": \"rm -rf build\"}"
+  }
+ ],
+ "pinned_clock": "2026-03-01T13:00:00.654321+00:00",
+ "safe_alternative_reason": [
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": null,
+   "text": "HOL Guard blocked this action. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": null,
+   "text": "HOL Guard blocked this action. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": null,
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "",
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "",
+   "text": "HOL Guard blocked this action. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "",
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "unknown",
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "unknown",
+   "text": "HOL Guard blocked this action. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "unknown",
+   "text": "HOL Guard blocked this action. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_destructive_command",
+   "text": "HOL Guard blocked this action. This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_destructive_command",
+   "text": "HOL Guard blocked this action. This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_destructive_command",
+   "text": "HOL Guard blocked this action. This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_package_review",
+   "text": "HOL Guard blocked this action. Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_package_review",
+   "text": "HOL Guard blocked this action. Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_package_review",
+   "text": "HOL Guard blocked this action. Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_network_review",
+   "text": "HOL Guard blocked this action. This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_network_review",
+   "text": "HOL Guard blocked this action. This makes a network request that Guard has not seen before. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_network_review",
+   "text": "HOL Guard blocked this action. This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_file_read_review",
+   "text": "HOL Guard blocked this action. This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_file_read_review",
+   "text": "HOL Guard blocked this action. This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_file_read_review",
+   "text": "HOL Guard blocked this action. This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "HOL Guard blocked this action. Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "HOL Guard blocked this action. Guard cannot check what this tool call will do before it runs. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "HOL Guard blocked this action. Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_command_review_required",
+   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_command_review_required",
+   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "HOL Guard blocked this action.",
+   "reason_code": "native_command_review_required",
+   "text": "HOL Guard blocked this action. Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": null,
+   "text": "This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": null,
+   "text": "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": null,
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "",
+   "text": "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "unknown",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "unknown",
+   "text": "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "unknown",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "native_destructive_command",
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "native_destructive_command",
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "native_destructive_command",
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "native_package_review",
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "native_package_review",
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "native_package_review",
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "native_network_review",
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "native_network_review",
+   "text": "This makes a network request that Guard has not seen before. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "native_network_review",
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "native_file_read_review",
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "native_file_read_review",
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "native_file_read_review",
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "Guard cannot check what this tool call will do before it runs. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "",
+   "reason_code": "native_command_review_required",
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "",
+   "reason_code": "native_command_review_required",
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "",
+   "reason_code": "native_command_review_required",
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": null,
+   "text": "This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": null,
+   "text": "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": null,
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "",
+   "text": "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "unknown",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "unknown",
+   "text": "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "unknown",
+   "text": "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "native_destructive_command",
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "native_destructive_command",
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "native_destructive_command",
+   "text": "This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "native_package_review",
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "native_package_review",
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "native_package_review",
+   "text": "Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "native_network_review",
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "native_network_review",
+   "text": "This makes a network request that Guard has not seen before. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "native_network_review",
+   "text": "This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "native_file_read_review",
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "native_file_read_review",
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "native_file_read_review",
+   "text": "This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "Guard cannot check what this tool call will do before it runs. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "   ",
+   "reason_code": "native_command_review_required",
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "   ",
+   "reason_code": "native_command_review_required",
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "   ",
+   "reason_code": "native_command_review_required",
+   "text": "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": null,
+   "text": "padded \u00e9 This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": null,
+   "text": "padded \u00e9 It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": null,
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "",
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "",
+   "text": "padded \u00e9 It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "",
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "unknown",
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "unknown",
+   "text": "padded \u00e9 It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "unknown",
+   "text": "padded \u00e9 No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_destructive_command",
+   "text": "padded \u00e9 This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_destructive_command",
+   "text": "padded \u00e9 This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_destructive_command",
+   "text": "padded \u00e9 This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_package_review",
+   "text": "padded \u00e9 Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_package_review",
+   "text": "padded \u00e9 Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_package_review",
+   "text": "padded \u00e9 Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_network_review",
+   "text": "padded \u00e9 This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_network_review",
+   "text": "padded \u00e9 This makes a network request that Guard has not seen before. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_network_review",
+   "text": "padded \u00e9 This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_file_read_review",
+   "text": "padded \u00e9 This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_file_read_review",
+   "text": "padded \u00e9 This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_file_read_review",
+   "text": "padded \u00e9 This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "padded \u00e9 Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "padded \u00e9 Guard cannot check what this tool call will do before it runs. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "padded \u00e9 Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_command_review_required",
+   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_command_review_required",
+   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u3000\u2003 padded \u00e9 \t\n",
+   "reason_code": "native_command_review_required",
+   "text": "padded \u00e9 Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": null,
+   "text": "inner  spaces This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": null,
+   "text": "inner  spaces It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": null,
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "",
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "",
+   "text": "inner  spaces It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "",
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "unknown",
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "unknown",
+   "text": "inner  spaces It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "unknown",
+   "text": "inner  spaces No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_destructive_command",
+   "text": "inner  spaces This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_destructive_command",
+   "text": "inner  spaces This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_destructive_command",
+   "text": "inner  spaces This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_package_review",
+   "text": "inner  spaces Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_package_review",
+   "text": "inner  spaces Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_package_review",
+   "text": "inner  spaces Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_network_review",
+   "text": "inner  spaces This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_network_review",
+   "text": "inner  spaces This makes a network request that Guard has not seen before. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_network_review",
+   "text": "inner  spaces This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_file_read_review",
+   "text": "inner  spaces This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_file_read_review",
+   "text": "inner  spaces This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_file_read_review",
+   "text": "inner  spaces This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "inner  spaces Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "inner  spaces Guard cannot check what this tool call will do before it runs. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "inner  spaces Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_command_review_required",
+   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_command_review_required",
+   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\u001c\u001d\u001e\u001f inner  spaces \u0085",
+   "reason_code": "native_command_review_required",
+   "text": "inner  spaces Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": null,
+   "text": "\ud83d\udd12 locked This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": null,
+   "text": "\ud83d\udd12 locked It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": null,
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "",
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "",
+   "text": "\ud83d\udd12 locked It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "",
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "unknown",
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "unknown",
+   "text": "\ud83d\udd12 locked It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "unknown",
+   "text": "\ud83d\udd12 locked No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_destructive_command",
+   "text": "\ud83d\udd12 locked This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_destructive_command",
+   "text": "\ud83d\udd12 locked This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_destructive_command",
+   "text": "\ud83d\udd12 locked This command deletes or overwrites data. Use `git worktree remove` for a worktree, or target one specific path. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_package_review",
+   "text": "\ud83d\udd12 locked Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_package_review",
+   "text": "\ud83d\udd12 locked Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_package_review",
+   "text": "\ud83d\udd12 locked Package installs download code from a registry, so Guard reviews them. An install that only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci --ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this was already that form, reuse dependencies that are already installed where you can. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_network_review",
+   "text": "\ud83d\udd12 locked This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_network_review",
+   "text": "\ud83d\udd12 locked This makes a network request that Guard has not seen before. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_network_review",
+   "text": "\ud83d\udd12 locked This makes a network request that Guard has not seen before. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_file_read_review",
+   "text": "\ud83d\udd12 locked This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_file_read_review",
+   "text": "\ud83d\udd12 locked This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_file_read_review",
+   "text": "\ud83d\udd12 locked This reads a file outside what Guard treats as safe to read. A search is checked against every file it can reach, so search a narrower folder or one file, use `rg` with a `-g` file filter, or find files by name with `find` or `glob`. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "\ud83d\udd12 locked Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "\ud83d\udd12 locked Guard cannot check what this tool call will do before it runs. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_pre_tool_unknown_review",
+   "text": "\ud83d\udd12 locked Guard cannot check what this tool call will do before it runs. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": null,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_command_review_required",
+   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  },
+  {
+   "approval_queued": true,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_command_review_required",
+   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+   "approval_queued": false,
+   "reason": "\ud83d\udd12 locked",
+   "reason_code": "native_command_review_required",
+   "text": "\ud83d\udd12 locked Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. If it chains several steps, run each step as its own command; Guard checks each one on its own. No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; continue with a permitted alternative or tell the user what is blocked."
+  }
+ ],
+ "schema": "guard-store-guard-event-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE guard_events (\n              event_id integer primary key autoincrement,\n              event_name text not null,\n              payload_json text not null,\n              occurred_at text not null\n            )",
+  "CREATE INDEX idx_guard_events_recent\n            on guard_events (occurred_at desc, event_id desc)\n            ",
+  "CREATE INDEX idx_guard_events_name_recent\n            on guard_events (event_name, occurred_at desc, event_id desc)\n            ",
+  "CREATE TRIGGER trg_guard_workflow_event_preserve_link\n    before delete on guard_events when exists (\n      select 1 from guard_workflow_capability_receipts where event_id = old.event_id\n      union all\n      select 1 from guard_workflow_capability_authority_transitions where event_id = old.event_id\n    ) begin select raise(abort, 'workflow_capability_event_referenced'); end"
+ ]
+}

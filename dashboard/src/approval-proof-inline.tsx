@@ -1,0 +1,279 @@
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import type { ChangeEvent, KeyboardEvent, ReactNode, RefObject } from "react";
+import { HiMiniKey } from "react-icons/hi2";
+import { ActionButton } from "./approval-center-primitives";
+import { shouldSubmitApprovalProof } from "./approval-keyboard";
+import type { GuardApprovalGatePublicConfig } from "./guard-types";
+import { isBulkApproveGateReady as approvalGateProofReady } from "./queue-bulk-approval-credentials";
+import { approvalGateIsLocked, approvalGateLockRemainingSeconds } from "./approval-gate-utils";
+export { approvalGateProofReady };
+
+type ApprovalProofFieldInputsProps = {
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  approvalPassword: string;
+  approvalTotpCode: string;
+  passwordRef?: RefObject<HTMLInputElement | null>;
+  requireFreshTotp?: boolean;
+  requireGate?: boolean;
+  onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+};
+
+export function approvalProofRecentlySatisfied(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+  return gate?.totp_enabled === true && gate.totp_recent_satisfied === true;
+}
+
+export function approvalProofRequiresPassword(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+  return gate?.totp_enabled !== true;
+}
+
+
+
+export function approvalGateNeedsSetup(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
+  return gate !== null && gate !== undefined && gate.enabled !== true;
+}
+
+export function ApprovalGateRecommendationNotice() {
+  return (
+    <div
+      role="note"
+      className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3"
+    >
+      <HiMiniKey className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-sm text-slate-600">
+        Set an approval password or MFA so only you can approve blocked actions.
+      </p>
+      <ActionButton href="/settings?section=approval" variant="outline">Set up approval</ActionButton>
+    </div>
+  );
+}
+
+export function ApprovalGateSetupNotice() {
+  return (
+    <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4">
+      <div className="flex items-start gap-3">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10">
+          <HiMiniKey className="h-5 w-5 text-brand-blue" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-brand-dark">Local approval isn't ready</h3>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            This change needs proof from this device, but the approval gate is off or missing its password. Enable Ask for proof and set an approval password in Settings &gt; Approval gate, then come back.
+          </p>
+          <div className="mt-3">
+            <ActionButton href="/settings?section=approval" variant="primary">Set up approval</ActionButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function isApprovalProofSubmitDisabled(
+  gate: GuardApprovalGatePublicConfig | null | undefined,
+  credentials: { approvalPassword: string; approvalTotpCode: string },
+  busy: boolean,
+  requireFreshTotp = false,
+  requireGate = false,
+): boolean {
+  if (busy) {
+    return true;
+  }
+  if (approvalGateIsLocked(gate)) {
+    return true;
+  }
+  if (requireGate && gate == null) {
+    return true;
+  }
+  if (gate != null && !approvalGateProofReady(gate)) {
+    // Fail-open endpoint with an explicitly disabled gate: the backend does not require proof.
+    if (!requireGate && gate.enabled === false) return false;
+    return true;
+  }
+  if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
+    return false;
+  }
+  if (approvalProofRequiresPassword(gate)) {
+    return credentials.approvalPassword.trim() === "";
+  }
+  return credentials.approvalTotpCode.trim() === "";
+}
+
+export function buildApprovalProofCredentials(
+  gate: GuardApprovalGatePublicConfig | null | undefined,
+  credentials: { approvalPassword: string; approvalTotpCode: string },
+  requireFreshTotp = false,
+): { approval_password?: string; approval_totp_code?: string } {
+  if (approvalGateIsLocked(gate)) {
+    return {};
+  }
+  if (gate != null && !approvalGateProofReady(gate)) {
+    return {};
+  }
+  if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
+    return {};
+  }
+  if (approvalProofRequiresPassword(gate)) {
+    return { approval_password: credentials.approvalPassword };
+  }
+  return { approval_totp_code: credentials.approvalTotpCode };
+}
+
+export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
+  const instanceId = useId();
+  const passwordFieldId = `${instanceId}-approval-proof-password`;
+  const totpFieldId = `${instanceId}-approval-proof-totp`;
+  const handleTotpChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
+    event.target.value = digits;
+    props.onApprovalTotpCodeChange(event);
+  }, [props]);
+  if (props.requireGate && props.approvalGate === null) {
+    return (
+      <p className="text-sm leading-6 text-brand-dark/75" role="status">
+        Checking local approval settings. Try again when they are available.
+      </p>
+    );
+  }
+  if (props.approvalGate !== null && !approvalGateProofReady(props.approvalGate)) {
+    if (!props.requireGate && props.approvalGate.enabled === false) return null;
+    return <ApprovalGateSetupNotice />;
+  }
+  if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
+    return (
+      <p className="text-sm leading-6 text-brand-dark/75">
+        Recently confirmed with your authenticator. A new code is not needed yet.
+      </p>
+    );
+  }
+  const needsPassword = approvalProofRequiresPassword(props.approvalGate);
+  return (
+    <div className="space-y-3">
+      {needsPassword ? (
+        <label className="block" htmlFor={passwordFieldId}>
+        <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+        <input
+          ref={props.passwordRef}
+          id={passwordFieldId}
+          type="password"
+          autoComplete="current-password"
+          name="password"
+          enterKeyHint="done"
+          value={props.approvalPassword}
+          onChange={props.onApprovalPasswordChange}
+          className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
+        </label>
+      ) : (
+        <label className="block" htmlFor={totpFieldId}>
+          <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
+          <input
+            id={totpFieldId}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            autoComplete="one-time-code"
+            name="one-time-code"
+            enterKeyHint="done"
+            autoFocus
+            aria-required="true"
+            value={props.approvalTotpCode}
+            onChange={handleTotpChange}
+            className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+type ApprovalProofInlineProps = {
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  approvalPassword: string;
+  approvalTotpCode: string;
+  error: ReactNode;
+  submitLabel: string;
+  submitBusy: boolean;
+  onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onSubmit: () => void;
+  onBack: () => void;
+};
+
+export function ApprovalProofInline(props: ApprovalProofInlineProps) {
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.approvalGate, now);
+  const gateLocked = lockRemainingSeconds > 0;
+
+  useEffect(() => {
+    if (!gateLocked) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [gateLocked]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      passwordRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const submitDisabled = isApprovalProofSubmitDisabled(
+    props.approvalGate,
+    {
+      approvalPassword: props.approvalPassword,
+      approvalTotpCode: props.approvalTotpCode,
+    },
+    props.submitBusy,
+  );
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (shouldSubmitApprovalProof(event.key, event.nativeEvent.isComposing, submitDisabled)) {
+        event.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit, submitDisabled],
+  );
+
+  return (
+    <div className="space-y-5" onKeyDown={handleKeyDown}>
+      <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-4">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10">
+            <HiMiniKey className="h-5 w-5 text-brand-blue" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-brand-dark">Approval proof required</h3>
+            <p className="mt-1 text-sm leading-relaxed text-slate-600">
+              Enter your local approval proof before Guard syncs supply-chain intel on this device.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <ApprovalProofFieldInputs
+        approvalGate={props.approvalGate}
+        approvalPassword={props.approvalPassword}
+        approvalTotpCode={props.approvalTotpCode}
+        passwordRef={passwordRef}
+        onApprovalPasswordChange={props.onApprovalPasswordChange}
+        onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
+      />
+
+      {props.error ?? null}
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <ActionButton variant="primary" onClick={props.onSubmit} disabled={submitDisabled}>
+          {props.submitLabel}
+        </ActionButton>
+        <ActionButton variant="outline" onClick={props.onBack} disabled={props.submitBusy}>
+          Go back
+        </ActionButton>
+      </div>
+    </div>
+  );
+}

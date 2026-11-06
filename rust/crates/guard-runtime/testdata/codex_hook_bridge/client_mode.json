@@ -1,0 +1,138 @@
+{
+  "_source": "Recorded from isolated_hook_environment and _desktop_transition_probe_command (frozen macOS bundle, HOL_GUARD_DESKTOP=1, no signed proxy).",
+  "desktop_probes": [
+    {
+      "data": "{\"hook_event_name\":\"PreToolUse\",\"cwd\":\"/w\",\"guard_transition_probe\":{\"schema\":\"hol-guard.transition-hook-probe.v1\",\"operation_id\":\"12345678-1234-5678-1234-567812345678\",\"request_id\":\"transition-hook-00000000000000000000000000000000\"}}",
+      "python_probe": true
+    },
+    {
+      "data": "{\"hook_event_name\":\"PreToolUse\",\"cwd\":\"/w\",\"guard_transition_probe\":{\"schema\":\"other\",\"operation_id\":\"12345678-1234-5678-1234-567812345678\",\"request_id\":\"transition-hook-00000000000000000000000000000000\"}}",
+      "python_probe": false
+    },
+    {
+      "data": "{\"hook_event_name\":\"PreToolUse\",\"cwd\":\"/w\",\"guard_transition_probe\":null}",
+      "python_probe": false
+    },
+    {
+      "data": "{\"hook_event_name\":\"PreToolUse\",\"cwd\":\"/w\"}",
+      "python_probe": false
+    },
+    {
+      "data": "{\"hook_event_name\":\"PostToolUse\",\"cwd\":\"/w\",\"guard_transition_probe\":{\"schema\":\"hol-guard.transition-hook-probe.v1\",\"operation_id\":\"12345678-1234-5678-1234-567812345678\",\"request_id\":\"transition-hook-00000000000000000000000000000000\"}}",
+      "python_probe": false
+    },
+    {
+      "data": "{\"hookEventName\":\"PreToolUse\",\"cwd\":\"/w\",\"guard_transition_probe\":{\"schema\":\"hol-guard.transition-hook-probe.v1\",\"operation_id\":\"12345678-1234-5678-1234-567812345678\",\"request_id\":\"transition-hook-00000000000000000000000000000000\"}}",
+      "python_probe": false
+    },
+    {
+      "data": "{\"hook_event_name\":\"Stop\",\"guard_transition_probe\":{\"schema\":\"hol-guard.transition-hook-probe.v1\",\"operation_id\":\"12345678-1234-5678-1234-567812345678\",\"request_id\":\"transition-hook-00000000000000000000000000000000\"}}",
+      "python_probe": false
+    },
+    {
+      "data": "{\"hook_event_name\":\"Stop\",\"hook_event_name\":\"PreToolUse\",\"cwd\":\"/w\",\"guard_transition_probe\":{\"schema\":\"hol-guard.transition-hook-probe.v1\",\"operation_id\":\"12345678-1234-5678-1234-567812345678\",\"request_id\":\"transition-hook-00000000000000000000000000000000\"}}",
+      "python_probe": true
+    },
+    {
+      "data": "{\"hook_event_name\":\"PreToolUse\",\"hook_event_name\":\"Stop\",\"cwd\":\"/w\",\"guard_transition_probe\":{\"schema\":\"hol-guard.transition-hook-probe.v1\",\"operation_id\":\"12345678-1234-5678-1234-567812345678\",\"request_id\":\"transition-hook-00000000000000000000000000000000\"}}",
+      "python_probe": false
+    }
+  ],
+  "start_environments": [
+    {
+      "expected": {
+        "HOME": "/h",
+        "PATH": "/bin"
+      },
+      "source": {
+        "HOME": "/h",
+        "PATH": "/bin"
+      }
+    },
+    {
+      "expected": {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "/Applications/G.app/proxy",
+        "HOME": "/h"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "/Applications/G.app/proxy",
+        "HOME": "/h"
+      }
+    },
+    {
+      "expected": {
+        "HOME": "/h"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOME": "/h"
+      }
+    },
+    {
+      "expected": {
+        "HOME": "/h"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "",
+        "HOME": "/h"
+      }
+    },
+    {
+      "expected": {
+        "HOME": "/h"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "relative/proxy",
+        "HOME": "/h"
+      }
+    },
+    {
+      "expected": {
+        "HOME": "/h"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP": "true",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "/p",
+        "HOME": "/h"
+      }
+    },
+    {
+      "expected": {
+        "HOME": "/h"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP": "0",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "/p",
+        "HOME": "/h"
+      }
+    },
+    {
+      "expected": {
+        "HOME": "/h"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "/p",
+        "HOME": "/h"
+      }
+    },
+    {
+      "expected": {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "/p",
+        "HOME": "/h",
+        "LC_ALL": "C"
+      },
+      "source": {
+        "HOL_GUARD_DESKTOP": "1",
+        "HOL_GUARD_DESKTOP_HOOK_PROXY": "/p",
+        "HOME": "/h",
+        "LC_ALL": "C",
+        "UNLISTED_KEY": "x"
+      }
+    }
+  ]
+}

@@ -1,0 +1,276 @@
+"""Policy bundle schema validation and integrity hashing.
+
+Rust owns v1 bundle schema validation, canonical hashing, signature
+verification and downgrade ordering. This module keeps the sync-time names,
+remediation text rendering and the transport calls; a native failure is a
+typed rejection, never a Python verdict.
+"""
+
+from __future__ import annotations
+
+from ..version import __version__
+from .native_policy_bundle import (
+    NATIVE_UNAVAILABLE_REJECTION,
+    PolicyBundleNativeUnavailableError,
+    native_policy_bundle,
+    policy_bundle_chunks,
+)
+
+CANONICAL_COMPILE_REJECTION_PREFIX = "canonical_compile_"
+
+# The compiler reports these before it reads any rule and names the policy
+# document in place of a rule, so a rejection for one of them carries no rule id.
+CANONICAL_COMPILE_DOCUMENT_CODES = frozenset(
+    {"invalid_policy_spec", "invalid_policy_rules", "unsupported_policy_budgets"}
+)
+
+# A rule the canonical compiler cannot turn into enforcement rows rejects the
+# whole bundle, so the device keeps the policy it already had. The reason code
+# alone names neither the rule nor what about it is unenforceable, which leaves
+# an administrator with a published policy that never applies and nothing to
+# act on. Each compile code carries the one sentence that says what Guard can
+# enforce instead; the rule's own id travels beside the reason in the stored
+# rejection.
+_CANONICAL_COMPILE_REMEDIATION = {
+    "unsupported_policy_match": (
+        "Guard enforces match on artifacts, exact commands, harnesses, publishers, tools and workspaces; "
+        "other match fields, such as packages, domains or paths, are not enforced on this device. Tools "
+        "cannot be combined with artifacts or publishers, and an exact command cannot be combined with "
+        "artifacts, tools or publishers."
+    ),
+    "invalid_policy_match_selector": "Every match field needs at least one non-empty value.",
+    "unsupported_policy_effect": "Guard enforces allow, block and review rules.",
+    "unsupported_exact_command_review": (
+        "Guard cannot ask for review on an exact command; it enforces only allow and block there. Block "
+        "the command, or ask for review on its tool instead."
+    ),
+    "unsupported_policy_lifetime": ("Guard enforces lifetime.mode permanent, or until with an expiresAt time."),
+    "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
+    "command_expression_requires_guard_3_1_runtime": (
+        "This device does not enforce command expressions, such as a command prefix, so the rule stays "
+        "unapplied. Match the exact command instead, which Guard enforces. A tool match is not a "
+        "substitute: it covers every call to that tool, not only this command, so widen the rule only as "
+        "a deliberate policy decision."
+    ),
+    "policy_compilation_limit": (
+        "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "
+        "fewer tools, artifacts, harnesses, publishers and workspaces per rule."
+    ),
+}
+
+_POLICY_BUNDLE_TRUST_REMEDIATION_REASONS = frozenset(
+    {
+        "missing_signature",
+        "missing_signing_key_id",
+        "signing_key_fingerprint_mismatch",
+        "signing_key_not_current",
+        "signing_key_purpose_mismatch",
+        "signing_key_revoked",
+        "signing_key_workspace_mismatch",
+        "trusted_key_unavailable",
+        "unsupported_signature_algorithm",
+        "untrusted_signing_key",
+    }
+)
+_POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS = frozenset(
+    {
+        "bundle_signature_invalid",
+        "invalid_signature_encoding",
+        "invalid_verifier",
+    }
+)
+_POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS = frozenset(
+    {
+        "bundle_hash_mismatch",
+        "invalid_bundle_hash",
+        "invalid_payload_hash",
+        "payload_hash_mismatch",
+    }
+)
+_POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS = frozenset(
+    {
+        "invalid_acknowledgements",
+        "invalid_cloud_exceptions",
+        "invalid_policy_bundle",
+        "invalid_policy_defaults",
+        "invalid_receipt_redaction_level",
+        "invalid_rollout_state",
+        "invalid_rules",
+        "missing_required_field",
+    }
+)
+_POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS = frozenset({"invalid_workspace_id", "wrong_workspace"})
+_POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS = frozenset(
+    {"bundle_expired", "bundle_not_yet_valid", "invalid_expires_at", "invalid_issued_at"}
+)
+_POLICY_BUNDLE_VERSION_REMEDIATION_REASONS = frozenset(
+    {
+        "invalid_bundle_version",
+        "invalid_min_daemon_version",
+        "unsupported_contract_version",
+        "unsupported_daemon_version",
+    }
+)
+
+
+def _non_empty_string(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _flag(kind: str, request: dict[str, object], *, otherwise: bool) -> bool:
+    """Return one Rust boolean verdict.
+
+    ``otherwise`` is the fail-closed answer when Rust rejects the request as
+    malformed or answers with an error verdict. An outage of the resident is not
+    a verdict: ``PolicyBundleNativeUnavailableError`` propagates so callers report it
+    as unavailable rather than as an inactive, unsupported or downgraded bundle.
+    """
+
+    try:
+        result = native_policy_bundle(kind, request)
+    except PolicyBundleNativeUnavailableError:
+        raise
+    except ValueError:
+        return otherwise
+    if isinstance(result.get("error"), str):
+        return otherwise
+    return result.get("value") is True
+
+
+def policy_bundle_daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
+    slim = {key: policy_bundle[key] for key in ("minDaemonVersion",) if key in policy_bundle}
+    return _flag("daemon_version_supported", {"bundle": slim, "daemon_version": __version__}, otherwise=False)
+
+
+def policy_bundle_is_enforceable(policy_bundle: dict[str, object]) -> bool:
+    """Return whether an authenticated rollout is intended as live authority."""
+
+    slim = {key: policy_bundle[key] for key in ("contractVersion", "rolloutState") if key in policy_bundle}
+    return _flag("is_enforceable", {"bundle": slim}, otherwise=False)
+
+
+def policy_bundle_acceptance_checkpoint(policy_bundle: dict[str, object]) -> dict[str, object]:
+    """Return the signed identity fields needed for monotonic replay defense."""
+
+    checkpoint = {
+        "bundleHash": policy_bundle.get("bundleHash"),
+        "bundleVersion": policy_bundle.get("bundleVersion"),
+        "issuedAt": policy_bundle.get("issuedAt"),
+        "payloadHash": policy_bundle.get("payloadHash"),
+        "workspaceId": policy_bundle.get("workspaceId"),
+        "cloudExceptionsIssuedAt": policy_bundle.get("cloudExceptionsIssuedAt"),
+        "cloudExceptionsHash": policy_bundle_cloud_exceptions_hash(policy_bundle),
+    }
+    return {key: value for key, value in checkpoint.items() if value is not None}
+
+
+def policy_bundle_cloud_exceptions_hash(policy_bundle: dict[str, object]) -> str | None:
+    """Return the identity of the bundle's signed Cloud exception set, if any.
+
+    A checkpoint keeps it beside the issue time, so a different set signed at
+    the same instant is a replay rather than the set the device accepted.
+    """
+
+    stored = policy_bundle.get("cloudExceptionsHash")
+    if isinstance(stored, str):
+        return stored
+    if "cloudExceptions" not in policy_bundle:
+        return None
+    result = native_policy_bundle(
+        "v2_cloud_exceptions_hash",
+        {"bundle_chunks": policy_bundle_chunks({"cloudExceptions": policy_bundle["cloudExceptions"]})},
+    )
+    value = result.get("value")
+    return value if isinstance(value, str) else None
+
+
+_ORDERING_KEYS = ("bundleVersion", "bundleHash", "payloadHash", "issuedAt", "workspaceId")
+
+
+def _ordering_view(bundle: object) -> object:
+    if not isinstance(bundle, dict):
+        return bundle
+    return {key: bundle[key] for key in _ORDERING_KEYS if key in bundle}
+
+
+def policy_bundle_is_version_downgrade(
+    accepted_bundle: dict[str, object] | None,
+    candidate_bundle: dict[str, object],
+) -> bool:
+    """Reject older or unordered signed payloads relative to accepted authority."""
+
+    try:
+        accepted_chunks = None if accepted_bundle is None else policy_bundle_chunks(_ordering_view(accepted_bundle))
+        request: dict[str, object] = {
+            "accepted_chunks": accepted_chunks,
+            "bundle_chunks": policy_bundle_chunks(_ordering_view(candidate_bundle)),
+        }
+    except ValueError:
+        return True
+    return _flag("is_downgrade", request, otherwise=True)
+
+
+def policy_bundle_rejection_message(reason: str | None) -> str | None:
+    if reason is not None and reason.startswith(CANONICAL_COMPILE_REJECTION_PREFIX):
+        code = reason[len(CANONICAL_COMPILE_REJECTION_PREFIX) :]
+        detail = _CANONICAL_COMPILE_REMEDIATION.get(code)
+        subject = "policy" if code in CANONICAL_COMPILE_DOCUMENT_CODES else "rule"
+        return (
+            "The policy bundle was not applied because "
+            + ("its policy" if subject == "policy" else "one of its rules")
+            + " cannot be enforced on this device. "
+            + (f"{detail} " if detail else "")
+            + f"Change the {subject} in Guard Cloud and publish again; this device keeps the policy it already had."
+        )
+    if reason == "inactive_rollout_state":
+        return (
+            "The authenticated policy bundle is not active for local enforcement. "
+            "Approve or publish the rollout in Guard Cloud, then sync again."
+        )
+    if reason == NATIVE_UNAVAILABLE_REJECTION:
+        return (
+            "The policy bundle was not applied because the Guard native runtime could not be reached. "
+            "Check that Guard is healthy, then sync again."
+        )
+    if reason in _POLICY_BUNDLE_TRUST_REMEDIATION_REASONS | _POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS:
+        return (
+            "The policy bundle was not applied because its signing authority could not be verified. "
+            "Sync again after the workspace policy signing key is provisioned or rotated."
+        )
+    if reason in _POLICY_BUNDLE_INTEGRITY_REMEDIATION_REASONS:
+        return (
+            "The policy bundle was not applied because its integrity checks failed. "
+            "Sync again to fetch a complete policy bundle; if the error persists, contact your workspace administrator."
+        )
+    if reason in _POLICY_BUNDLE_SCHEMA_REMEDIATION_REASONS:
+        return (
+            "The policy bundle was not applied because its schema or required fields are invalid. "
+            "Sync again to fetch a complete policy bundle; if the error persists, contact your workspace administrator."
+        )
+    if reason in _POLICY_BUNDLE_WORKSPACE_REMEDIATION_REASONS:
+        return (
+            "The policy bundle was not applied because it does not match the connected workspace. "
+            "Reconnect Guard to the intended workspace. Sync again after the workspace connection is confirmed."
+        )
+    if reason in _POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS:
+        return (
+            "The policy bundle was not applied because its validity period is not current. "
+            "Check the system clock. Sync again to fetch the current workspace policy."
+        )
+    if reason == "bundle_version_downgrade":
+        return (
+            "The policy bundle was not applied because it is older than, or conflicts with, "
+            "the policy this device already accepted. This device keeps the policy it already had. "
+            "Publish the policy again in Guard Cloud so it gets a newer version, then sync again. "
+            "If a newer publish is also rejected, the policy record on this device may be damaged; "
+            "contact your workspace administrator."
+        )
+    if reason in _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS:
+        return (
+            "The policy bundle was not applied because its contract or daemon version is incompatible. "
+            "Update Guard to a supported version if required. Sync again to fetch the current workspace policy."
+        )
+    return None
+
+
+non_empty_string = _non_empty_string

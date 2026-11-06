@@ -1,0 +1,416 @@
+{
+  "schema": "guard-workspace-grant-plan-vectors.v1",
+  "cases": [
+    {
+      "name": "base plan without a grant",
+      "plan": {
+        "profile_version": "workspace-contained-v1",
+        "grant_identity_hash": null,
+        "capabilities": [],
+        "read_only_roots": [
+          "/opt/tool/run.js"
+        ]
+      },
+      "expected": null,
+      "result": [
+        "/opt/tool/run.js"
+      ]
+    },
+    {
+      "name": "base plan carrying a hash",
+      "plan": {
+        "profile_version": "workspace-contained-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [],
+        "read_only_roots": []
+      },
+      "expected": null,
+      "result": null
+    },
+    {
+      "name": "base plan carrying a capability",
+      "plan": {
+        "profile_version": "workspace-contained-v1",
+        "grant_identity_hash": null,
+        "capabilities": [
+          "loopback-network"
+        ],
+        "read_only_roots": []
+      },
+      "expected": null,
+      "result": null
+    },
+    {
+      "name": "grant plan with no decided grant",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [],
+        "read_only_roots": []
+      },
+      "expected": null,
+      "result": null
+    },
+    {
+      "name": "unknown capability",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "network"
+        ],
+        "read_only_roots": []
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "unsorted capabilities",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "state-dir-read",
+          "loopback-network"
+        ],
+        "read_only_roots": [
+          "/home/dev/.lanectl"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "duplicate capability",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "loopback-network"
+        ],
+        "read_only_roots": []
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "capability not a string",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          1
+        ],
+        "read_only_roots": []
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "loopback grant",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network"
+        ],
+        "read_only_roots": [
+          "/opt/tool/run.js"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": [
+        "/opt/tool/run.js"
+      ]
+    },
+    {
+      "name": "empty grant",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [],
+        "read_only_roots": []
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": []
+    },
+    {
+      "name": "other identity",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "capabilities": [
+          "loopback-network"
+        ],
+        "read_only_roots": []
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "null identity on a grant plan",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": null,
+        "capabilities": [],
+        "read_only_roots": []
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "base profile with a decided grant",
+      "plan": {
+        "profile_version": "workspace-contained-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [],
+        "read_only_roots": []
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "capability beyond the decision",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-write"
+        ],
+        "read_only_roots": [
+          "/home/dev/.lanectl"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "state directory last",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "state-dir-read"
+        ],
+        "read_only_roots": [
+          "/opt/tool/run.js",
+          "/home/dev/.lanectl"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": [
+        "/opt/tool/run.js"
+      ]
+    },
+    {
+      "name": "state directory missing",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "state-dir-read"
+        ],
+        "read_only_roots": [
+          "/opt/tool/run.js"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "state directory elsewhere",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "state-dir-write"
+        ],
+        "read_only_roots": [
+          "/home/dev/.ssh"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "state directory not decided",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "state-dir-read"
+        ],
+        "read_only_roots": [
+          "/home/dev/.lanectl"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": null
+      },
+      "result": null
+    },
+    {
+      "name": "state directory not last",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "state-dir-read"
+        ],
+        "read_only_roots": [
+          "/home/dev/.lanectl",
+          "/opt/tool/run.js"
+        ]
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "roots not a list",
+      "plan": {
+        "profile_version": "workspace-contained-grant-v1",
+        "grant_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [],
+        "read_only_roots": "x"
+      },
+      "expected": {
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "capabilities": [
+          "loopback-network",
+          "state-dir-read",
+          "state-dir-write"
+        ],
+        "state_dir": "/home/dev/.lanectl"
+      },
+      "result": null
+    },
+    {
+      "name": "capabilities missing",
+      "plan": {
+        "profile_version": "workspace-contained-v1",
+        "grant_identity_hash": null,
+        "read_only_roots": []
+      },
+      "expected": null,
+      "result": null
+    }
+  ]
+}

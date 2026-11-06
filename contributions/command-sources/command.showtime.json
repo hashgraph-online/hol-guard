@@ -1,0 +1,2545 @@
+{
+  "extension": {
+    "action_classes": [
+      "showtime dependency install",
+      "showtime agent configuration change",
+      "showtime file removal",
+      "showtime network download",
+      "showtime browser automation"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews the showtime video-studio CLI's commands that reach beyond the video project: installing tools and models (setup), writing other coding agents' configuration (install), deleting files (setup --prune, clean, voice cache --clear), explicit network downloads (audio music|lib|packs fetch, assets media fetch, reference <URL>) and driving a headless browser against a site or a walkthrough script (site capture|component|record, demo record). Project-local commands (new, check, render, qa, export, look, snap, receipt, doctor, guide, status) and --help are not matched and remain automatic. Components that ordinary commands fetch on first use (for example a speech model on the first transcription) are outside this extension; `showtime setup --plan` lists them.",
+    "ecosystem_ids": [],
+    "executables": [
+      "showtime",
+      "showtime.cmd",
+      "showtime.ps1"
+    ],
+    "extension_id": "command.showtime",
+    "homepage": "https://github.com/FavioVazquez/showtime",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "showtime command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "showtime dependency install"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `showtime setup`, which downloads and installs ffmpeg, a Python virtual environment, Node packages, a headless browser and speech/vision models into ~/.showtime (a few hundred MB for the default core tier; about 3.6 GB with --full or --tier full; --with extras such as asr-turbo add up to 1.5 GB each; --fetch pulls named first-use components; --link writes ~/.claude/skills/showtime). --list, --plan and --estimate only print and exit before installing anything.",
+        "example_command": "showtime setup --full",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "showtime tool and model install",
+        "permission_id": "command.showtime.permission.setup",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `showtime setup --estimate` or `showtime setup --plan` first: they print every download (URL, size, sha256) and install nothing."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "showtime agent configuration change"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `showtime install`, which adds a skill link, crew agent files and an MCP server entry to another coding agent's user-level or project configuration (for example ~/.codex, ~/.cursor, .gemini), or removes them with --uninstall. --print and --list change nothing.",
+        "example_command": "showtime install --agent codex",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "showtime install into another coding agent",
+        "permission_id": "command.showtime.permission.agent-install",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run the same command with --print first; it shows every file and config entry it would write and changes nothing."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "showtime file removal"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies showtime commands that delete files: `showtime setup --prune` (superseded files under ~/.showtime), `showtime clean` (a job's or project's intermediates; an agent can only delete with --yes because the confirmation needs a terminal) and `showtime voice cache --clear|--prune` (cached speech). Each removes only files showtime created; --dry-run and the print-only setup flags remove nothing.",
+        "example_command": "showtime clean my-video --yes",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "showtime file removal",
+        "permission_id": "command.showtime.permission.cleanup",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `showtime clean --dry-run` (or `showtime setup --plan`) first to see exactly what would be removed and how much space it frees."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "showtime network download"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies showtime commands whose purpose is to download from the network now: `audio music fetch` (produced music from creators' sites; --all is the whole catalog), `audio lib fetch` (the audio library, ~249 MB core tier), `audio packs fetch` (sound-effect packs; --all), `assets media fetch` (a CC0/public-domain image or video, or any http(s) URL given with --license) and `reference <http(s) URL>` (downloads a reference video to analyse).",
+        "example_command": "showtime audio packs fetch --all",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "showtime explicit network downloads",
+        "permission_id": "command.showtime.permission.downloads",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Search first (`showtime audio music search`, `audio packs list`, `assets media search`) and fetch only the items the video uses."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "showtime browser automation"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `showtime site capture|component|record`, which drive a headless Chrome against a URL (loading the live site, dismissing cookie banners, downloading its images, logos and videos), and `showtime demo record`, which imports and runs a Node.js walkthrough script that clicks and types in a web app while it records frames.",
+        "example_command": "showtime site capture https://example.com",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "showtime headless browser against a site or script",
+        "permission_id": "command.showtime.permission.browser-capture",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Capture a local build with --serve <dir> where possible, and read the demo script before recording it."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Favio Vázquez",
+      "id": "community.showtime",
+      "url": "https://github.com/FavioVazquez/showtime"
+    },
+    "reference_urls": [
+      "https://github.com/FavioVazquez/showtime",
+      "https://faviovazquez.github.io/showtime/",
+      "https://github.com/FavioVazquez/showtime/releases/tag/v0.3.2",
+      "https://github.com/FavioVazquez/showtime/blob/v0.3.2/skills/showtime/setup/setup.py",
+      "https://github.com/FavioVazquez/showtime/blob/v0.3.2/skills/showtime/lib/st/cli_install.py",
+      "https://github.com/FavioVazquez/showtime/blob/v0.3.2/skills/showtime/lib/st/cli_job.py",
+      "https://github.com/FavioVazquez/showtime/blob/v0.3.2/skills/showtime/lib/st/cli_audio.py",
+      "https://github.com/FavioVazquez/showtime/blob/v0.3.2/skills/showtime/lib/st/cli_capture.py",
+      "https://github.com/FavioVazquez/showtime/blob/v0.3.2/skills/showtime/scripts/site.mjs",
+      "https://github.com/FavioVazquez/showtime/blob/v0.3.2/skills/showtime/scripts/demo.mjs"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "showtime dependency install"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime setup` (skills/showtime/setup/setup.py), which installs or updates tools and models in ~/.showtime and downloads what they need. --help, --list, --plan and --estimate return before the installer runs.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--fetch",
+                  "--ffmpeg",
+                  "--home",
+                  "--platform",
+                  "--seed",
+                  "--skip",
+                  "--tier",
+                  "--with"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "setup"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.setup",
+        "risk_classes": [
+          "network_egress",
+          "execution"
+        ],
+        "rule_id": "command.showtime.setup",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup help (-h)",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--list"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup listing (--list)",
+            "variant_id": "list"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--plan"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup download plan (--plan)",
+            "variant_id": "plan"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--estimate"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup size estimate (--estimate)",
+            "variant_id": "estimate"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `showtime setup --estimate` or `showtime setup --plan` first."
+        ],
+        "severity": "high",
+        "title": "showtime setup install"
+      },
+      {
+        "action_classes": [
+          "showtime agent configuration change"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime install` (skills/showtime/lib/st/cli_install.py), which writes or, with --uninstall, removes a skill link, crew agents and an MCP server entry in another coding agent's configuration. --print and --list change nothing.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--agent",
+                  "-a"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "install"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.agent-install",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.showtime.install",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--agent",
+                      "-a"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "install"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime install help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--agent",
+                      "-a"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "install"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime install help (-h)",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--agent",
+                      "-a"
+                    ],
+                    "required_flags": [
+                      "--print"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "install"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime install preview (--print)",
+            "variant_id": "print"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--agent",
+                      "-a"
+                    ],
+                    "required_flags": [
+                      "--list"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "install"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime install listing (--list)",
+            "variant_id": "list"
+          }
+        ],
+        "safer_alternatives": [
+          "Run the same command with --print first."
+        ],
+        "severity": "high",
+        "title": "showtime install into an agent"
+      },
+      {
+        "action_classes": [
+          "showtime file removal"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime setup --prune` (skills/showtime/setup/setup.py), which deletes files from older showtime versions that nothing uses any more under ~/.showtime.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--fetch",
+                  "--ffmpeg",
+                  "--home",
+                  "--platform",
+                  "--seed",
+                  "--skip",
+                  "--tier",
+                  "--with"
+                ],
+                "required_flags": [
+                  "--prune"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "setup"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.cleanup",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.showtime.setup-prune",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup help (-h)",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--list"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup listing (--list)",
+            "variant_id": "list"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--plan"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup download plan (--plan)",
+            "variant_id": "plan"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--fetch",
+                      "--ffmpeg",
+                      "--home",
+                      "--platform",
+                      "--seed",
+                      "--skip",
+                      "--tier",
+                      "--with"
+                    ],
+                    "required_flags": [
+                      "--estimate"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "setup"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime setup size estimate (--estimate)",
+            "variant_id": "estimate"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `showtime setup --plan` or `showtime doctor` first to see what is installed."
+        ],
+        "severity": "medium",
+        "title": "showtime setup --prune"
+      },
+      {
+        "action_classes": [
+          "showtime file removal"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime clean` (skills/showtime/lib/st/cli_job.py), which deletes the intermediates showtime wrote in a job or project (frame dumps, scratch, audio intermediates, with --all also review packs and logs). Without a terminal it refuses unless --yes is given; --dry-run only lists.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "clean"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.cleanup",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.showtime.clean",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "clean"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime clean help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "clean"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime clean help (-h)",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "clean"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime clean preview (--dry-run)",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "clean"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime clean preview (-n)",
+            "variant_id": "short-dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `showtime clean --dry-run` first."
+        ],
+        "severity": "medium",
+        "title": "showtime clean"
+      },
+      {
+        "action_classes": [
+          "showtime file removal"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime voice cache --clear` and `--prune` (skills/showtime/lib/st/cli_voice.py), which delete cached narration lines; plain `showtime voice cache` only reports its size.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--max-mb"
+                ],
+                "required_flags": [
+                  "--clear"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "voice",
+                  "cache"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--max-mb"
+                ],
+                "required_flags": [
+                  "--prune"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "voice",
+                  "cache"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.cleanup",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.showtime.voice-cache-clear",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--max-mb"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "voice",
+                      "cache"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime voice cache help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--max-mb"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "voice",
+                      "cache"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime voice cache help (-h)",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `showtime voice cache` first to see the cache size and cap."
+        ],
+        "severity": "low",
+        "title": "showtime voice cache clear or prune"
+      },
+      {
+        "action_classes": [
+          "showtime network download"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime audio music fetch`, `audio lib fetch` and `audio packs fetch` (skills/showtime/lib/st/cli_audio.py), which download music tracks, audio-library tiers or sound-effect packs into ~/.showtime now. `audio lib fetch --list-parts` only lists.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--category",
+                  "--for",
+                  "--limit",
+                  "--only",
+                  "--part",
+                  "--seed",
+                  "--shelf",
+                  "--tier",
+                  "--workers"
+                ],
+                "paths": [
+                  [
+                    "audio",
+                    "music",
+                    "fetch"
+                  ],
+                  [
+                    "audio",
+                    "lib",
+                    "fetch"
+                  ],
+                  [
+                    "audio",
+                    "packs",
+                    "fetch"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.downloads",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.showtime.audio-fetch",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--category",
+                      "--for",
+                      "--limit",
+                      "--only",
+                      "--part",
+                      "--seed",
+                      "--shelf",
+                      "--tier",
+                      "--workers"
+                    ],
+                    "paths": [
+                      [
+                        "audio",
+                        "music",
+                        "fetch"
+                      ],
+                      [
+                        "audio",
+                        "lib",
+                        "fetch"
+                      ],
+                      [
+                        "audio",
+                        "packs",
+                        "fetch"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime audio fetch help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--category",
+                      "--for",
+                      "--limit",
+                      "--only",
+                      "--part",
+                      "--seed",
+                      "--shelf",
+                      "--tier",
+                      "--workers"
+                    ],
+                    "paths": [
+                      [
+                        "audio",
+                        "music",
+                        "fetch"
+                      ],
+                      [
+                        "audio",
+                        "lib",
+                        "fetch"
+                      ],
+                      [
+                        "audio",
+                        "packs",
+                        "fetch"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime audio fetch help (-h)",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--category",
+                      "--for",
+                      "--limit",
+                      "--only",
+                      "--part",
+                      "--seed",
+                      "--shelf",
+                      "--tier",
+                      "--workers"
+                    ],
+                    "required_flags": [
+                      "--list-parts"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "audio",
+                      "lib",
+                      "fetch"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime audio lib fetch part listing (--list-parts)",
+            "variant_id": "list-parts"
+          }
+        ],
+        "safer_alternatives": [
+          "Search or list first and fetch only the items the video uses."
+        ],
+        "severity": "medium",
+        "title": "showtime audio downloads"
+      },
+      {
+        "action_classes": [
+          "showtime network download"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime assets media fetch` (skills/showtime/lib/st/cli_capture.py, skills/showtime/lib/st/assets/media.py), which downloads an image or video by search id, or any http(s) URL when --license is given, and writes a license sidecar and credit.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--author",
+                  "--license",
+                  "--max-mb",
+                  "--max-size",
+                  "--output",
+                  "--project",
+                  "--quality",
+                  "--source-page",
+                  "--title",
+                  "-o"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "assets",
+                  "media",
+                  "fetch"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.downloads",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.showtime.media-fetch",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--author",
+                      "--license",
+                      "--max-mb",
+                      "--max-size",
+                      "--output",
+                      "--project",
+                      "--quality",
+                      "--source-page",
+                      "--title",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "assets",
+                      "media",
+                      "fetch"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime assets media fetch help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--author",
+                      "--license",
+                      "--max-mb",
+                      "--max-size",
+                      "--output",
+                      "--project",
+                      "--quality",
+                      "--source-page",
+                      "--title",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "assets",
+                      "media",
+                      "fetch"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime assets media fetch help (-h)",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Use `showtime assets media search` first and fetch a result by its id."
+        ],
+        "severity": "medium",
+        "title": "showtime assets media fetch"
+      },
+      {
+        "action_classes": [
+          "showtime network download"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime reference <http(s) URL>` (skills/showtime/lib/st/cli_variety.py, skills/showtime/lib/st/variety/reference.py), which downloads a video from a direct link before analysing it. A local file path is not matched.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "leading_options_with_values": [],
+                "operand_prefixes": [
+                  "HTTP://",
+                  "HTTp://",
+                  "HTtP://",
+                  "HTtp://",
+                  "HtTP://",
+                  "HtTp://",
+                  "HttP://",
+                  "Http://",
+                  "hTTP://",
+                  "hTTp://",
+                  "hTtP://",
+                  "hTtp://",
+                  "htTP://",
+                  "htTp://",
+                  "httP://",
+                  "http://",
+                  "HTTPS://",
+                  "HTTPs://",
+                  "HTTpS://",
+                  "HTTps://",
+                  "HTtPS://",
+                  "HTtPs://",
+                  "HTtpS://",
+                  "HTtps://",
+                  "HtTPS://",
+                  "HtTPs://",
+                  "HtTpS://",
+                  "HtTps://",
+                  "HttPS://",
+                  "HttPs://",
+                  "HttpS://",
+                  "Https://",
+                  "hTTPS://",
+                  "hTTPs://",
+                  "hTTpS://",
+                  "hTTps://",
+                  "hTtPS://",
+                  "hTtPs://",
+                  "hTtpS://",
+                  "hTtps://",
+                  "htTPS://",
+                  "htTPs://",
+                  "htTpS://",
+                  "htTps://",
+                  "httPS://",
+                  "httPs://",
+                  "httpS://",
+                  "https://"
+                ],
+                "options_with_values": [
+                  "--against",
+                  "--for",
+                  "--job",
+                  "--max-seconds",
+                  "--out",
+                  "--title",
+                  "-o"
+                ],
+                "subcommands": [
+                  "reference"
+                ]
+              },
+              "op": "subcommand-operand-prefix.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.downloads",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.showtime.reference-url",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--against",
+                      "--for",
+                      "--job",
+                      "--max-seconds",
+                      "--out",
+                      "--title",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reference"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime reference help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--against",
+                      "--for",
+                      "--job",
+                      "--max-seconds",
+                      "--out",
+                      "--title",
+                      "-o"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "reference"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime reference help (-h)",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Download the reference yourself from a source you may keep, then pass the local file."
+        ],
+        "severity": "medium",
+        "title": "showtime reference from a URL"
+      },
+      {
+        "action_classes": [
+          "showtime browser automation"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime site capture|component|record` (skills/showtime/scripts/site.mjs), which load a URL in headless Chrome, dismiss consent banners and download the page's media. --serve <dir> captures a local static folder over 127.0.0.1 instead.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--aspect",
+                  "--dpr",
+                  "--duration",
+                  "--ease",
+                  "--fps",
+                  "--from",
+                  "--gpu",
+                  "--hide",
+                  "--hold",
+                  "--locale",
+                  "--max",
+                  "--max-height",
+                  "--max-shots",
+                  "--output",
+                  "--pad",
+                  "--page",
+                  "--quality",
+                  "--serve",
+                  "--tile-height",
+                  "--timeout",
+                  "--to",
+                  "--user-agent",
+                  "--wait",
+                  "--width",
+                  "-a",
+                  "-d",
+                  "-o"
+                ],
+                "paths": [
+                  [
+                    "site",
+                    "capture"
+                  ],
+                  [
+                    "site",
+                    "component"
+                  ],
+                  [
+                    "site",
+                    "record"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.browser-capture",
+        "risk_classes": [
+          "network_egress",
+          "execution"
+        ],
+        "rule_id": "command.showtime.site-capture",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--aspect",
+                      "--dpr",
+                      "--duration",
+                      "--ease",
+                      "--fps",
+                      "--from",
+                      "--gpu",
+                      "--hide",
+                      "--hold",
+                      "--locale",
+                      "--max",
+                      "--max-height",
+                      "--max-shots",
+                      "--output",
+                      "--pad",
+                      "--page",
+                      "--quality",
+                      "--serve",
+                      "--tile-height",
+                      "--timeout",
+                      "--to",
+                      "--user-agent",
+                      "--wait",
+                      "--width",
+                      "-a",
+                      "-d",
+                      "-o"
+                    ],
+                    "paths": [
+                      [
+                        "site",
+                        "capture"
+                      ],
+                      [
+                        "site",
+                        "component"
+                      ],
+                      [
+                        "site",
+                        "record"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime site help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--aspect",
+                      "--dpr",
+                      "--duration",
+                      "--ease",
+                      "--fps",
+                      "--from",
+                      "--gpu",
+                      "--hide",
+                      "--hold",
+                      "--locale",
+                      "--max",
+                      "--max-height",
+                      "--max-shots",
+                      "--output",
+                      "--pad",
+                      "--page",
+                      "--quality",
+                      "--serve",
+                      "--tile-height",
+                      "--timeout",
+                      "--to",
+                      "--user-agent",
+                      "--wait",
+                      "--width",
+                      "-a",
+                      "-d",
+                      "-o"
+                    ],
+                    "paths": [
+                      [
+                        "site",
+                        "capture"
+                      ],
+                      [
+                        "site",
+                        "component"
+                      ],
+                      [
+                        "site",
+                        "record"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime site help (-h)",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--aspect",
+                      "--dpr",
+                      "--duration",
+                      "--ease",
+                      "--fps",
+                      "--from",
+                      "--gpu",
+                      "--hide",
+                      "--hold",
+                      "--locale",
+                      "--max",
+                      "--max-height",
+                      "--max-shots",
+                      "--output",
+                      "--pad",
+                      "--page",
+                      "--quality",
+                      "--serve",
+                      "--tile-height",
+                      "--timeout",
+                      "--to",
+                      "--user-agent",
+                      "--wait",
+                      "--width",
+                      "-a",
+                      "-d",
+                      "-o"
+                    ],
+                    "paths": [
+                      [
+                        "site",
+                        "capture"
+                      ],
+                      [
+                        "site",
+                        "component"
+                      ],
+                      [
+                        "site",
+                        "record"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--serve"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime site local static folder (--serve)",
+            "variant_id": "serve"
+          }
+        ],
+        "safer_alternatives": [
+          "Capture a local build with --serve <dir> where possible."
+        ],
+        "severity": "medium",
+        "title": "showtime site capture, component or record"
+      },
+      {
+        "action_classes": [
+          "showtime browser automation"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `showtime demo record` (skills/showtime/scripts/demo.mjs), which imports and runs a Node.js walkthrough script that drives a browser against --url or a --serve folder while recording frames.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "showtime",
+                  "showtime.cmd",
+                  "showtime.ps1"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--no-color"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--animations",
+                  "--dpr",
+                  "--fps",
+                  "--gpu",
+                  "--max-duration",
+                  "--platform",
+                  "--quality",
+                  "--serve",
+                  "--size",
+                  "--url",
+                  "-s",
+                  "-u"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "demo",
+                  "record"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.showtime.permission.browser-capture",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.showtime.demo-record",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--animations",
+                      "--dpr",
+                      "--fps",
+                      "--gpu",
+                      "--max-duration",
+                      "--platform",
+                      "--quality",
+                      "--serve",
+                      "--size",
+                      "--url",
+                      "-s",
+                      "-u"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "demo",
+                      "record"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime demo record help (--help)",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "showtime",
+                      "showtime.cmd",
+                      "showtime.ps1"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--no-color"
+                    ],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--animations",
+                      "--dpr",
+                      "--fps",
+                      "--gpu",
+                      "--max-duration",
+                      "--platform",
+                      "--quality",
+                      "--serve",
+                      "--size",
+                      "--url",
+                      "-s",
+                      "-u"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "demo",
+                      "record"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "showtime demo record help (-h)",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Read the walkthrough script before recording it, and point it at a local build."
+        ],
+        "severity": "medium",
+        "title": "showtime demo record"
+      }
+    ],
+    "safer_alternatives": [
+      "Use the print-only forms first: `showtime setup --estimate|--plan|--list`, `showtime install --print`, `showtime clean --dry-run`."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

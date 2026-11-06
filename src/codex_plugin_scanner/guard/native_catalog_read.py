@@ -1,0 +1,223 @@
+"""Thin resident transport for the native catalog read model (ADR 0014).
+
+Rust owns snapshot construction, filtering, paging, cursors, ETags and
+serialization. Python only bounds the raw request strings, forwards them over
+the existing resident protocol and validates the result frame. It never
+parses, filters, pages or re-serializes catalog content: ``body`` is written
+to the HTTP client exactly as Rust produced it.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .catalog_delivery.discovery import DiscoveryHandle
+
+from .native_resident_client import native_resident_client_request
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
+from .strict_json_pairs import unique_json_object
+
+CATALOG_READ_FEATURE = "catalog-read-model-v1"
+CATALOG_DISCOVERY_FEATURE = "catalog-read-discovery-v2"
+MAX_CATALOG_V2_BODY_BYTES = 262_144
+MAX_CATALOG_V2_ROUTE_BYTES = 512
+MAX_CATALOG_V2_QUERY_BYTES = 2048
+MAX_CATALOG_V2_IF_NONE_MATCH_BYTES = 2048
+_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
+_REQUEST_SCHEMA = "guard-catalog-read-request.v1"
+_RESULT_SCHEMA = "guard-catalog-read-result.v1"
+_RESULT_FIELDS = frozenset({"schema", "outcome", "http_status", "etag", "body", "error_code"})
+_ETAG = re.compile(r'"cr1-[0-9a-f]{32}"')
+_DIGEST = re.compile(r"[0-9a-f]{64}")
+_ERROR_STATUS = {
+    "catalog_request_invalid": 400,
+    "catalog_query_invalid": 400,
+    "catalog_cursor_invalid": 400,
+    "catalog_route_not_found": 404,
+    "catalog_extension_not_found": 404,
+    "catalog_snapshot_expired": 409,
+    "catalog_item_exceeds_page_budget": 500,
+    "catalog_snapshot_mismatch": 503,
+    "catalog_read_model_unavailable": 503,
+}
+# A resident that is busy or timed out is a temporary fault, not protocol absence:
+# answering 501 would send every client to the whole v1 catalog under load.
+CATALOG_READ_TRANSPORT_FAILED = "catalog_read_transport_failed"
+# Discovery preparation has failed on every recent attempt, so a client's retry
+# schedule cannot clear it. This is still not protocol absence: the runtime is
+# present and advertises the capability, and a 501 here would silently serve the
+# v1 catalog while an installed runtime stayed broken. See ADR 0014.
+CATALOG_READ_PREPARATION_FAILED = "catalog_read_preparation_failed"
+# `catalog_delivery.discovery.PREPARATION_FAILING`, matched by value so a test
+# that stubs the discovery module keeps the behaviour it has today.
+DISCOVERY_PREPARATION_FAILING = "native discovery preparation failing"
+
+
+@dataclass(frozen=True, slots=True)
+class NativeCatalogReadResult:
+    status: int
+    etag: str | None = None
+    body: bytes | None = None
+    error_code: str | None = None
+
+
+def _validated_result(decoded: object) -> NativeCatalogReadResult | None:
+    if not isinstance(decoded, dict) or set(decoded) != _RESULT_FIELDS or decoded["schema"] != _RESULT_SCHEMA:
+        return None
+    outcome, status, etag = decoded["outcome"], decoded["http_status"], decoded["etag"]
+    body, error_code = decoded["body"], decoded["error_code"]
+    if outcome == "ok":
+        if status != 200 or not isinstance(etag, str) or not _ETAG.fullmatch(etag) or error_code is not None:
+            return None
+        if not isinstance(body, str):
+            return None
+        encoded = body.encode("utf-8")
+        if len(encoded) > MAX_CATALOG_V2_BODY_BYTES:
+            return None
+        return NativeCatalogReadResult(status=200, etag=etag, body=encoded)
+    if outcome == "not_modified":
+        if status != 304 or not isinstance(etag, str) or not _ETAG.fullmatch(etag):
+            return None
+        if body is not None or error_code is not None:
+            return None
+        return NativeCatalogReadResult(status=304, etag=etag)
+    if outcome == "error":
+        if not isinstance(error_code, str) or _ERROR_STATUS.get(error_code) != status:
+            return None
+        if etag is not None or body is not None:
+            return None
+        return NativeCatalogReadResult(status=status, error_code=error_code)
+    return None
+
+
+def _supports_catalog_read(status: NativeRuntimeStatus) -> bool:
+    if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
+        return False
+    features = set(status.capabilities.features)
+    if "catalog-prepare-v1" in features and "catalog-prepare-batch-v1" not in features:
+        return False
+    return _RESIDENT_PROTOCOL_FEATURE in features and CATALOG_READ_FEATURE in features
+
+
+def native_catalog_read(
+    *,
+    guard_home: Path,
+    route: str,
+    query: str,
+    if_none_match: str | None,
+    expected_catalog_digest: str,
+    timeout_seconds: float = 2.0,
+    discovery_handle: DiscoveryHandle | None = None,
+) -> NativeCatalogReadResult | None:
+    """Return the native result, or ``None`` when the read model is unavailable.
+
+    ``None`` means protocol absence (no native runtime, no capability, or a frame
+    this daemon cannot validate); callers answer 501 so clients may use the v1
+    route. A busy or timed-out resident answers 503 ``catalog_read_transport_failed``.
+    One deadline covers runtime discovery and the resident call.
+    """
+
+    if len(route.encode("utf-8")) > MAX_CATALOG_V2_ROUTE_BYTES:
+        return NativeCatalogReadResult(status=404, error_code="catalog_route_not_found")
+    if len(query.encode("utf-8")) > MAX_CATALOG_V2_QUERY_BYTES:
+        return NativeCatalogReadResult(status=400, error_code="catalog_query_invalid")
+    if if_none_match is not None and len(if_none_match.encode("utf-8")) > MAX_CATALOG_V2_IF_NONE_MATCH_BYTES:
+        # An oversized validator never matches; send the full representation.
+        if_none_match = None
+    if not _DIGEST.fullmatch(expected_catalog_digest):
+        return None
+    deadline = time.monotonic() + timeout_seconds
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if not _supports_catalog_read(status) or status.identity is None or status.capabilities is None:
+        return None
+    envelope: dict[str, Any] = {
+        "operation": "catalog_read",
+        "request": {
+            "schema": _REQUEST_SCHEMA,
+            "route": route,
+            "query": query,
+            "if_none_match": if_none_match,
+            "expected_catalog_digest": expected_catalog_digest,
+        },
+        "deadline_budget_ms": max(1, int((deadline - time.monotonic()) * 1000)),
+    }
+    handle = discovery_handle
+    if discovery_handle is not None and CATALOG_DISCOVERY_FEATURE not in status.capabilities.features:
+        return None
+    if CATALOG_DISCOVERY_FEATURE in status.capabilities.features:
+        try:
+            from .catalog_delivery.discovery import DiscoveryHandle, installed_discovery
+
+            handle = installed_discovery(guard_home) if discovery_handle is None else discovery_handle
+            if discovery_handle is not None and (
+                type(handle) is not DiscoveryHandle or handle.guard_home != guard_home.absolute()
+            ):
+                raise ValueError("discovery handle is unverified")
+        except (ImportError, OSError, ValueError, KeyError, TypeError) as error:
+            if isinstance(error, ValueError) and str(error) == DISCOVERY_PREPARATION_FAILING:
+                return NativeCatalogReadResult(status=503, error_code=CATALOG_READ_PREPARATION_FAILED)
+            return NativeCatalogReadResult(status=503, error_code="catalog_read_model_unavailable")
+        envelope["operation"] = "catalog_read_v2"
+        envelope["request"] = {
+            "guard_home": str(guard_home.absolute()),
+            "discovery_root": handle.root,
+            "read": envelope["request"],
+        }
+        envelope["deadline_budget_ms"] = max(1, int((deadline - time.monotonic()) * 1000))
+        if "catalog-prepare-v1" in status.capabilities.features:
+            envelope["operation"] = "catalog_read_prepared_v1"
+            envelope["request"].pop("discovery_root")
+            envelope["request"]["handle"] = handle.native
+    payload = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
+    response = native_resident_client_request(
+        executable=status.identity.path,
+        guard_home=guard_home,
+        environment=_isolated_environment(),
+        payload=payload,
+        timeout_seconds=max(0.001, deadline - time.monotonic()),
+        deadline_monotonic=deadline,
+    )
+    # Catalog reads stay out of the shared resident health that gates hook
+    # execution: a catalog-op contract fault or dashboard polling under load
+    # must not open (or reset) the hook circuit. The caller still sees 503 or
+    # a v1 fallback for every failure.
+    if response is None:
+        return NativeCatalogReadResult(status=503, error_code=CATALOG_READ_TRANSPORT_FAILED)
+    try:
+        decoded = json.loads(response.decode("utf-8"), object_pairs_hook=unique_json_object)
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if isinstance(decoded, dict) and decoded.get("error") in {
+        "native_client_deadline_exceeded",
+        "native_request_deadline_exceeded",
+        "native_overloaded",
+    }:
+        return NativeCatalogReadResult(status=503, error_code=CATALOG_READ_TRANSPORT_FAILED)
+    result = _validated_result(decoded)
+    if (
+        result is not None
+        and result.status == 503
+        and discovery_handle is None
+        and handle is not None
+        and "handle" in envelope["request"]
+    ):
+        from .catalog_delivery.discovery import invalidate
+
+        invalidate(guard_home, handle)
+    return result
+
+
+__all__ = [
+    "CATALOG_READ_FEATURE",
+    "CATALOG_READ_PREPARATION_FAILED",
+    "CATALOG_READ_TRANSPORT_FAILED",
+    "MAX_CATALOG_V2_BODY_BYTES",
+    "NativeCatalogReadResult",
+    "native_catalog_read",
+]

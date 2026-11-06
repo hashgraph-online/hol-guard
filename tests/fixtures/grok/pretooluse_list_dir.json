@@ -1,0 +1,10 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-012",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "list_dir",
+  "toolInput": {
+    "target_directory": "<home>/.ssh"
+  }
+}

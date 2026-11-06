@@ -1,0 +1,291 @@
+{
+ "extension": {
+  "action_classes": [
+   "shellroute routed command execution",
+   "shellroute proxy lifecycle command",
+   "shellroute API key reveal"
+  ],
+  "aliases": [],
+  "conflicts": [],
+  "delegated_protection": null,
+  "dependencies": [],
+  "description": "Reviews shellroute routed command execution, persistent proxy start and stop, and API key reveal while leaving status, balance, and country listings automatic.",
+  "ecosystem_ids": [
+   "shellroute"
+  ],
+  "executables": [
+   "shellroute"
+  ],
+  "extension_id": "command.shellroute",
+  "homepage": "https://github.com/shellroute/shellroute-cli",
+  "icon": {
+   "background": "#0F766E",
+   "kind": "react-icon",
+   "name": "HiMiniGlobeAlt"
+  },
+  "license": "MIT",
+  "name": "shellroute",
+  "permissions": [
+   {
+    "action_classes": [
+     "shellroute routed command execution"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies shellroute run invocations that execute a command through a proxy exit in a chosen country or city.",
+    "example_command": "shellroute run DE -- curl https://ipinfo.io/json",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "3.13.1",
+    "label": "shellroute routed command execution",
+    "permission_id": "command.shellroute.permission.exec",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Confirm the routing country or city and the routed command before execution."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "shellroute proxy lifecycle command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies shellroute proxy invocations that start a persistent local proxy or stop running proxy sessions.",
+    "example_command": "shellroute proxy --country US",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "3.13.1",
+    "label": "shellroute proxy lifecycle",
+    "permission_id": "command.shellroute.permission.proxy",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Check shellroute status for active sessions before starting or stopping the persistent proxy."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "shellroute API key reveal"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies shellroute reveal-key invocations that print the stored API key to the terminal.",
+    "example_command": "shellroute reveal-key",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "3.13.1",
+    "label": "shellroute API key reveal",
+    "permission_id": "command.shellroute.permission.reveal-key",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Reveal the API key only when needed; prefer referencing it from a secret store."
+    ],
+    "typed_capabilities": []
+   }
+  ],
+  "project_markers": [],
+  "publisher": {
+   "display_name": "Community",
+   "id": "community.shellroute",
+   "url": "https://github.com/shellroute/shellroute-cli"
+  },
+  "reference_urls": [
+   "https://github.com/shellroute/shellroute-cli"
+  ],
+  "required": false,
+  "risk_classes": [
+   "destructive_shell",
+   "execution",
+   "local_secret_read",
+   "network_egress"
+  ],
+  "rules": [
+   {
+    "action_classes": [
+     "shellroute routed command execution"
+    ],
+    "default_mode": "review",
+    "description": "shellroute run executes an arbitrary command through a proxy exit in the chosen country or city.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "allow_leading_options": true,
+      "executables": [
+       "shellroute",
+       "shellroute.cmd",
+       "shellroute.exe"
+      ],
+      "fail_secure_unknown_options": true,
+      "forbidden_flags": [],
+      "interspersed_flags": [
+       "--verbose",
+       "-v",
+       "--json"
+      ],
+      "interspersed_options_with_values": [
+       "--country",
+       "--city",
+       "--format"
+      ],
+      "inverse_flag_pairs": [],
+      "leading_options_with_values": [],
+      "options_with_values": [],
+      "required_flags": [],
+      "required_flags_in_all_arguments": false,
+      "required_option_values": [],
+      "subcommands": [
+       "run"
+      ]
+     },
+     "op": "executable.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.shellroute.permission.exec",
+    "risk_classes": [
+     "execution",
+     "network_egress"
+    ],
+    "rule_id": "command.shellroute.run",
+    "rule_version": "1.0.0",
+    "safe_variants": [],
+    "safer_alternatives": [
+     "Verify the destination country code and the routed command before running."
+    ],
+    "severity": "high",
+    "title": "shellroute routed command execution"
+   },
+   {
+    "action_classes": [
+     "shellroute proxy lifecycle command"
+    ],
+    "default_mode": "review",
+    "description": "shellroute proxy starts a persistent local proxy bound to a country or stops running proxy sessions.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "allow_leading_options": true,
+      "executables": [
+       "shellroute",
+       "shellroute.cmd",
+       "shellroute.exe"
+      ],
+      "fail_secure_unknown_options": true,
+      "forbidden_flags": [],
+      "interspersed_flags": [
+       "--verbose",
+       "-v",
+       "--json"
+      ],
+      "interspersed_options_with_values": [
+       "--country",
+       "--city",
+       "--format",
+       "--port"
+      ],
+      "inverse_flag_pairs": [],
+      "leading_options_with_values": [],
+      "options_with_values": [],
+      "required_flags": [],
+      "required_flags_in_all_arguments": false,
+      "required_option_values": [],
+      "subcommands": [
+       "proxy"
+      ]
+     },
+     "op": "executable.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.shellroute.permission.proxy",
+    "risk_classes": [
+     "execution",
+     "network_egress"
+    ],
+    "rule_id": "command.shellroute.proxy",
+    "rule_version": "1.0.0",
+    "safe_variants": [],
+    "safer_alternatives": [
+     "Check shellroute status before starting or stopping proxy sessions."
+    ],
+    "severity": "high",
+    "title": "shellroute proxy lifecycle"
+   },
+   {
+    "action_classes": [
+     "shellroute API key reveal"
+    ],
+    "default_mode": "review",
+    "description": "shellroute reveal-key prints the stored API key to the terminal output.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "allow_leading_options": true,
+      "executables": [
+       "shellroute",
+       "shellroute.cmd",
+       "shellroute.exe"
+      ],
+      "fail_secure_unknown_options": true,
+      "forbidden_flags": [],
+      "interspersed_flags": [
+       "--json"
+      ],
+      "interspersed_options_with_values": [
+       "--format"
+      ],
+      "inverse_flag_pairs": [],
+      "leading_options_with_values": [],
+      "options_with_values": [],
+      "required_flags": [],
+      "required_flags_in_all_arguments": false,
+      "required_option_values": [],
+      "subcommands": [
+       "reveal-key"
+      ]
+     },
+     "op": "executable.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.shellroute.permission.reveal-key",
+    "risk_classes": [
+     "local_secret_read"
+    ],
+    "rule_id": "command.shellroute.reveal-key",
+    "rule_version": "1.0.0",
+    "safe_variants": [],
+    "safer_alternatives": [
+     "Keep the API key in a secret store and avoid printing it to shared terminals."
+    ],
+    "severity": "high",
+    "title": "shellroute API key reveal"
+   }
+  ],
+  "safer_alternatives": [
+   "Check status, balance, and countries before routing traffic, and keep the API key in a secret store."
+  ],
+  "source": "built-in",
+  "version": "1.0.0"
+ },
+ "schema": "guard.command-extension-source.v1"
+}

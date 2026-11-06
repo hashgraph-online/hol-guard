@@ -1,0 +1,614 @@
+//! Context-dependent classifiers keep a narrow exact subset and explicit uncertainty.
+use crate::is_contained_compile_check_arguments;
+
+use super::{basename, CanonicalCommandV1, CommandSegmentV1, CompatibilityObservations};
+
+#[path = "interpreter.rs"]
+mod interpreter;
+#[path = "redirects.rs"]
+mod redirects;
+#[path = "source_names.rs"]
+mod source_names;
+use redirects::Redirect;
+use source_names::{sensitive, sensitive_path};
+
+/// A harness or Guard configuration location named anywhere in the value.
+fn names_managed_config(value: &str) -> bool {
+    let value = value.to_ascii_lowercase().replace('\\', "/");
+    [".hol-guard", ".codex/", ".claude/", "hol-guard/config"]
+        .iter()
+        .any(|path| value.contains(path))
+}
+
+fn option(arguments: &[String], names: &[&str]) -> bool {
+    arguments
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .any(|argument| {
+            names.iter().any(|name| {
+                argument == name
+                    || argument
+                        .strip_prefix(name)
+                        .is_some_and(|tail| tail.starts_with('='))
+            })
+        })
+}
+
+fn docker(segment: &CommandSegmentV1, index: usize, output: &mut CompatibilityObservations) {
+    let arguments = &segment.arguments;
+    if arguments.len() == 1
+        && matches!(
+            arguments[0].as_str(),
+            "--version" | "--help" | "-h" | "version" | "help"
+        )
+    {
+        return;
+    }
+    if matches!(arguments.get(..2), Some(prefix) if prefix == ["compose", "down"]) {
+        let invalid_rmi = match &arguments[2..] {
+            [option, value] if option == "--rmi" => !matches!(value.as_str(), "all" | "local"),
+            [option] => option
+                .strip_prefix("--rmi=")
+                .is_some_and(|value| !matches!(value, "all" | "local")),
+            _ => false,
+        };
+        if invalid_rmi {
+            // Compose rejects this closed invocation before changing anything.
+            // Additional options remain outside this proof (for example -v).
+            return;
+        }
+    }
+    // Python has additional option-value, Compose, Buildx, exported environment
+    // and credential-context logic. Do not silently turn those into no-match.
+    let direct_sensitive = arguments
+        .first()
+        .is_some_and(|value| matches!(value.as_str(), "login" | "push" | "run"))
+        && !option(arguments, &["--help", "-h"]);
+    output.rule(
+        "command.container-runtime.docker-sensitive",
+        index,
+        !direct_sensitive,
+    );
+}
+
+/// Whether a `docker` segment carries only inert environment prefixes and a
+/// local/default daemon context, so an explicit `docker-sensitive` Allow may
+/// settle uncertainty about it. Remote hosts, non-default contexts, custom
+/// client configs, TLS flags, and sensitive environment variables stay on
+/// review.
+pub(crate) fn docker_segment_settles_uncertainty(segment: &CommandSegmentV1) -> bool {
+    if basename(segment) != "docker" {
+        return true;
+    }
+    if segment
+        .environment_names
+        .iter()
+        .any(|name| !super::environment::inert_environment_name(name))
+    {
+        return false;
+    }
+    let Some(subcommand_index) =
+        crate::sfrs_docker_args::docker_subcommand_index(&segment.arguments)
+    else {
+        return false;
+    };
+    !crate::sfrs_tool_request::docker_global_context_is_sensitive(
+        &segment.arguments[..subcommand_index],
+    )
+}
+
+/// `get`/`describe` with only well-known global and display options and a plain
+/// resource list that names no Secret: this form cannot reveal Secret payloads.
+fn plain_non_secret_read(arguments: &[String]) -> bool {
+    const VALUE_OPTIONS: &[&str] = &[
+        "--context",
+        "--cluster",
+        "--namespace",
+        "--request-timeout",
+        "-n",
+        "--chunk-size",
+        "--field-selector",
+        "--label-columns",
+        "--output",
+        "--selector",
+        "--sort-by",
+        "-L",
+        "-l",
+        "-o",
+    ];
+    const FLAGS: &[&str] = &[
+        "--all-namespaces",
+        "--ignore-not-found",
+        "--no-headers",
+        "--show-kind",
+        "--show-labels",
+        "--show-managed-fields",
+        "-A",
+    ];
+    let mut subcommand: Option<&str> = None;
+    let mut resources: Vec<&str> = Vec::new();
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
+        index += 1;
+        if let Some(name) = argument.strip_prefix("--").and(argument.split('=').next()) {
+            let attached = argument.split_once('=').map(|(_, value)| value);
+            if VALUE_OPTIONS.contains(&name) {
+                let value = attached.or_else(|| arguments.get(index).map(String::as_str));
+                if attached.is_none() {
+                    index += 1;
+                }
+                if name == "--output" && !value.is_some_and(output_format_reads_no_file) {
+                    return false;
+                }
+            } else if !FLAGS.contains(&name) || attached.is_some() {
+                return false;
+            }
+        } else if argument.starts_with('-') {
+            if VALUE_OPTIONS.contains(&argument.as_str()) {
+                if argument == "-o"
+                    && !arguments
+                        .get(index)
+                        .is_some_and(|value| output_format_reads_no_file(value))
+                {
+                    return false;
+                }
+                index += 1;
+            } else if !FLAGS.contains(&argument.as_str()) {
+                return false;
+            }
+        } else if subcommand.is_none() {
+            subcommand = Some(argument);
+        } else {
+            // kubectl accepts several TYPE[/NAME] operands; every one must be checked.
+            resources.push(argument);
+        }
+    }
+    if !matches!(subcommand, Some("get" | "describe")) || resources.is_empty() {
+        return false;
+    }
+    resources
+        .iter()
+        .flat_map(|resource| resource.split(','))
+        .all(|part| {
+            let head = part.split('/').next().unwrap_or("").to_ascii_lowercase();
+            !head.is_empty()
+                && head
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+                && !head.starts_with("secret")
+                && !head.starts_with("sealedsecret")
+        })
+}
+
+/// Output formats that render the fetched objects only. The `*-file` formats
+/// (`go-template-file`, `jsonpath-file`, `custom-columns-file`, `template-file`)
+/// read a local file and would print it, so they stay on review.
+pub(super) fn output_format_reads_no_file(value: &str) -> bool {
+    matches!(value, "json" | "yaml" | "name" | "wide")
+        || [
+            "jsonpath=",
+            "jsonpath-as-json=",
+            "go-template=",
+            "custom-columns=",
+        ]
+        .iter()
+        .any(|prefix| value.starts_with(prefix))
+}
+
+fn kubernetes(
+    command: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    index: usize,
+    output: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
+) {
+    // The native proof's read-only queries name no Secret and load only a
+    // trusted kubeconfig, so they cannot return Secret payloads either.
+    if crate::pretool::kubectl_reads::proven_read_segment(command, segment, context) {
+        return;
+    }
+    let arguments = &segment.arguments;
+    if arguments.len() == 1
+        && matches!(
+            arguments[0].as_str(),
+            "--help" | "version" | "api-resources"
+        )
+    {
+        return;
+    }
+    if plain_non_secret_read(arguments) {
+        return;
+    }
+    let direct_resource = arguments.get(1).is_some_and(|resource| {
+        resource.split(',').any(|part| {
+            let head = part.split('/').next().unwrap_or("");
+            matches!(head, "secret" | "secrets")
+        })
+    });
+    let direct_secret = arguments
+        .first()
+        .is_some_and(|subcommand| matches!(subcommand.as_str(), "get" | "describe" | "edit"))
+        && direct_resource;
+    let token = arguments.first().is_some_and(|value| value == "create")
+        && arguments.get(1).is_some_and(|value| value == "token");
+    let extract = basename(segment) == "oc"
+        && arguments.first().is_some_and(|value| value == "extract")
+        && direct_resource;
+    if (direct_secret || token || extract) && !option(arguments, &["--help", "-h"]) {
+        output.rule("command.kubernetes-secrets.secret-read", index, false);
+    } else {
+        // Named-context, exec/cp, --raw, JSONPath, token/volume and stdin forms
+        // need the richer context classifier; even a missing subcommand is not
+        // evidence of absence of this capability.
+        output.rule("command.kubernetes-secrets.secret-read", index, true);
+    }
+}
+
+pub(super) fn observe(
+    command: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    index: usize,
+    output: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
+) {
+    let executable = basename(segment);
+    let arguments = &segment.arguments;
+    // A proven container or image listing, or a start of an existing
+    // container, grants no new host access and prints no container
+    // environment, credential or Compose project data.
+    if executable == "docker"
+        && !crate::pretool::docker_reads::proven_segment(command, segment, context)
+    {
+        docker(segment, index, output);
+    }
+    if matches!(executable.as_str(), "kubectl" | "oc") {
+        kubernetes(command, segment, index, output, context);
+    }
+    let normalized = segment.text.to_ascii_lowercase().replace('\\', "/");
+    let literal_printer = matches!(executable.as_str(), "echo" | "printf");
+    if !literal_printer && normalized.contains(".docker/config.json") {
+        output.rule(
+            "command.container-runtime.docker-config-access",
+            index,
+            true,
+        );
+    }
+    if matches!(
+        executable.as_str(),
+        "curl" | "wget" | "nc" | "netcat" | "scp" | "rsync" | "sftp" | "ftp"
+    ) {
+        let upload = !matches!(executable.as_str(), "curl" | "wget")
+            || arguments.iter().any(|value| {
+                value.starts_with('@')
+                    || value.starts_with("--data")
+                    || value.starts_with("--upload")
+                    || value.starts_with("--post")
+                    || value.starts_with("-T")
+                    || value.starts_with("-d")
+                    || value.starts_with("--config")
+                    || value == "-K"
+            });
+        let pipeline = command
+            .segments
+            .iter()
+            .filter(|other| other.execution_context == segment.execution_context)
+            .count()
+            > 1;
+        // A proven read takes no option that sends stdin or a file, so a
+        // pipe after it only filters the response. A zero-I/O loopback
+        // `nc -z` probe reads no stdin and sends nothing.
+        // A proven local `rsync` copy names two host paths, takes no option
+        // that reaches another host and redirects nothing but to `/dev/null`,
+        // so it sends nothing anywhere. A lone usage or version probe prints
+        // the program's own text and exits before it opens a connection or
+        // reads a transfer source, so it names no host and no path either.
+        let proven_read = (executable == "curl"
+            && crate::pretool::curl_reads::proven_read_segment(command, segment, context))
+            || (executable == "wget"
+                && crate::pretool::wget_reads::proven_read_segment(command, segment, context))
+            || crate::pretool::port_probes::proven_probe_segment(command, segment, context)
+            || (executable == "rsync" && crate::pretool::rsync_local::local_copy_segment(segment))
+            || lone_usage_probe(segment, &executable, arguments, context);
+        if (upload || pipeline) && !proven_read {
+            output.rule("command.data-protection.file-upload", index, true);
+        }
+        if sensitive(&command.normalized_text) {
+            output.rule(
+                "command.data-protection.credential-exfiltration",
+                index,
+                true,
+            );
+        }
+    }
+    if literal_printer && crate::environment_secret_dump::printer_expands_secret(&segment.text) {
+        output.rule(
+            "command.shell-mutations.process-environment-secret-read",
+            index,
+            false,
+        );
+    }
+    if matches!(executable.as_str(), "printenv" | "env") {
+        if arguments.is_empty() || arguments.iter().any(|value| sensitive(value)) {
+            output.rule(
+                "command.shell-mutations.process-environment-secret-read",
+                index,
+                false,
+            );
+        } else if executable == "env"
+            || !(matches!(arguments.as_slice(), [only] if only == "--help" || only == "--version")
+                || arguments
+                    .iter()
+                    .all(|name| super::environment::plain_printed_name(name)))
+        {
+            output.rule(
+                "command.shell-mutations.process-environment-secret-read",
+                index,
+                true,
+            );
+        }
+    }
+    let interpreter = executable.starts_with("python")
+        || matches!(
+            executable.as_str(),
+            "node"
+                | "nodejs"
+                | "ruby"
+                | "perl"
+                | "php"
+                | "lua"
+                | "pwsh"
+                | "powershell"
+                | "sh"
+                | "bash"
+                | "zsh"
+                | "fish"
+        );
+    if interpreter {
+        // Interpreter programs can construct accesses that are absent from raw
+        // tokens. Only bounded literal/CLI forms remove this attribution; they
+        // do not remove the independent pre-tool execution review requirement.
+        if let Some(uncertain) = interpreter::environment_observation(&executable, arguments) {
+            output.rule(
+                "command.shell-mutations.process-environment-secret-read",
+                index,
+                uncertain,
+            );
+        }
+    }
+    // A proven `sed` print or stdout substitution writes no file.
+    let write_command = (executable == "sed"
+        && !crate::pretool::sed_edits::proven_read_segment(command, segment, context))
+        || (executable == "dd"
+            && !crate::pretool::dd_reads::proven_read_segment(command, segment, context))
+        || matches!(
+            executable.as_str(),
+            "cp" | "mv"
+                | "tee"
+                | "install"
+                | "touch"
+                | "truncate"
+                | "awk"
+                | "gawk"
+                | "ln"
+                | "chmod"
+                | "chown"
+                | "chgrp"
+        );
+    // A quoted `>` in a POSIX argument (a Markdown placeholder or arrow in a
+    // comment body) writes nothing; interpreter code keeps the raw check.
+    let redirect = if interpreter || command.dialect != "posix" {
+        if segment.text.contains('>') {
+            Redirect::Output
+        } else {
+            Redirect::None
+        }
+    } else {
+        redirects::posix_redirect(&segment.text)
+    };
+    if write_command || redirect != Redirect::None || interpreter {
+        // Filing a Markdown note in a plan folder (a plain `cp` or `touch`)
+        // changes no harness configuration, though the folder sits inside the
+        // harness directory.
+        let plan_note_write = matches!(executable.as_str(), "cp" | "touch")
+            && redirect == Redirect::None
+            && command.wrapper_chain.is_empty()
+            && !command.path_overridden
+            && crate::pretool::safe_reads::plan_note_write_sources(&executable, arguments, context)
+                .is_some_and(|sources| !sources.iter().any(|source| names_managed_config(source)));
+        // A stderr merge or discard (`2>/dev/null`) changes no file, so naming a
+        // harness directory beside it is a read, not a managed-config write.
+        // Reads of logins and secret-bearing config there stay with the native
+        // read proof, which refuses them whatever redirect follows.
+        if (write_command || redirect == Redirect::Output || interpreter)
+            && names_managed_config(&normalized)
+            && !plan_note_write
+        {
+            output.rule("command.shell-mutations.managed-config-write", index, true);
+        }
+        // An environment API such as os.environ is not a filesystem path.
+        // Interpreter writes need an actual write operation as well as a
+        // sensitive path; other interpreter uncertainty remains owned above.
+        let interpreter_write = [
+            "write(",
+            "writetext(",
+            "write_text(",
+            "unlink(",
+            "remove(",
+            "rename(",
+            "chmod(",
+        ]
+        .iter()
+        .any(|operation| normalized.contains(operation));
+        // A stderr merge or discard writes no file, but still shows the agent
+        // what the command reads: any sensitive path operand keeps review.
+        // Multi-word prose, such as a comment body, still counts when it names
+        // a credential location, but words like "token" in it are just text.
+        let output_write = write_command || redirect == Redirect::Output || interpreter_write;
+        // A write to a project file whose name only reads like a credential,
+        // such as `src/tokenizer.ts` or a tracked catalog, is the edit the
+        // agent was asked to make, also beside a stderr redirect: `vitest run
+        // src/token.test.ts 2>&1` reads the test file it was asked to run.
+        let text = crate::pretool::search_scope_tracked::screen(command, segment, context.cwd);
+        let stderr_names_credential = redirect == Redirect::Stderr
+            && segment.tokens.iter().any(|token| {
+                if token.contains(char::is_whitespace) {
+                    sensitive_path(token)
+                } else {
+                    sensitive(token)
+                }
+            });
+        if ((output_write && sensitive(&text)) || stderr_names_credential)
+            && !source_names::only_source_file_names(&text, &segment.tokens, &executable)
+        {
+            output.rule("command.shell-mutations.sensitive-file-write", index, true);
+        }
+    }
+    let introspection_only =
+        matches!(arguments.as_slice(), [only] if matches!(only.as_str(), "--help" | "--version"));
+    // A write probe's trailing `rm` removes only the file the same command
+    // creates, which the native proof checked did not exist beforehand.
+    let probe_cleanup = executable == "rm"
+        && crate::pretool::safe_reads::proven_created_file_removal(command, segment, context);
+    // Removing the links an agent placed at the root of a linked worktree
+    // of the session's repository deletes no data, whether named from the
+    // session's checkout or after a leading `cd` into that worktree.
+    let link_cleanup = executable == "rm"
+        && (crate::pretool::directory_targets::sibling::link_removal(segment, context)
+            || crate::pretool::directory_targets::sibling::entered_link_removal(
+                command, index, context,
+            ));
+    // A proven in-place substitution is the same bounded edit the agent's
+    // edit tool makes on an ordinary workspace file.
+    let proven_edit = executable == "sed"
+        && crate::pretool::sed_edits::proven_in_place_segment(command, segment, context);
+    if !introspection_only
+        && !probe_cleanup
+        && !link_cleanup
+        && !proven_edit
+        && (matches!(
+            executable.as_str(),
+            "rm" | "rmdir"
+                | "shred"
+                | "wipefs"
+                | "mkfs"
+                | "mkfs.ext4"
+                | "mkfs.xfs"
+                | "shutdown"
+                | "reboot"
+                | "poweroff"
+                | "halt"
+                | "diskutil"
+                | "truncate"
+        ) || (executable == "dd"
+            && !crate::pretool::dd_reads::proven_read_segment(command, segment, context))
+            || (executable == "find"
+                && !is_contained_compile_check_arguments(arguments)
+                && crate::read_only_fanout::find_exec(arguments).is_none()
+                && option(
+                    arguments,
+                    &["-delete", "-exec", "-execdir", "-ok", "-okdir"],
+                ))
+            || (matches!(executable.as_str(), "sed" | "perl")
+                && arguments.iter().any(|value| value.starts_with("-i"))))
+    {
+        output.rule("command.shell-mutations.destructive-shell", index, true);
+    }
+    if executable == "gh"
+        && matches!(arguments.first().map(String::as_str), Some("pr"))
+        && matches!(
+            arguments.get(1).map(String::as_str),
+            Some("create" | "edit")
+        )
+        && (segment.text.contains("$(") || segment.text.contains('`'))
+    {
+        output.rule(
+            "command.shell-mutations.github-body-substitution",
+            index,
+            true,
+        );
+    }
+}
+
+/// Whether this segment is a lone usage or version probe of the program its
+/// bare name picks out.
+///
+/// [`crate::pretool::help_probes`] and [`crate::pretool::version_probes`]
+/// answer for a basename, and the segment proof that normally asks them has
+/// already established which program that basename reaches. Here nothing has,
+/// so the same preconditions are required first: a bare name spelled exactly
+/// as the comparison reads it, no wrapper and no overridden `PATH`.
+/// `./curl --help` or a shadowed `nc --help` runs a program the workspace
+/// chose, and that program can read whatever is piped into it. An assignment
+/// prefix needs no test here: a loader or credential name has already made
+/// the context unsupported, and every other non-inert name is uncertainty no
+/// observation can clear.
+fn lone_usage_probe(
+    segment: &CommandSegmentV1,
+    executable: &str,
+    arguments: &[String],
+    context: crate::pretool::PathContext<'_>,
+) -> bool {
+    segment.executable.as_deref() == Some(executable)
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && (crate::pretool::version_probes::safe_version_probe(executable, arguments)
+            || crate::pretool::help_probes::safe_help_probe(executable, arguments, context))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{basename, lone_usage_probe, CommandSegmentV1};
+
+    fn segment(text: &str) -> CommandSegmentV1 {
+        let model = crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": text})).unwrap(),
+        )
+        .unwrap();
+        model.segments.into_iter().next().unwrap()
+    }
+
+    fn probe(text: &str) -> bool {
+        let segment = segment(text);
+        let executable = basename(&segment);
+        let arguments = segment.arguments.clone();
+        lone_usage_probe(
+            &segment,
+            &executable,
+            &arguments,
+            crate::pretool::PathContext::default(),
+        )
+    }
+
+    #[test]
+    fn a_bare_transfer_tool_printing_its_own_text_is_a_probe() {
+        for text in [
+            "rsync --help",
+            "rsync --version",
+            "scp --help",
+            "sftp --help",
+            "scp --version",
+        ] {
+            assert!(probe(text), "{text}");
+        }
+    }
+
+    /// The basename alone does not say which program runs. A directory, a
+    /// wrapper or an overridden `PATH` each picks a different one, and the
+    /// upload rule this exemption clears is what keeps that program away
+    /// from the piped stdin.
+    ///
+    /// A transparent wrapper such as `env` and an executor such as `xargs`
+    /// are absent on purpose: the parser models neither, so they reach no
+    /// segment and no observation at all.
+    #[test]
+    fn a_probe_of_another_spelling_is_not_admitted() {
+        for text in [
+            "./rsync --help",
+            "/tmp/tools/rsync --help",
+            "bin/scp --version",
+            "sudo rsync --help",
+        ] {
+            assert!(!probe(text), "{text}");
+        }
+    }
+}

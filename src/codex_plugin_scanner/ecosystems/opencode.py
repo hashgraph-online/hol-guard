@@ -1,0 +1,137 @@
+"""OpenCode ecosystem adapter."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from ..json_comment_stripping import strip_jsonc_comments
+from .base import iter_safe_recursive_dirs, iter_safe_recursive_files
+from .types import Ecosystem, NormalizedPackage, PackageCandidate
+
+
+def _strip_jsonc(text: str) -> str:
+    return strip_jsonc_comments(text)
+
+
+def _parse_opencode_config_text(text: str) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return None, "invalid-json"
+    if isinstance(payload, dict):
+        return payload, None
+    return None, "not-object"
+
+
+def _load_json_or_jsonc(path: Path) -> tuple[dict[str, object], bool, str | None]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}, True, "file-not-found"
+    except PermissionError:
+        return {}, True, "permission-denied"
+    except OSError:
+        return {}, True, "read-error"
+    return _load_json_or_jsonc_text(path, text)
+
+
+def _load_json_or_jsonc_text(path: Path, text: str) -> tuple[dict[str, object], bool, str | None]:
+    """Parse one captured config generation without reading its path again."""
+
+    has_comments = "//" in text or "/*" in text
+    if path.suffix == ".jsonc" and has_comments:
+        text = _strip_jsonc(text)
+    parsed, parse_reason = _parse_opencode_config_text(text)
+    if parsed is not None:
+        return parsed, False, None
+    if path.suffix != ".jsonc" and has_comments:
+        stripped = _strip_jsonc(text)
+        if stripped != text:
+            parsed, parse_reason = _parse_opencode_config_text(stripped)
+            if parsed is not None:
+                return parsed, False, None
+    return {}, True, parse_reason or "invalid-json"
+
+
+class OpenCodeAdapter:
+    """Adapter for OpenCode plugin repositories."""
+
+    ecosystem_id = Ecosystem.OPENCODE
+
+    def detect(self, root: Path) -> list[PackageCandidate]:
+        candidates: list[PackageCandidate] = []
+        seen_roots: set[Path] = set()
+        for config_name in ("opencode.json", "opencode.jsonc"):
+            for manifest_path in iter_safe_recursive_files(root, root, config_name):
+                package_root = manifest_path.parent
+                if package_root in seen_roots:
+                    continue
+                seen_roots.add(package_root)
+                candidates.append(
+                    PackageCandidate(
+                        ecosystem=Ecosystem.OPENCODE,
+                        package_kind="workspace-bundle",
+                        root_path=package_root,
+                        manifest_path=manifest_path,
+                        detection_reason=f"found {config_name}",
+                    )
+                )
+
+        for opencode_dir in iter_safe_recursive_dirs(root, root, ".opencode"):
+            package_root = opencode_dir.parent
+            if package_root in seen_roots:
+                continue
+            seen_roots.add(package_root)
+            candidates.append(
+                PackageCandidate(
+                    ecosystem=Ecosystem.OPENCODE,
+                    package_kind="workspace-bundle",
+                    root_path=package_root,
+                    manifest_path=None,
+                    detection_reason="found .opencode workspace directory",
+                )
+            )
+        return candidates
+
+    def parse(self, candidate: PackageCandidate) -> NormalizedPackage:
+        manifest, parse_error, parse_error_reason = (
+            _load_json_or_jsonc(candidate.manifest_path) if candidate.manifest_path else ({}, False, None)
+        )
+        root = candidate.root_path
+        components: dict[str, tuple[str, ...]] = {}
+        commands_dir = root / ".opencode" / "commands"
+        plugins_dir = root / ".opencode" / "plugins"
+        if commands_dir.is_dir():
+            components["commands"] = tuple(
+                str(path.relative_to(root)) for path in iter_safe_recursive_files(root, commands_dir, "*.md")
+            )
+        if plugins_dir.is_dir():
+            components["plugin_modules"] = tuple(
+                sorted(
+                    str(path.relative_to(root))
+                    for path in iter_safe_recursive_files(root, plugins_dir, "*")
+                    if path.suffix in {".js", ".ts", ".mjs", ".cjs"}
+                )
+            )
+        mcp_config = manifest.get("mcp")
+        if isinstance(mcp_config, dict):
+            components["mcp_servers"] = tuple(sorted(str(key) for key in mcp_config))
+        raw_name = manifest.get("name")
+        raw_version = manifest.get("version")
+
+        return NormalizedPackage(
+            ecosystem=Ecosystem.OPENCODE,
+            package_kind=candidate.package_kind,
+            root_path=root,
+            manifest_path=candidate.manifest_path,
+            name=raw_name if isinstance(raw_name, str) else None,
+            version=raw_version if isinstance(raw_version, str) else None,
+            metadata={
+                key: value for key in ("description", "repository") if isinstance((value := manifest.get(key)), str)
+            },
+            components=components,
+            raw_manifest=manifest,
+            manifest_parse_error=parse_error,
+            manifest_parse_error_reason=parse_error_reason,
+        )

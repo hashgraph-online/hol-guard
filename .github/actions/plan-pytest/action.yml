@@ -1,0 +1,80 @@
+name: Plan complete pytest suite
+description: Collect this interpreter's complete suite and publish its distinct node plan.
+inputs:
+  python-version:
+    description: Python minor version used to name this interpreter's plan artifact.
+    required: true
+  shard-count:
+    description: Number of complete, nonempty node shards.
+    required: true
+  telemetry-branch:
+    description: Trusted target branch from which successful push timings may be restored.
+    required: true
+  github-token:
+    description: Read-only Actions token for optional trusted duration telemetry.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Restore latest trusted duration telemetry
+      id: latest-duration-telemetry
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TELEMETRY_BRANCH: ${{ inputs.telemetry-branch }}
+      # The manifest candidate exists only when every coverage shard passed and
+      # reported, so it is trusted without requiring the whole run to be green.
+      # A red main must not pin planning to timings older than the suite.
+      run: |
+        timeout --signal=KILL 5s bash --noprofile --norc -e -o pipefail -s <<'DURATION_TELEMETRY'
+        # Walk this branch's own push runs newest first. Pull request runs
+        # upload an artifact with the same name, so a repository-wide artifact
+        # page can be filled by them and hide the newest main manifest.
+        run_ids=$(
+          gh api --method GET "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f branch="$TELEMETRY_BRANCH" -f event=push -f per_page=30 \
+            --jq '.workflow_runs[] | select(.event == "push" and .head_branch == env.TELEMETRY_BRANCH
+              and .path == ".github/workflows/ci.yml") | .id'
+        )
+        artifact_id=
+        for run_id in $run_ids; do
+          artifact_id=$(
+            gh api --method GET "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+              -f name=pytest-duration-manifest-candidate \
+              --jq '[.artifacts[] | select(.expired == false
+                and .name == "pytest-duration-manifest-candidate")][0].id // empty'
+          )
+          test -z "$artifact_id" || break
+        done
+        test -n "$artifact_id"
+        gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/duration-manifest.zip
+        unzip -p /tmp/duration-manifest.zip pytest-duration-manifest-candidate.json.gz \
+          > /tmp/pytest-duration-manifest.json.gz
+        gzip -t /tmp/pytest-duration-manifest.json.gz
+        mv /tmp/pytest-duration-manifest.json.gz pytest-duration-manifest.latest.json.gz
+        DURATION_TELEMETRY
+    - name: Collect and build affinity-aware pytest shards
+      shell: bash
+      env:
+        CI_PLAN_SHARD_COUNT: ${{ inputs.shard-count }}
+      run: |
+        uv run --no-sync python scripts/ci/build_pytest_shard_plan.py \
+          --shard-count "$CI_PLAN_SHARD_COUNT" \
+          --duration-manifest ci/pytest-duration-manifest.json.gz \
+          --duration-manifest pytest-duration-manifest.latest.json.gz \
+          --max-manifest-age-days 28 \
+          --output-directory pytest-shards
+    - name: Publish pytest shard plan
+      shell: bash
+      run: cat pytest-shards/plan.json
+    - name: Publish complete protected test inventory
+      shell: bash
+      run: cat pytest-shards/test-inventory.json
+    - name: Upload pytest shard plan
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: pytest-shard-plan-${{ inputs.python-version }}
+        path: pytest-shards
+        if-no-files-found: error
+        retention-days: 1

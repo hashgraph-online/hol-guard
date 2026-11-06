@@ -1,0 +1,1024 @@
+{
+  "extension": {
+    "action_classes": [
+      "Theourgia external-runner evaluation command",
+      "Theourgia block deletion command",
+      "Theourgia log installation command",
+      "Theourgia committed store change command",
+      "Theourgia draft change command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Theourgia commands that run code through an external interpreter, delete blocks, install log segments, or change the committed store or a writer's drafts, while leaving the read-only verbs (outline, search, refs, read, grep, log, diff, check and the exports) unmatched.",
+    "ecosystem_ids": [],
+    "executables": [
+      "theourgia"
+    ],
+    "extension_id": "command.theourgia",
+    "homepage": "https://github.com/guenchi/Theourgia",
+    "icon": {
+      "background": "#4338CA",
+      "kind": "react-icon",
+      "name": "HiMiniCube"
+    },
+    "license": "Apache-2.0",
+    "name": "Theourgia command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Theourgia external-runner evaluation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `theourgia eval --lang <language>` for a language other than `scheme`. Those runners (node, python3, sh, or Chez outside the sandbox) start an interpreter that reaches whatever it can reach on the machine; only `--lang scheme`, the default, runs in the sandbox with no filesystem and no network. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "example_command": "theourgia eval --lang python 'print(1)'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Theourgia evaluation through an external interpreter",
+        "permission_id": "command.theourgia.permission.eval-runner",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Evaluate Scheme in the sandbox (`theourgia eval <source>`, or `--lang scheme`) when the task allows it.",
+          "External runners stay off unless the operator sets THEOURGIA_RUNNERS=on; confirm the source text and the working directory before approving one."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Theourgia block deletion command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `theourgia del <id>`, which retires a block, and `theourgia import-md` or `theourgia import-code` with `--allow-delete`, which retire the blocks whose files or sections have disappeared from the imported directory. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "example_command": "theourgia del f0sjkuzn.4",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Theourgia block deletion",
+        "permission_id": "command.theourgia.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Read the block and what refers to it first: `theourgia read <id> --recursive` and `theourgia refs <id>`.",
+          "Run the import without --allow-delete first; its answer lists the files and sections that are absent instead of deleting them."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Theourgia log installation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `theourgia publish`, which installs a segment file into a writer's log, and `theourgia adopt`, which takes records that are on disk into the log. Both change the store's history from files outside it. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "example_command": "theourgia publish w1 3 ./000003.sexp",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Theourgia log installation",
+        "permission_id": "command.theourgia.permission.log-install",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `theourgia check` before and after, and confirm where the segment or the on-disk records came from."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Theourgia committed store change command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies the Theourgia verbs that change the committed store: `insert`, `set`, `move`, `link`, `unlink`, `def`, `commit`, `batch` (which reads its changes from standard input, deletions included), `import-md`, `import-code` and `supply`. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "example_command": "theourgia commit f0sjkuzn.4",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Theourgia committed store change",
+        "permission_id": "command.theourgia.permission.store-write",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect what a commit will install with `theourgia drafts` before approving it.",
+          "Read the intents piped to `theourgia batch` before approving it; they may include deletions."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Theourgia draft change command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `theourgia write`, `theourgia restore` and `theourgia discard`, which save, bring back or throw away a writer's private draft of a block. A draft is not in the committed store and no other writer sees it until `commit`. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "example_command": "theourgia discard f0sjkuzn.4",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Theourgia draft change",
+        "permission_id": "command.theourgia.permission.draft",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "List the writer's drafts with `theourgia drafts` before discarding one; a discarded draft is not kept."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "guenchi",
+      "id": "community.guenchi",
+      "url": "https://github.com/guenchi"
+    },
+    "reference_urls": [
+      "https://github.com/guenchi/Theourgia/blob/master/README.md",
+      "https://theourgia.dev/manual.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Theourgia external-runner evaluation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `theourgia eval --lang <language>` for a language other than `scheme`. Those runners (node, python3, sh, or Chez outside the sandbox) start an interpreter that reaches whatever it can reach on the machine; only `--lang scheme`, the default, runs in the sandbox with no filesystem and no network. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--cut",
+                  "--lang",
+                  "--memory-bytes",
+                  "--output-bytes",
+                  "--timeout-ms",
+                  "--under",
+                  "--writer"
+                ],
+                "required_flags": [
+                  "--lang"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "eval"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.theourgia.permission.eval-runner",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.theourgia.eval-runner",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "theourgia"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--wire"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--actor",
+                      "--cursor",
+                      "--req",
+                      "--socket",
+                      "--store"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--cut",
+                      "--lang",
+                      "--memory-bytes",
+                      "--output-bytes",
+                      "--timeout-ms",
+                      "--under",
+                      "--writer"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [
+                      [
+                        "--lang",
+                        [
+                          "scheme"
+                        ]
+                      ]
+                    ],
+                    "subcommands": [
+                      "eval"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Theourgia sandboxed Scheme evaluation",
+            "variant_id": "scheme-sandbox"
+          }
+        ],
+        "safer_alternatives": [
+          "Evaluate Scheme in the sandbox (`theourgia eval <source>`, or `--lang scheme`) when the task allows it.",
+          "External runners stay off unless the operator sets THEOURGIA_RUNNERS=on; confirm the source text and the working directory before approving one."
+        ],
+        "severity": "high",
+        "title": "Theourgia evaluation through an external interpreter"
+      },
+      {
+        "action_classes": [
+          "Theourgia block deletion command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `theourgia del <id>`, which retires a block, and `theourgia import-md` or `theourgia import-code` with `--allow-delete`, which retire the blocks whose files or sections have disappeared from the imported directory. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "del"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--allow-delete"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "import-md"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--allow-delete"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "import-code"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.theourgia.permission.delete",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.theourgia.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read the block and what refers to it first: `theourgia read <id> --recursive` and `theourgia refs <id>`.",
+          "Run the import without --allow-delete first; its answer lists the files and sections that are absent instead of deleting them."
+        ],
+        "severity": "high",
+        "title": "Theourgia block deletion"
+      },
+      {
+        "action_classes": [
+          "Theourgia log installation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `theourgia publish`, which installs a segment file into a writer's log, and `theourgia adopt`, which takes records that are on disk into the log. Both change the store's history from files outside it. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "publish"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "adopt"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.theourgia.permission.log-install",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.theourgia.log-install",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run `theourgia check` before and after, and confirm where the segment or the on-disk records came from."
+        ],
+        "severity": "high",
+        "title": "Theourgia log installation"
+      },
+      {
+        "action_classes": [
+          "Theourgia committed store change command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies the Theourgia verbs that change the committed store: `insert`, `set`, `move`, `link`, `unlink`, `def`, `commit`, `batch` (which reads its changes from standard input, deletions included), `import-md`, `import-code` and `supply`. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--after",
+                  "--keywords",
+                  "--text",
+                  "--title",
+                  "--under"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "insert"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--based-on",
+                  "--if-unchanged"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "set"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--after"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "move"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "link"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "unlink"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--under"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "def"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--working-version",
+                  "--writer"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "commit"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "batch"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "import-md"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "import-code"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--for"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "supply"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.theourgia.permission.store-write",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.theourgia.store-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect what a commit will install with `theourgia drafts` before approving it.",
+          "Read the intents piped to `theourgia batch` before approving it; they may include deletions."
+        ],
+        "severity": "medium",
+        "title": "Theourgia committed store change"
+      },
+      {
+        "action_classes": [
+          "Theourgia draft change command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `theourgia write`, `theourgia restore` and `theourgia discard`, which save, bring back or throw away a writer's private draft of a block. A draft is not in the committed store and no other writer sees it until `commit`. This community coverage does not certify the upstream tool or every Theourgia feature.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--based-on",
+                  "--working-cut",
+                  "--working-parent",
+                  "--working-parent-writer",
+                  "--writer"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "write"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--writer"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "restore"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "theourgia"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--wire"
+                ],
+                "interspersed_options_with_values": [
+                  "--actor",
+                  "--cursor",
+                  "--req",
+                  "--socket",
+                  "--store"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--writer"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "discard"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.theourgia.permission.draft",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.theourgia.draft",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "List the writer's drafts with `theourgia drafts` before discarding one; a discarded draft is not kept."
+        ],
+        "severity": "low",
+        "title": "Theourgia draft change"
+      }
+    ],
+    "safer_alternatives": [
+      "Use the read-only verbs (outline, search, refs, read) to inspect the store before changing it.",
+      "Keep external eval runners off (THEOURGIA_RUNNERS unset) unless a task needs one."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

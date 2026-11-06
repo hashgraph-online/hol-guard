@@ -1,0 +1,433 @@
+#!/usr/bin/env python3
+"""Release-gate benchmark for the Rust hook runtime.
+
+Only aggregate synthetic measurements are emitted; benchmark output excludes
+user commands, file contents, secrets, and machine paths.
+
+The enforced warm measurement covers the production adapter-to-decision path over
+a warm resident; direct resident IPC is reported as a diagnostic. Cold one-shot
+and resident readiness are held to absolute ceilings.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import os
+import statistics
+import sys
+import tempfile
+import time
+from collections.abc import Mapping
+from pathlib import Path
+from types import ModuleType
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.append(str(_REPO_ROOT))
+
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process  # noqa: E402
+from codex_plugin_scanner.guard.native_resident_client import (  # noqa: E402
+    close_native_residents,
+    native_resident_client_request,
+)
+from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route  # noqa: E402
+from codex_plugin_scanner.guard.native_runtime import native_runtime_status  # noqa: E402
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS  # noqa: E402
+
+
+def _load_ci_module(name: str) -> ModuleType:
+    """Load a CI native-runtime helper by path: `scripts/ci` shadows the top-level `ci` here."""
+    source = _REPO_ROOT / "ci" / "native_runtime" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"_bench_{name}", source)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {source}")
+    module = importlib.util.module_from_spec(spec)
+    # Dataclasses resolve their annotations through sys.modules while the module loads.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_POST_TOOL_REVIEW = _load_ci_module("post_tool_review")
+review_post_tool_native = _POST_TOOL_REVIEW.review_post_tool_native
+HookReviewRequest = _POST_TOOL_REVIEW.HookReviewRequest
+native_policy_snapshot = _load_ci_module("native_policy_test_support").native_policy_snapshot
+
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_MAX_WARM_P95_MS = 20.0
+_MAX_COLD_P95_MS = 150.0
+_MAX_NATIVE_READINESS_MS = 400.0
+
+
+def _percentile(values: list[float], quantile: float) -> float:
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, int(len(ordered) * quantile)))
+    return ordered[index]
+
+
+def _summary(values: list[float]) -> dict[str, float]:
+    return {
+        "p50_ms": round(statistics.median(values), 3),
+        "p95_ms": round(_percentile(values, 0.95), 3),
+        "p99_ms": round(_percentile(values, 0.99), 3),
+        "max_ms": round(max(values), 3),
+    }
+
+
+def _payload(sample: int | None = None) -> dict[str, object]:
+    sample_marker = "" if sample is None else f"// benchmark sample {sample}\n"
+    return {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "src/example.ts"},
+        "tool_response": [{"type": "text", "text": ("export const value = 1;\n" * 40) + sample_marker}],
+    }
+
+
+def _request(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    request_id: str,
+    sample: int | None = None,
+) -> HookReviewRequest:
+    return HookReviewRequest(
+        harness="claude-code",
+        event_name="PostToolUse",
+        payload=_payload(sample),
+        payload_kind="inline",
+        config_path=None,
+        cwd=workspace,
+        home_dir=workspace,
+        guard_home=guard_home,
+        source_scope="project",
+        request_id=request_id,
+        deadline_monotonic=time.monotonic() + 5.0,
+    )
+
+
+def _wire_request(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    request_id: str = "native-benchmark-oneshot",
+    sample: int | None = None,
+    policy_snapshot: Mapping[str, object] | None = None,
+) -> str:
+    if policy_snapshot is None:
+        request = {
+            "protocol_version": 1,
+            "request_id": request_id,
+            "harness": "claude-code",
+            "event_name": "PostToolUse",
+            "payload": _payload(sample),
+            "cwd": str(workspace),
+            "home_dir": str(workspace),
+            "guard_home": str(guard_home),
+            "source_ref_external_allowed": False,
+            "observe_mode": False,
+            "deadline_budget_ms": 5_000,
+        }
+    else:
+        generation = policy_snapshot.get("generation")
+        request = {
+            "schema": "guard-hook-envelope.v2",
+            "request_id": request_id,
+            "harness": "claude-code",
+            "event": "PostToolUse",
+            "raw_payload": _payload(sample),
+            "deadline_budget_ms": 5_000,
+            "policy_generation": generation,
+            "policy_snapshot": {
+                "generation": generation,
+                "policy_digest": policy_snapshot.get("policy_digest"),
+                "runtime_identity": policy_snapshot.get("runtime_identity"),
+            },
+            "source": {
+                "cwd": str(workspace),
+                "home_dir": str(workspace),
+                "guard_home": str(guard_home),
+                "source_ref_external_allowed": False,
+            },
+        }
+    return json.dumps(request, separators=(",", ":"))
+
+
+def _native_environment(workspace: Path) -> dict[str, str]:
+    environment = {"HOME": str(workspace), "TMPDIR": tempfile.gettempdir()}
+    for key in ("LANG", "LC_ALL"):
+        value = os.environ.get(key)
+        if value:
+            environment[key] = value
+    return environment
+
+
+def _stop_native_resident(runtime: Path, state_dir: Path, workspace: Path) -> None:
+    state_files = list(state_dir.glob("resident-v3-*/generation-*.json"))
+    if not state_files:
+        return
+    result = run_isolated_hook_process(
+        (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
+        input_text="",
+        cwd=runtime.parent,
+        environment=_native_environment(workspace),
+        timeout_seconds=RESIDENT_STOP_TIMEOUT_SECONDS,
+        output_limit=_MAX_RESPONSE_BYTES,
+    )
+    if result.returncode != 0 or result.timed_out or result.containment_failed:
+        raise RuntimeError("Native resident teardown failed")
+    if list(state_dir.glob("resident-v3-*/generation-*.json")):
+        raise RuntimeError("Native resident teardown left state behind")
+
+
+def _bench_native_warm(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    iterations: int,
+    policy_snapshot: Mapping[str, object],
+) -> list[float]:
+    """Measure direct authenticated resident IPC as a diagnostic."""
+    status = native_runtime_status()
+    if status.identity is None:
+        raise RuntimeError("Native resident runtime identity is unavailable")
+    values: list[float] = []
+    for index in range(iterations):
+        request = _wire_request(
+            workspace=workspace,
+            guard_home=guard_home,
+            request_id=f"native-warm-{index}",
+            sample=index,
+            policy_snapshot=policy_snapshot,
+        )
+        started = time.perf_counter()
+        response_bytes = native_resident_client_request(
+            executable=status.identity.path,
+            guard_home=guard_home,
+            environment=_native_environment(workspace),
+            payload=request.encode("utf-8"),
+            timeout_seconds=5.0,
+        )
+        values.append((time.perf_counter() - started) * 1_000.0)
+        if response_bytes is None:
+            raise RuntimeError("Native resident IPC request failed")
+        envelope = json.loads(response_bytes)
+        if envelope.get("schema") != "guard-hook-edge-result.v2" or envelope.get("authority") != "rust":
+            raise RuntimeError("Native resident IPC returned an invalid authority envelope")
+        response = envelope.get("result", {})
+        if not isinstance(response, dict) or response.get("decision") != "allow":
+            raise RuntimeError(
+                "Native resident runtime did not return the expected allow decision: "
+                f"sample={index} response={response!r}"
+            )
+    return values
+
+
+def _bench_native_warm_production(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    iterations: int,
+    policy_snapshot: Mapping[str, object] | None = None,
+) -> list[float]:
+    """Measure the production adapter-to-decision route over a warm resident."""
+    values: list[float] = []
+    for index in range(iterations):
+        reset_native_hook_route()
+        request = _request(
+            workspace=workspace,
+            guard_home=guard_home,
+            request_id=f"native-production-warm-{index}",
+            sample=index,
+        )
+        started = time.perf_counter()
+        if policy_snapshot is None:
+            response = review_post_tool_native(request, observe_mode=False, policy_snapshot=None)
+        else:
+            response = review_post_tool_native(
+                request,
+                observe_mode=False,
+                policy_snapshot=policy_snapshot,
+            )
+        values.append((time.perf_counter() - started) * 1_000.0)
+        if native_hook_route() != "native_resident":
+            raise RuntimeError(
+                "Native production warm benchmark did not use the authenticated resident route: "
+                f"sample={index} route={native_hook_route()!r}"
+            )
+        if response is None or response.decision != "allow":
+            raise RuntimeError(
+                "Native production warm benchmark returned an unexpected decision: "
+                f"sample={index} reason_code={getattr(response, 'reason_code', None)}"
+            )
+    return values
+
+
+def _bench_native_oneshot(
+    *,
+    runtime: Path,
+    workspace: Path,
+    guard_home: Path,
+    iterations: int,
+) -> list[float]:
+    wire_request = _wire_request(workspace=workspace, guard_home=guard_home)
+    environment = _native_environment(workspace)
+    values: list[float] = []
+    for _ in range(iterations):
+        started = time.perf_counter()
+        result = run_isolated_hook_process(
+            (str(runtime), "hook", "--stdin"),
+            input_text=wire_request,
+            cwd=runtime.parent,
+            environment=environment,
+            timeout_seconds=5.0,
+            output_limit=_MAX_RESPONSE_BYTES,
+        )
+        values.append((time.perf_counter() - started) * 1_000.0)
+        if result.returncode != 0 or result.timed_out or result.containment_failed:
+            raise RuntimeError("Cold native one-shot runtime failed")
+        response = json.loads(result.stdout)
+        if not isinstance(response, dict) or response.get("decision") != "allow":
+            raise RuntimeError("Cold native one-shot runtime returned an unexpected decision")
+    return values
+
+
+def _validated_runtime(path: Path) -> Path:
+    lexical = path.expanduser()
+    if lexical.is_symlink():
+        raise ValueError("native runtime must not be a symlink")
+    resolved = lexical.resolve(strict=True)
+    if not resolved.is_file():
+        raise ValueError("native runtime must be a regular file")
+    _bind_native_runtime(resolved)
+    return resolved
+
+
+def _bind_native_runtime(runtime: Path) -> None:
+    os.environ["HOL_GUARD_NATIVE"] = "force"
+    os.environ["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
+
+
+def _readiness_failure(response: object) -> RuntimeError:
+    status = native_runtime_status()
+    return RuntimeError(
+        "Native resident readiness probe failed: "
+        f"reason={status.reason} available={status.available} "
+        f"compatible={status.compatible} decision={getattr(response, 'decision', None)}"
+    )
+
+
+def _run_benchmarks(
+    *, runtime: Path, warm_iterations: int, cold_iterations: int
+) -> tuple[list[float], list[float], list[float], float]:
+    short_temp_root = "/tmp" if os.name != "nt" and Path("/tmp").is_dir() else None
+    with tempfile.TemporaryDirectory(prefix="hg-native-bench-", dir=short_temp_root) as temp_dir:
+        workspace = Path(temp_dir)
+        guard_home = workspace / "guard-home"
+        guard_home.mkdir(mode=0o700)
+
+        close_native_residents()
+        try:
+            with native_policy_snapshot(guard_home) as snapshot:
+                reset_native_hook_route()
+                # Snapshot materialization is durable policy bookkeeping, not resident readiness.
+                # Start the gate when the production adapter begins its first authenticated request.
+                readiness_started = time.perf_counter()
+                readiness_response = review_post_tool_native(
+                    _request(workspace=workspace, guard_home=guard_home, request_id="native-readiness"),
+                    observe_mode=False,
+                    policy_snapshot=snapshot,
+                )
+                native_readiness_ms = (time.perf_counter() - readiness_started) * 1_000.0
+                if (
+                    readiness_response is None
+                    or readiness_response.decision != "allow"
+                    or native_hook_route() != "native_resident"
+                ):
+                    raise _readiness_failure(readiness_response)
+                native_warm = _bench_native_warm_production(
+                    workspace=workspace,
+                    guard_home=guard_home,
+                    iterations=warm_iterations,
+                    policy_snapshot=snapshot,
+                )
+                native_warm_ipc = _bench_native_warm(
+                    workspace=workspace,
+                    guard_home=guard_home,
+                    iterations=warm_iterations,
+                    policy_snapshot=snapshot,
+                )
+        finally:
+            _stop_native_resident(runtime, guard_home / "native-runtime", workspace)
+            close_native_residents()
+
+        native_oneshot = _bench_native_oneshot(
+            runtime=runtime,
+            workspace=workspace,
+            guard_home=guard_home,
+            iterations=cold_iterations,
+        )
+    return native_warm, native_warm_ipc, native_oneshot, native_readiness_ms
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Benchmark the Rust hook runtime")
+    parser.add_argument("--runtime", type=Path, required=True)
+    parser.add_argument("--warm-iterations", type=int, default=100)
+    parser.add_argument("--cold-iterations", type=int, default=3)
+    parser.add_argument("--json", type=Path)
+    parser.add_argument("--enforce", action="store_true")
+    args = parser.parse_args()
+    if args.warm_iterations < 10 or args.cold_iterations < 2:
+        parser.error("benchmark iteration counts are too small")
+    runtime = _validated_runtime(args.runtime)
+    native_warm, native_warm_ipc, native_oneshot, native_readiness_ms = _run_benchmarks(
+        runtime=runtime,
+        warm_iterations=args.warm_iterations,
+        cold_iterations=args.cold_iterations,
+    )
+    native_warm_summary = _summary(native_warm)
+    native_warm_ipc_summary = _summary(native_warm_ipc)
+    native_oneshot_summary = _summary(native_oneshot)
+    result = {
+        "schema": "hol-guard-native-performance.v1",
+        "warm": {
+            "native_resident": native_warm_summary,
+            "native_resident_ipc_diagnostic": native_warm_ipc_summary,
+        },
+        "cold": {
+            "native_oneshot": native_oneshot_summary,
+        },
+        "native_readiness_ms": round(native_readiness_ms, 3),
+        "gates": {
+            "maximum_warm_p95_ms": _MAX_WARM_P95_MS,
+            "maximum_cold_p95_ms": _MAX_COLD_P95_MS,
+            "maximum_native_readiness_ms": _MAX_NATIVE_READINESS_MS,
+        },
+    }
+    rendered = json.dumps(result, indent=2, sort_keys=True)
+    print(rendered)
+    if args.json is not None:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(rendered + "\n", encoding="utf-8")
+
+    if not args.enforce:
+        return 0
+    failures: list[str] = []
+    if native_warm_summary["p95_ms"] > _MAX_WARM_P95_MS:
+        failures.append(f"warm native resident p95 exceeds {_MAX_WARM_P95_MS:.0f}ms")
+    if native_oneshot_summary["p95_ms"] > _MAX_COLD_P95_MS:
+        failures.append(f"cold native one-shot p95 exceeds {_MAX_COLD_P95_MS:.0f}ms")
+    if native_readiness_ms > _MAX_NATIVE_READINESS_MS:
+        failures.append(f"native resident readiness exceeds {_MAX_NATIVE_READINESS_MS:.0f}ms")
+    if failures:
+        for failure in failures:
+            print(f"PERFORMANCE GATE: {failure}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

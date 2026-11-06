@@ -1,0 +1,38 @@
+name: Platform arm inventory
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/platform-arm-inventory.yml"
+      - "ci/platform_arms.json"
+      - "rust/**"
+      - "scripts/ci/platform_arm_inventory.py"
+      - "tests/test_platform_arm_inventory.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/platform-arm-inventory.yml"
+      - "ci/platform_arms.json"
+      - "rust/**"
+      - "scripts/ci/platform_arm_inventory.py"
+      - "tests/test_platform_arm_inventory.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-arm-inventory-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Reject unreviewed non-Unix behaviour arms
+        run: python3 scripts/ci/platform_arm_inventory.py --root .

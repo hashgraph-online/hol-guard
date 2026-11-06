@@ -1,0 +1,2477 @@
+{
+  "schema": "linux-launch-parity.v1",
+  "baseline": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/runtime/restricted_linux_landlock.py": "544270e956360eec3f8ce895af74728699e0359f1a7e00811039d1fffac70a9b",
+    "src/codex_plugin_scanner/guard/runtime/restricted_linux_mappings.py": "dd444d6d651697c0c7b7cf38d77bfa155e15adba183219fec85a393190789df1",
+    "src/codex_plugin_scanner/guard/runtime/restricted_linux_entry.py": "5892ba09cd8a077be5d8a345df131054115ff9f46e41ec9d4e1e93f62608e94c",
+    "src/codex_plugin_scanner/guard/runtime/restricted_linux_elf.py": "db657bee3f0a23b44b23b9c1eb398babc0db4262d56477f8f179d94784c636df",
+    "src/codex_plugin_scanner/guard/runtime/restricted_linux_paths.py": "08fa4d90b10eff57b9e6e205ba4e025ecb0926828bb19df8bc97938ac88c1135"
+  },
+  "cases": [
+    {
+      "operation": "socket_filter",
+      "input": {
+        "machine": "x86_64"
+      },
+      "expected": {
+        "value": [
+          [
+            32,
+            0,
+            0,
+            4
+          ],
+          [
+            21,
+            1,
+            0,
+            3221225534
+          ],
+          [
+            6,
+            0,
+            0,
+            2147483648
+          ],
+          [
+            32,
+            0,
+            0,
+            0
+          ],
+          [
+            53,
+            0,
+            1,
+            1073741824
+          ],
+          [
+            6,
+            0,
+            0,
+            2147483648
+          ],
+          [
+            21,
+            0,
+            1,
+            41
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            42
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            101
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            311
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            319
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            272
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            308
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            165
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            166
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            155
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            425
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            426
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            427
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            428
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            429
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            430
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            431
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            432
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            433
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            442
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            435
+          ],
+          [
+            6,
+            0,
+            0,
+            327718
+          ],
+          [
+            21,
+            0,
+            4,
+            56
+          ],
+          [
+            32,
+            0,
+            0,
+            16
+          ],
+          [
+            84,
+            0,
+            0,
+            2114060416
+          ],
+          [
+            21,
+            1,
+            0,
+            0
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            32,
+            0,
+            0,
+            0
+          ],
+          [
+            21,
+            1,
+            0,
+            53
+          ],
+          [
+            6,
+            0,
+            0,
+            2147418112
+          ],
+          [
+            32,
+            0,
+            0,
+            16
+          ],
+          [
+            21,
+            1,
+            0,
+            1
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            32,
+            0,
+            0,
+            24
+          ],
+          [
+            84,
+            0,
+            0,
+            4294440959
+          ],
+          [
+            21,
+            1,
+            0,
+            1
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            32,
+            0,
+            0,
+            32
+          ],
+          [
+            21,
+            1,
+            0,
+            0
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            6,
+            0,
+            0,
+            2147418112
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "socket_filter",
+      "input": {
+        "machine": "aarch64"
+      },
+      "expected": {
+        "value": [
+          [
+            32,
+            0,
+            0,
+            4
+          ],
+          [
+            21,
+            1,
+            0,
+            3221225655
+          ],
+          [
+            6,
+            0,
+            0,
+            2147483648
+          ],
+          [
+            32,
+            0,
+            0,
+            0
+          ],
+          [
+            53,
+            0,
+            1,
+            1073741824
+          ],
+          [
+            6,
+            0,
+            0,
+            2147483648
+          ],
+          [
+            21,
+            0,
+            1,
+            198
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            203
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            117
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            271
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            279
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            97
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            268
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            40
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            39
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            41
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            425
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            426
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            427
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            428
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            429
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            430
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            431
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            432
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            433
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            442
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            21,
+            0,
+            1,
+            435
+          ],
+          [
+            6,
+            0,
+            0,
+            327718
+          ],
+          [
+            21,
+            0,
+            4,
+            220
+          ],
+          [
+            32,
+            0,
+            0,
+            16
+          ],
+          [
+            84,
+            0,
+            0,
+            2114060416
+          ],
+          [
+            21,
+            1,
+            0,
+            0
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            32,
+            0,
+            0,
+            0
+          ],
+          [
+            21,
+            1,
+            0,
+            199
+          ],
+          [
+            6,
+            0,
+            0,
+            2147418112
+          ],
+          [
+            32,
+            0,
+            0,
+            16
+          ],
+          [
+            21,
+            1,
+            0,
+            1
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            32,
+            0,
+            0,
+            24
+          ],
+          [
+            84,
+            0,
+            0,
+            4294440959
+          ],
+          [
+            21,
+            1,
+            0,
+            1
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            32,
+            0,
+            0,
+            32
+          ],
+          [
+            21,
+            1,
+            0,
+            0
+          ],
+          [
+            6,
+            0,
+            0,
+            327681
+          ],
+          [
+            6,
+            0,
+            0,
+            2147418112
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "socket_filter",
+      "input": {
+        "machine": "arm64"
+      },
+      "expected": {
+        "error": "Unsupported Linux socket-filter architecture."
+      }
+    },
+    {
+      "operation": "socket_filter",
+      "input": {
+        "machine": "i386"
+      },
+      "expected": {
+        "error": "Unsupported Linux socket-filter architecture."
+      }
+    },
+    {
+      "operation": "socket_filter",
+      "input": {
+        "machine": "unknown"
+      },
+      "expected": {
+        "error": "Unsupported Linux socket-filter architecture."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/runtime",
+        "access": 12,
+        "directory": true,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 16384,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "value": [
+          12
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/runtime",
+        "access": 12,
+        "directory": true,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 32768,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Linux access target changed or has an unexpected type."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/workspace",
+        "access": 8,
+        "directory": true,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 16384,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "value": [
+          8
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/private",
+        "access": 30654,
+        "directory": true,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 16384,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "value": [
+          30654
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/runner",
+        "access": 5,
+        "directory": false,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 32768,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "value": [
+          5
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/runner",
+        "access": 5,
+        "directory": false,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 16384,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Linux access target changed or has an unexpected type."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/runner",
+        "access": 5,
+        "directory": false,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 40960,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Linux access target changed or has an unexpected type."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "runner",
+        "access": 5,
+        "directory": false,
+        "identity": null,
+        "device": false,
+        "evidence": {
+          "mode": 32768,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Linux access plans require absolute paths."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/source",
+        "access": 4,
+        "directory": false,
+        "identity": [
+          1,
+          2
+        ],
+        "device": false,
+        "evidence": {
+          "mode": 32768,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "value": [
+          4
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/source",
+        "access": 4,
+        "directory": false,
+        "identity": [
+          1,
+          3
+        ],
+        "device": false,
+        "evidence": {
+          "mode": 32768,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Linux read target changed after discovery."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/source",
+        "access": 4,
+        "directory": false,
+        "identity": [
+          1,
+          2
+        ],
+        "device": false,
+        "evidence": {
+          "mode": 32768,
+          "device": 1,
+          "inode": 2,
+          "links": 2,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Linux read target changed after discovery."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/source",
+        "access": 4,
+        "directory": false,
+        "identity": [
+          1,
+          2
+        ],
+        "device": false,
+        "evidence": {
+          "mode": 40960,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Linux access target changed or has an unexpected type."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/dev/null",
+        "access": 6,
+        "directory": false,
+        "identity": null,
+        "device": true,
+        "evidence": {
+          "mode": 8192,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "value": [
+          6
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/dev/random",
+        "access": 4,
+        "directory": false,
+        "identity": null,
+        "device": true,
+        "evidence": {
+          "mode": 8192,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 8
+        }
+      },
+      "expected": {
+        "value": [
+          4
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/dev/urandom",
+        "access": 4,
+        "directory": false,
+        "identity": null,
+        "device": true,
+        "evidence": {
+          "mode": 8192,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 9
+        }
+      },
+      "expected": {
+        "value": [
+          4
+        ]
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/dev/zero",
+        "access": 4,
+        "directory": false,
+        "identity": null,
+        "device": true,
+        "evidence": {
+          "mode": 8192,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 5
+        }
+      },
+      "expected": {
+        "error": "Unexpected namespace device."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/dev/null",
+        "access": 6,
+        "directory": false,
+        "identity": null,
+        "device": true,
+        "evidence": {
+          "mode": 8192,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 2,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Unexpected namespace device."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/dev/null",
+        "access": 6,
+        "directory": false,
+        "identity": null,
+        "device": true,
+        "evidence": {
+          "mode": 8192,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 9
+        }
+      },
+      "expected": {
+        "error": "Unexpected namespace device."
+      }
+    },
+    {
+      "operation": "landlock_admission",
+      "input": {
+        "path": "/dev/null",
+        "access": 6,
+        "directory": false,
+        "identity": null,
+        "device": true,
+        "evidence": {
+          "mode": 32768,
+          "device": 1,
+          "inode": 2,
+          "links": 1,
+          "major": 1,
+          "minor": 3
+        }
+      },
+      "expected": {
+        "error": "Unexpected namespace device."
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": "1 0 0:1 / / rw - tmpfs tmpfs rw\n2 1 0:2 / /dev rw,nosuid - tmpfs tmpfs rw\n3 1 0:3 / /lib ro,nodev - bind bind ro\n4 1 0:4 / /space\\040name rw,nodev - bind bind rw\n"
+      },
+      "expected": {
+        "value": [
+          [
+            "/dev",
+            16777226
+          ],
+          [
+            "/lib",
+            16777231
+          ],
+          [
+            "/space name",
+            16777230
+          ],
+          [
+            "/",
+            16777226
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": ""
+      },
+      "expected": {
+        "error": "Invalid namespace mount count."
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": "broken"
+      },
+      "expected": {
+        "error": "Malformed namespace mount snapshot."
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": "1 0 0:1 / / ro,rw - tmpfs tmpfs rw\n"
+      },
+      "expected": {
+        "error": "Ambiguous namespace mount permissions."
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": "1 0 0:1 / /lib rw,noatime - bind bind rw\n"
+      },
+      "expected": {
+        "value": [
+          [
+            "/lib",
+            1034
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": "1 0 0:1 / /lib ro,relatime,nodev - bind bind rw\n"
+      },
+      "expected": {
+        "value": [
+          [
+            "/lib",
+            2097167
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": "1 0 0:1 / /lib rw,strictatime,nodiratime - bind bind rw\n"
+      },
+      "expected": {
+        "value": [
+          [
+            "/lib",
+            16779274
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "mount_targets",
+      "input": {
+        "raw": "1 0 0:1 / /lib rw,nodev - bind bind rw\n"
+      },
+      "expected": {
+        "value": [
+          [
+            "/lib",
+            16777230
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "value": [
+          [
+            "$ROOT/runner",
+            [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            [
+              "$ROOT/runner"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ],
+            "extra": true
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Invalid executable mapping fields."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Invalid executable mapping path."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/../runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Invalid executable mapping path."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Invalid executable mapping hash."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              true,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Invalid executable mapping identity."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": []
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Invalid executable mapping aliases."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner",
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Ambiguous executable mapping aliases."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/other"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Ambiguous executable mapping aliases."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": []
+      },
+      "expected": {
+        "error": "Unbound executable mapping."
+      }
+    },
+    {
+      "operation": "validate_records",
+      "input": {
+        "records": [
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          },
+          {
+            "path": "$ROOT/runner",
+            "identity": [
+              16777229,
+              4973603077,
+              24,
+              1791785647128398028,
+              33216
+            ],
+            "sha256": "51751237a30501092631b69aa65ee463eef9c83c77040b65406525619ff5d9c6",
+            "targets": [
+              "$ROOT/runner"
+            ]
+          }
+        ],
+        "approved_paths": [
+          "$ROOT/runner"
+        ]
+      },
+      "expected": {
+        "error": "Unbound executable mapping."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "value": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": {},
+          "write_identities": {
+            "$ROOT": [
+              16777229,
+              4973603075
+            ]
+          }
+        }
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v1",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Unsupported Linux execution plan."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Unsupported Linux execution plan."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ]
+          ],
+          "extra": true
+        }
+      },
+      "expected": {
+        "error": "Unsupported Linux execution plan."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Linux plan exceeds its boundary."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "bad\u0000"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Invalid Linux command vector."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              -1,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Invalid Linux inode evidence."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              true,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Invalid Linux inode evidence."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT/other",
+              16777229,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Mismatched Linux inode evidence."
+      }
+    },
+    {
+      "operation": "load_plan",
+      "input": {
+        "payload": {
+          "schema": "guard-linux-readonly-plan.v2",
+          "mapping_records": [],
+          "command": [
+            "$ROOT/runner",
+            "-V"
+          ],
+          "read_roots": [],
+          "read_files": [],
+          "list_roots": [],
+          "write_roots": [
+            "$ROOT"
+          ],
+          "executables": [
+            "$ROOT/runner"
+          ],
+          "device_files": [],
+          "read_identities": [],
+          "write_identities": [
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ],
+            [
+              "$ROOT",
+              16777229,
+              4973603075
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "error": "Incomplete Linux inode evidence."
+      }
+    },
+    {
+      "operation": "plan_locator",
+      "input": {
+        "digest": "../plan.json"
+      },
+      "expected": {
+        "error": "Invalid private Linux plan locator."
+      }
+    },
+    {
+      "operation": "plan_locator",
+      "input": {
+        "digest": "/etc/passwd"
+      },
+      "expected": {
+        "error": "Invalid private Linux plan locator."
+      }
+    },
+    {
+      "operation": "plan_locator",
+      "input": {
+        "digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "expected": {
+        "error": "Invalid private Linux plan locator."
+      }
+    },
+    {
+      "operation": "plan_locator",
+      "input": {
+        "digest": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "expected": {
+        "error": "Invalid private Linux plan locator."
+      }
+    },
+    {
+      "operation": "plan_locator",
+      "input": {
+        "digest": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "expected": {
+        "error": "Invalid private Linux plan locator."
+      }
+    },
+    {
+      "operation": "plan_locator",
+      "input": {
+        "digest": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\u0000"
+      },
+      "expected": {
+        "error": "Invalid private Linux plan locator."
+      }
+    },
+    {
+      "operation": "seal_copy",
+      "input": {
+        "data_hex": "617070726f76656420706f727461626c652066697874757265",
+        "mutation": "valid"
+      },
+      "expected": {
+        "value": {
+          "bytes_hex": "617070726f76656420706f727461626c652066697874757265",
+          "mode": 320
+        }
+      }
+    },
+    {
+      "operation": "seal_copy",
+      "input": {
+        "data_hex": "617070726f76656420706f727461626c652066697874757265",
+        "mutation": "hash"
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "operation": "seal_copy",
+      "input": {
+        "data_hex": "617070726f76656420706f727461626c652066697874757265",
+        "mutation": "inode"
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "operation": "seal_copy",
+      "input": {
+        "data_hex": "617070726f76656420706f727461626c652066697874757265",
+        "mutation": "size"
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "operation": "seal_copy",
+      "input": {
+        "data_hex": "617070726f76656420706f727461626c652066697874757265",
+        "mutation": "mode"
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "operation": "seal_copy",
+      "input": {
+        "data_hex": "617070726f76656420706f727461626c652066697874757265",
+        "mutation": "symlink"
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380001000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c4601010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460201010000000000000000000200030001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000370001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000400000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380081000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460201010000000000000000000200b70001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460201010000000000000000000200b70001000000000000000000000040000000000000000000000000000000000000004000380001000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460101010000000000000000000200b70001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460201010000000000000000000200030001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460201010000000000000000000200b70001000000000000000000000040000000000000000000000000000000000000004000370001000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460201010000000000000000000200b70001000000000000000000000040000000000000000000000000000000000000004000380001000000000000000400000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "elf_loader",
+      "input": {
+        "executable": "$ROOT/runner",
+        "image_hex": "7f454c460201010000000000000000000200b70001000000000000000000000040000000000000000000000000000000000000004000380081000000000000000100000005000000000000000000000000000000000000000000000000000000780000000000000078000000000000000010000000000000"
+      },
+      "expected": {
+        "error": "The exact approved ELF loader could not be verified."
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/tree-ordinary",
+        "max_entries": 240000,
+        "fixture_tree": "ordinary"
+      },
+      "expected": {
+        "value": [
+          {
+            "path": "$ROOT/tree-ordinary/subdir/module.py",
+            "device": "$DEVICE",
+            "inode": "$INODE"
+          },
+          {
+            "path": "$ROOT/tree-ordinary/source.py",
+            "device": "$DEVICE",
+            "inode": "$INODE"
+          }
+        ]
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/tree-credentials",
+        "max_entries": 240000,
+        "fixture_tree": "credentials"
+      },
+      "expected": {
+        "value": [
+          {
+            "path": "$ROOT/tree-credentials/subdir/module.py",
+            "device": "$DEVICE",
+            "inode": "$INODE"
+          },
+          {
+            "path": "$ROOT/tree-credentials/source.py",
+            "device": "$DEVICE",
+            "inode": "$INODE"
+          }
+        ]
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/tree-symlink",
+        "max_entries": 240000,
+        "fixture_tree": "symlink"
+      },
+      "expected": {
+        "value": [
+          {
+            "path": "$ROOT/tree-symlink/subdir/module.py",
+            "device": "$DEVICE",
+            "inode": "$INODE"
+          },
+          {
+            "path": "$ROOT/tree-symlink/source.py",
+            "device": "$DEVICE",
+            "inode": "$INODE"
+          }
+        ]
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/tree-hardlink",
+        "max_entries": 240000,
+        "fixture_tree": "hardlink"
+      },
+      "expected": {
+        "value": [
+          {
+            "path": "$ROOT/tree-hardlink/subdir/module.py",
+            "device": "$DEVICE",
+            "inode": "$INODE"
+          }
+        ]
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/tree-budget",
+        "max_entries": 1,
+        "fixture_tree": "budget"
+      },
+      "expected": {
+        "error": "Linux workspace discovery exceeds its entry budget."
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/root-alias",
+        "max_entries": 240000,
+        "fixture_tree": "root-alias"
+      },
+      "expected": {
+        "error": "Linux workspace is not a canonical nonsensitive directory."
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/parent-alias/subdir",
+        "max_entries": 240000,
+        "fixture_tree": "parent-alias"
+      },
+      "expected": {
+        "error": "Linux workspace is not a canonical nonsensitive directory."
+      }
+    },
+    {
+      "operation": "read_grants",
+      "input": {
+        "root": "$ROOT/tree-protected-root/.ssh",
+        "max_entries": 240000,
+        "fixture_tree": "protected-root"
+      },
+      "expected": {
+        "error": "Linux workspace is not a canonical nonsensitive directory."
+      }
+    }
+  ]
+}

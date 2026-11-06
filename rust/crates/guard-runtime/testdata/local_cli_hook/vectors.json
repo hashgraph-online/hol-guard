@@ -1,0 +1,963 @@
+{
+  "schema": "guard-local-cli-hook-vectors.v1",
+  "vectors": [
+    {
+      "name": "plain-empty",
+      "arguments": [],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-one",
+      "arguments": [
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "plain-nested",
+      "arguments": [
+        "deploy",
+        "prod"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy",
+        "prod"
+      ],
+      "command_id": "deploy.prod"
+    },
+    {
+      "name": "plain-nested-unknown-tail",
+      "arguments": [
+        "deploy",
+        "staging"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy",
+        "staging"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "plain-unknown",
+      "arguments": [
+        "status"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "status"
+      ],
+      "command_id": "other"
+    },
+    {
+      "name": "plain-flag-first",
+      "arguments": [
+        "--verbose",
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-flag-stops",
+      "arguments": [
+        "deploy",
+        "--force",
+        "prod"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "plain-dash-only",
+      "arguments": [
+        "-",
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-path-stops",
+      "arguments": [
+        "./deploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-digit-start",
+      "arguments": [
+        "1deploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-underscore",
+      "arguments": [
+        "db_migrate"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "db_migrate"
+      ],
+      "command_id": "other"
+    },
+    {
+      "name": "plain-max-depth",
+      "arguments": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "command_id": "a.b.c.d"
+    },
+    {
+      "name": "plain-depth-prefix",
+      "arguments": [
+        "db",
+        "migrate",
+        "up",
+        "now",
+        "later"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "db",
+        "migrate",
+        "up",
+        "now"
+      ],
+      "command_id": "db.migrate.up"
+    },
+    {
+      "name": "plain-long-name",
+      "arguments": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "command_id": "other"
+    },
+    {
+      "name": "plain-too-long-name",
+      "arguments": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-unicode",
+      "arguments": [
+        "déploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-dot-token",
+      "arguments": [
+        "deploy.prod"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "plain-empty-catalog",
+      "arguments": [
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "other"
+    },
+    {
+      "name": "plain-root-word",
+      "arguments": [
+        "root"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "root"
+      ],
+      "command_id": "root"
+    },
+    {
+      "name": "script-strip",
+      "arguments": [
+        "tool.py",
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "script",
+      "identity_name": "tool.py",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "script-strip-path",
+      "arguments": [
+        "./bin/tool.py",
+        "db",
+        "migrate"
+      ],
+      "runner": null,
+      "kind": "script",
+      "identity_name": "tool.py",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "db",
+        "migrate"
+      ],
+      "command_id": "db.migrate"
+    },
+    {
+      "name": "script-strip-trailing-dot",
+      "arguments": [
+        "bin/tool.py/.",
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "script",
+      "identity_name": "tool.py",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "script-no-strip",
+      "arguments": [
+        "other.py",
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "script",
+      "identity_name": "tool.py",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "script-no-strip-name-token",
+      "arguments": [
+        "deploy",
+        "prod"
+      ],
+      "runner": null,
+      "kind": "script",
+      "identity_name": "deploy",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "prod"
+      ],
+      "command_id": "other"
+    },
+    {
+      "name": "script-only-script",
+      "arguments": [
+        "tool.py"
+      ],
+      "runner": null,
+      "kind": "script",
+      "identity_name": "tool.py",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "script-empty",
+      "arguments": [],
+      "runner": null,
+      "kind": "script",
+      "identity_name": "tool.py",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "executable-no-strip",
+      "arguments": [
+        "tool",
+        "deploy"
+      ],
+      "runner": null,
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "tool",
+        "deploy"
+      ],
+      "command_id": "other"
+    },
+    {
+      "name": "runner-npx",
+      "arguments": [
+        "wrangler",
+        "deploy"
+      ],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "runner-npx-yes",
+      "arguments": [
+        "-y",
+        "wrangler",
+        "deploy",
+        "prod"
+      ],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy",
+        "prod"
+      ],
+      "command_id": "deploy.prod"
+    },
+    {
+      "name": "runner-npx-long-yes",
+      "arguments": [
+        "--yes",
+        "--",
+        "wrangler",
+        "db"
+      ],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "db"
+      ],
+      "command_id": "db"
+    },
+    {
+      "name": "runner-npx-package-flag",
+      "arguments": [
+        "--package",
+        "x",
+        "wrangler",
+        "deploy"
+      ],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "runner-npx-no-target",
+      "arguments": [
+        "-y"
+      ],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "runner-npx-target-only",
+      "arguments": [
+        "wrangler"
+      ],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "runner-npm-exec",
+      "arguments": [
+        "exec",
+        "wrangler",
+        "deploy"
+      ],
+      "runner": "npm",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "runner-pnpm-x",
+      "arguments": [
+        "x",
+        "wrangler",
+        "db",
+        "migrate"
+      ],
+      "runner": "pnpm",
+      "kind": "executable",
+      "identity_name": "wrangler",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "db",
+        "migrate"
+      ],
+      "command_id": "db.migrate"
+    },
+    {
+      "name": "runner-yarn-exec-twice",
+      "arguments": [
+        "exec",
+        "exec",
+        "deploy"
+      ],
+      "runner": "yarn",
+      "kind": "executable",
+      "identity_name": "exec",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "runner-npx-exec-is-target",
+      "arguments": [
+        "exec",
+        "deploy"
+      ],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "exec",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "runner-bunx",
+      "arguments": [
+        "tool",
+        "--flag",
+        "deploy"
+      ],
+      "runner": "bunx",
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "runner-empty",
+      "arguments": [],
+      "runner": "npx",
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [],
+      "command_id": "root"
+    },
+    {
+      "name": "runner-script-kind",
+      "arguments": [
+        "tool.py",
+        "deploy"
+      ],
+      "runner": "npx",
+      "kind": "script",
+      "identity_name": "tool.py",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "deploy"
+      ],
+      "command_id": "deploy"
+    },
+    {
+      "name": "runner-max-depth",
+      "arguments": [
+        "tool",
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "runner": "pnpx",
+      "kind": "executable",
+      "identity_name": "tool",
+      "catalog": [
+        "root",
+        "deploy",
+        "deploy.prod",
+        "db",
+        "db.migrate",
+        "db.migrate.up",
+        "a.b.c.d",
+        "other"
+      ],
+      "tokens": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "command_id": "a.b.c.d"
+    }
+  ]
+}

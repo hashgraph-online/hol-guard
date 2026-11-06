@@ -1,0 +1,1384 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.xrpl-muse-skill",
+    "version": "1.0.0",
+    "name": "XRPL Muse Skill protection",
+    "description": "Guards the xrpl-muse-skill ceremony: xrpl-trade builds unsigned transaction proposals and never signs; xrpl-sign --approve is the sole hash-bound, policy-gated signer; fresh installs stay read-only until the typed xrpl-trade live ceremony. Proposal, signing, and gate-transition commands review; read-only queries stay inert.",
+    "action_classes": [
+      "xrpl transaction proposal",
+      "xrpl transaction signing",
+      "signing-gate transition",
+      "xrpl read-only query"
+    ],
+    "risk_classes": [
+      "financial_transaction"
+    ],
+    "safer_alternatives": [
+      "Keep the skill in read-only mode and review each proposal before approving its hash.",
+      "Verify the full 64-hex proposal hash out-of-band before running xrpl-sign --approve."
+    ],
+    "reference_urls": [
+      "https://github.com/terramike/xrpl-muse-skill"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": [
+      "xrpl-trade",
+      "xrpl-sign"
+    ],
+    "project_markers": [],
+    "permissions": [
+      {
+        "permission_id": "command.xrpl-muse-skill.permission.propose-trade",
+        "implementation_version": "1.0.0",
+        "label": "Propose XRPL DEX trades",
+        "description": "xrpl-trade builds unsigned DEX offer proposals (buy, sell, cancel). It never signs or submits; every proposal needs human approval of its exact 64-hex hash via xrpl-sign.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review the proposal hash before approving.",
+          "Stay in read-only mode until ready to transact."
+        ],
+        "example_command": "xrpl-trade buy --pair XRP/RLUSD --amount 10 --price 2.5"
+      },
+      {
+        "permission_id": "command.xrpl-muse-skill.permission.propose-payment",
+        "implementation_version": "1.0.0",
+        "label": "Propose XRPL payments and trustlines",
+        "description": "xrpl-trade builds unsigned Payment and TrustSet proposals (send, trustline). It never signs or submits; every proposal needs human approval of its exact 64-hex hash via xrpl-sign.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review the proposal hash before approving.",
+          "Confirm the destination address out-of-band."
+        ],
+        "example_command": "xrpl-trade send --to r9e34ga9YxYHYoCe7UtWWpuLjp4iKs3gkB --amount 5"
+      },
+      {
+        "permission_id": "command.xrpl-muse-skill.permission.propose-nft",
+        "implementation_version": "1.0.0",
+        "label": "Propose XRPL NFT actions",
+        "description": "xrpl-trade builds unsigned NFT proposals (mint, list, buy, bid, send). It never signs or submits; every proposal needs human approval of its exact 64-hex hash via xrpl-sign.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review the proposal hash before approving."
+        ],
+        "example_command": "xrpl-trade nft-list --token-id 0008132E2A679C62B6FA2429A58B5D56F1"
+      },
+      {
+        "permission_id": "command.xrpl-muse-skill.permission.propose-faucet",
+        "implementation_version": "1.0.0",
+        "label": "Claim testnet faucet funds",
+        "description": "xrpl-trade faucet funds a fresh testnet/devnet wallet from the public faucet. Real transaction, valueless test funds only; rejected against mainnet by the skill.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Use testnet or devnet only; the skill refuses mainnet."
+        ],
+        "example_command": "xrpl-trade faucet --network testnet"
+      },
+      {
+        "permission_id": "command.xrpl-muse-skill.permission.sign",
+        "implementation_version": "1.0.0",
+        "label": "Approve and sign XRPL transactions",
+        "description": "xrpl-sign --approve is the sole signing path. Approval is bound to the full 64-hex proposal hash and gated by the local policy (spending caps, destination allowlist). This is the last human gate before funds move.",
+        "risk_tier": "critical",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xrpl transaction signing"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Approve only the exact hash you reviewed.",
+          "Never approve a hash you did not derive from an inspected proposal."
+        ],
+        "example_command": "xrpl-sign --approve --hash <64-hex> --profile main"
+      },
+      {
+        "permission_id": "command.xrpl-muse-skill.permission.gate",
+        "implementation_version": "1.0.0",
+        "label": "Change the signing gate",
+        "description": "xrpl-trade live leaves read-only mode through a typed ceremony; xrpl-trade autopilot manages local mainnet signing. Both weaken the default-deny posture and require explicit human intent.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "signing-gate transition"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Prefer staying in read-only mode.",
+          "Re-enter read-only mode with xrpl-trade read-only when done."
+        ],
+        "example_command": "xrpl-trade live"
+      },
+      {
+        "permission_id": "command.xrpl-muse-skill.permission.read",
+        "implementation_version": "1.0.0",
+        "label": "Read-only XRPL queries",
+        "description": "Balance, quote, order-book, token-safety, and ledger-forensic reads. No transaction is built, signed, or submitted.",
+        "risk_tier": "low",
+        "baseline_floor": "allow",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "xrpl read-only query"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Read-only XRPL inspection does not move funds."
+        ],
+        "example_command": "xrpl-trade balance"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.xrpl-muse-skill.propose-trade",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xrpl-muse-skill.permission.propose-trade",
+        "title": "XRPL DEX trade proposal",
+        "description": "Matches xrpl-trade buy, sell, and cancel: unsigned DEX offer proposals awaiting hash-bound human approval.",
+        "severity": "high",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "safer_alternatives": [
+          "Inspect the proposal with the quoted hash before approving."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "buy"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "sell"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "cancel"
+                ],
+                "allow_leading_options": false
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "xrpl-trade buy/sell/cancel command help (--help)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "buy"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "sell"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "cancel"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "xrpl-trade buy/sell/cancel command help (-h)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "buy"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "sell"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "cancel"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.xrpl-muse-skill.propose-payment",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xrpl-muse-skill.permission.propose-payment",
+        "title": "XRPL payment / trustline proposal",
+        "description": "Matches xrpl-trade send and trustline: unsigned Payment and TrustSet proposals awaiting hash-bound human approval.",
+        "severity": "high",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "safer_alternatives": [
+          "Confirm the destination address out-of-band before approving."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "send"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "trustline"
+                ],
+                "allow_leading_options": false
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "xrpl-trade send/trustline command help (--help)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "send"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "trustline"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "xrpl-trade send/trustline command help (-h)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "send"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "trustline"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.xrpl-muse-skill.propose-nft",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xrpl-muse-skill.permission.propose-nft",
+        "title": "XRPL NFT proposal",
+        "description": "Matches xrpl-trade NFT subcommands: unsigned mint, list, buy, bid, and send proposals awaiting hash-bound human approval.",
+        "severity": "high",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "safer_alternatives": [
+          "Inspect the proposal with the quoted hash before approving."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-pin-and-propose"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-list"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-buy"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-bid"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-send"
+                ],
+                "allow_leading_options": false
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "xrpl-trade nft-pin-and-propose/nft-list/nft-buy/nft-bid/nft-send command help (--help)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-pin-and-propose"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-list"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-buy"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-bid"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-send"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "xrpl-trade nft-pin-and-propose/nft-list/nft-buy/nft-bid/nft-send command help (-h)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-pin-and-propose"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-list"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-buy"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-bid"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "nft-send"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.xrpl-muse-skill.propose-faucet",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xrpl-muse-skill.permission.propose-faucet",
+        "title": "XRPL testnet faucet claim",
+        "description": "Matches xrpl-trade faucet: funds a fresh testnet/devnet wallet. Valueless test funds; the skill refuses mainnet.",
+        "severity": "medium",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "xrpl transaction proposal"
+        ],
+        "safer_alternatives": [
+          "Use testnet or devnet only."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "faucet"
+                ],
+                "allow_leading_options": false
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "xrpl-trade faucet command help (--help)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "faucet"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "xrpl-trade faucet command help (-h)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "faucet"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.xrpl-muse-skill.sign-approval",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xrpl-muse-skill.permission.sign",
+        "title": "XRPL hash-bound signing approval",
+        "description": "Matches xrpl-sign --approve: the sole signing ceremony. Approval is bound to the full 64-hex proposal hash and policy-gated. The last human gate before funds move.",
+        "severity": "critical",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "xrpl transaction signing"
+        ],
+        "safer_alternatives": [
+          "Approve only the exact hash you reviewed out-of-band."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-sign"
+                ],
+                "subcommands": [],
+                "allow_leading_options": false,
+                "required_flags": [
+                  "--approve"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "xrpl-sign command help (--help)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-sign"
+                    ],
+                    "subcommands": [],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "forbidden_flags": [
+                      "--approve"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "list",
+            "title": "xrpl-sign pending proposal list (--list)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-sign"
+                    ],
+                    "subcommands": [],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--list"
+                    ],
+                    "forbidden_flags": [
+                      "--approve"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.xrpl-muse-skill.gate-transition",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xrpl-muse-skill.permission.gate",
+        "title": "Signing-gate transition",
+        "description": "Matches xrpl-trade live (leaves read-only mode via typed ceremony) and xrpl-trade autopilot (manages local mainnet signing). Both weaken the default-deny posture.",
+        "severity": "high",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "signing-gate transition"
+        ],
+        "safer_alternatives": [
+          "Prefer staying in read-only mode; re-enter it when done."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "live"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "autopilot"
+                ],
+                "allow_leading_options": false
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "xrpl-trade live/autopilot command help (--help)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "live"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "autopilot"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "--help"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "xrpl-trade live/autopilot command help (-h)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "live"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "autopilot"
+                    ],
+                    "allow_leading_options": false,
+                    "required_flags": [
+                      "-h"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "read-only",
+            "title": "xrpl-trade read-only (enter read-only mode)",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": [
+                      "xrpl-trade"
+                    ],
+                    "subcommands": [
+                      "read-only"
+                    ],
+                    "allow_leading_options": false
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.xrpl-muse-skill.read-only",
+        "rule_version": "1.0.0",
+        "permission_id": "command.xrpl-muse-skill.permission.read",
+        "title": "XRPL read-only query",
+        "description": "Matches xrpl-trade read-only subcommands: balances, quotes, order books, token safety, and ledger forensics. Inert reads; no transaction is built, signed, or submitted.",
+        "severity": "low",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "xrpl read-only query"
+        ],
+        "safer_alternatives": [
+          "Read-only XRPL inspection does not move funds."
+        ],
+        "default_mode": "disabled",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "balance"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "quote"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "pairs"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "inspect-token"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "token-safety"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "validators"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "amendments"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "stablecoin"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "oracle"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "trace"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "links"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "flow"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-trail"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "token-trail"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "plan-trade"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-inventory"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-stage"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "reconcile"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "incoming"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-new"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "nft-radar"
+                ],
+                "allow_leading_options": false
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "xrpl-trade"
+                ],
+                "subcommands": [
+                  "xrpresso"
+                ],
+                "allow_leading_options": false
+              }
+            }
+          ]
+        },
+        "safe_variants": []
+      }
+    ]
+  }
+}
+

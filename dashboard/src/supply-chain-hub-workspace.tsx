@@ -1,0 +1,175 @@
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { WorkspacePageHeader } from "./workspace-page-header";
+import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
+import { PackageFirewallPanel, type PackageFirewallPanelHandle } from "./supply-chain-firewall-panel";
+import { useSupplyChainAuditSession } from "./use-supply-chain-audit-session";
+import { resolveSupplyChainAuditWorkspaceDir } from "./supply-chain-audit-workspace";
+import {
+  IDLE_SUPPLY_CHAIN_FIX_ALL_STATE,
+  type SupplyChainFixAllState,
+} from "./supply-chain-fix-all";
+import { lazyWorkspace } from "./lazy-workspace";
+
+const SupplyChainWorkspace = lazyWorkspace("supply-chain-workspace", () =>
+  import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
+);
+const SupplyChainWorkspaceDetails = lazyWorkspace("supply-chain-workspace-details", () =>
+  import("./supply-chain-workspace-details").then((m) => ({ default: m.SupplyChainWorkspaceDetails }))
+);
+const AuditWorkspace = lazyWorkspace("audit-workspace", () =>
+  import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace }))
+);
+const WorkspaceFindingsWorkspace = lazyWorkspace("workspace-findings-workspace", () =>
+  import("./workspace-findings-workspace").then((m) => ({ default: m.WorkspaceFindingsWorkspace }))
+);
+const FeedHealthWorkspace = lazyWorkspace("feed-health-workspace", () =>
+  import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
+);
+
+type HubTab = "supply-chain" | "audit" | "workspaces" | "feed-health";
+
+const hubTabs: Array<{ value: HubTab; label: string }> = [
+  { value: "supply-chain", label: "Supply Chain" },
+  { value: "audit", label: "Audit" },
+  { value: "workspaces", label: "Workspaces" },
+  { value: "feed-health", label: "Feed Health" },
+];
+
+export function hubTitleForTab(tab: HubTab): string {
+  return hubTabs.find((item) => item.value === tab)?.label ?? "Supply Chain";
+}
+
+function viewToTab(view: string): HubTab {
+  if (view === "supply-chain" || view === "audit" || view === "workspaces" || view === "feed-health") {
+    return view;
+  }
+  return "supply-chain";
+}
+
+export function SupplyChainHubWorkspace(props: {
+  activeView: string;
+  snapshot: GuardRuntimeSnapshot;
+  receipts: GuardReceipt[];
+  policies: GuardPolicyDecision[];
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  onClearPolicy: (policy: GuardPolicyDecision) => void;
+  onOpenSettings: () => void;
+  onGoHome: () => void;
+  onNavigate: (pathname: string) => void;
+  onRuntimeRefresh?: (requireComplete?: boolean) => Promise<void> | void;
+}) {
+  const tab = viewToTab(props.activeView);
+  const firewallPanelRef = useRef<PackageFirewallPanelHandle>(null);
+  const [fixAllState, setFixAllState] = useState<SupplyChainFixAllState>(
+    IDLE_SUPPLY_CHAIN_FIX_ALL_STATE,
+  );
+  const auditSession = useSupplyChainAuditSession({
+    snapshot: props.snapshot,
+    onNavigate: props.onNavigate,
+  });
+
+  const managedAuditWorkspaceDir = useMemo(
+    () => resolveSupplyChainAuditWorkspaceDir(props.snapshot.managed_installs ?? []),
+    [props.snapshot.managed_installs],
+  );
+
+  useEffect(() => {
+    auditSession.adoptDiscoveredAuditWorkspace(managedAuditWorkspaceDir);
+  }, [auditSession.adoptDiscoveredAuditWorkspace, managedAuditWorkspaceDir]);
+
+  const handleTabChange = useCallback(
+    (value: HubTab) => {
+      const path = value === "supply-chain" ? "/supply-chain" : `/${value}`;
+      props.onNavigate(path);
+    },
+    [props.onNavigate]
+  );
+  const handleAuditNavigate = useCallback(() => {
+    props.onNavigate("/audit");
+  }, [props.onNavigate]);
+  const handleWorkspacesNavigate = useCallback(() => {
+    props.onNavigate("/workspaces");
+  }, [props.onNavigate]);
+  const handleFixAll = useCallback(() => {
+    firewallPanelRef.current?.fixAll();
+  }, []);
+
+  return (
+    <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS}>
+      <WorkspacePageHeader
+        title={hubTitleForTab(tab)}
+        tabs={hubTabs}
+        activeTab={tab}
+        onTabChange={handleTabChange}
+      />
+      <Suspense fallback={<LazyFallback />}>
+        {tab === "supply-chain" && (
+          <SupplyChainWorkspace
+            snapshot={props.snapshot}
+            receipts={props.receipts}
+            fixAllState={fixAllState}
+            onFixAll={handleFixAll}
+          />
+        )}
+        {tab === "audit" && (
+          <AuditWorkspace
+            snapshot={props.snapshot}
+            receipts={props.receipts}
+            approvalGate={props.approvalGate}
+            auditSession={auditSession}
+            onOpenWorkspaces={handleWorkspacesNavigate}
+          />
+        )}
+        {tab === "workspaces" && (
+          <WorkspaceFindingsWorkspace
+            suggestedRoot={auditSession.auditWorkspaceDir || managedAuditWorkspaceDir || ""}
+            onChooseFolder={auditSession.handleChooseAuditWorkspace}
+          />
+        )}
+        {tab === "feed-health" && (
+          <FeedHealthWorkspace snapshot={props.snapshot} onOpenSettings={props.onOpenSettings} />
+        )}
+      </Suspense>
+      <div className={tab === "supply-chain" ? undefined : "hidden"} aria-hidden={tab !== "supply-chain"}>
+        <PackageFirewallPanel
+          ref={firewallPanelRef}
+          approvalGate={props.approvalGate}
+          auditWorkspaceDir={auditSession.auditWorkspaceDir}
+          managedAuditWorkspaceDir={managedAuditWorkspaceDir}
+          onAuditConnectGateChange={auditSession.setAuditConnectGate}
+          onAuditErrorChange={auditSession.handleAuditErrorChange}
+          onAuditWorkspaceRequired={auditSession.handleAuditWorkspaceRequired}
+          onAuditWorkspaceDiscovered={auditSession.adoptDiscoveredAuditWorkspace}
+          onStateChanged={props.onRuntimeRefresh}
+          onAuditStarted={auditSession.handleAuditStarted}
+          onAuditCompleted={auditSession.handleAuditCompleted}
+          onAuditRunningChange={auditSession.handleAuditRunningChange}
+          onFixAllStateChange={setFixAllState}
+          runAuditRef={auditSession.runAuditRef}
+        />
+      </div>
+      {/* Status, then the roster, then the facts behind it: DOM order matches
+          what the eye reads, so keyboard and screen-reader users meet the
+          manager rows before the supporting detail. */}
+      {tab === "supply-chain" && (
+        <Suspense fallback={null}>
+          <SupplyChainWorkspaceDetails
+            snapshot={props.snapshot}
+            onAuditNavigate={handleAuditNavigate}
+            auditSnapshot={auditSession.auditSnapshot}
+            auditRunning={auditSession.auditRunning}
+          />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function LazyFallback() {
+  return (
+    <div className="flex min-h-[200px] items-center justify-center">
+      <div className="guard-skeleton h-8 w-48" />
+    </div>
+  );
+}

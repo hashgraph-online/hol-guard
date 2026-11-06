@@ -1,0 +1,496 @@
+"""Build/check native program and catalog projections from canonical JSON sources.
+
+Python only orchestrates file I/O. Rust owns source validation, lowering, and
+identities. This development command is never called on the hook hot path.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
+from contextlib import contextmanager
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+ARTIFACT = ROOT / "contracts/extensions/native-command-program.v1.json"
+CATALOG_ARTIFACT = ROOT / "contracts/extensions/command-catalog.v1.json"
+DELIVERY_LIMITS = ROOT / "contracts/catalog-delivery/limits.json"
+
+
+def canonical_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n"
+    ).encode()
+
+
+MAX_SOURCE_BYTES = 8 * 1024 * 1024
+
+
+def _compiler_transport():
+    path = Path(__file__).with_name("command_compiler_receipt.py")
+    spec = importlib.util.spec_from_file_location("command_compiler_receipt", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def read_source_bytes(path: Path, *, root: Path | None = None) -> bytes:
+    root = root or ROOT
+    relative = path.relative_to(root)
+    current = root
+    if root.is_symlink():
+        raise ValueError("source root cannot be a symlink")
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"invalid source file: {relative}")
+    if not path.is_file():
+        raise ValueError(f"invalid source file: {relative}")
+    with path.open("rb") as stream:
+        data = stream.read(MAX_SOURCE_BYTES + 1)
+    if not data or len(data) > MAX_SOURCE_BYTES:
+        raise ValueError(f"invalid source file: {relative}")
+    return data
+
+
+def read_object(path: Path, *, root: Path | None = None) -> dict:
+    return source_object(read_source_bytes(path, root=root), path)
+
+
+def source_object(data: bytes, path: Path) -> dict:
+
+    def unique(pairs: list[tuple[str, object]]) -> dict:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate source key: {path.name}/{key}")
+            result[key] = value
+        return result
+
+    value = json.loads(data, object_pairs_hook=unique)
+    if not isinstance(value, dict):
+        raise ValueError(f"source must be an object: {path.name}")
+    return value
+
+
+def _build_inputs():
+    path = Path(__file__).with_name("core_command_build_inputs.py")
+    spec = importlib.util.spec_from_file_location("core_command_build_inputs", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def core_entries() -> list[dict]:
+    return _build_inputs().core_entries(ROOT, read_object)
+
+
+def source_paths(*, core_only: bool = False) -> tuple[list[Path], list[Path]]:
+    if core_only:
+        paths = [ROOT / entry["source"] for entry in core_entries()]
+        return (
+            [path for path in paths if path.parent.name == "command-sources"],
+            [path for path in paths if path.parent.name == "mcp-servers"],
+        )
+    source_paths = [
+        path
+        for path in sorted((ROOT / "contributions/command-sources").glob("*.json"))
+        if path.name != "migration-manifest.json"
+    ]
+    mcp_paths = sorted((ROOT / "contributions/mcp-servers").glob("*.json"))
+    paths = source_paths + mcp_paths
+    if not source_paths or len(paths) > 512:
+        raise ValueError("canonical source inventory exceeds complete-program extension count budget")
+    return source_paths, mcp_paths
+
+
+def build_request(*, core_only: bool = False) -> dict:
+    """Legacy in-process adapter for archive checks; release builds use raw records."""
+    command_paths, mcp_paths = source_paths(core_only=core_only)
+    sources = []
+    for path in command_paths:
+        source = read_object(path)
+        if path.stem != source.get("extension", {}).get("extension_id"):
+            raise ValueError(f"source filename/identity mismatch: {path.name}")
+        sources.append(source)
+    if not sources:
+        raise ValueError("canonical command sources are missing")
+    return {
+        "schema": "guard.command-extension-build.v1",
+        "sources": sources,
+        "mcp_sources": [read_object(path) for path in mcp_paths],
+        "trust": _trust_request_payload(core_only=core_only),
+    }
+
+
+@contextmanager
+def source_stream(*, core_only: bool = False):
+    """Spool bounded raw records without holding or normalizing the whole corpus."""
+    command_paths, mcp_paths = source_paths(core_only=core_only)
+    trust = _trust_request_payload(core_only=True) if core_only else _trust_request_payload()
+    with tempfile.TemporaryFile() as stream:
+
+        def frame(data: bytes) -> None:
+            if not data or len(data) > MAX_SOURCE_BYTES:
+                raise ValueError("source record exceeds native input budget")
+            stream.write(len(data).to_bytes(4, "big"))
+            stream.write(data)
+
+        stream.write(b"HGCS\x01")
+        frame(
+            canonical_bytes(
+                {
+                    "schema": "guard.command-extension-source-stream.v1",
+                    "sources": len(command_paths),
+                    "mcp_sources": len(mcp_paths),
+                    "trust": trust,
+                }
+            )
+        )
+        for index, path in enumerate(command_paths + mcp_paths):
+            data = read_source_bytes(path)
+            # Validate filename binding using these exact bytes, then forward
+            # the raw record for native duplicate/depth/typed validation.
+            if index < len(command_paths):
+                source = source_object(data, path)
+                if path.stem != source.get("extension", {}).get("extension_id"):
+                    raise ValueError(f"source filename/identity mismatch: {path.name}")
+            frame(data)
+        stream.seek(0)
+        yield stream, trust, command_paths + mcp_paths
+
+
+def _trust_request_payload(*, core_only: bool = False) -> dict:
+    """Assemble the trust block from authored per-extension bindings.
+
+    The aggregate is an ignored package projection. Only authored bindings
+    determine the compiled program, catalog, and packaged trust classifications.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
+    if not core_only:
+        return trust_map_from_bindings(ROOT / "contracts" / "extensions" / "trust")
+    return _build_inputs().core_trust(ROOT, read_object)
+
+
+def packaged_trust_map(request: dict) -> dict:
+    """Keep reviewed classes and default unbound canonical contributions off."""
+    trust = request["trust"]
+    classes = {name: set(ids) for name, ids in trust["classes"].items()}
+    known = set().union(*classes.values())
+    ids = {source["extension"]["extension_id"] for source in request["sources"]}
+    ids.update("command.mcp-" + source["id"].removeprefix("mcp.") for source in request["mcp_sources"])
+    classes["external"].update(ids - known)
+    return {**trust, "classes": {name: sorted(ids) for name, ids in classes.items()}}
+
+
+def _implementation_files(directory: Path) -> set[Path]:
+    return _build_inputs()._implementation_files(directory)
+
+
+def implementation_digest() -> str:
+    return _build_inputs().implementation_digest(ROOT)
+
+
+class DeliveryBudgetError(ValueError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+class NativeCompilationError(ValueError):
+    def __init__(self, code: str | None, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+def check_delivery_budgets(*, program: bytes, catalog: bytes) -> None:
+    """Refuse to publish artifacts that the packaged loader would reject."""
+
+    limits = read_object(DELIVERY_LIMITS)
+    if len(program) > limits["max_native_command_program_bytes"]:
+        raise DeliveryBudgetError("program-bytes", "native command program exceeds its delivery budget")
+    if len(catalog) > limits["max_generated_catalog_artifact_bytes"]:
+        raise DeliveryBudgetError("catalog-bytes", "generated catalog artifact exceeds its delivery budget")
+
+
+def compilation_failure(completed: subprocess.CompletedProcess, paths: list[Path]) -> ValueError:
+    """Keep native source diagnostics without assuming a crash produced JSON."""
+    try:
+        failure = json.loads(completed.stdout)
+    except (ValueError, UnicodeDecodeError):
+        failure = None
+    if isinstance(failure, dict) and isinstance(failure.get("code"), str) and failure["code"]:
+        pointer = failure.get("pointer")
+        location = ""
+        if isinstance(pointer, str) and pointer.startswith("/records/"):
+            index_text = pointer.removeprefix("/records/")
+            if len(index_text) <= 3 and index_text.isascii() and index_text.isdecimal():
+                index = int(index_text)
+                if index < len(paths):
+                    location = f" ({paths[index].relative_to(ROOT)})"
+        detail = f"{location}: {failure['code'][:1024]}"
+    else:
+        detail = ": " + completed.stdout[:1024].decode(errors="replace")
+    code = failure.get("code") if isinstance(failure, dict) else None
+    return NativeCompilationError(code, f"native source compilation failed (exit {completed.returncode}){detail}")
+
+
+def _pack_descriptors(compiler: Path | None, *, inventory=None) -> list[dict]:
+    return _build_inputs().pack_descriptors(ROOT, compiler, read_object, inventory=inventory)
+
+
+def main(argv: list[str] | None = None, *, inventory=None) -> int:
+    """Build or strictly check projections bound to current native implementation and authored sources."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="Reject a missing or stale generated artifact.")
+    parser.add_argument(
+        "--projections-only", action="store_true", help="Stage package inputs without rewriting published descriptors."
+    )
+    parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
+    parser.add_argument("--legacy-complete", action="store_true", help="Bounded whole-catalog migration output.")
+    parser.add_argument(
+        "--core-only",
+        action="store_true",
+        help="Stage resident core/default projections without a legacy optional aggregate.",
+    )
+    parser.add_argument(
+        "--descriptor-dir",
+        type=Path,
+        help="Descriptor destination (default: ignored contracts/extensions/build-descriptors).",
+    )
+    parser.add_argument(
+        "--publish-descriptor",
+        action="append",
+        default=[],
+        metavar="ID",
+        help="Also prepare this extension's public JSON record for its contribution PR.",
+    )
+    parser.add_argument(
+        "--check-public-descriptors",
+        action="store_true",
+        help="Read-only check of public descriptor bytes in HEAD before scratch preparation.",
+    )
+    args = parser.parse_args(argv)
+    if args.descriptor_dir and args.publish_descriptor:
+        parser.error("Use --publish-descriptor with the default runtime destination.")
+    command = (
+        [str(args.compiler.resolve(strict=True)), "compile-stream"]
+        if args.compiler
+        else [
+            "cargo",
+            "+1.88.0",
+            "run",
+            "--locked",
+            "--quiet",
+            "--manifest-path",
+            str(ROOT / "rust/Cargo.toml"),
+            "-p",
+            "guard-command",
+            "--bin",
+            "guard-command-source",
+            "--",
+            "compile-stream",
+        ]
+    )
+    # Package staging must not depend on optional inventory fitting the legacy
+    # whole-program limits. Full output remains explicit migration tooling.
+    if args.legacy_complete and (args.core_only or args.projections_only):
+        parser.error("Legacy complete output cannot be combined with core projection selection.")
+    core_only = not args.legacy_complete
+    with source_stream(core_only=True) if core_only else source_stream() as (stream, trust_value, paths):
+        completed, bootstrap = _compiler_transport().compile_stream(
+            command[:-1], stream, root=ROOT, implementation=implementation_digest(), inspect_mode=bool(args.compiler)
+        )
+    if completed.returncode:
+        raise compilation_failure(completed, paths)
+    compiled = json.loads(completed.stdout)
+    if compiled["catalog_projection_kind"] != "complete":
+        raise ValueError("release generation requires a complete catalog")
+    bound_ids = {identity for identities in trust_value["classes"].values() for identity in identities}
+    contribution_ids = {descriptor["id"] for descriptor in compiled["descriptors"]}
+    contribution_ids.update(extension["extension_id"] for extension in compiled["program"]["extensions"])
+    missing_bindings = sorted(contribution_ids - bound_ids)
+    if missing_bindings:
+        raise ValueError("canonical contributions lack authored trust bindings: " + ", ".join(missing_bindings))
+    if compiled["implementation_digest"] != implementation_digest():
+        raise ValueError("source compiler does not match the current native implementation; rebuild it")
+    if not bootstrap and core_only:
+        built = subprocess.run(
+            [*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False
+        )
+        if built.returncode or json.loads(built.stdout) != compiled:
+            raise ValueError("source compiler does not embed the current authored sources; rebuild it before staging")
+        trust = subprocess.run(
+            [*command[:-1], "export-trust"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False
+        )
+        if trust.returncode or json.loads(trust.stdout) != trust_value:
+            raise ValueError(
+                "source compiler trust map does not match the authored bindings; rebuild it before staging"
+            )
+    if core_only and not args.core_only and not args.projections_only:
+        compiled["descriptors"] = _pack_descriptors(args.compiler, inventory=inventory)
+    public_directory = ROOT / "contributions/extensions"
+    descriptors = {descriptor["id"]: descriptor for descriptor in compiled["descriptors"]}
+    if set(args.publish_descriptor) - descriptors.keys():
+        raise ValueError("published descriptor has no canonical source")
+    if args.check_public_descriptors:
+        stale_public = []
+        expected_public = {}
+        for identity, descriptor in descriptors.items():
+            if "/" in identity or "\\" in identity or not identity.startswith("command."):
+                raise ValueError("invalid generated descriptor identity")
+            relative = f"contributions/extensions/{identity}.json"
+            blob = subprocess.run(
+                ["git", "show", f"HEAD:{relative}"],
+                cwd=ROOT,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            if blob.returncode or blob.stdout != canonical_bytes(descriptor):
+                stale_public.append(relative)
+                expected_public[relative] = descriptor
+        # Descriptors are public projections; printing the expected one lets
+        # a contributor without the native toolchain update it from CI.
+        print(
+            json.dumps(
+                {
+                    "expected_public_descriptors": expected_public,
+                    "ok": not stale_public,
+                    "stale_public_descriptors": sorted(stale_public),
+                },
+                sort_keys=True,
+            )
+        )
+        return int(bool(stale_public))
+    program = compiled["program"]
+    catalog = {
+        "schema": "guard.command-catalog.v1",
+        "catalog": compiled["catalog"],
+        "catalog_digest": program["catalog_digest"],
+        "program_digest": program["program_digest"],
+        "source_digest": compiled["source_digest"],
+        "implementation_digest": compiled["implementation_digest"],
+    }
+    trust_path = ROOT / "contracts/extensions/build-trust-class-map.v1.json"
+    outputs = {
+        trust_path: canonical_bytes(trust_value),
+        ARTIFACT: canonical_bytes(program),
+        CATALOG_ARTIFACT: canonical_bytes(catalog),
+    }
+    check_delivery_budgets(program=outputs[ARTIFACT], catalog=outputs[CATALOG_ARTIFACT])
+    package_directory = ROOT / "src/codex_plugin_scanner/guard/contracts/data/extensions"
+    if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
+        raise ValueError("package resource directory cannot traverse a symlink")
+    outputs.update(
+        {package_directory / path.name: content for path, content in tuple(outputs.items()) if path != trust_path}
+    )
+    outputs[package_directory / "trust-class-map.v1.json"] = outputs[trust_path]
+    # A build is not a public contribution publication. Keep the public GitHub
+    # records intact unless a publication helper explicitly selects that path.
+    descriptor_directory = args.descriptor_dir or ROOT / "contracts/extensions/build-descriptors"
+    if not descriptor_directory.is_absolute():
+        descriptor_directory = ROOT / descriptor_directory
+    if any(path.is_symlink() for path in (descriptor_directory, *descriptor_directory.parents) if path != ROOT):
+        raise ValueError("descriptor output directory cannot traverse a symlink")
+    descriptor_directory = descriptor_directory.resolve()
+    descriptor_directory.relative_to(ROOT.resolve())
+    for descriptor in () if args.projections_only else compiled["descriptors"]:
+        identity = descriptor["id"]
+        if "/" in identity or "\\" in identity or not identity.startswith("command."):
+            raise ValueError("invalid generated descriptor identity")
+        outputs[descriptor_directory / f"{identity}.json"] = canonical_bytes(descriptor)
+    for identity in args.publish_descriptor:
+        path = public_directory / f"{identity}.json"
+        if any(parent.is_symlink() for parent in (path.parent, *path.parent.parents) if parent != ROOT):
+            raise ValueError("public descriptor output cannot traverse a symlink")
+        outputs[path] = canonical_bytes(descriptors[identity])
+    expected_descriptors = {path for path in outputs if path.parent == descriptor_directory}
+    unexpected_descriptors = sorted(
+        path
+        for path in descriptor_directory.glob("command.*.json")
+        if not args.projections_only and path not in expected_descriptors
+    )
+    if any(not path.is_file() or path.is_symlink() for path in unexpected_descriptors):
+        raise ValueError("unexpected generated descriptor destination is not a regular file")
+    stale = [
+        str(path.relative_to(ROOT))
+        for path, content in outputs.items()
+        if not path.is_file() or path.read_bytes() != content
+    ]
+    if any(path.is_symlink() for path in outputs):
+        raise ValueError("generated artifact destination cannot be a symlink")
+    if args.check:
+        if stale or unexpected_descriptors:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "stale": [*stale, *(str(path.relative_to(ROOT)) for path in unexpected_descriptors)],
+                        "repair": "Run scripts/build_native_command_program.py.",
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 1
+        if not bootstrap and core_only:
+            embedded = subprocess.run(
+                [*command[:-1], "evaluate-batch"],
+                input=canonical_bytes(
+                    {
+                        "schema": "guard.command-extension-evaluation-batch.v1",
+                        "cases": [{"id": "embedded-identity", "command": "pwd"}],
+                    }
+                ),
+                stdout=subprocess.PIPE,
+                cwd=ROOT,
+                timeout=60,
+                check=False,
+            )
+            if embedded.returncode:
+                raise ValueError("native compiler embedded-program verification failed")
+            identity = json.loads(embedded.stdout)
+            if any(identity.get(key) != program[key] for key in ("program_digest", "catalog_digest")):
+                raise ValueError("native compiler embeds a stale program; rebuild it after generating the artifacts")
+    else:
+        if not args.projections_only:
+            descriptor_directory.mkdir(parents=True, exist_ok=True)
+        if args.publish_descriptor:
+            public_directory.mkdir(parents=True, exist_ok=True)
+        for path in unexpected_descriptors:
+            if path.parent == public_directory:
+                raise ValueError(
+                    "Public contribution records require explicit retirement; generation cannot delete them"
+                )
+            path.unlink()
+        for path, content in outputs.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.is_file() or path.read_bytes() != content:
+                path.write_bytes(content)
+    print(
+        json.dumps(
+            {
+                "artifact": str(ARTIFACT.relative_to(ROOT)),
+                "program_digest": program["program_digest"],
+                "catalog_digest": program["catalog_digest"],
+                "bytes": len(outputs[ARTIFACT]),
+                "generated_files": len(outputs),
+                "checked": bool(args.check),
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
+        raise SystemExit(str(error)) from error

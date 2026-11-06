@@ -1,0 +1,746 @@
+"""Daemon contract tests for Codex browser approval auto-resume."""
+
+from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard import codex_resume as codex_resume_module
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.live_process_identity import current_process_identity
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_app_server_fake import codex_app_server
+
+
+def _request(request_id: str) -> GuardApprovalRequest:
+    return GuardApprovalRequest(
+        request_id=request_id,
+        harness="codex",
+        artifact_id=f"codex:project:{request_id}",
+        artifact_name=request_id,
+        artifact_hash=f"hash-{request_id}",
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("args",),
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        workspace="/workspace",
+        launch_target="cat ~/.npmrc",
+        review_command=f"hol-guard approvals approve {request_id}",
+        approval_url=f"http://127.0.0.1/pending/{request_id}",
+    )
+
+
+def _post_json(
+    port: int, token: str, path: str, payload: dict[str, object], *, timeout: float = 5
+) -> dict[str, object]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Guard-Token": token},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _post_json_without_token(port: int, path: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
+def _get_json(port: int, token: str, path: str) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        headers={"X-Guard-Token": token},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
+def _get_json_without_token(port: int, path: str) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
+def _seed_codex_operation(
+    store: GuardStore,
+    *,
+    request_id: str,
+    socket_path: Path | None,
+    thread_id: str = "thread-1",
+    workspace: str = "/workspace",
+    codex_home: str | None = None,
+    command_text: str | None = None,
+    hook_event_name: str | None = None,
+    waits_for_browser_approval: bool | None = None,
+    browser_wait_deadline_at: str | None = None,
+    status: str = "waiting_on_approval",
+) -> None:
+    session = store.upsert_guard_session(
+        session_id=f"session-{request_id}",
+        harness="codex",
+        surface="harness-adapter",
+        status=status,
+        client_name="codex-hook",
+        client_title="Codex hook",
+        client_version="1.0.0",
+        workspace=workspace,
+        capabilities=["approval-resolution"],
+        now="2026-05-19T10:00:00+00:00",
+    )
+    metadata: dict[str, object] = {
+        "codex_thread_id": thread_id,
+        "codex_turn_id": "turn-1",
+        "workspace": workspace,
+    }
+    if socket_path is not None:
+        metadata["codex_app_server_socket"] = str(socket_path)
+    if codex_home is not None:
+        metadata["codex_home"] = codex_home
+    if command_text is not None:
+        metadata["command_text"] = command_text
+    if hook_event_name is not None:
+        metadata["hook_event_name"] = hook_event_name
+    if waits_for_browser_approval is not None:
+        metadata["codex_hook_waits_for_browser_approval"] = waits_for_browser_approval
+        if waits_for_browser_approval:
+            process_identity = current_process_identity()
+            assert process_identity is not None
+            metadata["codex_browser_wait_process"] = process_identity
+    if browser_wait_deadline_at is not None:
+        metadata["codex_browser_wait_deadline_at"] = browser_wait_deadline_at
+    store.upsert_guard_operation(
+        operation_id=f"operation-{request_id}",
+        session_id=str(session["session_id"]),
+        harness="codex",
+        operation_type="tool_call",
+        status=status,
+        approval_request_ids=[request_id],
+        resume_token=f"resume-{request_id}",
+        metadata=metadata,
+        now="2026-05-19T10:00:00+00:00",
+    )
+
+
+def test_codex_block_does_not_resume_codex_thread(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-block"), "2026-05-19T10:00:00+00:00")
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-block",
+            socket_path=server.socket_path,
+            status="approval_wait_timeout",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            payload = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-block/block",
+                {"scope": "artifact", "reason": "blocked"},
+                timeout=15,
+            )
+        finally:
+            daemon.stop()
+
+    assert payload["codexResume"]["status"] == "skipped"
+    assert payload["codexResume"]["reason"] == "blocked_not_resumed"
+    assert payload["codexResume"]["supported"] is False
+    assert server.messages == []
+
+
+def test_codex_block_with_missing_socket_does_not_start_headless_resume(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-block-headless"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-block-headless",
+        socket_path=None,
+        thread_id="blocked-session-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        command_text="cat ~/.npmrc",
+        status="approval_wait_timeout",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        blocked = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-block-headless/block",
+            {"scope": "artifact", "reason": "blocked"},
+        )
+        retried = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-block-headless/resume",
+            {},
+        )
+    finally:
+        daemon.stop()
+
+    assert blocked["codexResume"]["status"] == "skipped"
+    assert blocked["codexResume"]["reason"] == "blocked_not_resumed"
+    assert retried["status"] == "skipped"
+    assert retried["reason"] == "blocked_not_resumed"
+
+
+def test_codex_approve_defers_headless_resume_while_live_hook_waits(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-live"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    _seed_codex_operation(
+        store,
+        request_id="req-live",
+        socket_path=missing_socket,
+        thread_id="live-session-1",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codexResume"]["status"] == "pending"
+    assert payload["codexResume"]["reason"] == "live_hook_waiting"
+    assert "original Codex action continue" in payload["codexResume"]["message"]
+
+
+def test_codex_approve_stale_live_hook_wait_requires_app_server_socket(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-stale-live"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-stale-live",
+        socket_path=None,
+        thread_id="stale-live-session-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        command_text="npm install minimist@1.2.8",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2000-01-01T00:00:00+00:00",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-stale-live/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+    assert "original Codex chat" in payload["codexResume"]["message"]
+
+
+def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-live-block"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    _seed_codex_operation(
+        store,
+        request_id="req-live-block",
+        socket_path=missing_socket,
+        thread_id="live-block-session-1",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live-block/block",
+            {"scope": "artifact", "reason": "blocked"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codexResume"]["status"] == "skipped"
+    assert payload["codexResume"]["reason"] == "blocked_not_resumed"
+    assert payload["codexResume"]["supported"] is False
+
+
+def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-live-retry"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    _seed_codex_operation(
+        store,
+        request_id="req-live-retry",
+        socket_path=missing_socket,
+        thread_id="live-session-retry-1",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        approved = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live-retry/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+        retried = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live-retry/resume",
+            {},
+        )
+    finally:
+        daemon.stop()
+
+    assert approved["codexResume"]["status"] == "pending"
+    assert retried["status"] == "failed"
+    assert retried["reason"] == "socket_not_available"
+    assert retried["strategy"] == "codex-app-server-thread"
+    assert "original Codex chat" in retried["message"]
+
+
+def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-status"), "2026-05-19T10:00:00+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-status/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+        status_code, payload = _get_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-status/resume",
+        )
+    finally:
+        daemon.stop()
+
+    assert status_code == 200
+    assert payload["request_id"] == "req-status"
+    assert payload["status"] == "skipped"
+    assert payload["strategy"] == "manual-only"
+
+
+def test_request_resume_status_endpoint_requires_guard_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-auth"), "2026-05-19T10:00:00+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        status, payload = _get_json_without_token(daemon.port, "/v1/requests/req-auth/resume")
+    finally:
+        daemon.stop()
+
+    assert status == 401
+    assert payload["error"] == "unauthorized"
+
+
+def test_request_resume_retry_endpoint_requires_guard_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-auth-post"), "2026-05-19T10:00:00+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        status, payload = _post_json_without_token(
+            daemon.port,
+            "/v1/requests/req-auth-post/resume",
+            {},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 401
+    assert payload["error"] == "unauthorized"
+
+
+def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_present(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-allow-command"), "2026-05-19T10:00:00+00:00")
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-allow-command",
+            socket_path=server.socket_path,
+            command_text="python - <<'PY'\nprint('guard')\nPY",
+            status="approval_wait_timeout",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            payload = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-allow-command/approve",
+                {"scope": "artifact", "reason": "reviewed"},
+            )
+        finally:
+            daemon.stop()
+
+    assert payload["codexResume"]["status"] == "sent"
+    [continuation] = server.continuations()
+    assert continuation["params"]["responsesapiClientMetadata"] == {
+        "hol_guard_request_id": "req-allow-command",
+        "hol_guard_resolution": "allow",
+    }
+    [prompt] = continuation["params"]["input"]
+    assert prompt["text"] == (
+        "HOL Guard approved request `req-allow-command` for this exact command:\n"
+        "python - <<'PY'\nprint('guard')\nPY\n"
+        "Retry that exact command now using the existing saved approval."
+    )
+
+
+def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_missing(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-retry"), "2026-05-19T10:00:00+00:00")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_codex_operation(
+        store,
+        request_id="req-retry",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home="/tmp/codex-home",
+        status="approval_wait_timeout",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        initial = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-retry/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+        assert initial["codexResume"]["reason"] == "socket_not_available"
+
+        retried = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-retry/resume",
+            {},
+        )
+        status_code, current = _get_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-retry/resume",
+        )
+    finally:
+        daemon.stop()
+
+    assert retried["status"] == "failed"
+    assert retried["strategy"] == "codex-app-server-thread"
+    assert retried["attempt_count"] == 2
+    assert status_code == 200
+    assert current["status"] == "failed"
+
+
+def test_request_resume_retry_is_idempotent_after_success(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-idempotent"), "2026-05-19T10:00:00+00:00")
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-idempotent",
+            socket_path=server.socket_path,
+            status="approval_wait_timeout",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            approved = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-idempotent/approve",
+                {"scope": "artifact", "reason": "reviewed"},
+            )
+            retried = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-idempotent/resume",
+                {},
+            )
+        finally:
+            daemon.stop()
+
+    assert approved["codexResume"]["status"] == "sent"
+    assert retried["status"] == "already_sent"
+    assert len(server.continuations()) == 1
+
+
+def test_codex_approve_fails_without_app_server_socket_and_never_starts_exec_resume(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-exec"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    _seed_codex_operation(
+        store,
+        request_id="req-exec",
+        socket_path=missing_socket,
+        thread_id="session-exec-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        status="approval_wait_timeout",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-exec/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+    assert "original Codex chat" in payload["codexResume"]["message"]
+
+
+def test_codex_approve_returns_the_resident_resume_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _fake_resume_call(store: object, **kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {
+            "resume": {
+                "request_id": kwargs["request_id"],
+                "status": "sent",
+                "reason": "turn_start_sent",
+                "thread_id": "session-default-socket-1",
+                "strategy": "codex-app-server-thread",
+                "supported": True,
+            }
+        }
+
+    monkeypatch.setattr(codex_resume_module, "_resume_call", _fake_resume_call)
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-default-socket"), "2026-05-19T10:00:00+00:00")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_codex_operation(
+        store,
+        request_id="req-default-socket",
+        socket_path=None,
+        thread_id="session-default-socket-1",
+        workspace=str(workspace),
+        status="approval_wait_timeout",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-default-socket/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["codexResume"]["status"] == "sent"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+    assert [call["call"] for call in calls] == ["retry"]
+
+
+def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-oserror"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_codex_operation(
+        store,
+        request_id="req-oserror",
+        socket_path=missing_socket,
+        thread_id="session-oserror-1",
+        workspace=str(workspace),
+        status="approval_wait_timeout",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-oserror/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codexResume"]["status"] == "failed"
+    assert payload["codexResume"]["reason"] == "socket_not_available"
+    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
+
+
+def test_request_resume_retry_reports_a_missing_resident_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.codex_resume import ResumeUnavailableError
+    from codex_plugin_scanner.guard.daemon.server_control_policy import _ControlPolicyRoutes
+
+    written: dict[str, object] = {}
+
+    def _write_json(payload: dict[str, object], *, status: int = 200) -> None:
+        written["payload"] = payload
+        written["status"] = status
+
+    routes = _ControlPolicyRoutes.__new__(_ControlPolicyRoutes)
+    routes._write_json = _write_json  # type: ignore[method-assign]
+    routes.server = type("_Server", (), {"store": object()})()
+
+    def _retry(*args: object, **kwargs: object) -> dict[str, object]:
+        raise ResumeUnavailableError()
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server_control_policy.retry_request_resume",
+        _retry,
+    )
+    routes._handle_request_resume_retry("req-unavailable")
+
+    assert written == {"payload": {"error": "resume_unavailable"}, "status": 503}
+
+
+def test_request_resume_read_reports_a_missing_resident_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.daemon.server_control_policy import _ControlPolicyRoutes
+
+    written: dict[str, object] = {}
+
+    def _write_json(payload: dict[str, object], *, status: int = 200) -> None:
+        written["payload"] = payload
+        written["status"] = status
+
+    store = type(
+        "_Store",
+        (),
+        {
+            "guard_home": tmp_path,
+            "path": tmp_path / "guard.db",
+            "get_approval_request": lambda self, request_id: {"request_id": request_id},
+        },
+    )()
+    routes = _ControlPolicyRoutes.__new__(_ControlPolicyRoutes)
+    routes._write_json = _write_json  # type: ignore[method-assign]
+    routes.server = type("_Server", (), {"store": store})()
+    monkeypatch.setattr("codex_plugin_scanner.guard.codex_resume.ensure_resident_prerequisite", lambda home: False)
+
+    routes._handle_request_resume_read("req-unavailable")
+
+    assert written == {"payload": {"error": "resume_unavailable"}, "status": 503}

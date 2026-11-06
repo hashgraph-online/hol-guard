@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.run",
+  "version": "1.0.0",
+  "name": "run",
+  "description": "Reviews and gates task execution tools for the run polyglot task runner and MCP server.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.nihilok",
+    "displayName": "nihilok",
+    "url": "https://github.com/nihilok/run"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#111827" },
+  "homepage": "https://runtool.dev",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "run"
+  },
+  "riskClasses": ["external-command-execution"],
+  "tools": [
+    { "name": "run_docs", "state": "inherit" },
+    { "name": "get_cwd", "state": "inherit" },
+    { "name": "set_cwd", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/nihilok/run",
+    "https://runtool.dev/docs"
+  ],
+  "saferAlternatives": [
+    "Keep user-defined tasks and directory mutations on Review unless unattended execution is explicitly intended."
+  ]
+}

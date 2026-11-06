@@ -1,0 +1,136 @@
+"""Focused remote MCP endpoint identity and catalog safety coverage."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import normalized_remote_mcp_url
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads, remote_mcp_endpoint_identity
+from tests.runtime_wrapper_support import _copilot_runtime_server_identity, _CopilotMcpRuntimeServer
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_recorded_expectations import instapods_matches
+
+
+def _remote_payload(url: str, *, mcp_id: str, server_name: str) -> dict[str, object]:
+    return {
+        "schemaVersion": "guard.mcp-server-contribution.v1",
+        "id": mcp_id,
+        "version": "1.0.0",
+        "name": "Example Remote MCP",
+        "description": "Remote example",
+        "trustClass": "external",
+        "activation": "opt-in",
+        "publisher": {"id": "example.test", "displayName": "Example"},
+        "icon": {"kind": "none"},
+        "launch": {
+            "kind": "remote-http",
+            "url": url,
+            "serverNames": [server_name],
+        },
+        "riskClasses": ["remote"],
+        "tools": [{"name": "write_data", "state": "review"}],
+        "saferAlternatives": ["Keep the tool on normal review."],
+    }
+
+
+def test_remote_url_preserves_trailing_slash_route_identity() -> None:
+    without_slash = "https://example.test/mcp"
+    with_slash = "https://example.test/mcp/"
+
+    assert normalized_remote_mcp_url(without_slash) == without_slash
+    assert normalized_remote_mcp_url(with_slash) == with_slash
+    assert remote_mcp_endpoint_identity(without_slash) == without_slash
+    assert remote_mcp_endpoint_identity(with_slash) == with_slash
+
+
+def test_remote_path_dot_segments_have_one_endpoint_identity() -> None:
+    expected = "https://example.test/api/mcp"
+    variants = (
+        "https://example.test/api/./mcp",
+        "https://example.test/api/%2e/mcp",
+        "https://example.test/api/route/../mcp",
+        "https://example.test/api/route/%2E%2E/mcp",
+    )
+
+    for variant in variants:
+        assert normalized_remote_mcp_url(variant) == expected
+        assert remote_mcp_endpoint_identity(variant) == expected
+
+
+def test_remote_path_percent_escapes_have_one_endpoint_identity() -> None:
+    lower = "https://example.test/api/%7euser/a%2fb"
+    upper = "https://example.test/api/~user/a%2Fb"
+    expected = "https://example.test/api/~user/a%2Fb"
+
+    assert normalized_remote_mcp_url(lower) == expected
+    assert normalized_remote_mcp_url(upper) == expected
+    assert remote_mcp_endpoint_identity(lower) == expected
+    assert remote_mcp_endpoint_identity(upper) == expected
+
+
+def test_remote_route_variants_are_distinct_contribution_endpoints(tmp_path: Path) -> None:
+    plain = _remote_payload(
+        "https://example.test/mcp",
+        mcp_id="mcp.route-plain",
+        server_name="route-plain",
+    )
+    slash = _remote_payload(
+        "https://example.test/mcp/",
+        mcp_id="mcp.route-slash",
+        server_name="route-slash",
+    )
+    (tmp_path / "mcp.route-plain.json").write_text(json.dumps(plain), encoding="utf-8")
+    (tmp_path / "mcp.route-slash.json").write_text(json.dumps(slash), encoding="utf-8")
+
+    payloads = load_mcp_contribution_payloads(tmp_path)
+    assert {payload["id"] for payload in payloads} == {"mcp.route-plain", "mcp.route-slash"}
+
+
+def test_equivalent_percent_encoded_routes_are_duplicate_endpoints(tmp_path: Path) -> None:
+    lower = _remote_payload(
+        "https://example.test/api/%7euser/a%2fb",
+        mcp_id="mcp.route-lower",
+        server_name="route-lower",
+    )
+    upper = _remote_payload(
+        "https://example.test/api/~user/a%2Fb",
+        mcp_id="mcp.route-upper",
+        server_name="route-upper",
+    )
+    (tmp_path / "mcp.route-lower.json").write_text(json.dumps(lower), encoding="utf-8")
+    (tmp_path / "mcp.route-upper.json").write_text(json.dumps(upper), encoding="utf-8")
+
+    try:
+        load_mcp_contribution_payloads(tmp_path)
+    except ValueError as error:
+        assert "duplicate MCP remote endpoint" in str(error)
+    else:
+        raise AssertionError("equivalent percent-encoded MCP routes were accepted as distinct endpoints")
+
+
+def test_copilot_long_query_credentials_keep_hosted_safeguards(tmp_path: Path) -> None:
+    secret = "s" * 320
+    server = _CopilotMcpRuntimeServer(
+        server_name="instapods",
+        source_scope="project",
+        config_path=str(tmp_path / ".mcp.json"),
+        server_config={"url": f"https://app.instapods.com/api/mcp?token={secret}"},
+    )
+
+    identity, fingerprint, transport = _copilot_runtime_server_identity(server, launch_cwd=tmp_path)
+    artifact = build_tool_call_artifact(
+        harness="copilot",
+        server_name="instapods",
+        tool_name="delete_pod",
+        source_scope="project",
+        config_path=server.config_path,
+        transport=transport,
+        server_fingerprint=fingerprint,
+        server_identity=identity,
+    )
+    assert artifact.metadata["mcp_server_identity"]["command"] == "https://app.instapods.com/api/mcp"
+    assert secret not in str(artifact.to_dict())
+    assert instapods_matches(artifact)

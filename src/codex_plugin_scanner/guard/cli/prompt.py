@@ -1,0 +1,445 @@
+"""Interactive Guard approval prompts."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+from ..approval_gate import ApprovalGateError, ApprovalGateGrant, public_config, require_approval_decision
+from ..models import GuardArtifact, PolicyDecision
+from ..native_artifact_content_hash import native_artifact_content_hashes
+from ..store import GuardStore
+from .approval_gate_prompt import prompt_for_approval_gate
+
+PromptChoice = str
+
+
+@dataclass(frozen=True, slots=True)
+class PromptArtifact:
+    """Resolved artifact context for an interactive Guard decision."""
+
+    harness: str
+    artifact_id: str
+    artifact_name: str
+    artifact_hash: str
+    policy_action: str
+    changed_fields: tuple[str, ...]
+    provenance_summary: str
+    recommendation: str
+    publisher: str | None
+    config_path: str | None
+    source_scope: str | None
+    artifact_type: str | None
+    command: str | None
+    transport: str | None
+    metadata: dict[str, object]
+    current_snapshot: dict[str, object] | None
+    removed: bool = False
+    snapshot_hash: str | None = None
+
+
+def resolve_interactive_decisions(
+    store: GuardStore,
+    evaluation: dict[str, object],
+    prompt_artifacts: list[PromptArtifact],
+    workspace: str | None,
+    now: str,
+    console: Console | None = None,
+    input_func: Callable[[str], str] | None = None,
+) -> dict[str, object]:
+    """Prompt for changed artifacts and return exact, unpersisted launch intents.
+
+    Persistent policy choices are stored against the reviewed context token,
+    but receipts and snapshots are left to ``guard_run`` after it redetects
+    the launch state and recomputes the authoritative action.
+    """
+
+    review_items = [
+        artifact
+        for artifact in prompt_artifacts
+        if artifact.policy_action in {"warn", "review", "require-reapproval", "block"}
+    ]
+    if not review_items:
+        evaluation["blocked"] = False
+        return evaluation
+
+    terminal = console or Console()
+    ask = input_func or terminal.input
+    blocked = False
+    decisions_by_artifact = {
+        str(item.get("artifact_id")): item for item in _coerce_artifact_results(evaluation.get("artifacts"))
+    }
+
+    for artifact in review_items:
+        try:
+            choice = _prompt_for_artifact(artifact, terminal, ask)
+        except (EOFError, KeyboardInterrupt):
+            evaluation["review_hint"] = (
+                "Guard needs an interactive terminal to approve changes. "
+                f"Run `hol-guard diff {artifact.harness}` and allow or deny the artifact before launch."
+            )
+            evaluation["blocked"] = True
+            return evaluation
+        if choice == "allow_once":
+            try:
+                _interactive_gate_grant(
+                    store,
+                    action="allow",
+                    scope="artifact",
+                    now=now,
+                )
+            except (EOFError, KeyboardInterrupt):
+                evaluation["review_hint"] = (
+                    "Guard needs an interactive terminal to approve changes. "
+                    f"Run `hol-guard diff {artifact.harness}` and allow or deny the artifact before launch."
+                )
+                evaluation["blocked"] = True
+                return evaluation
+            _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", "allow-once")
+            continue
+        if choice == "allow_artifact":
+            approval_gate_grant = _interactive_gate_grant(
+                store,
+                action="allow",
+                scope="artifact",
+                now=now,
+            )
+            store.upsert_policy(
+                PolicyDecision(
+                    harness=artifact.harness,
+                    scope="artifact",
+                    artifact_id=artifact.artifact_id,
+                    artifact_hash=artifact.artifact_hash,
+                    action="allow",
+                    reason="interactive-allow-artifact",
+                ),
+                now,
+                approval_gate_grant=approval_gate_grant,
+            )
+            _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", "allow-artifact")
+            continue
+        if choice == "allow_publisher":
+            if artifact.publisher is None:
+                approval_gate_grant = _interactive_gate_grant(
+                    store,
+                    action="allow",
+                    scope="harness",
+                    now=now,
+                )
+                store.upsert_policy(
+                    PolicyDecision(
+                        harness=artifact.harness,
+                        scope="harness",
+                        artifact_id=artifact.artifact_id,
+                        artifact_hash=artifact.artifact_hash,
+                        action="allow",
+                        reason="interactive-allow-harness",
+                    ),
+                    now,
+                    approval_gate_grant=approval_gate_grant,
+                )
+                decision_scope = "allow-harness"
+            else:
+                approval_gate_grant = _interactive_gate_grant(
+                    store,
+                    action="allow",
+                    scope="publisher",
+                    now=now,
+                )
+                store.upsert_policy(
+                    PolicyDecision(
+                        harness=artifact.harness,
+                        scope="publisher",
+                        artifact_id=artifact.artifact_id,
+                        artifact_hash=artifact.artifact_hash,
+                        publisher=artifact.publisher,
+                        action="allow",
+                        reason="interactive-allow-publisher",
+                    ),
+                    now,
+                    approval_gate_grant=approval_gate_grant,
+                )
+                decision_scope = "allow-publisher"
+            _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", decision_scope)
+            continue
+
+        approval_gate_grant = _interactive_gate_grant(
+            store,
+            action="block",
+            scope="artifact",
+            now=now,
+        )
+        store.upsert_policy(
+            PolicyDecision(
+                harness=artifact.harness,
+                scope="artifact",
+                artifact_id=artifact.artifact_id,
+                action="block",
+                reason="interactive-block",
+            ),
+            now,
+            approval_gate_grant=approval_gate_grant,
+        )
+        _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "block", "block")
+        blocked = True
+
+    evaluation["artifacts"] = list(decisions_by_artifact.values())
+    evaluation["blocked"] = blocked
+    return evaluation
+
+
+def _interactive_gate_grant(
+    store: GuardStore,
+    *,
+    action: str,
+    scope: str,
+    now: str,
+) -> ApprovalGateGrant | None:
+    gate = public_config(store.guard_home)
+    gate_input = (
+        prompt_for_approval_gate(store.guard_home, strict=scope == "global" or gate.strict_all_decisions)
+        if gate.enabled and (action == "allow" or gate.strict_all_decisions)
+        else None
+    )
+    try:
+        return require_approval_decision(
+            store.guard_home,
+            action=action,
+            scope=scope,
+            approval_gate_input=gate_input,
+            now=now,
+        )
+    except ApprovalGateError as error:
+        raise EOFError(str(error)) from error
+
+
+def _prompt_for_artifact(
+    artifact: PromptArtifact,
+    console: Console,
+    ask: Callable[[str], str],
+) -> PromptChoice:
+    while True:
+        console.print(_build_prompt_panel(artifact))
+        prompt = (
+            "[bold cyan]Choose[/bold cyan] "
+            "[[green]1[/green]/[green]2[/green]/[green]3[/green]/[red]4[/red]/[yellow]5[/yellow]]: "
+        )
+        choice = ask(prompt).strip()
+        normalized = choice.lower()
+        if normalized in {"1", "allow-once", "allow_once"}:
+            return "allow_once"
+        if normalized in {"2", "always-artifact", "allow-artifact", "allow_artifact"}:
+            return "allow_artifact"
+        if normalized in {"3", "always-publisher", "allow-publisher", "allow_publisher"}:
+            return "allow_publisher"
+        if normalized in {"4", "block"}:
+            return "block"
+        if normalized in {"5", "details", "show-details", "show_details"}:
+            console.print(_build_detail_panel(artifact))
+            continue
+        console.print("[yellow]Enter 1, 2, 3, 4, or 5.[/yellow]")
+
+
+def _build_prompt_panel(artifact: PromptArtifact) -> Panel:
+    table = Table.grid(padding=(0, 1))
+    table.add_row(
+        "Artifact",
+        Text.assemble(
+            (_safe_prompt_value(artifact.artifact_name), "bold"),
+            f" ({_safe_prompt_value(artifact.artifact_id)})",
+        ),
+    )
+    table.add_row("Harness", _safe_prompt_value(artifact.harness))
+    table.add_row("Changed", ", ".join(_safe_prompt_value(field) for field in artifact.changed_fields) or "none")
+    table.add_row("Recommendation", _safe_prompt_value(artifact.recommendation))
+    table.add_row("Provenance", _safe_prompt_value(artifact.provenance_summary))
+    capabilities = _capabilities_summary(artifact)
+    table.add_row("Capabilities", capabilities)
+    publisher_label = _safe_prompt_value(artifact.publisher or artifact.harness)
+    menu = [
+        Text.assemble(("1", "green"), " allow once"),
+        Text.assemble(("2", "green"), " always allow this artifact"),
+        Text.assemble(("3", "green"), f" always allow {publisher_label}"),
+        Text.assemble(("4", "red"), " block"),
+        Text.assemble(("5", "yellow"), " show details"),
+    ]
+    content = Group(table, Text(""), *menu)
+    return Panel(content, title="Guard review", border_style="yellow")
+
+
+def _build_detail_panel(artifact: PromptArtifact) -> Panel:
+    table = Table.grid(padding=(0, 1))
+    table.add_row("Artifact type", _safe_prompt_value(artifact.artifact_type or "unknown"))
+    table.add_row("Source", _safe_prompt_value(artifact.source_scope or "unknown"))
+    table.add_row("Config", _safe_prompt_value(artifact.config_path or "unknown"))
+    table.add_row("Transport", _safe_prompt_value(artifact.transport or "unknown"))
+    table.add_row("Command", _safe_prompt_value(artifact.command or "n/a"))
+    table.add_row("Hash", _safe_prompt_value(artifact.artifact_hash))
+    if artifact.publisher is not None:
+        table.add_row("Publisher", _safe_prompt_value(artifact.publisher))
+    env_keys = artifact.metadata.get("env_keys")
+    if isinstance(env_keys, list) and env_keys:
+        table.add_row("Env keys", ", ".join(_safe_prompt_value(str(item)) for item in env_keys))
+    return Panel(table, title="Guard details", border_style="blue")
+
+
+def _capabilities_summary(artifact: PromptArtifact) -> str:
+    parts = []
+    if artifact.artifact_type is not None:
+        parts.append(_safe_prompt_value(artifact.artifact_type.replace("_", " ")))
+    if artifact.transport is not None:
+        parts.append(_safe_prompt_value(artifact.transport))
+    if artifact.command is not None:
+        parts.append(_safe_prompt_value(artifact.command))
+    return " • ".join(parts) if parts else "local harness artifact"
+
+
+def _safe_prompt_value(value: str) -> str:
+    return "".join(character if character.isprintable() else "?" for character in value)
+
+
+def _set_decision_payload(
+    decision_map: dict[str, dict[str, object]],
+    artifact_id: str,
+    policy_action: str,
+    user_override: str,
+) -> None:
+    item = decision_map.get(artifact_id)
+    if item is None:
+        return
+    item["policy_action"] = policy_action
+    item["user_override"] = user_override
+
+
+def build_prompt_artifacts(
+    harness: str,
+    artifacts: list[GuardArtifact],
+    evaluation_artifacts: list[dict[str, object]],
+) -> list[PromptArtifact]:
+    """Combine detected artifacts with evaluation results for prompting."""
+
+    artifacts_by_id = {artifact.artifact_id: artifact for artifact in artifacts}
+    content_hashes = _content_hash_fallbacks(artifacts_by_id, evaluation_artifacts)
+    prompt_artifacts: list[PromptArtifact] = []
+    for item in evaluation_artifacts:
+        artifact_id = str(item.get("artifact_id"))
+        artifact = artifacts_by_id.get(artifact_id)
+        approval_context_hash = item.get("approval_context_hash")
+        exact_approval_hash = (
+            approval_context_hash if isinstance(approval_context_hash, str) and approval_context_hash.strip() else None
+        )
+        raw_content_hash = item.get("artifact_hash")
+        content_hash = raw_content_hash if isinstance(raw_content_hash, str) and raw_content_hash else None
+        raw_changed_fields = item.get("changed_fields")
+        changed_fields = (
+            tuple(str(field) for field in raw_changed_fields if isinstance(field, str))
+            if isinstance(raw_changed_fields, list)
+            else ()
+        )
+        if artifact is None:
+            prompt_artifacts.append(
+                PromptArtifact(
+                    harness=harness,
+                    artifact_id=artifact_id,
+                    artifact_name=str(item.get("artifact_name") or artifact_id),
+                    artifact_hash=exact_approval_hash or str(item.get("artifact_hash") or "removed"),
+                    policy_action=str(item.get("policy_action") or "review"),
+                    changed_fields=changed_fields,
+                    provenance_summary=f"artifact removed from {harness}",
+                    recommendation=str(item.get("policy_action") or "review"),
+                    publisher=None,
+                    config_path=None,
+                    source_scope=None,
+                    artifact_type=None,
+                    command=None,
+                    transport=None,
+                    metadata={},
+                    current_snapshot=None,
+                    removed=bool(item.get("removed")),
+                    snapshot_hash=content_hash,
+                )
+            )
+            continue
+        prompt_artifacts.append(
+            PromptArtifact(
+                harness=harness,
+                artifact_id=artifact.artifact_id,
+                artifact_name=artifact.name,
+                artifact_hash=exact_approval_hash or content_hashes[artifact.artifact_id],
+                policy_action=str(item.get("policy_action") or "review"),
+                changed_fields=changed_fields,
+                provenance_summary=f"{artifact.source_scope} artifact defined at {artifact.config_path}",
+                recommendation=str(item.get("policy_action") or "review"),
+                publisher=artifact.publisher,
+                config_path=artifact.config_path,
+                source_scope=artifact.source_scope,
+                artifact_type=artifact.artifact_type,
+                command=artifact.command,
+                transport=artifact.transport,
+                metadata=dict(artifact.metadata),
+                current_snapshot=_prompt_artifact_snapshot(artifact),
+                removed=False,
+                snapshot_hash=content_hash or content_hashes[artifact.artifact_id],
+            )
+        )
+    return prompt_artifacts
+
+
+def _content_hash_fallbacks(
+    artifacts_by_id: dict[str, GuardArtifact],
+    evaluation_artifacts: list[dict[str, object]],
+) -> dict[str, str]:
+    """Hash only the artifacts whose evaluation row is missing a hash.
+
+    Each hash is an approval key the resident spells, and an evaluation already
+    carries both hashes for nearly every row, so the fallback below rarely has
+    anything to fall back to. Asking for the ones that are missing keeps the
+    resident off the path of a prompt that needs none of them, and keeps a
+    prompt that needs one from crossing to the resident once per row.
+    """
+
+    pending: dict[str, GuardArtifact] = {}
+    for item in evaluation_artifacts:
+        artifact = artifacts_by_id.get(str(item.get("artifact_id")))
+        if artifact is None or artifact.artifact_id in pending:
+            continue
+        if _text(item.get("approval_context_hash")) and _text(item.get("artifact_hash")):
+            continue
+        pending[artifact.artifact_id] = artifact
+    if not pending:
+        return {}
+    wanted = list(pending.values())
+    return dict(zip(pending, native_artifact_content_hashes(wanted), strict=True))
+
+
+def _text(value: object) -> str:
+    """The value as the non-blank string it has to be to stand in for a hash."""
+
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _prompt_artifact_snapshot(artifact: GuardArtifact) -> dict[str, object]:
+    """Mirror the consumer snapshot shape without persisting raw env values."""
+
+    snapshot = artifact.to_dict()
+    metadata = snapshot.get("metadata")
+    snapshot["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
+    return snapshot
+
+
+def _coerce_artifact_results(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+__all__ = [
+    "PromptArtifact",
+    "build_prompt_artifacts",
+    "resolve_interactive_decisions",
+]

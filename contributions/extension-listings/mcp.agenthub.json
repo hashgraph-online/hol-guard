@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.agenthub",
+  "tagline": "Review for an MCP gateway that runs other coding agents: task start, apply, discard and code sent to agent providers.",
+  "summary": "AgentHub is one MCP gateway from Claude Code or any MCP client to local coding agents such as Codex, Claude Code, Antigravity, Aider and Goose. This opt-in coverage reviews the tools that run an agent or change its work: ask, start_task, send_message, review, compare, apply_task, cancel_task and discard_task, plus any tool it does not list. Read-only task and session tools (list_agents, get_task, wait_task, get_task_logs, list_tasks, get_task_diff, list_sessions, search_sessions, get_transcript, list_models) follow normal Guard policy.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed AgentHub MCP tools and the surrounding Guard policy.",
+    "Matching applies to the agenthub-gateway package launched through uvx; other launchers fall back to normal Guard policy.",
+    "Permission modes, trusted workspaces and worktree isolation are enforced by AgentHub, not by Guard.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://github.com/premanand8800/agenthub-mcp",
+  "tags": ["mcp", "agents", "delegation", "worktree"],
+  "contributors": [
+    {"githubId": "166927084", "githubLogin": "premanand8800", "roles": ["author"]}
+  ],
+  "originalContributions": [
+    {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3455"}
+  ],
+  "upstream": {"name": "AgentHub", "url": "https://github.com/premanand8800/agenthub-mcp"},
+  "maintainerGithubIds": ["166927084"]
+}

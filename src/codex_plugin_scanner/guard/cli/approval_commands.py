@@ -1,0 +1,414 @@
+"""CLI helpers for Guard approval queue workflows."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import urllib.parse
+from datetime import datetime, timezone
+from pathlib import Path
+
+from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
+from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_hook_copy import authenticated_approval_review_url
+from ..approval_resolution import TERMINAL_POLICY_ACTION_NOT_RESOLVABLE
+from ..approval_scope_support import IneligibleApprovalScopeError, StaleApprovalScopeContractError
+from ..approvals import (
+    ApprovalRequestAlreadyResolvedError,
+    ApprovalRequestNotFoundError,
+    apply_approval_resolution,
+    build_runtime_snapshot,
+)
+from ..browser_opener import open_app_url, open_browser_url
+from ..codex_resume import retry_request_resume
+from ..config import load_guard_config
+from ..daemon import load_guard_daemon_url
+from ..desktop_review_link import desktop_review_url
+from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
+from ..runtime.self_approval import SELF_APPROVAL_REASON, approval_resolution_invoked_from_agent
+from ..runtime.surface_server import GuardSurfaceRuntime
+from ..store import GuardStore
+from ..trusted_local_tools import LocalToolGrantUnavailableError
+from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
+from .commands_parser_approvals import add_approval_parser as add_approval_parser
+
+_HARNESS_RETRY_COPY: dict[str, str] = {
+    "codex": "Return to Codex and retry",
+    "claude-code": "Return to Claude and retry",
+    "opencode": "Return to OpenCode and retry",
+    "copilot": "Return to Copilot and retry",
+    "pi": "Return to Pi and retry",
+    "omp": "Return to Oh My Pi and retry",
+    "grok": "Grok is resuming this action",
+}
+_DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
+
+
+def _build_retry_hint(action: str, harness: str) -> dict[str, str]:
+    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Decision saved."
+    return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
+
+
+def run_approval_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+    workspace: Path | None,
+) -> dict[str, object]:
+    command = getattr(args, "approvals_command", None)
+    if command is None:
+        payload = build_runtime_snapshot(
+            store=store,
+            approval_center_url=load_guard_daemon_url(store.guard_home),
+            now=_now(),
+        )
+        payload["auto_open"] = _auto_open_first_pending_request(store=store, workspace=workspace)
+        return payload
+    if command == "list":
+        # The same queue snapshot as the bare command, read-only: it never opens the approval center.
+        return build_runtime_snapshot(
+            store=store,
+            approval_center_url=load_guard_daemon_url(store.guard_home),
+            now=_now(),
+        )
+    if command == "clear-history":
+        harness = getattr(args, "harness", None)
+        clear_all = bool(getattr(args, "all", False))
+        if clear_all and harness is not None:
+            return {
+                "history_cleared": False,
+                "error": "Choose either --all or --harness <name> when clearing approval history.",
+                "cleared_policies": 0,
+                "cleared_resolved_requests": 0,
+                "exit_code": 2,
+            }
+        if not clear_all and harness is None:
+            return {
+                "history_cleared": False,
+                "error": "Choose --harness <name> or --all when clearing approval history.",
+                "cleared_policies": 0,
+                "cleared_resolved_requests": 0,
+                "exit_code": 2,
+            }
+        target_harness = None if clear_all else harness
+        source = getattr(args, "source", None)
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            approval_gate_grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_clear",
+                approval_gate_input=gate_input,
+            )
+            cleared_resolved_requests = 0
+            if source is None:
+                cleared_resolved_requests = store.clear_approval_requests(harness=target_harness, status="resolved")
+            cleared_policies = store.clear_policy_decisions(
+                target_harness,
+                source,
+                approval_gate_grant=approval_gate_grant,
+            )
+        except ApprovalGateError as error:
+            return approval_gate_cli_payload(error)
+        return {
+            "history_cleared": True,
+            "harness": target_harness,
+            "source": source,
+            "cleared_policies": cleared_policies,
+            "cleared_resolved_requests": cleared_resolved_requests,
+            "exit_code": 0,
+        }
+    if command == "unlock":
+        gate = approval_gate_public_config(store.guard_home)
+        if gate.totp_enabled:
+            return {
+                "unlocked": False,
+                "error": "approval_gate_totp_required",
+                "message": "Cooldown unlock is unavailable while TOTP is enabled.",
+                "exit_code": 4,
+            }
+        duration_map = {"15m": 900, "1h": 3600}
+        duration_value = duration_map.get(str(getattr(args, "duration", "15m")), 900)
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            gate = unlock_cooldown(
+                store.guard_home,
+                duration_seconds=duration_value,
+                approval_gate_input=gate_input,
+                now=_now(),
+            )
+        except ApprovalGateError as error:
+            return approval_gate_cli_payload(error)
+        return {
+            "unlocked": True,
+            "cooldown_seconds": gate.cooldown_seconds,
+            "cooldown_active": gate.cooldown_active,
+            "cooldown_expires_at": gate.cooldown_expires_at,
+            "exit_code": 0,
+        }
+    if command == "lock":
+        gate = revoke_cooldown(store.guard_home, now=_now())
+        return {
+            "locked": True,
+            "cooldown_active": gate.cooldown_active,
+            "cooldown_expires_at": gate.cooldown_expires_at,
+            "exit_code": 0,
+        }
+    if command in {"approve", "deny"} and approval_resolution_invoked_from_agent(os.environ):
+        return {
+            "resolved": False,
+            "error": "approval_cli_blocked_in_agent_context",
+            "message": SELF_APPROVAL_REASON,
+            "next_action": "Open the original Guard request in the local approval center or native harness prompt.",
+            "exit_code": 4,
+        }
+    try:
+        trust_local_tool = bool(getattr(args, "trust_local_tool", False))
+        if trust_local_tool and (args.scope != "artifact" or bool(getattr(args, "remember", False))):
+            return {
+                "resolved": False,
+                "error": "invalid_local_tool_trust_scope",
+                "message": "Local tool trust requires artifact scope and cannot be combined with --remember.",
+                "exit_code": 2,
+            }
+        gate_input = (
+            prompt_for_approval_gate(store.guard_home, strict=str(args.scope) == "global")
+            if _approval_resolution_needs_gate(
+                store,
+                action=str(args.approval_action),
+                scope=str(args.scope),
+            )
+            else None
+        )
+        remember = bool(getattr(args, "remember", False))
+        request = store.get_approval_request(args.request_id) if remember else None
+        exact_action_remember = request is not None and request.get("exact_action_persistence_eligible") is True
+        scope_contract_version = None
+        scope_contract_digest = None
+        if exact_action_remember and request is not None:
+            version = request.get("scope_contract_version")
+            digest = request.get("scope_contract_digest")
+            if version is None or digest is None:
+                return {
+                    "resolved": False,
+                    "error": "incomplete_scope_contract",
+                    "exit_code": 2,
+                }
+            scope_contract_version = str(version)
+            scope_contract_digest = str(digest)
+        item = apply_approval_resolution(
+            store=store,
+            request_id=args.request_id,
+            action=args.approval_action,
+            scope=args.scope,
+            workspace=str(workspace) if workspace is not None else None,
+            reason=args.reason,
+            now=_now(),
+            approval_gate_input=gate_input,
+            persist_policy=True if remember else None,
+            scope_contract_version=scope_contract_version,
+            scope_contract_digest=scope_contract_digest,
+            local_tool_grant_target=(getattr(args, "trust_target", None) if trust_local_tool else None),
+            local_tool_grant_duration=(getattr(args, "trust_duration", None) if trust_local_tool else None),
+        )
+    except ApprovalGateError as error:
+        return approval_gate_cli_payload(error)
+    except StaleApprovalScopeContractError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
+            **error.contract.to_dict(),
+            "exit_code": 4,
+        }
+    except IneligibleApprovalScopeError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
+            "action": error.action,
+            "requested_scope": error.requested_scope,
+            **error.contract.to_dict(),
+            "exit_code": 2,
+        }
+    except ApprovalRequestNotFoundError:
+        return {
+            "resolved": False,
+            "error": "request_unknown",
+            "exit_code": 4,
+        }
+    except ApprovalRequestAlreadyResolvedError:
+        return {
+            "resolved": False,
+            "error": "already_resolved",
+            "exit_code": 4,
+        }
+    except LocalToolGrantUnavailableError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
+            "exit_code": 4,
+        }
+    except ValueError as error:
+        message = str(error)
+        known_resolution_error = message in {
+            AUTHORITATIVE_DECISION_INCONSISTENT,
+            TERMINAL_POLICY_ACTION_NOT_RESOLVABLE,
+        } or message.startswith("Approval request disappeared: ")
+        if not known_resolution_error:
+            raise
+        return {
+            "resolved": False,
+            "error": message,
+            "exit_code": 4,
+        }
+    return {"resolved": True, "item": item}
+
+
+def _approval_resolution_needs_gate(store: GuardStore, *, action: str, scope: str) -> bool:
+    gate = approval_gate_public_config(store.guard_home)
+    if not gate.enabled:
+        return False
+    if scope == "global":
+        return True
+    if gate.cooldown_active and not gate.totp_enabled:
+        return False
+    if action == "allow":
+        return True
+    return gate.strict_all_decisions
+
+
+def _auto_open_first_pending_request(*, store: GuardStore, workspace: Path | None) -> dict[str, object]:
+    request = store.get_next_pending_request()
+    if request is None:
+        return {"opened": False, "reason": "no-pending-request"}
+    approval_url = str(request.get("approval_url") or "")
+    approval_center_url = _repaired_approval_url(approval_url, store.guard_home) or load_guard_daemon_url(
+        store.guard_home
+    )
+    if approval_center_url is None:
+        return {"opened": False, "reason": "missing-approval-url"}
+    request_id = str(request.get("request_id") or "")
+    if not request_id:
+        return {"opened": False, "reason": "missing-request-id"}
+    config = load_guard_config(store.guard_home, workspace)
+    approval_surface_policy = config.approval_surface_policy
+    if approval_surface_policy == "native-only":
+        approval_surface_policy = "never-auto-open"
+    elif approval_surface_policy == "attention-aware":
+        approval_surface_policy = "approval-center"
+    result = GuardSurfaceRuntime(store).ensure_surface(
+        surface="approval-center",
+        approval_center_url=approval_center_url,
+        approval_surface_policy=approval_surface_policy,
+        open_key=f"approval-request:{request_id}",
+        opener=open_browser_url,
+    )
+    result["request_id"] = request_id
+    return result
+
+
+def run_approval_open_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+) -> tuple[dict[str, object], int]:
+    request_id = args.request_id
+    item = store.get_approval_request(request_id)
+    if item is None:
+        return {"error": "not_found", "request_id": request_id}, 1
+    approval_url = str(item.get("approval_url", ""))
+    repaired_url = _repaired_approval_url(approval_url, store.guard_home)
+    payload: dict[str, object] = {
+        "request_id": request_id,
+        "approval_url": repaired_url,
+        "repaired": repaired_url != approval_url,
+        "opened": False,
+        "opened_in": None,
+    }
+    if getattr(args, "no_open", False):
+        return payload, 0
+    # The printed link stays unsigned: command output reaches agents and logs.
+    # Only the launch carries a session, in Desktop's own window or as a signed
+    # browser link, so the request opens signed in on this machine.
+    desktop_url = desktop_review_url(store.guard_home, request_id)
+    if desktop_url is not None and open_app_url(desktop_url):
+        payload.update(opened=True, opened_in="desktop")
+        return payload, 0
+    signed_url = authenticated_approval_review_url(repaired_url, guard_home=store.guard_home)
+    if signed_url and open_browser_url(signed_url):
+        payload.update(opened=True, opened_in="browser")
+    return payload, 0
+
+
+def run_approval_retry_hint_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+) -> tuple[dict[str, object], int]:
+    request_id = args.request_id
+    item = store.get_approval_request(request_id)
+    if item is None:
+        return {"error": "not_found", "request_id": request_id}, 1
+    status = str(item.get("status", ""))
+    if status != "resolved":
+        return {"error": "not_resolved", "status": status, "request_id": request_id}, 1
+    resolution_action = str(item.get("resolution_action", ""))
+    harness = str(item.get("harness", ""))
+    hint: dict[str, object] = dict(_build_retry_hint(resolution_action, harness))
+    return hint, 0
+
+
+def run_approval_resume_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+) -> tuple[dict[str, object], int]:
+    request_id = args.request_id
+    try:
+        payload = retry_request_resume(
+            store,
+            request_id=request_id,
+            now=_now(),
+            force=bool(getattr(args, "force", False)),
+        )
+    except ValueError as error:
+        error_code = str(error)
+        if error_code == "not_found":
+            return {"error": "not_found", "request_id": request_id}, 1
+        if error_code == "not_resolved":
+            item = store.get_approval_request(request_id)
+            status = str(item.get("status", "")) if item is not None else ""
+            return {"error": "not_resolved", "status": status, "request_id": request_id}, 1
+        if error_code == "resume_unavailable":
+            return {"error": "resume_unavailable", "request_id": request_id}, 1
+        return {"error": "resume_not_supported", "request_id": request_id}, 1
+    return payload, 0
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _repaired_approval_url(approval_url: str, guard_home: Path) -> str:
+    daemon_url = load_guard_daemon_url(guard_home)
+    if daemon_url is None:
+        return approval_url
+    try:
+        parsed_approval = urllib.parse.urlparse(approval_url)
+        parsed_daemon = urllib.parse.urlparse(daemon_url)
+    except ValueError:
+        return approval_url
+    if parsed_approval.scheme not in {"http", "https"} or parsed_approval.hostname not in {
+        "127.0.0.1",
+        "::1",
+        "localhost",
+    }:
+        return approval_url
+    return urllib.parse.urlunparse(
+        (
+            parsed_daemon.scheme,
+            parsed_daemon.netloc,
+            parsed_approval.path,
+            parsed_approval.params,
+            parsed_approval.query,
+            parsed_approval.fragment,
+        )
+    )

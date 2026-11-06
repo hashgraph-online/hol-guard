@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.plim",
+  "version": "1.4.1",
+  "name": "Plim MCP",
+  "description": "Desktop audio alerts, interactive Telegram questions, terminal command monitoring, and dynamic progress tracking for AI coding agents.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.marcusedu",
+    "displayName": "Marcus Duarte",
+    "url": "https://github.com/marcusedu/plim"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#F59E0B"
+  },
+  "homepage": "https://plim.sh",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "plim-mcp"
+  },
+  "riskClasses": ["external-command-execution", "external-message-egress"],
+  "tools": [
+    { "name": "plim_notify", "state": "review" },
+    { "name": "plim_ask", "state": "review" },
+    { "name": "plim_progress", "state": "review" },
+    { "name": "plim_run", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/marcusedu/plim",
+    "https://plim.sh"
+  ],
+  "saferAlternatives": [
+    "Review shell commands before approving plim_run execution, and inspect message content before approving Telegram egress tools (plim_notify, plim_ask, plim_progress)."
+  ]
+}

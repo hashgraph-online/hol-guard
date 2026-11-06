@@ -1,0 +1,10 @@
+repos:
+  - repo: https://github.com/hashgraph-online/ai-plugin-scanner
+    rev: v1.1.0
+    hooks:
+      - id: plugin-scanner
+        name: Plugin Scanner
+        description: "Scan a plugin directory for security and best practices."
+        entry: plugin-scanner
+        language: python
+        pass_filenames: false

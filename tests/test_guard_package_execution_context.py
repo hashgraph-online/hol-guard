@@ -1,0 +1,616 @@
+"""Regression coverage for context-complete package approval identities."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.approval_scope_support import (
+    package_request_portable_workspace_scope,
+    package_request_runtime_workspace_scope,
+)
+from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.package_execution_context import (
+    build_package_execution_context,
+    changed_package_execution_context_components,
+)
+
+pytestmark = pytest.mark.usefixtures("_native_package_context_authority")
+
+
+@pytest.fixture
+def _native_package_context_authority(native_context_digest: Path) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    home = native_context.context_digest_guard_home()
+    assert home is not None, "package context controls require a bound guard home"
+    result = native_context.native_context_digest(
+        "canonical_sha256",
+        {"material": None, "prefix": None},
+        guard_home=home,
+        timeout_seconds=5.0,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+
+    assert result is not None and result["status"] == "ok", native_resident_client_failure_code()
+
+
+def _write_repository(root: Path, *, common_git_dir: Path | None = None) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    if common_git_dir is None:
+        common_git_dir = root / ".git"
+        common_git_dir.mkdir(parents=True)
+        (common_git_dir / "config").write_text(
+            '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = https://example.test/team/app.git\n',
+            encoding="utf-8",
+        )
+    else:
+        git_dir = common_git_dir / "worktrees" / root.name
+        git_dir.mkdir(parents=True)
+        (git_dir / "commondir").write_text("../..\n", encoding="utf-8")
+        (root / ".git").write_text(f"gitdir: {git_dir}\n", encoding="utf-8")
+    return common_git_dir
+
+
+def _write_package_files(workspace: Path) -> None:
+    (workspace / "package.json").write_text(
+        json.dumps({"name": "demo", "dependencies": {"left-pad": "1.3.0"}}, indent=2),
+        encoding="utf-8",
+    )
+    (workspace / "pnpm-lock.yaml").write_text(
+        "lockfileVersion: '9.0'\npackages:\n  left-pad@1.3.0: {}\n",
+        encoding="utf-8",
+    )
+
+
+def _artifact(*, manager: str = "pnpm", prefix: str = "") -> GuardArtifact:
+    manifest_path = f"{prefix}package.json"
+    lockfile_path = f"{prefix}pnpm-lock.yaml"
+    return GuardArtifact(
+        artifact_id="guard-cli:project:package-request:context-test",
+        name=f"{manager} install",
+        harness="guard-cli",
+        artifact_type="package_request",
+        source_scope="project",
+        config_path="hol-guard.toml",
+        metadata={
+            "package_manager": manager,
+            "intent_kind": "install",
+            "manifest_paths": [manifest_path],
+            "lockfile_paths": [lockfile_path],
+            "flags": [],
+        },
+    )
+
+
+def _environment(tmp_path: Path, *, executable_payload: str = "pnpm-v1") -> dict[str, str]:
+    executable_dir = tmp_path / "bin"
+    executable_dir.mkdir(exist_ok=True)
+    executable = executable_dir / "pnpm"
+    executable.write_text(f"#!/bin/sh\n# {executable_payload}\n", encoding="utf-8")
+    executable.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    return {"PATH": str(executable_dir), "HOME": str(home)}
+
+
+def _context(
+    workspace: Path,
+    artifact: GuardArtifact,
+    environment: dict[str, str],
+):
+    return build_package_execution_context(
+        workspace_dir=workspace,
+        artifact=artifact,
+        executable="pnpm",
+        environment=environment,
+    )
+
+
+def _component_digest(context, name: str) -> str:
+    return next(component.digest for component in context.components if component.name == name)
+
+
+def test_portable_context_matches_across_linked_git_worktrees(
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
+    primary = tmp_path / "primary"
+    linked = tmp_path / "linked"
+    common = _write_repository(primary)
+    _write_repository(linked, common_git_dir=common)
+    _write_package_files(primary)
+    _write_package_files(linked)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+
+    primary_context = _context(primary, artifact, environment)
+    linked_context = _context(linked, artifact, environment)
+
+    assert primary_context.portable is True
+    assert linked_context.portable is True
+    assert primary_context.digest == linked_context.digest
+    primary_scope = package_request_portable_workspace_scope(
+        artifact_id=artifact.artifact_id,
+        artifact_hash="a" * 64,
+        artifact_type=artifact.artifact_type,
+        execution_context=primary_context,
+    )
+    linked_scope = package_request_portable_workspace_scope(
+        artifact_id=artifact.artifact_id,
+        artifact_hash="a" * 64,
+        artifact_type=artifact.artifact_type,
+        execution_context=linked_context,
+    )
+    assert primary_scope == linked_scope
+    assert primary_scope is not None and primary_scope.startswith("package-request-workspace:v2:")
+
+
+def test_identical_files_in_unrelated_repositories_do_not_share_context(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    _write_repository(first)
+    _write_repository(second)
+    _write_package_files(first)
+    _write_package_files(second)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+
+    first_context = _context(first, artifact, environment)
+    second_context = _context(second, artifact, environment)
+
+    assert first_context.portable is True
+    assert second_context.portable is True
+    assert first_context.digest != second_context.digest
+    assert changed_package_execution_context_components(first_context, second_context) == ("repository_identity",)
+
+
+def test_registry_config_is_normalized_and_security_changes_rekey(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+    npmrc = workspace / ".npmrc"
+    npmrc.write_text("# local registry\nregistry = https://registry.example.test/\n", encoding="utf-8")
+    before = _context(workspace, artifact, environment)
+
+    npmrc.write_text("registry=https://registry.example.test/\n; comment only\n", encoding="utf-8")
+    comment_only = _context(workspace, artifact, environment)
+    npmrc.write_text("registry=https://mirror.example.test/\n", encoding="utf-8")
+    changed = _context(workspace, artifact, environment)
+
+    assert before.digest == comment_only.digest
+    assert _component_digest(before, "registry_and_proxy_configuration") != _component_digest(
+        changed,
+        "registry_and_proxy_configuration",
+    )
+
+
+def test_pnpm_hook_and_yarn_plugin_changes_rekey_hook_component(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+    hook = workspace / "pnpmfile.cjs"
+    plugin = workspace / ".yarn" / "plugins" / "guard.cjs"
+    plugin.parent.mkdir(parents=True)
+    hook.write_text("module.exports = { hooks: {} };\n", encoding="utf-8")
+    plugin.write_text("module.exports = {};\n", encoding="utf-8")
+    before = _context(workspace, artifact, environment)
+
+    hook.write_text("module.exports = { hooks: { readPackage: value => value } };\n", encoding="utf-8")
+    hook_changed = _context(workspace, artifact, environment)
+    plugin.write_text("module.exports = { name: 'updated' };\n", encoding="utf-8")
+    plugin_changed = _context(workspace, artifact, environment)
+
+    component = "lifecycle_hooks_overrides_and_patches"
+    assert _component_digest(before, component) != _component_digest(hook_changed, component)
+    assert _component_digest(hook_changed, component) != _component_digest(plugin_changed, component)
+
+
+def test_root_workspace_manifest_change_rekeys_nested_workspace_configuration(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    workspace = repository / "packages" / "app"
+    _write_repository(repository)
+    workspace.mkdir(parents=True)
+    _write_package_files(workspace)
+    root_manifest = repository / "package.json"
+    root_manifest.write_text(json.dumps({"private": True, "workspaces": ["packages/*"]}), encoding="utf-8")
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+    before = _context(workspace, artifact, environment)
+
+    root_manifest.write_text(json.dumps({"private": True, "workspaces": ["packages/app"]}), encoding="utf-8")
+    after = _context(workspace, artifact, environment)
+
+    assert _component_digest(before, "workspace_configuration") != _component_digest(
+        after,
+        "workspace_configuration",
+    )
+
+
+def test_root_yarn_plugin_change_rekeys_nested_workspace_hook_context(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    workspace = repository / "packages" / "app"
+    _write_repository(repository)
+    workspace.mkdir(parents=True)
+    _write_package_files(workspace)
+    (repository / "package.json").write_text(
+        json.dumps({"private": True, "workspaces": ["packages/*"]}),
+        encoding="utf-8",
+    )
+    plugin = repository / ".yarn" / "plugins" / "guard.cjs"
+    plugin.parent.mkdir(parents=True)
+    plugin.write_text("module.exports = { name: 'first' };\n", encoding="utf-8")
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+    before = _context(workspace, artifact, environment)
+
+    plugin.write_text("module.exports = { name: 'second' };\n", encoding="utf-8")
+    after = _context(workspace, artifact, environment)
+
+    assert before.portable is True
+    assert after.portable is True
+    assert _component_digest(before, "lifecycle_hooks_overrides_and_patches") != _component_digest(
+        after,
+        "lifecycle_hooks_overrides_and_patches",
+    )
+
+
+def test_lockfile_executable_and_proxy_environment_each_rekey_context(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+    baseline = _context(workspace, artifact, environment)
+
+    (workspace / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\npackages: {}\n", encoding="utf-8")
+    lock_changed = _context(workspace, artifact, environment)
+    _write_package_files(workspace)
+    executable = Path(environment["PATH"]) / "pnpm"
+    executable.write_text("#!/bin/sh\n# pnpm-v2\n", encoding="utf-8")
+    executable_changed = _context(workspace, artifact, environment)
+    proxy_environment = {**environment, "HTTPS_PROXY": "https://proxy.example.test"}
+    proxy_changed = _context(workspace, artifact, proxy_environment)
+
+    assert _component_digest(baseline, "manifests_and_lockfiles") != _component_digest(
+        lock_changed,
+        "manifests_and_lockfiles",
+    )
+    assert _component_digest(baseline, "package_manager_executable") != _component_digest(
+        executable_changed,
+        "package_manager_executable",
+    )
+    assert _component_digest(executable_changed, "environment_policy") != _component_digest(
+        proxy_changed,
+        "environment_policy",
+    )
+
+
+def test_script_backed_manager_binds_env_selected_interpreter_content_and_path(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    manager_bin = tmp_path / "manager-bin"
+    first_runtime_bin = tmp_path / "first-runtime"
+    second_runtime_bin = tmp_path / "second-runtime"
+    for directory in (manager_bin, first_runtime_bin, second_runtime_bin):
+        directory.mkdir()
+    manager = manager_bin / "pnpm"
+    manager.write_text("#!/usr/bin/env node\n// package manager\n", encoding="utf-8")
+    manager.chmod(0o755)
+    first_node = first_runtime_bin / "node"
+    second_node = second_runtime_bin / "node"
+    first_node.write_bytes(b"node-runtime-v1\n")
+    second_node.write_bytes(b"node-runtime-v1\n")
+    first_node.chmod(0o755)
+    second_node.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    artifact = _artifact()
+    first_environment = {
+        "PATH": os.pathsep.join((str(manager_bin), str(first_runtime_bin))),
+        "HOME": str(home),
+    }
+    second_environment = {
+        "PATH": os.pathsep.join((str(manager_bin), str(second_runtime_bin))),
+        "HOME": str(home),
+    }
+
+    first = _context(workspace, artifact, first_environment)
+    unchanged = _context(workspace, artifact, first_environment)
+    path_changed = _context(workspace, artifact, second_environment)
+    first_node.write_bytes(b"node-runtime-v2\n")
+    first_node.chmod(0o755)
+    content_changed = _context(workspace, artifact, first_environment)
+
+    assert first.portable is True
+    assert first.digest == unchanged.digest
+    component = "package_manager_executable"
+    assert _component_digest(first, component) != _component_digest(path_changed, component)
+    assert _component_digest(first, component) != _component_digest(content_changed, component)
+
+
+def test_manager_digest_ignores_path_entries_that_do_not_change_the_resolved_binary(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    shim_bin = tmp_path / "agent-shim-1234"
+    shim_bin.mkdir()
+    shadow_bin = tmp_path / "shadow-bin"
+    shadow_bin.mkdir()
+    shadow = shadow_bin / "pnpm"
+    shadow.write_text("#!/bin/sh\n# pnpm-v1\n", encoding="utf-8")
+    shadow.chmod(0o755)
+    artifact = _artifact()
+
+    baseline = _context(workspace, artifact, environment)
+    prefixed = _context(
+        workspace,
+        artifact,
+        {**environment, "PATH": os.pathsep.join((str(shim_bin), environment["PATH"]))},
+    )
+    shadowed = _context(
+        workspace,
+        artifact,
+        {**environment, "PATH": os.pathsep.join((str(shadow_bin), environment["PATH"]))},
+    )
+
+    component = "package_manager_executable"
+    assert baseline.portable is True
+    assert _component_digest(baseline, component) == _component_digest(prefixed, component)
+    assert _component_digest(baseline, component) != _component_digest(shadowed, component)
+
+
+def test_script_backed_manager_binds_nested_python_module_loaded_by_shebang(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    runtime_bin = tmp_path / "runtime-bin"
+    runtime_bin.mkdir()
+    manager = runtime_bin / "pnpm"
+    manager.write_text("#!/usr/bin/env -S python -m bootstrap\n", encoding="utf-8")
+    manager.chmod(0o755)
+    python = runtime_bin / "python"
+    python.write_bytes(b"native-python-runtime\n")
+    python.chmod(0o755)
+    bootstrap = workspace / "bootstrap.py"
+    bootstrap.write_text("print('v1')\n", encoding="utf-8")
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {"PATH": str(runtime_bin), "HOME": str(home)}
+
+    before = _context(workspace, _artifact(), environment)
+    bootstrap.write_text("print('v2')\n", encoding="utf-8")
+    after = _context(workspace, _artifact(), environment)
+
+    assert before.portable is True
+    assert after.portable is True
+    assert _component_digest(before, "package_manager_executable") != _component_digest(
+        after,
+        "package_manager_executable",
+    )
+
+
+def test_unbound_nested_node_preload_in_shebang_disables_package_approval_reuse(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    runtime_bin = tmp_path / "runtime-bin"
+    runtime_bin.mkdir()
+    manager = runtime_bin / "pnpm"
+    manager.write_text("#!/usr/bin/env -S node --require ./preload.js\n", encoding="utf-8")
+    manager.chmod(0o755)
+    node = runtime_bin / "node"
+    node.write_bytes(b"native-node-runtime\n")
+    node.chmod(0o755)
+    (workspace / "preload.js").write_text("module.exports = {};\n", encoding="utf-8")
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {"PATH": str(runtime_bin), "HOME": str(home)}
+
+    first = _context(workspace, _artifact(), environment)
+    second = _context(workspace, _artifact(), environment)
+
+    assert first.portable is False
+    assert first.non_portable_reason == "package_manager_launch_identity_unavailable"
+    assert first.digest != second.digest
+
+
+def test_oversized_or_dynamic_configuration_is_not_portable(
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    artifact = _artifact()
+    (workspace / ".npmrc").write_bytes(b"x" * (2 * 1024 * 1024 + 1))
+
+    oversized = _context(workspace, artifact, environment)
+
+    assert oversized.portable is False
+    assert oversized.non_portable_reason == "oversized_configuration"
+    (workspace / ".npmrc").unlink()
+    (workspace / "pnpmfile.cjs").write_text("module.exports = require(resolveHook());\n", encoding="utf-8")
+    dynamic = _context(workspace, artifact, environment)
+    assert dynamic.portable is False
+    assert dynamic.non_portable_reason == "dynamic_manager_configuration"
+    runtime_scope = package_request_runtime_workspace_scope(
+        artifact_id=artifact.artifact_id,
+        artifact_hash="b" * 64,
+        artifact_type=artifact.artifact_type,
+        execution_context=dynamic,
+    )
+    assert runtime_scope is not None
+    assert runtime_scope.startswith("package-request-workspace-exact:v2:")
+    assert (
+        package_request_portable_workspace_scope(
+            artifact_id=artifact.artifact_id,
+            artifact_hash="b" * 64,
+            artifact_type=artifact.artifact_type,
+            execution_context=dynamic,
+        )
+        is None
+    )
+    (workspace / "pnpmfile.cjs").unlink()
+    (workspace / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "demo",
+                "dependencies": {"left-pad": "1.3.0"},
+                "scripts": {"postinstall": "node scripts/setup.js"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    lifecycle = _context(workspace, artifact, environment)
+    assert lifecycle.portable is False
+    assert lifecycle.non_portable_reason == "dynamic_lifecycle_hook"
+
+
+def test_context_evidence_never_contains_configuration_values(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    environment["NPM_TOKEN"] = "test-registry-credential"
+    (workspace / ".npmrc").write_text(
+        "//registry.example.test/:_authToken=test-file-credential\n",
+        encoding="utf-8",
+    )
+
+    evidence = _context(workspace, _artifact(), environment).to_evidence()
+    serialized = json.dumps(evidence, sort_keys=True)
+
+    assert "test-registry-credential" not in serialized
+    assert "test-file-credential" not in serialized
+    assert "registry.example.test" not in serialized
+
+
+def test_native_build_failure_cannot_produce_reusable_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
+) -> None:
+    from codex_plugin_scanner.guard import native_package_context_build
+
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    monkeypatch.setattr(native_package_context_build, "_resident_request", lambda **_kwargs: None)
+    with pytest.raises(ValueError, match=r"native_package_context_build_|native_"):
+        _context(workspace, _artifact(), environment)
+
+
+def test_unavailable_resident_leaves_a_package_request_without_a_saved_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A probe's own guard home has no resident; the evaluation must still run.
+
+    The scope is the key a saved approval is matched under.  Without the
+    resident there is no key, so the lookup finds nothing and the request is
+    decided as if nothing had been saved - the closed outcome.  Raising here
+    would take the whole package evaluation down with it.
+    """
+
+    from codex_plugin_scanner.guard import local_supply_chain
+    from codex_plugin_scanner.guard.native_package_workspace_scope import NativePackageWorkspaceScopeError
+
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    artifact = _artifact()
+    context = _context(workspace, artifact, _environment(tmp_path))
+
+    def _unavailable(**_kwargs: object) -> tuple[str | None, str | None]:
+        raise NativePackageWorkspaceScopeError("Native package workspace scope unavailable")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.approval_scope_support.native_package_workspace_scopes",
+        _unavailable,
+    )
+
+    candidates = local_supply_chain._package_policy_workspace_candidates(
+        artifact=artifact,
+        artifact_hash="sha256:1234",
+        workspace_dir=workspace,
+        execution_context=context,
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert candidates == ()
+
+
+def test_the_resident_s_own_reply_discriminator_is_accepted(
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
+    """The compiled resident's scope reply reaches the caller intact.
+
+    The transport this op shares with the package-authority family used to
+    accept only that family's reply discriminator, so every answer this op
+    actually sends was discarded as malformed and no package scope could ever
+    be derived.  This exercises the real round trip end to end.
+    """
+
+    from codex_plugin_scanner.guard.native_package_workspace_scope import (
+        _RESULT_SCHEMA,
+        native_package_workspace_scopes,
+    )
+
+    assert _RESULT_SCHEMA == "guard-package-workspace-scope-result.v1"
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    artifact = _artifact()
+    context = _context(workspace, artifact, _environment(tmp_path))
+
+    portable, runtime = native_package_workspace_scopes(
+        artifact_id=artifact.artifact_id,
+        artifact_hash="b" * 64,
+        artifact_type=artifact.artifact_type,
+        execution_context=context,
+    )
+
+    assert portable is not None and portable.startswith("package-request-workspace:v2:")
+    # A portable context has no second identity. The runtime scope a policy
+    # lookup uses is that same portable scope, so the reply carries it twice;
+    # the exact scope is the fallback for a context that cannot travel, and
+    # test_oversized_or_dynamic_configuration_is_not_portable covers it.
+    assert runtime == portable
+
+
+def test_a_request_without_an_execution_context_never_reaches_the_resident(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both scopes bind a context, so a caller without one has nothing to ask.
+
+    An approval saved against an MCP artifact arrives here with no context.
+    Asking anyway spends a round trip on a pair of nulls, and fails outright
+    wherever the resident is down.
+    """
+
+    from codex_plugin_scanner.guard import native_package_workspace_scope
+
+    def _unreachable(**_kwargs: object) -> dict[str, object]:
+        raise AssertionError("a contextless request must not reach the resident")
+
+    monkeypatch.setattr(native_package_workspace_scope, "_resident_request", _unreachable)
+
+    assert native_package_workspace_scope.native_package_workspace_scopes(
+        artifact_id="artifact",
+        artifact_hash="b" * 64,
+        artifact_type="package-request",
+        execution_context=None,
+    ) == (None, None)

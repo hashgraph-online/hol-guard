@@ -1,0 +1,46 @@
+{
+  "policyAllowed": true,
+  "remainingLeaseMs": 27860,
+  "snapshot": {
+    "enabled": true,
+    "generatedAt": "2026-10-16T09:40:25.695Z",
+    "leaseExpiresAt": "2026-10-16T09:40:55.695Z",
+    "offers": [
+      {
+        "availability": "open",
+        "checkedAt": "2026-10-16T09:40:25.712Z",
+        "currency": "usd",
+        "indicativeAmountCents": 50000,
+        "openSlots": 10,
+        "product": "always",
+        "quoteRequired": true,
+        "totalSlots": 10
+      },
+      {
+        "availability": "open",
+        "checkedAt": "2026-10-16T09:40:25.712Z",
+        "currency": "usd",
+        "indicativeAmountCents": 5000,
+        "openSlots": 60,
+        "product": "time_slot",
+        "quoteRequired": true,
+        "totalSlots": 60
+      },
+      {
+        "availability": "open",
+        "checkedAt": "2026-10-16T09:40:25.712Z",
+        "currency": "usd",
+        "indicativeAmountCents": 20000,
+        "openSlots": 4,
+        "product": "sponsored",
+        "quoteRequired": true,
+        "totalSlots": 4
+      }
+    ],
+    "placements": [],
+    "reasonCode": null,
+    "schemaVersion": "guard.extensions.discovery.v1",
+    "snapshotId": "62cd8106-1aef-49b4-b8d3-0ddbd4615e06",
+    "state": "ready"
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "extension": {
+    "action_classes": [
+      "filesystem destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews recursive deletion and access-control changes across filesystem trees.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.filesystem",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Filesystem protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "filesystem destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies recursive deletion that can remove a directory tree in one operation.",
+        "example_command": "rm -r build/",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Recursive filesystem deletion",
+        "permission_id": "command.filesystem.permission.recursive-delete",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List the exact target tree first, then remove only reviewed paths."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "filesystem destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies recursive access-control changes across a filesystem tree.",
+        "example_command": "chmod -R go-w vendor/",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Recursive permission or ownership change",
+        "permission_id": "command.filesystem.permission.recursive-permission-change",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Preview affected paths and apply the change to the narrowest directory possible."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [],
+    "required": true,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "filesystem destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies recursive deletion that can remove a directory tree in one operation.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "rm"
+            ],
+            "required_arguments": [
+              "-r"
+            ]
+          },
+          "op": "arguments.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.filesystem.permission.recursive-delete",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.filesystem.recursive-delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "List the exact target tree first, then remove only reviewed paths."
+        ],
+        "severity": "high",
+        "title": "Recursive filesystem deletion"
+      },
+      {
+        "action_classes": [
+          "filesystem destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies recursive access-control changes across a filesystem tree.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "chgrp",
+              "chmod",
+              "chown"
+            ],
+            "required_arguments": [
+              "-r"
+            ]
+          },
+          "op": "arguments.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.filesystem.permission.recursive-permission-change",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.filesystem.recursive-permission-change",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Preview affected paths and apply the change to the narrowest directory possible."
+        ],
+        "severity": "high",
+        "title": "Recursive permission or ownership change"
+      }
+    ],
+    "safer_alternatives": [
+      "List and review exact target paths before recursive mutation.",
+      "Limit permission and ownership changes to the narrowest path."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

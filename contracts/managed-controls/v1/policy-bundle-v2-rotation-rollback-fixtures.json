@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "guard.managed-controls.rotation-rollback-fixtures.v1",
+  "rotation": {
+    "acceptedKeyId": "managed-controls-key-2026-08",
+    "nextKeyId": "managed-controls-key-2026-09",
+    "revokedKeyId": "managed-controls-key-2026-07",
+    "workspaceId": "workspace-managed-controls"
+  },
+  "transitionCases": [
+    {
+      "name": "newer-version",
+      "currentVersion": 7,
+      "currentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "candidateVersion": 8,
+      "candidateHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "expected": null
+    },
+    {
+      "name": "same-version-same-hash",
+      "currentVersion": 7,
+      "currentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "candidateVersion": 7,
+      "candidateHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": null
+    },
+    {
+      "name": "same-version-substitution",
+      "currentVersion": 7,
+      "currentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "candidateVersion": 7,
+      "candidateHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "expected": "bundle_version_conflict"
+    },
+    {
+      "name": "downgrade",
+      "currentVersion": 7,
+      "currentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "candidateVersion": 6,
+      "candidateHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "expected": "bundle_downgrade_rejected"
+    }
+  ],
+  "authorizedRollback": {
+    "bundleVersion": 9,
+    "bundleHash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "rollback": {
+      "rollbackOfBundleHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rollbackOfBundleVersion": 8,
+      "lastGoodBundleHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "lastGoodBundleVersion": 7,
+      "reason": "Restore the last reviewed complete Managed Controls state.",
+      "actor": "security-admin@example.com",
+      "createdAt": "2026-08-21T11:59:00.000Z",
+      "authorization": "guard.controls.publish"
+    }
+  }
+}

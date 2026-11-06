@@ -1,0 +1,17 @@
+{
+  "batch": 14,
+  "evidence": [
+    "src/codex_plugin_scanner/guard/managed_controls/feature_flags.py",
+    "tests/managed_controls/telemetry.py",
+    "tests/managed_controls/redaction.py",
+    "tests/managed_controls/test_flags_telemetry_redaction.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 210,
+    "start": 196
+  },
+  "theme": "Independent rollout flags, privacy-safe telemetry, and redaction"
+}

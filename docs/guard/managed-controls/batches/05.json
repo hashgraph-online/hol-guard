@@ -1,0 +1,15 @@
+{
+  "batch": 5,
+  "evidence": [
+    "tests/managed_controls/authority.py",
+    "tests/managed_controls/test_authority_composition.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 75,
+    "start": 61
+  },
+  "theme": "Explicit personal, workspace, and non-weakenable authority modes"
+}

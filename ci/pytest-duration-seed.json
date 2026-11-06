@@ -1,0 +1,19 @@
+{
+  "artifact_id": 10610019604,
+  "artifact_name": "pytest-duration-manifest-candidate",
+  "description": "Phase-inclusive duration seed from the successful complete Python 3.12 coverage run, copied without changing any measured values.",
+  "head_sha": "92bd5c4015fcc52acaa477c2f76769afa1d00e40",
+  "manifest_sha256": "c9a337e00ed42acdee1ccc714b8870aedc5c29a0ffae8d470b65c679f5565b4a",
+  "node_count": 20140,
+  "observed_at": "2026-09-20T18:12:22Z",
+  "phases": [
+    "setup",
+    "call",
+    "teardown"
+  ],
+  "run_attempt": 1,
+  "run_conclusion": "success",
+  "run_id": 35528148442,
+  "run_url": "https://github.com/hashgraph-online/hol-guard/actions/runs/35528148442",
+  "workflow_path": ".github/workflows/ci.yml"
+}

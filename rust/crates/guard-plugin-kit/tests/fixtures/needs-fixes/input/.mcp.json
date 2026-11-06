@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "api": {
+      "command": "node",
+      "args": [
+        "server.js"
+      ],
+      "env": {
+        "SERVICE_API_KEY": "replace-me-123",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "empty": {}
+  }
+}

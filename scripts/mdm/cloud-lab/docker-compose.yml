@@ -1,0 +1,259 @@
+name: ${HOL_MDM_LAB_PROJECT:-hol-guard-mdm-cloud-lab}
+
+x-lab-service: &lab-service
+  image: hol-guard-mdm-cloud-lab:local
+  build:
+    context: ../../..
+    dockerfile: scripts/mdm/cloud-lab/Dockerfile
+  init: true
+  user: "${HOL_MDM_LAB_UID:-10001}:${HOL_MDM_LAB_GID:-10001}"
+  restart: "no"
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - mdm-lab
+  environment:
+    HOL_MDM_LAB_ADMIN_TOKEN: ${HOL_MDM_LAB_ADMIN_TOKEN:?HOL_MDM_LAB_ADMIN_TOKEN must be set}
+  tmpfs:
+    - /tmp:size=64m,mode=1777,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+
+services:
+  volume-init:
+    image: hol-guard-mdm-cloud-lab:local
+    build:
+      context: ../../..
+      dockerfile: scripts/mdm/cloud-lab/Dockerfile
+    user: "0:0"
+    read_only: true
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        chown -R "${HOL_MDM_LAB_UID:-10001}:${HOL_MDM_LAB_GID:-10001}" /cloud-state /device-a-state /device-b-state
+        /device-c-state /device-d-state /artifacts &&
+        chmod 0700 /cloud-state /device-a-state /device-b-state
+        /device-c-state /device-d-state /artifacts
+    volumes:
+      - cloud-state:/cloud-state
+      - device-a-state:/device-a-state
+      - device-b-state:/device-b-state
+      - device-c-state:/device-c-state
+      - device-d-state:/device-d-state
+      - lab-artifacts:/artifacts
+    mem_limit: 128m
+    cpus: 0.25
+
+  cloud:
+    <<: *lab-service
+    command:
+      - scripts/mdm/cloud-lab/cloud_service.py
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8090"
+      - --database
+      - /state/cloud.sqlite3
+      - --signing-key
+      - /state/cloud-signing-key.pem
+    environment:
+      HOL_MDM_LAB_ADMIN_TOKEN: ${HOL_MDM_LAB_ADMIN_TOKEN:?HOL_MDM_LAB_ADMIN_TOKEN must be set}
+      HOL_MDM_LAB_DEVICE_SEEDS: >-
+        [{"workspaceId":"workspace-mdm-alpha","deviceId":"device-a","installationGeneration":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","token":"enrollment-token-device-a"},{"workspaceId":"workspace-mdm-alpha","deviceId":"device-b","installationGeneration":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","token":"enrollment-token-device-b"},{"workspaceId":"workspace-mdm-alpha","deviceId":"device-c","installationGeneration":"cccccccccccccccccccccccccccccccc","token":"enrollment-token-device-c"},{"workspaceId":"workspace-mdm-beta","deviceId":"device-d","installationGeneration":"dddddddddddddddddddddddddddddddd","token":"enrollment-token-device-d"},{"workspaceId":"workspace-mdm-alpha","deviceId":"device-clone-probe","installationGeneration":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","token":"enrollment-token-clone-probe"}]
+    volumes:
+      - cloud-state:/state
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    mem_limit: 512m
+    cpus: 1
+
+  proxy:
+    <<: *lab-service
+    command:
+      - scripts/mdm/cloud-lab/fault_proxy.py
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --upstream
+      - http://cloud:8090
+    depends_on:
+      cloud:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    mem_limit: 256m
+    cpus: 0.5
+
+  device-a:
+    <<: *lab-service
+    command: ["scripts/mdm/cloud-lab/device_runtime.py", "--port", "8070"]
+    environment:
+      HOL_MDM_WORKSPACE_ID: workspace-mdm-alpha
+      HOL_MDM_DEVICE_ID: device-a
+      HOL_MDM_INSTALLATION_GENERATION: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      HOL_MDM_ENROLLMENT_TOKEN: enrollment-token-device-a
+      HOL_MDM_CLOUD_URL: http://proxy:8080
+      HOL_MDM_STATE_DIR: /state
+      HOL_MDM_POLICY_PATH: /etc/hol-guard/managed-policy.json
+    volumes:
+      - device-a-state:/state
+    tmpfs:
+      - /tmp:size=64m,mode=1777,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+      - /etc/hol-guard:size=8m,mode=0700,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      proxy:
+        condition: service_healthy
+    healthcheck: &device-health
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/healthz', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    mem_limit: 384m
+    cpus: 0.75
+
+  device-b:
+    <<: *lab-service
+    command: ["scripts/mdm/cloud-lab/device_runtime.py", "--port", "8070"]
+    environment:
+      HOL_MDM_WORKSPACE_ID: workspace-mdm-alpha
+      HOL_MDM_DEVICE_ID: device-b
+      HOL_MDM_INSTALLATION_GENERATION: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      HOL_MDM_ENROLLMENT_TOKEN: enrollment-token-device-b
+      HOL_MDM_CLOUD_URL: http://proxy:8080
+      HOL_MDM_STATE_DIR: /state
+      HOL_MDM_POLICY_PATH: /etc/hol-guard/managed-policy.json
+    volumes:
+      - device-b-state:/state
+    tmpfs:
+      - /tmp:size=64m,mode=1777,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+      - /etc/hol-guard:size=8m,mode=0700,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      proxy:
+        condition: service_healthy
+    healthcheck: *device-health
+    mem_limit: 384m
+    cpus: 0.75
+
+  device-c:
+    <<: *lab-service
+    command: ["scripts/mdm/cloud-lab/device_runtime.py", "--port", "8070"]
+    environment:
+      HOL_MDM_WORKSPACE_ID: workspace-mdm-alpha
+      HOL_MDM_DEVICE_ID: device-c
+      HOL_MDM_INSTALLATION_GENERATION: cccccccccccccccccccccccccccccccc
+      HOL_MDM_ENROLLMENT_TOKEN: enrollment-token-device-c
+      HOL_MDM_CLOUD_URL: http://proxy:8080
+      HOL_MDM_STATE_DIR: /state
+      HOL_MDM_POLICY_PATH: /etc/hol-guard/managed-policy.json
+    volumes:
+      - device-c-state:/state
+    tmpfs:
+      - /tmp:size=64m,mode=1777,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+      - /etc/hol-guard:size=8m,mode=0700,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      proxy:
+        condition: service_healthy
+    healthcheck: *device-health
+    mem_limit: 384m
+    cpus: 0.75
+
+  device-d:
+    <<: *lab-service
+    command: ["scripts/mdm/cloud-lab/device_runtime.py", "--port", "8070"]
+    environment:
+      HOL_MDM_WORKSPACE_ID: workspace-mdm-beta
+      HOL_MDM_DEVICE_ID: device-d
+      HOL_MDM_INSTALLATION_GENERATION: dddddddddddddddddddddddddddddddd
+      HOL_MDM_ENROLLMENT_TOKEN: enrollment-token-device-d
+      HOL_MDM_CLOUD_URL: http://proxy:8080
+      HOL_MDM_STATE_DIR: /state
+      HOL_MDM_POLICY_PATH: /etc/hol-guard/managed-policy.json
+    volumes:
+      - device-d-state:/state
+    tmpfs:
+      - /tmp:size=64m,mode=1777,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+      - /etc/hol-guard:size=8m,mode=0700,uid=${HOL_MDM_LAB_UID:-10001},gid=${HOL_MDM_LAB_GID:-10001}
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      proxy:
+        condition: service_healthy
+    healthcheck: *device-health
+    mem_limit: 384m
+    cpus: 0.75
+
+  orchestrator:
+    <<: *lab-service
+    command:
+      - scripts/mdm/cloud-lab/orchestrator.py
+      - --json
+      - --phase
+      - initial
+      - --output
+      - /artifacts/mdm-cloud-integration-initial.json
+    depends_on:
+      cloud:
+        condition: service_healthy
+      proxy:
+        condition: service_healthy
+      device-a:
+        condition: service_healthy
+      device-b:
+        condition: service_healthy
+      device-c:
+        condition: service_healthy
+      device-d:
+        condition: service_healthy
+    environment:
+      HOL_MDM_LAB_ADMIN_TOKEN: ${HOL_MDM_LAB_ADMIN_TOKEN:?HOL_MDM_LAB_ADMIN_TOKEN must be set}
+      HOL_MDM_CLOUD_ADMIN_URL: http://cloud:8090
+      HOL_MDM_PROXY_URL: http://proxy:8080
+      HOL_MDM_DEVICE_A_URL: http://device-a:8070
+      HOL_MDM_DEVICE_B_URL: http://device-b:8070
+      HOL_MDM_DEVICE_C_URL: http://device-c:8070
+      HOL_MDM_DEVICE_D_URL: http://device-d:8070
+    volumes:
+      - lab-artifacts:/artifacts
+    mem_limit: 512m
+    cpus: 1
+
+networks:
+  mdm-lab:
+    internal: true
+
+volumes:
+  cloud-state:
+  device-a-state:
+  device-b-state:
+  device-c-state:
+  device-d-state:
+  lab-artifacts:

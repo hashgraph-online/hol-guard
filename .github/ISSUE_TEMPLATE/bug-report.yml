@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a defect in hol-guard, plugin-scanner, packaging, or automation.
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for reproducible defects in `hol-guard`, `plugin-scanner`, release packaging, or the GitHub Action.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - hol-guard
+        - plugin-scanner
+        - GitHub Action
+        - container image
+        - release workflow
+        - documentation
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Include expected behavior and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide commands, config, or sample inputs that reproduce the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, Python version, package version, and relevant runner or harness details.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste any relevant logs, stack traces, or screenshots.

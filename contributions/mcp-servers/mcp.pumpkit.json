@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.pumpkit",
+  "version": "1.0.0",
+  "name": "Pumpkit",
+  "description": "Reviews Pumpkit hosted MCP tools that publish on the user's X account, queue or change a post that publishes later without another prompt, or delete a Scheduled post. Drafting, revising and read tools keep Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.pumpkit",
+    "displayName": "Pumpkit",
+    "url": "https://pumpkit.io"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0F172A" },
+  "homepage": "https://github.com/pumpkit-io/pumpkit",
+  "license": "AGPL-3.0",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://pumpkit.io/api/v1/mcp",
+    "serverNames": ["pumpkit"]
+  },
+  "riskClasses": ["external-public-publishing", "external-scheduled-publishing", "external-content-deletion"],
+  "tools": [
+    { "name": "post_now", "state": "review" },
+    { "name": "schedule_post", "state": "review" },
+    { "name": "edit_scheduled_post", "state": "review" },
+    { "name": "delete_scheduled_post", "state": "review" },
+    { "name": "start_post", "state": "inherit" },
+    { "name": "give_feedback", "state": "inherit" },
+    { "name": "list_posts", "state": "inherit" },
+    { "name": "get_post", "state": "inherit" },
+    { "name": "list_scheduled_posts", "state": "inherit" },
+    { "name": "list_past_communities", "state": "inherit" },
+    { "name": "list_inspiration_authors", "state": "inherit" },
+    { "name": "add_inspiration_author", "state": "inherit" },
+    { "name": "remove_inspiration_author", "state": "inherit" },
+    { "name": "connect_x", "state": "inherit" },
+    { "name": "manage_subscription", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/pumpkit-io/pumpkit/blob/93cae9da8e51aa066864e9bcfeddb14e646c0a6b/docs/claude-code.md",
+    "https://github.com/pumpkit-io/pumpkit/blob/93cae9da8e51aa066864e9bcfeddb14e646c0a6b/backend/src/pumpkit/scheduling/tools.py",
+    "https://github.com/pumpkit-io/pumpkit/blob/93cae9da8e51aa066864e9bcfeddb14e646c0a6b/backend/src/pumpkit/mcp_server.py"
+  ],
+  "saferAlternatives": [
+    "Guard's Review shows the tool call's arguments, not the post that will publish: a version_id, or an edit that leaves out fields, doesn't show the effective text, time, destination or audience.",
+    "Prefer parts over version_id for post_now and schedule_post: the call then carries the exact text, so Review shows what will publish.",
+    "get_post takes the parent Post's id, not a Version's: use the Post id from start_post or give_feedback, or find it with list_posts and get_post. If no Post holds that Version, don't call the tool.",
+    "Before post_now or schedule_post with a version_id, show the person that Version's Final from get_post, every Part in order, the publish time, and the Community or profile it goes to.",
+    "Before edit_scheduled_post, read the post with list_scheduled_posts and show the text, time, Community or profile, and follower sharing it will have after the edit, including fields the call leaves out.",
+    "Before delete_scheduled_post, show that post's text, time, and which Parts are already live on X, from list_scheduled_posts. Deleting is permanent, and Parts already live stay on X.",
+    "Keep post_now, schedule_post, edit_scheduled_post and delete_scheduled_post on Review: a Scheduled post publishes at its time with no further prompt, and post_now can't be undone.",
+    "Drafting with start_post and give_feedback only writes Versions inside Pumpkit and publishes nothing on X."
+  ]
+}

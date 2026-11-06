@@ -1,0 +1,15 @@
+{
+  "batch": 12,
+  "evidence": [
+    "dashboard/src/managed-controls/rules-exceptions-model.ts",
+    "dashboard/src/managed-controls/rules-exceptions-model.test.ts"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 180,
+    "start": 166
+  },
+  "theme": "Rules & exceptions composition without a duplicate Extension editor"
+}

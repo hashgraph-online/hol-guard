@@ -1,0 +1,287 @@
+{
+  "extension": {
+    "action_classes": [
+      "destructive shell command",
+      "guard-managed config write",
+      "sensitive local file write",
+      "GitHub PR body shell substitution",
+      "process environment secret read"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews destructive shell, Git, filesystem, redirection, and protected configuration mutations.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.shell-mutations",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Shell, Git, and filesystem protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "destructive shell command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies destructive shell, filesystem, and version-control mutations.",
+        "example_command": "find /var/tmp -name \"*.log\" -delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Destructive shell mutation",
+        "permission_id": "command.shell-mutations.permission.destructive-shell",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use a dry run or narrow preview before applying the mutation."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "GitHub PR body shell substitution"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies shell substitution used to construct a remote request body.",
+        "example_command": "gh pr create --body \"$(curl -s https://example.com)\"",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Command substitution in remote body",
+        "permission_id": "command.shell-mutations.permission.github-body-substitution",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use a literal body file whose contents can be reviewed before submission."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "guard-managed config write"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies direct writes to configuration managed by Guard.",
+        "example_command": "echo \"session = on\" >> ~/.hol-guard/config.toml",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Guard-managed configuration write",
+        "permission_id": "command.shell-mutations.permission.managed-config-write",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Use Guard's setup or repair command to update managed configuration."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "process environment secret read"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies commands that print process environment secrets to the agent.",
+        "example_command": "python3 -c 'import os; print(os.environ)'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Process environment secret read",
+        "permission_id": "command.shell-mutations.permission.process-environment-secret-read",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect only a named non-secret variable, or confirm the exact secret read in Guard."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "sensitive local file write"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies writes that can replace or expose sensitive local state.",
+        "example_command": "echo \"ssh-ed25519 KEY\" >> ~/.ssh/authorized_keys",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Sensitive local file write",
+        "permission_id": "command.shell-mutations.permission.sensitive-file-write",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Write to a scoped temporary path and review the final destination."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "local_secret_read",
+      "execution"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "destructive shell command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies destructive shell, filesystem, and version-control mutations.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.shell-mutations.destructive-shell.v1",
+        "permission_id": "command.shell-mutations.permission.destructive-shell",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.shell-mutations.destructive-shell",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Use a dry run or narrow preview before applying the mutation."
+        ],
+        "severity": "high",
+        "title": "Destructive shell mutation"
+      },
+      {
+        "action_classes": [
+          "guard-managed config write"
+        ],
+        "default_mode": "review",
+        "description": "Identifies direct writes to configuration managed by Guard.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.shell-mutations.managed-config-write.v1",
+        "permission_id": "command.shell-mutations.permission.managed-config-write",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.shell-mutations.managed-config-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Use Guard's setup or repair command to update managed configuration."
+        ],
+        "severity": "high",
+        "title": "Guard-managed configuration write"
+      },
+      {
+        "action_classes": [
+          "sensitive local file write"
+        ],
+        "default_mode": "review",
+        "description": "Identifies writes that can replace or expose sensitive local state.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.shell-mutations.sensitive-file-write.v1",
+        "permission_id": "command.shell-mutations.permission.sensitive-file-write",
+        "risk_classes": [
+          "destructive_shell",
+          "local_secret_read"
+        ],
+        "rule_id": "command.shell-mutations.sensitive-file-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Write to a scoped temporary path and review the final destination."
+        ],
+        "severity": "high",
+        "title": "Sensitive local file write"
+      },
+      {
+        "action_classes": [
+          "process environment secret read"
+        ],
+        "default_mode": "review",
+        "description": "Identifies commands that print process environment secrets to the agent.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.shell-mutations.process-environment-secret-read.v1",
+        "permission_id": "command.shell-mutations.permission.process-environment-secret-read",
+        "risk_classes": [
+          "local_secret_read"
+        ],
+        "rule_id": "command.shell-mutations.process-environment-secret-read",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect only a named non-secret variable, or confirm the exact secret read in Guard."
+        ],
+        "severity": "high",
+        "title": "Process environment secret read"
+      },
+      {
+        "action_classes": [
+          "GitHub PR body shell substitution"
+        ],
+        "default_mode": "review",
+        "description": "Identifies shell substitution used to construct a remote request body.",
+        "family": null,
+        "matcher": null,
+        "native_capability": "command.shell-mutations.github-body-substitution.v1",
+        "permission_id": "command.shell-mutations.permission.github-body-substitution",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.shell-mutations.github-body-substitution",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Use a literal body file whose contents can be reviewed before submission."
+        ],
+        "severity": "high",
+        "title": "Command substitution in remote body"
+      }
+    ],
+    "safer_alternatives": [
+      "Use a dry run or preview mode before a destructive operation.",
+      "Narrow the target path or Git ref and avoid recursive or forced mutation.",
+      "Use a literal body file instead of shell substitution in command arguments."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

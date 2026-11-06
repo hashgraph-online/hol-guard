@@ -1,0 +1,94 @@
+"""Runner regressions for incomplete skill-directory identity approvals."""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
+from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
+
+def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
+) -> None:
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
+
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    store.ensure_policy_integrity_ready_for_write(
+        harness="gemini",
+        now="2026-07-19T00:00:00Z",
+    )
+    provision_native_verifier_key_for_store(store)
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    skill_dir = home_dir / ".gemini" / "skills" / "review"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# Review\n", encoding="utf-8")
+    try:
+        (skill_dir / "broken-reference").symlink_to("missing-reference.md")
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+
+    context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
+    detect_count = 0
+
+    def detect(_harness: str, _context: HarnessContext):
+        nonlocal detect_count
+        detect_count += 1
+        return GeminiHarnessAdapter().detect(context)
+
+    def allow_once(_detection, evaluation: dict[str, object]) -> dict[str, object]:
+        items = evaluation.get("artifacts")
+        assert isinstance(items, list)
+        item = items[0]
+        assert isinstance(item, dict)
+        assert item["policy_action"] == "require-reapproval"
+        item["policy_action"] = "allow"
+        item["user_override"] = "allow-once"
+        evaluation["blocked"] = False
+        return evaluation
+
+    launch_calls: list[object] = []
+    native_subprocess_run = subprocess.run
+    monkeypatch.setattr(wrapper_run, "detect_harness", detect)
+    monkeypatch.setattr(
+        wrapper_run_finish,
+        "subprocess",
+        SimpleNamespace(
+            run=lambda *args, **kwargs: (
+                launch_calls.append((args, kwargs))
+                or subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            )
+        ),
+    )
+    assert subprocess.run is native_subprocess_run
+
+    result = wrapper_run.guard_run(
+        "gemini",
+        context,
+        store,
+        GuardConfig(guard_home=home_dir, workspace=workspace_dir),
+        dry_run=False,
+        passthrough_args=[],
+        interactive_resolver=allow_once,
+    )
+
+    assert detect_count >= 2
+    assert result["blocked"] is False
+    assert result["artifacts"][0]["policy_action"] == "allow"
+    assert result["artifacts"][0]["trusted_request_override"]["applied"] is True

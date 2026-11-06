@@ -1,0 +1,102 @@
+{
+  "extension": {
+    "action_classes": [
+      "Elasticsearch destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews explicit DELETE requests to recognizable Elasticsearch API targets.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.search.elasticsearch",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Elasticsearch command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Elasticsearch destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies explicit DELETE requests to recognizable Elasticsearch APIs.",
+        "example_command": "curl -X DELETE 'https://localhost:9200/logs-old'",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Elasticsearch resource deletion",
+        "permission_id": "command.search.elasticsearch.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List the exact resource and capture its configuration before sending DELETE."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indices-delete"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Elasticsearch destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies explicit DELETE requests to recognizable Elasticsearch APIs.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "curl",
+              "curl.cmd",
+              "curl.exe"
+            ],
+            "service_ports": [
+              9200
+            ]
+          },
+          "op": "curl-elasticsearch-delete.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.search.elasticsearch.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.search.elasticsearch.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "List the exact resource and capture its configuration before sending DELETE."
+        ],
+        "severity": "critical",
+        "title": "Elasticsearch resource deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "List and export the target resource before sending DELETE."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

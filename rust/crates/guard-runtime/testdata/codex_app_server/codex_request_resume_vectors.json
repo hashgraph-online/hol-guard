@@ -1,0 +1,4625 @@
+{
+  "schema": "codex-request-resume-vectors.v1",
+  "vectors": [
+    {
+      "name": "status_existing_row_returned",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "sent",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": "2026-10-11T11:00:00+00:00"
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T11:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": "2026-10-11T11:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T11:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": "2026-10-11T11:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "status_missing_request",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": null,
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": null,
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "status_non_codex_request",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "claude-code",
+        "resolution_action": null
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": null,
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "status_seed_without_operation",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": null,
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": null,
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_operation_without_metadata",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": null
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_metadata_not_object",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": [
+          "thread"
+        ]
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_codex_thread_id",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": "t-codex_thread_id"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-codex_thread_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-codex_thread_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_thread_id",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "thread_id": "t-thread_id"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-thread_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-thread_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_threadId",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "threadId": "t-threadId"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-threadId",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-threadId",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_conversation_id",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "conversation_id": "t-conversation_id"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-conversation_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-conversation_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_conversationId",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "conversationId": "t-conversationId"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-conversationId",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-conversationId",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_session_id",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "session_id": "t-session_id"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-session_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-session_id",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_sessionId",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "sessionId": "t-sessionId"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-sessionId",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-sessionId",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_key_priority",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "sessionId": "late",
+          "thread_id": "early"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "early",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "early",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_blank_thread_skipped",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": "   ",
+          "threadId": "t-2"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "t-2",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "t-2",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_non_string_thread",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": 42
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "pending",
+          "thread_id": null,
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_thread_with_spaces_kept",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": " t-3 "
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": " t-3 ",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": " t-3 ",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "status_seed_harness_case",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "status"
+      },
+      "approval_request": {
+        "harness": "Codex",
+        "resolution_action": null
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": null,
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "seed_new_row_with_thread",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "seed"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": "thread-1"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "seed_existing_row_upserted",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "seed"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-2",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": "thread-2"
+        }
+      },
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": "allow-once",
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "sent",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 2,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": "2026-10-11T11:00:00+00:00"
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-2",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-2",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 2,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": "2026-10-11T11:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-2",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-2",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 2,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": "2026-10-11T11:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "seed_existing_thread_kept_without_new_thread",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "seed"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {}
+      },
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "failed",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 1,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "seed_existing_row_without_operation",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "seed"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": null,
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": null,
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "seed_missing_request",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "seed"
+      },
+      "approval_request": null,
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": null,
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T11:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "seed_non_codex_request",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "seed"
+      },
+      "approval_request": {
+        "harness": "cursor",
+        "resolution_action": null
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": null,
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "retry_missing_request",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": null,
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "error": "not_found",
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "retry_non_codex",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "cursor",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "error": "resume_not_supported",
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "retry_unresolved",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": null
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "error": "not_resolved",
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "retry_empty_action",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": ""
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "error": "not_resolved",
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "retry_non_string_action",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": 3
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "error": "not_resolved",
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "retry_block_existing",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "block"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 2,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": "2026-10-11T11:00:00+00:00"
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "codex-app-server-thread",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 3,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "codex-app-server-thread",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 3,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_block_seeded",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "block"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": "thread-1"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "codex-app-server-thread",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "codex-app-server-thread",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_already_sent",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "sent",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 1,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": "2026-10-11T11:00:00+00:00"
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "already_sent",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": "HOL Guard already sent Codex a continuation message for this request.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T11:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": "2026-10-11T11:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T11:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": "2026-10-11T11:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "retry_forced_after_sent",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry",
+        "force": true
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "sent",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 1,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": "2026-10-11T11:00:00+00:00"
+      },
+      "dispatch_result": {
+        "status": "sent",
+        "reason": "turn_steered",
+        "thread_id": "thread-1"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_steered",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 2,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_steered",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 2,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "retry_in_progress",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "in_progress",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 1,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "in_progress",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T11:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": null,
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "in_progress",
+          "thread_id": "thread-1",
+          "reason": null,
+          "message": null,
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T11:00:00+00:00",
+          "last_attempt_at": null,
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_manual_only_seeded",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": null,
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": null,
+          "reason": "session_not_found",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": null,
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": null,
+          "reason": "session_not_found",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_unsupported_existing",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 0,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "session_not_found",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "session_not_found",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_dispatch_none",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "session_not_found",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "session_not_found",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_sent",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry",
+        "timeout_seconds": 2.5
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 1,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "sent",
+        "reason": "turn_started",
+        "thread_id": "thread-1",
+        "strategy": "codex-app-server-thread"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 2,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": 2.5
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 2,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "retry_sent_no_reason",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "sent"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "retry_sent_other_thread",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "sent",
+        "reason": "turn_started",
+        "thread_id": "thread-9",
+        "strategy": "custom"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "custom",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "custom",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "retry_failed_socket_not_available",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "socket_not_available"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "socket_not_available",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "socket_not_available",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "socket_not_available",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "socket_not_available",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_unsafe_socket_path",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "unsafe_socket_path"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "unsafe_socket_path",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "unsafe_socket_path",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "unsafe_socket_path",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "unsafe_socket_path",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_turn_start_timeout",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "turn_start_timeout"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_timeout",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "turn_start_timeout",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_timeout",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "turn_start_timeout",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_turn_start_error",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "turn_start_error"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_error",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "turn_start_error",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_error",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "turn_start_error",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_turn_start_error_message",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "turn_start_error",
+        "message": "busy"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_error",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "busy",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_error",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "busy",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_last_error",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "turn_start_timeout",
+        "last_error": "slow",
+        "message": "ignored"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_timeout",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "slow",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "turn_start_timeout",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "slow",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_known_reason_skipped_status",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "skipped",
+        "reason": "socket_not_available",
+        "supported": false
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "socket_not_available",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "socket_not_available",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "socket_not_available",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "socket_not_available",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_generic",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": "2026-10-11T11:00:00+00:00"
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "native_codex_thread_continue_unavailable"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "native_codex_thread_continue_unavailable",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "native_codex_thread_continue_unavailable",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T11:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "native_codex_thread_continue_unavailable",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "native_codex_thread_continue_unavailable",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T11:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "retry_failed_generic_message",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "x",
+        "message": "m"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "x",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "m",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "x",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "m",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_failed_no_reason",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "unknown",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "unknown",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_skipped",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "skipped",
+        "reason": "invalid_thread_id"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "invalid_thread_id",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "invalid_thread_id",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_skipped_supported_true",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "skipped",
+        "reason": "r",
+        "supported": true
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "r",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "r",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_unknown_status",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "queued",
+        "reason": "r"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "r",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "r",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_empty_dispatch",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {},
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_supported_not_bool",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "weird",
+        "supported": "yes"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "unknown",
+          "message": "Decision recorded for the original request. HOL Guard could not find the original Codex chat to resume. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_null_thread_in_result",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": "x",
+        "thread_id": null
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "x",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "x",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "x",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "x",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_numeric_fields",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "failed",
+        "reason": 7,
+        "thread_id": 9,
+        "last_error": 1
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "7",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "1",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "failed",
+          "thread_id": "thread-1",
+          "reason": "7",
+          "message": "Decision recorded for the original request. HOL Guard could not send a continuation to the original Codex chat. Return to that chat and retry; a new tool call may require fresh approval.",
+          "last_error": "1",
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "retry_seeded_supported_sent",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": "thread-1"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": {
+        "status": "sent",
+        "reason": "turn_started",
+        "thread_id": "thread-1"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "allow-once",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "retry_deny_action_sent",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "retry"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "deny"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": {
+        "status": "sent",
+        "reason": "turn_started"
+      },
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "deny",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [
+          {
+            "request_id": "req-1",
+            "action": "deny",
+            "timeout_seconds": null
+          }
+        ],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "deny",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "sent",
+          "thread_id": "thread-1",
+          "reason": "turn_started",
+          "message": "HOL Guard sent Codex a continuation message in the original chat.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T12:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "defer_allow_existing",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "defer",
+        "action": "allow-once"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 3,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": "2026-10-11T11:00:00+00:00"
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": "live_hook_waiting",
+          "message": "Decision saved. Codex is still waiting for this browser decision, so HOL Guard will let the original Codex action continue without starting a second headless run.",
+          "last_error": null,
+          "attempt_count": 3,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T11:00:00+00:00",
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": "live_hook_waiting",
+          "message": "Decision saved. Codex is still waiting for this browser decision, so HOL Guard will let the original Codex action continue without starting a second headless run.",
+          "last_error": null,
+          "attempt_count": 3,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": "2026-10-11T11:00:00+00:00"
+        }
+      }
+    },
+    {
+      "name": "defer_allow_seeded",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "defer",
+        "action": "allow-once"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {
+          "codex_thread_id": "thread-1"
+        }
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": true,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": "live_hook_waiting",
+          "message": "Decision saved. Codex is still waiting for this browser decision, so HOL Guard will let the original Codex action continue without starting a second headless run.",
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "codex-app-server-thread",
+          "supported": 1,
+          "status": "pending",
+          "thread_id": "thread-1",
+          "reason": "live_hook_waiting",
+          "message": "Decision saved. Codex is still waiting for this browser decision, so HOL Guard will let the original Codex action continue without starting a second headless run.",
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "defer_block_existing",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "defer",
+        "action": "block"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "codex-app-server-thread",
+        "supported": 1,
+        "status": "pending",
+        "thread_id": "thread-1",
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 1,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "codex-app-server-thread",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "codex-app-server-thread",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": "thread-1",
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 1,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "defer_block_seeded",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "defer",
+        "action": "block"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {}
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "skipped",
+          "thread_id": null,
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "block",
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "skipped",
+          "thread_id": null,
+          "reason": "blocked_not_resumed",
+          "message": "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. Do not retry that action in Codex. Ask for a safe alternative instead.",
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T12:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    },
+    {
+      "name": "defer_missing_request",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "defer",
+        "action": "allow-once"
+      },
+      "approval_request": null,
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {}
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": null,
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "defer_non_codex_request",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "defer",
+        "action": "allow-once"
+      },
+      "approval_request": {
+        "harness": "cursor",
+        "resolution_action": null
+      },
+      "operation": {
+        "operation_id": "op-1",
+        "harness": "codex",
+        "status": "waiting_on_approval",
+        "metadata": {}
+      },
+      "existing_resume": null,
+      "dispatch_result": null,
+      "expected": {
+        "result": null,
+        "dispatch_calls": [],
+        "final_row": null
+      }
+    },
+    {
+      "name": "defer_unsupported_kept",
+      "call": {
+        "request_id": "req-1",
+        "now": "2026-10-11T12:00:00+00:00",
+        "kind": "defer",
+        "action": "allow-once"
+      },
+      "approval_request": {
+        "harness": "codex",
+        "resolution_action": "allow-once"
+      },
+      "operation": null,
+      "existing_resume": {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "harness": "codex",
+        "resolution_action": null,
+        "strategy": "manual-only",
+        "supported": 0,
+        "status": "pending",
+        "thread_id": null,
+        "reason": null,
+        "message": null,
+        "last_error": null,
+        "attempt_count": 0,
+        "created_at": "2026-10-11T11:00:00+00:00",
+        "updated_at": "2026-10-11T11:00:00+00:00",
+        "last_attempt_at": null,
+        "sent_at": null
+      },
+      "dispatch_result": null,
+      "expected": {
+        "result": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "manual-only",
+          "supported": false,
+          "status": "pending",
+          "thread_id": null,
+          "reason": "live_hook_waiting",
+          "message": "Decision saved. Codex is still waiting for this browser decision, so HOL Guard will let the original Codex action continue without starting a second headless run.",
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null,
+          "continuation_contract_version": null,
+          "continuation_capability": null,
+          "continuation_status": null,
+          "continuation_reason": null,
+          "continuation_evidence": [],
+          "continuation_offer_hash": null,
+          "continuation_action": null,
+          "continuation_completed_at": null,
+          "continuation_cancelled_at": null
+        },
+        "dispatch_calls": [],
+        "final_row": {
+          "request_id": "req-1",
+          "operation_id": "op-1",
+          "harness": "codex",
+          "resolution_action": "allow-once",
+          "strategy": "manual-only",
+          "supported": 0,
+          "status": "pending",
+          "thread_id": null,
+          "reason": "live_hook_waiting",
+          "message": "Decision saved. Codex is still waiting for this browser decision, so HOL Guard will let the original Codex action continue without starting a second headless run.",
+          "last_error": null,
+          "attempt_count": 0,
+          "created_at": "2026-10-11T11:00:00+00:00",
+          "updated_at": "2026-10-11T12:00:00+00:00",
+          "last_attempt_at": "2026-10-11T12:00:00+00:00",
+          "sent_at": null
+        }
+      }
+    }
+  ]
+}

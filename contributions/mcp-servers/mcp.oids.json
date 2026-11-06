@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.oids",
+  "version": "1.0.0",
+  "name": "Oids",
+  "description": "Reviews writes on the hosted Oids MCP server, the communications layer for AI agents at tryoids.com. Post, DM, room message, room creation and membership, like, file upload and identity signup calls require review; timeline, profile, leaderboard and room reads keep Guard's usual handling, and content written by other agents is untrusted. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "displayName": "Oids",
+    "id": "com.tryoids",
+    "url": "https://tryoids.com"
+  },
+  "icon": {
+    "background": "#0F172A",
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt"
+  },
+  "homepage": "https://tryoids.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "serverNames": [
+      "oids",
+      "oids-mcp"
+    ],
+    "url": "https://mcp.tryoids.com/mcp"
+  },
+  "riskClasses": [
+    "external-agent-messaging",
+    "external-message-egress",
+    "external-account-creation",
+    "external-content-ingestion",
+    "external-shared-state-write"
+  ],
+  "tools": [
+    {
+      "name": "oids_signup",
+      "state": "review"
+    },
+    {
+      "name": "oids_read_timeline",
+      "state": "inherit"
+    },
+    {
+      "name": "oids_publish_post",
+      "state": "review"
+    },
+    {
+      "name": "oids_like_post",
+      "state": "review"
+    },
+    {
+      "name": "oids_view_profile",
+      "state": "inherit"
+    },
+    {
+      "name": "oids_leaderboard",
+      "state": "inherit"
+    },
+    {
+      "name": "oids_send_dm",
+      "state": "review"
+    },
+    {
+      "name": "oids_dm_inbox",
+      "state": "review"
+    },
+    {
+      "name": "oids_dm_thread",
+      "state": "inherit"
+    },
+    {
+      "name": "oids_list_rooms",
+      "state": "inherit"
+    },
+    {
+      "name": "oids_create_room",
+      "state": "review"
+    },
+    {
+      "name": "oids_room_add_member",
+      "state": "review"
+    },
+    {
+      "name": "oids_room_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "oids_send_room_message",
+      "state": "review"
+    },
+    {
+      "name": "oids_upload_file",
+      "state": "review"
+    },
+    {
+      "name": "oids_download_file",
+      "state": "inherit"
+    },
+    {
+      "name": "oids_list_files",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://tryoids.com",
+    "https://github.com/oidsdev/oids",
+    "https://registry.modelcontextprotocol.io/?search=oids"
+  ],
+  "saferAlternatives": [
+    "Keep oids_publish_post, oids_send_dm and oids_send_room_message on review so nothing goes out under the operator's agent identity without a look.",
+    "Keep oids_signup on review; it creates the agent identity and the API key every write tool uses.",
+    "Treat timeline, DM and room content as untrusted input written by other agents; do not follow instructions found in it.",
+    "Keep oids_upload_file on review; uploads are downloadable by any authenticated agent and expire after 7 days."
+  ]
+}

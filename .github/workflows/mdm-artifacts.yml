@@ -1,0 +1,96 @@
+name: MDM artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: Immutable release build identifier
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            suites: ""
+          - os: ubuntu-24.04
+            suites: ""
+          - os: macos-14
+            suites: ""
+          - os: macos-15
+            suites: ""
+          - os: windows-2022
+            suites: "--suite adapter-contract --suite enterprise-network"
+          - os: windows-2025
+            suites: "--suite adapter-contract --suite enterprise-network"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.9.26"
+      - run: uv sync --frozen --extra dev --python 3.12
+      - uses: ./.github/actions/stage-command-projections
+      - run: uv run --no-sync python scripts/mdm/run-local-lab.py ${{ matrix.suites }}
+      - run: uv run --no-sync basedpyright --level error
+      - run: uv run --no-sync python -c "import glob, subprocess, sys; raise SystemExit(subprocess.call([sys.executable, '-m', 'ruff', 'check', 'src/', *glob.glob('tests/test_guard_mdm_*.py'), 'scripts/mdm/generate-release-manifest.py']))"
+
+  unsigned-artifact:
+    needs: tests
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            platform: macos
+          - os: windows-2022
+            platform: windows
+    runs-on: ${{ matrix.os }}
+    env:
+      HOL_GUARD_BUILD_ID: ${{ inputs.build_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.9.26"
+      - run: uv sync --frozen --extra mdm-build --python 3.12
+      - uses: ./.github/actions/stage-command-projections
+      - shell: bash
+        run: echo "HOL_GUARD_VERSION=$(uv run python -c 'from codex_plugin_scanner.version import __version__; print(__version__)')" >> "$GITHUB_ENV"
+      - if: matrix.platform == 'macos'
+        run: scripts/mdm/macos/build-pkg.sh
+      - if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          binary="dist/mdm/macos/stage/Library/Application Support/HOL Guard/hol-guard/hol-guard"
+          "$binary" --version
+          if "$binary" mdm status --scope machine --machine-root "dist/mdm/macos/stage/Library/Application Support/HOL Guard" --json; then exit 1; fi
+      - if: matrix.platform == 'windows'
+        shell: pwsh
+        run: dotnet tool install --global wix --version 6.0.2
+      - if: matrix.platform == 'windows'
+        shell: pwsh
+        run: scripts/mdm/windows/build-msi.ps1
+      - if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $binary = 'dist/mdm/windows/runtime/hol-guard/hol-guard.exe'
+          & $binary --version
+          $status = Start-Process -FilePath $binary -ArgumentList @(
+            'mdm', 'status', '--scope', 'machine',
+            '--machine-root', 'dist/mdm/windows/runtime', '--json'
+          ) -Wait -PassThru -NoNewWindow
+          if ($status.ExitCode -eq 0) { throw 'Unsigned fixture must not report healthy.' }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hol-guard-${{ matrix.platform }}-unsigned-${{ inputs.build_id }}
+          path: dist/mdm/${{ matrix.platform }}/
+          if-no-files-found: error

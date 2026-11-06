@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guard.hashgraphonline.com/schema/policy/v1alpha1/decision",
+  "title": "GuardPolicy decision",
+  "description": "The outcome of deciding one event against a policy, with every rule that was considered. Shared by hol-guard policy check, hol-guard policy test and the Policy Studio Explain panel.",
+  "type": "object",
+  "required": ["effect", "ruleId", "ambiguous", "matchLimitExceeded", "tiedRuleIds", "candidates", "lookup"],
+  "properties": {
+    "effect": {
+      "description": "allow or block when a rule decided; default when no rule matched and the policy defaults apply. When more rows matched than the runtime reads, the effect is block and ruleId is null.",
+      "enum": ["allow", "block", "default"]
+    },
+    "ruleId": {
+      "description": "The rule that decided, or null for default and for a match-limit block.",
+      "oneOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }]
+    },
+    "ambiguous": {
+      "description": "True when another rule ties with the deciding rule on effect and specificity.",
+      "type": "boolean"
+    },
+    "matchLimitExceeded": {
+      "description": "True when more than 256 rows matched; the runtime then blocks without naming a rule.",
+      "type": "boolean"
+    },
+    "tiedRuleIds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/identifier" },
+      "uniqueItems": true
+    },
+    "candidates": {
+      "description": "One entry per compiled rule row, in document order.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/candidate" }
+    },
+    "lookup": {
+      "type": "object",
+      "required": ["artifactId", "familyKey", "at"],
+      "properties": {
+        "artifactId": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "familyKey": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "at": { "$ref": "#/$defs/utcTimestamp" }
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "description": "Additive. For a command check, the strongest action a matching command rule asked for, including warn and review, which have no allow or block effect.",
+      "enum": ["allow", "warn", "review", "block"]
+    },
+    "document": {
+      "description": "Additive. The policy the decision was made against.",
+      "type": "object",
+      "required": ["id", "digest"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["ruleId", "rowIndex", "state", "reason"],
+      "properties": {
+        "ruleId": { "$ref": "#/$defs/identifier" },
+        "rowIndex": { "type": "integer", "minimum": 0 },
+        "state": { "enum": ["selected", "outranked", "unmatched", "expired", "not_enforced"] },
+        "reason": {
+          "description": "The first field that failed for unmatched rows, or why a matching row lost. null for the selected row.",
+          "oneOf": [
+            {
+              "enum": [
+                "harness",
+                "artifact",
+                "workspace",
+                "publisher",
+                "command",
+                "expired",
+                "exact_only_family",
+                "block_wins",
+                "more_specific_rule",
+                "tie"
+              ]
+            },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

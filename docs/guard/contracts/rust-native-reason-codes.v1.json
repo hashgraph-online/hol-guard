@@ -1,0 +1,110 @@
+{
+  "schema": "hol-guard.native-reason-codes.v1",
+  "codes": [
+    {
+      "code": "native_overloaded",
+      "category": "overload",
+      "retryable": true
+    },
+    {
+      "code": "native_crashed",
+      "category": "availability",
+      "retryable": true
+    },
+    {
+      "code": "native_recovering",
+      "category": "availability",
+      "retryable": true
+    },
+    {
+      "code": "native_circuit_open",
+      "category": "availability",
+      "retryable": false
+    },
+    {
+      "code": "native_authentication_failed",
+      "category": "authentication",
+      "retryable": false
+    },
+    {
+      "code": "native_response_invalid",
+      "category": "integrity",
+      "retryable": false
+    },
+    {
+      "code": "native_incompatible",
+      "category": "compatibility",
+      "retryable": false
+    },
+    {
+      "code": "daemon_unavailable",
+      "category": "critical_availability",
+      "retryable": true
+    },
+    {
+      "code": "policy_snapshot_stale",
+      "category": "policy_integrity",
+      "retryable": false
+    },
+    {
+      "code": "failsafe_pause",
+      "category": "fail_safe",
+      "retryable": true
+    },
+    {
+      "code": "native_queue_full",
+      "category": "overload",
+      "retryable": true
+    },
+    {
+      "code": "native_deadline_exceeded",
+      "category": "deadline",
+      "retryable": true
+    },
+    {
+      "code": "native_generation_mismatch",
+      "category": "integrity",
+      "retryable": false
+    },
+    {
+      "code": "native_policy_mismatch",
+      "category": "policy_integrity",
+      "retryable": false
+    },
+    {
+      "code": "native_rule_mismatch",
+      "category": "integrity",
+      "retryable": false
+    },
+    {
+      "code": "native_binary_quarantined",
+      "category": "integrity",
+      "retryable": false
+    },
+    {
+      "code": "daemon_recovering",
+      "category": "critical_availability",
+      "retryable": true
+    },
+    {
+      "code": "daemon_crash_loop",
+      "category": "critical_availability",
+      "retryable": false
+    },
+    {
+      "code": "emergency_profile_denied",
+      "category": "fail_safe",
+      "retryable": false
+    },
+    {
+      "code": "native_unavailable",
+      "category": "availability",
+      "retryable": true
+    },
+    {
+      "code": "native_request_rejected",
+      "category": "input_bound",
+      "retryable": false
+    }
+  ]
+}

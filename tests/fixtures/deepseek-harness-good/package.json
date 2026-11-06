@@ -1,0 +1,11 @@
+{
+  "name": "dsh-example",
+  "version": "1.0.0",
+  "description": "A native DeepSeek Harness plugin",
+  "main": "index.js",
+  "dsh": {
+    "bundle": {
+      "patch": "cordis.patch.yml"
+    }
+  }
+}

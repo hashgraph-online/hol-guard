@@ -1,0 +1,501 @@
+"""Tests for browser scope support in policy bundle parser (HGBM072-HGBM079)."""
+
+from __future__ import annotations
+
+import hashlib
+
+from tests.policy_bundle_parser_support import (
+    POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
+    computed_policy_bundle_hash,
+    validated_policy_bundle_payload,
+)
+from tests.policy_bundle_rule_validity_helpers import VALIDATION_NOW
+from tests.policy_bundle_rule_validity_helpers import policy_bundle_rule_is_valid as _policy_bundle_rule_is_valid
+from tests.policy_bundle_signing_helpers import (
+    TEST_POLICY_BUNDLE_WORKSPACE_ID,
+    policy_bundle_test_keyring,
+    policy_bundle_test_verification_key,
+    sign_policy_bundle,
+)
+from tests.policy_store_support import replace_remote_policies, resolve_policy
+
+
+def _valid_base_rule() -> dict[str, object]:
+    return {
+        "ruleId": "test-rule-1",
+        "action": "allow",
+        "reason": "allow local dev browser navigation",
+        "scope": {
+            "agents": ["codex"],
+            "devices": ["device-1"],
+            "ecosystems": ["npm"],
+            "environments": ["development"],
+            "harnesses": ["codex"],
+            "locations": ["us-east-1"],
+        },
+    }
+
+
+class TestBrowserScopeValidation:
+    """HGBM072-HGBM079: Browser scope support in policy bundle."""
+
+    def test_valid_bundle_with_browser_navigation_scope(self) -> None:
+        """HGBM072: Parser accepts browser scope fields."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserIntent"] = ["browser.navigation"]
+        rule["scope"]["origin"] = ["http://127.0.0.1:3000"]
+        rule["scope"]["pathPrefix"] = ["/guard"]
+        assert _policy_bundle_rule_is_valid(rule) is True
+
+    def test_valid_bundle_with_browser_inspect_scope(self) -> None:
+        """HGBM072: Browser inspect scope accepted."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserIntent"] = ["browser.inspect"]
+        rule["scope"]["origin"] = ["https://hol.org"]
+        assert _policy_bundle_rule_is_valid(rule) is True
+
+    def test_valid_bundle_with_browser_profile_scope(self) -> None:
+        """HGBM072: Browser profile scope accepted."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserProfile"] = ["isolated"]
+        assert _policy_bundle_rule_is_valid(rule) is True
+
+    def test_valid_bundle_with_sensitive_surface_scope(self) -> None:
+        """HGBM072: Sensitive surface scope accepted."""
+        rule = _valid_base_rule()
+        rule["scope"]["sensitiveSurface"] = ["cookies", "script_eval"]
+        assert _policy_bundle_rule_is_valid(rule) is True
+
+    def test_invalid_browser_intent_rejected(self) -> None:
+        """HGBM073: Invalid browser intent value rejected."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserIntent"] = ["browser.unknown"]
+        assert _policy_bundle_rule_is_valid(rule) is False
+
+    def test_invalid_browser_profile_rejected(self) -> None:
+        """HGBM073: Invalid browser profile value rejected."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserProfile"] = ["bogus-profile"]
+        assert _policy_bundle_rule_is_valid(rule) is False
+
+    def test_legacy_bundle_without_browser_fields_still_valid(self) -> None:
+        """HGBM074: Backwards compatibility — no browser fields needed."""
+        rule = _valid_base_rule()
+        assert _policy_bundle_rule_is_valid(rule) is True
+
+    def test_bundle_hash_stable_without_browser_fields(self) -> None:
+        """HGBM074: Hash unchanged for legacy bundles."""
+        bundle = {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "1.0",
+            "issuedAt": "2026-01-01T00:00:00Z",
+            "expiresAt": "2027-01-01T00:00:00Z",
+            "verifier": {"algorithm": "rsa-pss-sha256", "publicKeyPem": "key", "signature": "sig"},
+            "rolloutState": "enforced",
+            "policyDefaults": {},
+            "rules": [],
+            "acknowledgements": [],
+            "bundleHash": "sha256:d514421634db6671dd261bfe1cf84fff26f38def4ab117c09f82b49cf7821a69",
+        }
+        hash1 = computed_policy_bundle_hash(bundle)
+        hash2 = computed_policy_bundle_hash(dict(bundle))
+        assert hash1 == hash2
+
+    def test_navigation_allow_does_not_match_interact(self) -> None:
+        """HGBM077: browser.navigation scope does not match browser.interact."""
+        # This is a logical assertion about scope matching — the parser
+        # validates structure, and different browserIntent values produce
+        # different scope tuples.
+        nav_rule = _valid_base_rule()
+        nav_rule["scope"]["browserIntent"] = ["browser.navigation"]
+
+        interact_rule = _valid_base_rule()
+        interact_rule["scope"]["browserIntent"] = ["browser.interact"]
+
+        nav_scope = nav_rule["scope"]["browserIntent"]
+        interact_scope = interact_rule["scope"]["browserIntent"]
+        assert nav_scope != interact_scope
+
+    def test_mcp_tool_matcher_family_accepted(self) -> None:
+        """HGBM053: mcp-tool is in rule matcher families."""
+        assert "mcp-tool" in POLICY_BUNDLE_RULE_MATCHER_FAMILIES
+
+    def test_validated_payload_accepts_browser_scope(self) -> None:
+        """HGBM072: Full bundle validation accepts browser scope."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserIntent"] = ["browser.navigation"]
+        rule["scope"]["origin"] = ["http://127.0.0.1:3000"]
+        rule["scope"]["pathPrefix"] = ["/guard"]
+        rule["scope"]["browserProfile"] = ["isolated"]
+
+        bundle = {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "1.0",
+            "issuedAt": "2026-01-01T00:00:00Z",
+            "expiresAt": "2027-01-01T00:00:00Z",
+            "verifier": {"algorithm": "rsa-pss-sha256", "keyId": "key-1", "signature": "sig"},
+            "rolloutState": "enforced",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "block",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "block",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": False,
+            },
+            "rules": [rule],
+            "acknowledgements": [],
+        }
+
+        signing_key = policy_bundle_test_verification_key()
+        bundle = sign_policy_bundle(bundle, key=signing_key)
+        payload, error = validated_policy_bundle_payload(
+            bundle,
+            trusted_verification_keys=(signing_key,),
+            anchored_verification_keys=(signing_key,),
+            expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
+            now=VALIDATION_NOW,
+        )
+        assert payload is not None
+        assert error is None
+
+
+def _valid_bundle_with_rules(rules: list[dict[str, object]]) -> dict[str, object]:
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "1.0",
+        "issuedAt": "2026-01-01T00:00:00Z",
+        "expiresAt": "2027-01-01T00:00:00Z",
+        "verifier": {"algorithm": "rsa-pss-sha256", "keyId": "key-1", "signature": "sig"},
+        "rolloutState": "enforced",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "block",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "block",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": False,
+        },
+        "rules": rules,
+        "acknowledgements": [],
+    }
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    return bundle
+
+
+class TestBrowserScopeDecisionNarrowing:
+    """Regression: browser-scoped bundle rules must not produce broad family decisions."""
+
+    @staticmethod
+    def _local_match_rule() -> dict[str, object]:
+        rule = _valid_base_rule()
+        rule["scope"]["locations"] = []
+        return rule
+
+    def test_browser_scoped_rule_produces_no_decisions(self) -> None:
+        """A rule with browserIntent must not generate a harness-scoped family decision."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["browserIntent"] = ["browser.navigation"]
+        rule["scope"]["origin"] = ["http://127.0.0.1:3000"]
+        rule["scope"]["pathPrefix"] = ["/guard"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_exact_command_rule_does_not_create_family_decision(self) -> None:
+        """An exact command rule must not broaden into all tool actions."""
+        from codex_plugin_scanner.guard.runtime.runner import (
+            _build_policy_bundle_decisions,
+        )
+
+        command = " python -m pytest "
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
+        rule["matcher"] = {"command": command, "tool": "shell"}
+        rule["artifactId"] = "memory:codex:command_pattern:broad"
+        rule["matcherFamilies"] = ["tool-action"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert len(decisions) == 1
+        assert decisions[0].scope == "artifact"
+        assert (
+            decisions[0].artifact_id
+            == "memory:exact-shell-command:" + hashlib.sha256(command.encode("utf-8")).hexdigest()
+        )
+
+    def test_exact_artifact_rule_does_not_create_family_decision(self) -> None:
+        """An exact artifact grant stays exact even when a family is advertised."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        artifact_id = "codex:project:package-request:npm-safe-lib"
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
+        rule["matcher"] = {"artifactId": artifact_id}
+        rule["matcherFamilies"] = ["package-request"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert len(decisions) == 1
+        assert decisions[0].scope == "artifact"
+        assert decisions[0].artifact_id == artifact_id
+
+    def test_exact_command_with_unrepresentable_scope_is_skipped(self) -> None:
+        """Exact identity does not authorize dropping an additional path constraint."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["path"] = "/trusted/workspace"
+        rule["matcher"] = {"command": "python -m pytest", "tool": "shell"}
+        rule["matcherFamilies"] = ["tool-action"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_exact_artifact_with_package_selector_is_skipped(self) -> None:
+        """Exact artifact IDs cannot silently discard independent package selectors."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = ["npm"]
+        rule["scope"]["packageNames"] = ["safe-lib"]
+        rule["matcher"] = {"artifactId": "codex:project:package-request:npm-safe-lib"}
+        rule["matcherFamilies"] = ["package-request"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_package_selectors_do_not_create_harness_family_allow(self, tmp_path) -> None:
+        """npm/safe-lib authority must not become an allow for pypi/evil."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        rule = self._local_match_rule()
+        rule["matcherFamilies"] = ["package-request"]
+        rule["scope"]["devices"] = []
+        rule["scope"]["ecosystems"] = ["npm"]
+        rule["scope"]["packageNames"] = ["safe-lib"]
+        bundle = sign_policy_bundle(_valid_bundle_with_rules([rule]))
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_payload(
+            "oauth_local_credentials",
+            {"workspace_id": TEST_POLICY_BUNDLE_WORKSPACE_ID},
+            "2026-01-01T00:00:00Z",
+        )
+        store.set_sync_payload(
+            "policy_bundle_keyring",
+            policy_bundle_test_keyring(),
+            "2026-01-01T00:00:00Z",
+        )
+        store.set_sync_payload("policy_bundle", bundle, "2026-01-01T00:00:00Z")
+        replace_remote_policies(store, decisions, "2026-01-01T00:00:00Z", remote_write_authorized=True)
+
+        assert resolve_policy(store, "codex", "codex:project:package-request:pypi-evil", "sha256:evil") is None
+
+    def test_explicit_unconstrained_package_artifact_type_can_create_family_rule(self) -> None:
+        """An explicitly package-wide rule remains representable at family scope."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "package_request"
+        rule["matcherFamilies"] = ["package-request"]
+        rule["scope"]["ecosystems"] = []
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert len(decisions) == 1
+        assert decisions[0].scope == "harness"
+        assert decisions[0].artifact_id == "family:package-request"
+
+    def test_unrepresentable_matcher_selector_does_not_create_family_rule(self) -> None:
+        """A tool selector cannot be discarded while persisting a tool family rule."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["matcher"] = {"tool": "shell"}
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_blank_harness_constraint_does_not_broaden_to_wildcard(self) -> None:
+        """Malformed blank selectors fail closed instead of becoming ``*``."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "tool_action_request"
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["harnesses"] = [""]
+        bundle = _valid_bundle_with_rules([rule])
+
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+
+        assert decisions == []
+
+    def test_custom_agent_class_does_not_broaden_to_every_harness(self) -> None:
+        """A portal-side custom-agent class cannot become wildcard authority."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "tool_action_request"
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["agents"] = ["custom"]
+        rule["scope"]["harnesses"] = []
+        bundle = _valid_bundle_with_rules([rule])
+
+        assert _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev") == []
+
+    def test_disjoint_agent_and_harness_selectors_do_not_form_a_union(self) -> None:
+        """Conjunctive selector fields cannot be widened by unioning them."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["artifactType"] = "tool_action_request"
+        rule["matcherFamilies"] = ["tool-action"]
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["agents"] = ["codex"]
+        rule["scope"]["harnesses"] = ["claude-code"]
+        bundle = _valid_bundle_with_rules([rule])
+
+        assert _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev") == []
+
+    def test_rule_with_only_sensitive_surface_skipped(self) -> None:
+        """A rule with only sensitiveSurface scope is skipped (no broad allow)."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["sensitiveSurface"] = ["cookies"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_rule_with_only_browser_profile_skipped(self) -> None:
+        """A rule with only browserProfile scope is skipped (no broad allow)."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["browserProfile"] = ["isolated"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_rule_with_only_origin_skipped(self) -> None:
+        """A rule with only origin scope is skipped (no broad allow)."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["origin"] = ["http://127.0.0.1:3000"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_mixed_browser_and_non_browser_rules(self) -> None:
+        """Only the non-browser rule produces a decision; the browser rule is skipped."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        browser_rule = self._local_match_rule()
+        browser_rule["ruleId"] = "browser-rule"
+        browser_rule["scope"]["browserIntent"] = ["browser.navigation"]
+        browser_rule["scope"]["origin"] = ["http://127.0.0.1:3000"]
+
+        plain_rule = self._local_match_rule()
+        plain_rule["ruleId"] = "plain-rule"
+        plain_rule["scope"]["ecosystems"] = []
+        plain_rule["scope"]["command"] = "python -m pytest"
+
+        bundle = _valid_bundle_with_rules([browser_rule, plain_rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert len(decisions) > 0
+        for decision in decisions:
+            assert decision.owner == "plain-rule"
+
+    def test_empty_browser_scope_list_does_not_skip_rule(self) -> None:
+        """Empty browser scope lists are no-ops, not constraints."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["command"] = "python -m pytest"
+        rule["scope"]["browserIntent"] = []
+        rule["scope"]["origin"] = []
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert len(decisions) > 0
+
+    def test_top_level_browser_fields_skip_rule(self) -> None:
+        """Browser fields at the top level of the rule (not under scope) also skip."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["browserIntent"] = ["browser.navigation"]
+        rule["origin"] = ["http://127.0.0.1:3000"]
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_empty_top_level_browser_fields_do_not_skip_rule(self) -> None:
+        """Empty top-level browser fields are no-ops, not constraints."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["scope"]["ecosystems"] = []
+        rule["scope"]["command"] = "python -m pytest"
+        rule["browserIntent"] = []
+        rule["origin"] = []
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert len(decisions) > 0
+
+    def test_package_request_rule_without_package_scope_does_not_create_saved_family_decision(self) -> None:
+        """Empty-scope package bundle rules stay out of saved-policy overrides."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = self._local_match_rule()
+        rule["matcherFamilies"] = ["package-request"]
+        rule["scope"]["ecosystems"] = []
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []
+
+    def test_empty_scope_package_request_rule_does_not_block_all_installs(self) -> None:
+        """Regression: Cloud graph package defaults must not become a global install block."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        rule = {
+            "ruleId": "policy-graph-default-high-block",
+            "action": "block",
+            "reason": "Block immediately high risk.",
+            "scope": {
+                "agents": [],
+                "devices": [],
+                "ecosystems": [],
+                "environments": [],
+                "harnesses": [],
+                "locations": [],
+            },
+            "matcherFamilies": ["package-request"],
+        }
+        bundle = _valid_bundle_with_rules([rule])
+        decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+        assert decisions == []

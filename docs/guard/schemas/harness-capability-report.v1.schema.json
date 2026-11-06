@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/harness-capability-report.v1.schema.json",
+  "title": "HOL Guard harness capability report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "build", "commit", "requested_host", "capabilities"],
+  "properties": {
+    "schema_version": {"const": "harness-capability-report.v1"},
+    "build": {"type": "string", "minLength": 1, "maxLength": 256},
+    "commit": {"type": "string", "minLength": 1, "maxLength": 256},
+    "requested_host": {"type": ["string", "null"], "maxLength": 256},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/capability"}
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness", "adapter", "host_version_scope", "os_arch", "local_hosted",
+        "event", "transport", "mode", "declared_actions", "error_behavior",
+        "mandatory_compatibility", "known_blind_spots", "source_reference",
+        "deployment_health", "evidence_level", "observed_at", "expires_at",
+        "evidence_reference", "evidence_build", "evidence_host_version_scope",
+        "evidence_os_arch", "denied_witness_reference", "allowed_witness_reference",
+        "compatibility_verified"
+      ],
+      "properties": {
+        "harness": {"type": "string", "minLength": 1, "maxLength": 128},
+        "adapter": {"type": "string", "minLength": 1, "maxLength": 128},
+        "host_version_scope": {"type": "string", "minLength": 1, "maxLength": 256},
+        "os_arch": {"type": "string", "minLength": 1, "maxLength": 128},
+        "local_hosted": {"enum": ["local", "hosted", "unknown"]},
+        "event": {"type": "string", "minLength": 1, "maxLength": 128},
+        "transport": {"type": "string", "minLength": 1, "maxLength": 128},
+        "mode": {"type": "string", "minLength": 1, "maxLength": 128},
+        "declared_actions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "approval", "block", "inspect", "inventory", "observe",
+              "redact-before-forward", "rewrite", "suggest", "unavailable"
+            ]
+          }
+        },
+        "error_behavior": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "mandatory_compatibility": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "known_blind_spots": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 2000}
+        },
+        "source_reference": {"type": "string", "minLength": 1, "maxLength": 512},
+        "deployment_health": {"enum": ["unverified", "healthy", "degraded", "unavailable", "unknown"]},
+        "evidence_level": {
+          "enum": ["not_run", "source_review", "unit_test", "synthetic_canary", "live_block", "independent_review"]
+        },
+        "observed_at": {"type": ["string", "null"], "maxLength": 64},
+        "expires_at": {"type": ["string", "null"], "maxLength": 64},
+        "evidence_reference": {"type": ["string", "null"], "maxLength": 512},
+        "evidence_build": {"type": ["string", "null"], "maxLength": 256},
+        "evidence_host_version_scope": {"type": ["string", "null"], "maxLength": 256},
+        "evidence_os_arch": {"type": ["string", "null"], "maxLength": 128},
+        "denied_witness_reference": {"type": ["string", "null"], "maxLength": 512},
+        "allowed_witness_reference": {"type": ["string", "null"], "maxLength": 512},
+        "compatibility_verified": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"evidence_level": {"const": "not_run"}}},
+          "then": {
+            "properties": {
+              "observed_at": {"type": "null"},
+              "expires_at": {"type": "null"},
+              "evidence_reference": {"type": "null"},
+              "evidence_build": {"type": "null"},
+              "evidence_host_version_scope": {"type": "null"},
+              "evidence_os_arch": {"type": "null"},
+              "denied_witness_reference": {"type": "null"},
+              "allowed_witness_reference": {"type": "null"},
+              "compatibility_verified": {"const": false}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "evidence_level": {
+                "enum": ["source_review", "unit_test", "synthetic_canary", "live_block", "independent_review"]
+              }
+            }
+          },
+          "then": {
+            "required": ["observed_at", "expires_at", "evidence_reference"],
+            "properties": {
+              "observed_at": {"type": "string", "minLength": 1},
+              "expires_at": {"type": "string", "minLength": 1},
+              "evidence_reference": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

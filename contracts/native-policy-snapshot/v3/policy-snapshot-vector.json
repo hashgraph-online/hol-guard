@@ -1,0 +1,58 @@
+{
+  "verifier_key_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+  "snapshot": {
+    "config_digest": "f01c2dc32e56a85b48346341b108f289414a25ef4ff2e86db79902cdab349bc3",
+    "effective_policy": {
+      "artifact_actions": {
+        "package.tgz": "block"
+      },
+      "changed_hash_action": "require-reapproval",
+      "default_action": "warn",
+      "harness_actions": {
+        "codex": "warn"
+      },
+      "harness_risk_actions": {
+        "Claude_Code": {
+          "prompt_injection": "block"
+        }
+      },
+      "new_network_domain_action": "warn",
+      "protection_posture": "protected",
+      "publisher_actions": {
+        "npm": "review"
+      },
+      "receipt_redaction_level": "full",
+      "risk_actions": {
+        "network_egress": "warn",
+        "prompt_injection": "block"
+      },
+      "sandbox_analysis": "off",
+      "security_level": "balanced",
+      "subprocess_action": "warn",
+      "unknown_publisher_action": "review"
+    },
+    "expires_at_ms": 2000,
+    "generation": 7,
+    "integrity": {
+      "algorithm": "hmac-sha256",
+      "key_id": "4bb06f8e4e3a7715d201d573d0aa423762e55dabd61a2c02278fa56cc6d294e0",
+      "mac": "8f3bfcf5189d91b240bc7deb26d202741da55253303306712fb0b3d80a90944f"
+    },
+    "issued_at_ms": 1000,
+    "mode": "enforce",
+    "policy_digest": "3fd43e9f0885e10988562417fcef48b0bac9903ac8d1f1868f2f99888d4cc5e2",
+    "protocol_version": 1,
+    "rule_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "runtime_identity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "schema": "hol-guard-native-policy.v3",
+    "scope_contract": {
+      "kind": "guard-home",
+      "schema": "guard-native-scope.v1",
+      "scope_digest": "92db33c34234d26d3de1f15328b2150673a8122c200bff1dc77cfed2fecf3ee1",
+      "workspace_binding": "request-source"
+    },
+    "version": 3
+  },
+  "signing_bytes": "{\"config_digest\":\"f01c2dc32e56a85b48346341b108f289414a25ef4ff2e86db79902cdab349bc3\",\"effective_policy\":{\"artifact_actions\":{\"package.tgz\":\"block\"},\"changed_hash_action\":\"require-reapproval\",\"default_action\":\"warn\",\"harness_actions\":{\"codex\":\"warn\"},\"harness_risk_actions\":{\"Claude_Code\":{\"prompt_injection\":\"block\"}},\"new_network_domain_action\":\"warn\",\"protection_posture\":\"protected\",\"publisher_actions\":{\"npm\":\"review\"},\"receipt_redaction_level\":\"full\",\"risk_actions\":{\"network_egress\":\"warn\",\"prompt_injection\":\"block\"},\"sandbox_analysis\":\"off\",\"security_level\":\"balanced\",\"subprocess_action\":\"warn\",\"unknown_publisher_action\":\"review\"},\"expires_at_ms\":2000,\"generation\":7,\"issued_at_ms\":1000,\"mode\":\"enforce\",\"policy_digest\":\"3fd43e9f0885e10988562417fcef48b0bac9903ac8d1f1868f2f99888d4cc5e2\",\"protocol_version\":1,\"rule_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"runtime_identity\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"schema\":\"hol-guard-native-policy.v3\",\"scope_contract\":{\"kind\":\"guard-home\",\"schema\":\"guard-native-scope.v1\",\"scope_digest\":\"92db33c34234d26d3de1f15328b2150673a8122c200bff1dc77cfed2fecf3ee1\",\"workspace_binding\":\"request-source\"},\"version\":3}",
+  "snapshot_bytes": "{\"config_digest\":\"f01c2dc32e56a85b48346341b108f289414a25ef4ff2e86db79902cdab349bc3\",\"effective_policy\":{\"artifact_actions\":{\"package.tgz\":\"block\"},\"changed_hash_action\":\"require-reapproval\",\"default_action\":\"warn\",\"harness_actions\":{\"codex\":\"warn\"},\"harness_risk_actions\":{\"Claude_Code\":{\"prompt_injection\":\"block\"}},\"new_network_domain_action\":\"warn\",\"protection_posture\":\"protected\",\"publisher_actions\":{\"npm\":\"review\"},\"receipt_redaction_level\":\"full\",\"risk_actions\":{\"network_egress\":\"warn\",\"prompt_injection\":\"block\"},\"sandbox_analysis\":\"off\",\"security_level\":\"balanced\",\"subprocess_action\":\"warn\",\"unknown_publisher_action\":\"review\"},\"expires_at_ms\":2000,\"generation\":7,\"integrity\":{\"algorithm\":\"hmac-sha256\",\"key_id\":\"4bb06f8e4e3a7715d201d573d0aa423762e55dabd61a2c02278fa56cc6d294e0\",\"mac\":\"8f3bfcf5189d91b240bc7deb26d202741da55253303306712fb0b3d80a90944f\"},\"issued_at_ms\":1000,\"mode\":\"enforce\",\"policy_digest\":\"3fd43e9f0885e10988562417fcef48b0bac9903ac8d1f1868f2f99888d4cc5e2\",\"protocol_version\":1,\"rule_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"runtime_identity\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"schema\":\"hol-guard-native-policy.v3\",\"scope_contract\":{\"kind\":\"guard-home\",\"schema\":\"guard-native-scope.v1\",\"scope_digest\":\"92db33c34234d26d3de1f15328b2150673a8122c200bff1dc77cfed2fecf3ee1\",\"workspace_binding\":\"request-source\"},\"version\":3}"
+}

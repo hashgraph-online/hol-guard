@@ -1,0 +1,280 @@
+name: "HOL Plugin Release"
+description: "Scan an AI plugin release, check it with the HOL Plugin Kit, attest the evidence, and record it on its HOL listing."
+author: "HOL"
+
+inputs:
+  plugin_dir:
+    description: "Plugin repository path"
+    required: false
+    default: "."
+  profile:
+    description: "HOL Guard scanner policy profile"
+    required: false
+    default: "default"
+  fail_on_severity:
+    description: "Fail the job, after the evidence is attested, if a scanner finding reaches this severity (or none)"
+    required: false
+    default: "critical"
+  fail_on_check_errors:
+    description: "Fail when the Plugin Kit check reports errors"
+    required: false
+    default: "true"
+  upload_sarif:
+    description: "Upload SARIF to GitHub code scanning"
+    required: false
+    default: "false"
+  visibility:
+    description: "Evidence visibility on HOL: public or private"
+    required: false
+    default: "public"
+  register_release:
+    description: "Send the evidence to HOL. Only the trusted reusable workflow is accepted by HOL."
+    required: false
+    default: "false"
+  offer_line:
+    description: "Allow one HOL Blue line in the job summary, at most once in 28 days, for a listing without a membership"
+    required: false
+    default: "true"
+  release_endpoint:
+    description: "HTTPS HOL Plugin Release endpoint"
+    required: false
+    default: "https://hol.org/api/guard/plugins/releases/attestations"
+
+outputs:
+  score:
+    description: "Scanner score"
+    value: ${{ steps.scan.outputs.score }}
+  grade:
+    description: "Scanner grade"
+    value: ${{ steps.scan.outputs.grade }}
+  check_passed:
+    description: "Whether the Plugin Kit check passed"
+    value: ${{ steps.evidence.outputs.check_passed }}
+  supported_runtimes:
+    description: "Number of agent runtimes the Plugin Kit can package this plugin for"
+    value: ${{ steps.evidence.outputs.supported_runtimes }}
+  evidence_path:
+    description: "Release evidence path"
+    value: ${{ steps.evidence.outputs.evidence_path }}
+  evidence_sha256:
+    description: "Release evidence SHA-256"
+    value: ${{ steps.evidence.outputs.evidence_sha256 }}
+  sbom_path:
+    description: "Path to the CycloneDX SBOM, empty when the release declares no packages"
+    value: ${{ steps.evidence.outputs.sbom_path }}
+  sbom_components:
+    description: "Number of components in the SBOM"
+    value: ${{ steps.evidence.outputs.sbom_components }}
+  attestation_url:
+    description: "GitHub artifact attestation URL"
+    value: ${{ steps.attest.outputs.attestation-url }}
+  release_status:
+    description: "HOL registration status"
+    value: ${{ steps.register.outputs.release_status }}
+  release_url:
+    description: "HOL releases page for the matched listing, when there is one"
+    value: ${{ steps.register.outputs.release_url }}
+
+branding:
+  icon: "package"
+  color: "blue"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        VISIBILITY: ${{ inputs.visibility }}
+        REGISTER_RELEASE: ${{ inputs.register_release }}
+        RELEASE_ENDPOINT: ${{ inputs.release_endpoint }}
+        FAIL_ON_CHECK_ERRORS: ${{ inputs.fail_on_check_errors }}
+        FAIL_ON_SEVERITY: ${{ inputs.fail_on_severity }}
+      run: |
+        set -euo pipefail
+        case "$FAIL_ON_SEVERITY" in none|info|low|medium|high|critical) ;; *) echo "fail_on_severity must be none, info, low, medium, high or critical" >&2; exit 2 ;; esac
+        case "$VISIBILITY" in public|private) ;; *) echo "visibility must be public or private" >&2; exit 2 ;; esac
+        case "$REGISTER_RELEASE" in true|false) ;; *) echo "register_release must be true or false" >&2; exit 2 ;; esac
+        case "$FAIL_ON_CHECK_ERRORS" in true|false) ;; *) echo "fail_on_check_errors must be true or false" >&2; exit 2 ;; esac
+        if [ "$REGISTER_RELEASE" = "true" ] && [[ "$RELEASE_ENDPOINT" != https://* ]]; then
+          echo "release_endpoint must use HTTPS" >&2
+          exit 2
+        fi
+        if [ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]; then
+          echo "HOL Plugin Release runs on ubuntu-latest (Linux x86_64) runners." >&2
+          exit 2
+        fi
+
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: "3.12"
+
+    - name: Install verified HOL Guard
+      shell: bash
+      env:
+        GITHUB_TOKEN_FOR_ATTESTATION: ${{ github.token }}
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
+      run: |
+        set -euo pipefail
+        PIN_DIR="$GITHUB_ACTION_PATH"
+        LOCK_DIR="$GITHUB_ACTION_PATH/../action"
+        GUARD_VERSION="$(tr -d '[:space:]' < "$PIN_DIR/guard-version.txt")"
+        EXPECTED_SHA256="$(tr -d '[:space:]' < "$PIN_DIR/guard-sha256.txt")"
+        PYPI_ATTESTATIONS_VERSION="$(tr -d '[:space:]' < "$LOCK_DIR/pypi-attestations-version.txt")"
+        if ! grep -q "^pypi-attestations==${PYPI_ATTESTATIONS_VERSION} " "$LOCK_DIR/pypi-attestations-requirements.txt"; then
+          echo "pypi-attestations requirements lock does not match pypi-attestations-version.txt." >&2
+          exit 1
+        fi
+        DIST_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/hol-plugin-release-XXXXXX")"
+        python3 -P -m pip install --require-hashes --only-binary=:all: -r "$LOCK_DIR/pypi-attestations-requirements.txt"
+        if [[ "$GUARD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+a[0-9]+$ ]]; then
+          # Alpha native wheels ship only on the GitHub prerelease, never on PyPI.
+          # The pinned hash decides; the attestation must come from this repository's publish workflow.
+          WHEEL_NAME="hol_guard-${GUARD_VERSION}-py3-none-manylinux_2_17_x86_64.whl"
+          WHEEL_PATH="$DIST_DIR/$WHEEL_NAME"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$WHEEL_PATH" \
+            "https://github.com/hashgraph-online/hol-guard/releases/download/alpha/v${GUARD_VERSION}/${WHEEL_NAME}"
+        else
+          python3 -P -m pip download --only-binary=:all: --no-deps \
+            --platform manylinux_2_17_x86_64 --python-version 3.12 \
+            --dest "$DIST_DIR" "hol-guard==${GUARD_VERSION}"
+          WHEEL_PATH="$(find "$DIST_DIR" -maxdepth 1 -name "hol_guard-${GUARD_VERSION}-*manylinux*x86_64.whl" -print)"
+        fi
+        if [ -z "$WHEEL_PATH" ] || [ ! -f "$WHEEL_PATH" ] || [ "$(printf '%s\n' "$WHEEL_PATH" | wc -l)" -ne 1 ]; then
+          echo "Expected exactly one Linux x86_64 hol-guard ${GUARD_VERSION} wheel." >&2
+          exit 1
+        fi
+        ACTUAL_SHA256="$(sha256sum "$WHEEL_PATH" | cut -d' ' -f1)"
+        if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+          echo "Downloaded hol-guard wheel SHA-256 does not match guard-sha256.txt." >&2
+          exit 1
+        fi
+        if [[ "$GUARD_VERSION" =~ a[0-9]+$ ]]; then
+          if ! GH_TOKEN="$GITHUB_TOKEN_FOR_ATTESTATION" gh attestation verify "$WHEEL_PATH" \
+            --repo hashgraph-online/hol-guard \
+            --signer-workflow hashgraph-online/hol-guard/.github/workflows/publish.yml \
+            --source-ref refs/heads/main > /dev/null; then
+            echo "Failed to verify the GitHub attestation for hol-guard==${GUARD_VERSION}." >&2
+            exit 1
+          fi
+        elif ! python3 -P -m pypi_attestations verify pypi --repository "https://github.com/hashgraph-online/hol-guard" "$WHEEL_PATH"; then
+          echo "Failed to verify PyPI provenance for hol-guard==${GUARD_VERSION}." >&2
+          exit 1
+        fi
+        python3 -P -m pip install --no-deps --require-hashes --only-binary=:all: -r "$LOCK_DIR/scanner-runtime-requirements.txt"
+        python3 -P -m pip install --no-deps "$WHEEL_PATH"
+        # The hosted tool cache leaves installed files group- and world-writable,
+        # and Guard refuses a native runtime manifest anyone else can rewrite.
+        GUARD_PACKAGE_DIR="$(python3 -P -c 'import importlib.util, pathlib; print(pathlib.Path(importlib.util.find_spec("codex_plugin_scanner").origin).parent)')"
+        chmod -R go-w "$GUARD_PACKAGE_DIR"
+        echo "HOL_GUARD_VERSION=${GUARD_VERSION}" >> "$GITHUB_ENV"
+
+    - name: Scan release to SARIF
+      id: scan
+      shell: bash
+      env:
+        MODE: scan
+        PLUGIN_DIR: ${{ inputs.plugin_dir }}
+        FORMAT: sarif
+        OUTPUT: ${{ runner.temp }}/hol-plugin-release.sarif
+        PROFILE: ${{ inputs.profile }}
+        MIN_SCORE: "0"
+        # The severity gate runs in the summary step, after the evidence is attested.
+        FAIL_ON: "none"
+        CISCO_SCAN: "off"
+        CISCO_MCP_SCAN: "off"
+        WRITE_STEP_SUMMARY: "false"
+        PUBLISH_HINT: "false"
+        PR_COMMENT: "off"
+        SUBMISSION_ENABLED: "false"
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
+      run: python3 -P -m codex_plugin_scanner.action_runner
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload_sarif == 'true' && steps.scan.outputs.report_path != '' }}
+      uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7
+      with:
+        sarif_file: ${{ steps.scan.outputs.report_path }}
+        category: hol-plugin-release
+
+    - name: Check with the Plugin Kit
+      id: check
+      shell: bash
+      env:
+        PLUGIN_DIR: ${{ inputs.plugin_dir }}
+        CHECK_PATH: ${{ runner.temp }}/hol-plugin-release-check.json
+        HOL_GUARD_NATIVE: force
+      run: |
+        set -uo pipefail
+        # Exit 1 means the check found errors; the summary step applies fail_on_check_errors.
+        set +e
+        hol-guard plugin check "$PLUGIN_DIR" --json > "$CHECK_PATH"
+        status=$?
+        set -e
+        if [ "$status" -gt 1 ] || [ ! -s "$CHECK_PATH" ]; then
+          echo "The Plugin Kit could not check this repository (exit $status)." >&2
+          exit 1
+        fi
+        echo "check_path=$CHECK_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: Build release evidence
+      id: evidence
+      shell: bash
+      env:
+        REPOSITORY: ${{ github.repository }}
+        COMMIT_SHA: ${{ github.sha }}
+        REF: ${{ github.ref }}
+        RUN_ID: ${{ github.run_id }}
+        PROFILE: ${{ inputs.profile }}
+        SCORE: ${{ steps.scan.outputs.score }}
+        GRADE: ${{ steps.scan.outputs.grade }}
+        MAX_SEVERITY: ${{ steps.scan.outputs.max_severity }}
+        FINDINGS_TOTAL: ${{ steps.scan.outputs.findings_total }}
+        CHECK_PATH: ${{ steps.check.outputs.check_path }}
+        VISIBILITY: ${{ inputs.visibility }}
+        PLUGIN_DIR: ${{ inputs.plugin_dir }}
+        EVIDENCE_PATH: ${{ runner.temp }}/hol-plugin-release-evidence.json
+        SBOM_PATH: ${{ runner.temp }}/hol-plugin-release-sbom.cdx.json
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
+      run: python3 -P -m codex_plugin_scanner.plugin_release_runner evidence
+
+    - name: Create GitHub-signed provenance attestation
+      id: attest
+      uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+      with:
+        subject-path: ${{ steps.evidence.outputs.evidence_path }}
+        show-summary: true
+
+    - name: Record the release on HOL
+      id: register
+      shell: bash
+      env:
+        REGISTER_RELEASE: ${{ inputs.register_release }}
+        RELEASE_ENDPOINT: ${{ inputs.release_endpoint }}
+        OFFER_LINE: ${{ inputs.offer_line }}
+        EVIDENCE_PATH: ${{ steps.evidence.outputs.evidence_path }}
+        ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+        ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
+      run: python3 -P -m codex_plugin_scanner.plugin_release_runner register
+
+    - name: Summarize
+      shell: bash
+      env:
+        EVIDENCE_PATH: ${{ steps.evidence.outputs.evidence_path }}
+        ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+        RELEASE_STATUS: ${{ steps.register.outputs.release_status }}
+        RELEASE_URL: ${{ steps.register.outputs.release_url }}
+        OFFER_URL: ${{ steps.register.outputs.offer_url }}
+        CHANGES: ${{ steps.register.outputs.changes }}
+        FAIL_ON_CHECK_ERRORS: ${{ inputs.fail_on_check_errors }}
+        FAIL_ON_SEVERITY: ${{ inputs.fail_on_severity }}
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
+      run: python3 -P -m codex_plugin_scanner.plugin_release_runner summary

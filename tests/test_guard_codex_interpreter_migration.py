@@ -1,0 +1,99 @@
+"""Codex managed-hook reinstallation coverage for interpreter relocation."""
+
+from __future__ import annotations
+
+import importlib
+import os
+from pathlib import Path
+
+import pytest
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    tomllib = importlib.import_module("tomli")
+
+from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
+from codex_plugin_scanner.guard.codex_hook_integrity import HOOK_MANIFEST_SCHEMA_VERSION
+from codex_plugin_scanner.guard.codex_hook_manifest import assert_package_reauthentication_is_safe
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX executable fixtures are required")
+def test_guard_install_codex_adopts_equivalent_package_with_relocated_interpreter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=None,
+        guard_home=tmp_path / "guard-home",
+    )
+    first_interpreter = tmp_path / "first-python"
+    second_interpreter = tmp_path / "second-python"
+    for interpreter in (first_interpreter, second_interpreter):
+        interpreter.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        interpreter.chmod(0o755)
+
+    monkeypatch.setattr(codex_adapter.sys, "executable", str(first_interpreter))
+    adapter = CodexHarnessAdapter()
+    config_path = context.home_dir / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '[mcp_servers.browser]\ncommand = "/usr/bin/printf"\nargs = ["%s", "ready"]\n',
+        encoding="utf-8",
+    )
+    adapter.install(context)
+    first_proxy = tomllib.loads(config_path.read_text(encoding="utf-8"))["mcp_servers"]["browser"]
+
+    monkeypatch.setattr(codex_adapter.sys, "executable", str(second_interpreter))
+    installed = adapter.install(context)
+    state = codex_adapter.codex_native_hook_state(context)
+    second_proxy = tomllib.loads(config_path.read_text(encoding="utf-8"))["mcp_servers"]["browser"]
+
+    assert installed["active"] is True
+    assert first_proxy["command"] == str(first_interpreter)
+    assert second_proxy["command"] == str(second_interpreter)
+    assert second_proxy["args"] == first_proxy["args"]
+    assert installed["migrated_proxy_servers"] == ["browser"]
+    assert installed["runtime_restart_required"] is True
+    assert state["protection_active"] is True
+
+    reinstalled = adapter.install(context)
+
+    assert reinstalled["migrated_proxy_servers"] == []
+    assert reinstalled["runtime_restart_required"] is False
+
+
+def test_guard_install_codex_ignores_proxy_with_scalar_args(
+    tmp_path: Path,
+) -> None:
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=None,
+        guard_home=tmp_path / "guard-home",
+    )
+    config_path = context.home_dir / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '[mcp_servers.invalid]\ncommand = "/usr/bin/python"\nargs = 1\n',
+        encoding="utf-8",
+    )
+
+    installed = CodexHarnessAdapter().install(context)
+
+    assert installed["migrated_proxy_servers"] == []
+    assert installed["runtime_restart_required"] is False
+
+
+def test_reauthentication_rejects_incomplete_package_identity() -> None:
+    manifest = {
+        "schema_version": HOOK_MANIFEST_SCHEMA_VERSION,
+        "package_version": "2.1.0a6",
+        "packaged_files": [],
+    }
+
+    with pytest.raises(CodexHookIntegrityError, match="changed same-version hook code"):
+        assert_package_reauthentication_is_safe(manifest, manifest)

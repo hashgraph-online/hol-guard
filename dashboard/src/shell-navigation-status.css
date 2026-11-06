@@ -1,0 +1,50 @@
+.guard-shell-status-copy {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.guard-shell-status-copy > p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.guard-shell-status-action {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.25rem;
+  color: #2d75db;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.guard-shell-status-action:hover {
+  color: #1d4f9c;
+}
+
+.guard-shell-status-action:focus-visible {
+  outline: 2px solid rgb(45 117 219 / 0.45);
+  outline-offset: 2px;
+}
+
+.guard-shell-status-action svg {
+  height: 0.75rem;
+  width: 0.75rem;
+}
+
+@media (min-width: 80rem) {
+  .guard-shell-sidebar__status .guard-shell-status-copy {
+    margin: 0.5rem 0;
+    gap: 0.3rem;
+  }
+
+  .guard-shell-sidebar__status .guard-shell-status-copy > p,
+  .guard-shell-sidebar__status .guard-shell-status-action {
+    font-size: 0.6875rem;
+  }
+}

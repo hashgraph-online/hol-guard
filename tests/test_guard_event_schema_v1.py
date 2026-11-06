@@ -1,0 +1,359 @@
+from __future__ import annotations
+
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import ClassVar
+
+from codex_plugin_scanner.guard.edge_events import _fingerprint
+from codex_plugin_scanner.guard.models import GuardReceipt
+from codex_plugin_scanner.guard.runtime.runner import sync_guard_events, sync_receipts
+from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
+from codex_plugin_scanner.guard.store import GuardStore
+
+
+def build_receipt_event(
+    receipt: GuardReceipt,
+    *,
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    payload: dict[str, object] = {
+        "receiptId": receipt.receipt_id,
+        "harness": receipt.harness,
+        "artifactId": receipt.artifact_id,
+        "artifactHash": receipt.artifact_hash,
+        "artifactName": receipt.artifact_name,
+        "sourceScope": receipt.source_scope,
+        "policyDecision": receipt.policy_decision,
+        "capabilitiesSummary": receipt.capabilities_summary,
+        "changedCapabilities": list(receipt.changed_capabilities),
+        "provenanceSummary": receipt.provenance_summary,
+        "userOverride": receipt.user_override,
+    }
+    event_id = f"guard-event-{_fingerprint('receipt.created', receipt.receipt_id)[:32]}"
+    return GuardEventV1(
+        event_id=event_id,
+        idempotency_key=f"receipt.created:{receipt.receipt_id}",
+        event_type="receipt.created",
+        source="edge",
+        occurred_at=receipt.timestamp,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        payload=payload,
+    )
+
+
+def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
+    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
+
+    Also installs a test-only resolver override so sync-path exercises stay hermetic
+    (no OAuth token refresh against the network). Tests that need real sync against a
+    local server pass sync_url=<url>.
+    """
+    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token=token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=workspace_id,
+        now=now,
+    )
+    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
+    guard_runner_module._test_sync_auth_context_override = {
+        "sync_url": effective_sync_url,
+        "access_token": token,
+        "dpop_key_material": None,
+    }
+
+
+def _receipt() -> GuardReceipt:
+    return GuardReceipt(
+        receipt_id="receipt-1",
+        timestamp="2026-04-24T00:00:00+00:00",
+        harness="codex",
+        artifact_id="artifact-1",
+        artifact_hash="sha256:abc",
+        policy_decision="review",
+        capabilities_summary="requests network access",
+        changed_capabilities=("network",),
+        provenance_summary="local harness",
+        artifact_name="Sensitive Tool",
+        source_scope="workspace",
+    )
+
+
+class _EventIngestHandler(BaseHTTPRequestHandler):
+    requests: ClassVar[list[dict[str, object]]] = []
+    event_status: ClassVar[int] = 200
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length) if length else b"{}"
+        payload = json.loads(body.decode())
+        type(self).requests.append(
+            {
+                "path": self.path,
+                "payload": payload,
+                "authorization": self.headers.get("Authorization"),
+            }
+        )
+        status_code = type(self).event_status if self.path.endswith("/api/v1/guard/events") else 200
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        if status_code == 404:
+            self.wfile.write(json.dumps({"error": "not found"}).encode())
+            return
+        if self.path.endswith("/receipts/sync"):
+            response = {"syncedAt": "2026-04-24T00:00:00+00:00", "receiptsStored": len(payload.get("receipts", []))}
+        else:
+            response = {
+                "accepted": 1,
+                "rejected": 0,
+                "statuses": [
+                    {
+                        "eventId": payload["events"][0]["eventId"],
+                        "status": "accepted",
+                    }
+                ],
+            }
+        self.wfile.write(json.dumps(response).encode())
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
+
+
+class _RejectedEventHandler(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length) if length else b"{}"
+        payload = json.loads(body.decode())
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(
+            json.dumps(
+                {
+                    "accepted": 0,
+                    "rejected": 1,
+                    "statuses": [
+                        {
+                            "eventId": payload["events"][0]["eventId"],
+                            "status": "rejected",
+                        }
+                    ],
+                }
+            ).encode()
+        )
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
+
+
+def test_receipt_event_uses_white_rabbit_contract() -> None:
+    event = build_receipt_event(_receipt(), workspace_id="workspace-1", device_id="device-1")
+    payload = event.to_dict()
+
+    assert payload["eventType"] == "receipt.created"
+    assert payload["workspaceId"] == "workspace-1"
+    assert payload["idempotencyKey"] == "receipt.created:receipt-1"
+    assert payload["payload"]["receiptId"] == "receipt-1"
+    assert GuardEventV1.from_dict(payload).event_type == "receipt.created"
+
+
+def test_receipt_persistence_dual_writes_pending_cloud_event(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+
+    store.add_receipt(_receipt())
+
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    assert pending[0]["event_type"] == "receipt.created"
+    assert pending[0]["payload"]["payload"]["artifactId"] == "artifact-1"
+
+
+def test_sync_guard_events_posts_to_v1_ingest(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    _EventIngestHandler.requests = []
+    server = HTTPServer(("127.0.0.1", 0), _EventIngestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
+        )
+
+        result = sync_guard_events(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert result["accepted"] == 1
+    assert _EventIngestHandler.requests[0]["path"] == "/api/v1/guard/events"
+    assert _EventIngestHandler.requests[0]["authorization"] == "Bearer token-1"
+    assert _EventIngestHandler.requests[0]["payload"]["events"][0]["eventType"] == "receipt.created"
+    assert store.list_guard_events_v1(uploaded=False, limit=10) == []
+
+
+def test_sync_guard_events_normalizes_registry_base_url(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    _EventIngestHandler.requests = []
+    server = HTTPServer(("127.0.0.1", 0), _EventIngestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _seed_guard_cloud(store, sync_url=f"http://127.0.0.1:{server.server_port}/registry/api/v1", token="token-1")
+
+        result = sync_guard_events(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert result["accepted"] == 1
+    assert _EventIngestHandler.requests[0]["path"] == "/api/v1/guard/events"
+
+
+def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    _EventIngestHandler.requests = []
+    server = HTTPServer(("127.0.0.1", 0), _EventIngestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
+        )
+
+        result = sync_receipts(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert result["guard_events_v1"]["accepted"] == 1
+    assert [request["path"] for request in _EventIngestHandler.requests] == [
+        "/api/guard/receipts/sync",
+        "/api/v1/guard/events",
+    ]
+    assert store.list_guard_events_v1(uploaded=False, limit=10) == []
+    assert result["aibom_inventory"]["synced"] is False
+    assert result["aibom_inventory"]["reason"] == "background_deferred"
+
+
+def test_sync_receipts_runs_aibom_when_deep_sync_is_requested(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    _EventIngestHandler.requests = []
+    server = HTTPServer(("127.0.0.1", 0), _EventIngestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    calls: list[tuple[object, object]] = []
+
+    def fake_sync_aibom_snapshots_if_due(
+        current_store: GuardStore,
+        *,
+        generated_at: str,
+        auth_context: dict[str, object] | None = None,
+        home_dir=None,
+        workspace_dir=None,
+        **_kwargs: object,
+    ) -> dict[str, object]:
+        del current_store, generated_at, auth_context
+        calls.append((home_dir, workspace_dir))
+        return {"synced": True, "accepted": 1}
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.aibom_cli.sync_aibom_snapshots_if_due",
+        fake_sync_aibom_snapshots_if_due,
+    )
+    try:
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
+            workspace_id="workspace-alpha",
+        )
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+
+        result = sync_receipts(
+            store,
+            include_aibom=True,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert calls == [(home_dir, workspace_dir)]
+    assert result["aibom_inventory"] == {"synced": True, "accepted": 1}
+    assert store.get_sync_payload("aibom_inventory_context") == {
+        "home_dir": str(home_dir),
+        "workspace_dir": str(workspace_dir),
+        "workspace_id": "workspace-alpha",
+    }
+
+
+def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    _EventIngestHandler.requests = []
+    _EventIngestHandler.event_status = 404
+    server = HTTPServer(("127.0.0.1", 0), _EventIngestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
+        )
+
+        result = sync_receipts(store)
+    finally:
+        _EventIngestHandler.event_status = 200
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert result["receipts"] == 1
+    assert result["guard_events_v1"]["sync_skipped"] is True
+    # Events must NOT be marked as skipped/dropped on 404 — they remain pending for retry
+    assert result["guard_events_v1"]["skipped"] == 0
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    assert len(pending) == 1  # The receipt.created event is still pending
+
+
+def test_sync_guard_events_marks_rejected_events_terminal(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    server = HTTPServer(("127.0.0.1", 0), _RejectedEventHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _seed_guard_cloud(
+            store,
+            sync_url=f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            token="token-1",
+        )
+
+        sync_guard_events(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert store.list_guard_events_v1(uploaded=False, limit=10) == []

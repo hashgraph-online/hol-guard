@@ -1,0 +1,44 @@
+{
+  "schema": "guard.declarative-catalog-parity-proof.v1",
+  "scope": "same-native-engine-two-programs-offline-not-authenticated-receipts",
+  "baseline_program_digest": "76e8606727ac22aec5f1e7f07f83ee8107acc709b28e52d09c09906ca2ded031",
+  "candidate_program_digest": "28d1197aa0f23035c753550f84209ed707449ab1b31264308a4999c00241b700",
+  "implementation_digest": "ece9682ab7bba363ccd4297801e99d97d1e9eac9f0e432129b3d4aa3b32f9489",
+  "requested_cases": 2060,
+  "evaluated_cases": 2060,
+  "semantic_passed": true,
+  "coverage_complete": true,
+  "passed": true,
+  "unobserved_rules": [],
+  "target_commands_executed": 0,
+  "catalog_inventory": {
+    "extensions": 71,
+    "rules": 234,
+    "permissions": 248,
+    "safe_variants": 247,
+    "matcher_nodes": 1614,
+    "compatibility_rule_mappings": 42
+  },
+  "structural_comparison": {
+    "matcher_nodes_rule_roots_and_variants": "identical",
+    "permissions_compared_by_stable_id": "identical",
+    "mcp_wiring_and_candidate_hints": "identical",
+    "unexplained_differences": 0,
+    "native_identity_field_changes": 3,
+    "native_matcher_contract_digest_changes": 481,
+    "native_diagnostic_family_key_changes": 42,
+    "metadata_matcher_contract_digest_changes": 481,
+    "metadata_matcher_kind_changes": 481,
+    "metadata_compatibility_fallback_true_to_false": 19,
+    "metadata_note": "Python matcher class labels become native-matcher.v1; previously fallback-labeled declarative nodes are now explicitly native. Protection and permission definitions are preserved."
+  },
+  "excluded_identity_fields": [
+    "binding.program_digest",
+    "binding.catalog_digest",
+    "binding.control_effective_digest"
+  ],
+  "coverage_method": "Production pretool decisions plus all-active declarative observations; synthetic local and managed controls, without persisted authenticated receipts.",
+  "inherited_parser_limitation": "POSIX shell consumers in encoded pipelines are wrapper-normalized and do not remain adjacent consumer segments. PowerShell and pwsh fixtures exercise the encoded-execution matcher. This migration does not change that baseline parser behavior.",
+  "installed_baseline_candidate_comparison": "not-evaluated",
+  "installed_settings_preservation": "not-evaluated"
+}

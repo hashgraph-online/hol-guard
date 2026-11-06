@@ -1,0 +1,7 @@
+{
+  "hookEventName": "subagent_start",
+  "sessionId": "session-redacted-014",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "subagentType": "explore"
+}

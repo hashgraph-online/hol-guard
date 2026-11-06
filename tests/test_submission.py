@@ -1,0 +1,293 @@
+"""Tests for awesome-list submission helpers."""
+
+from pathlib import Path
+from urllib.error import HTTPError
+
+from codex_plugin_scanner import __version__
+from codex_plugin_scanner.scanner import scan_plugin
+from codex_plugin_scanner.submission import (
+    SubmissionMetadata,
+    build_submission_issue_body,
+    build_submission_issue_title,
+    build_submission_payload,
+    create_submission_issue,
+    find_existing_submission_issue,
+    normalize_github_api_base_url,
+    resolve_submission_metadata,
+)
+
+FIXTURES = Path(__file__).parent / "fixtures"
+EXPECTED_GOOD_PLUGIN_SCORE = 100
+
+
+def test_resolve_submission_metadata_prefers_manifest_fields() -> None:
+    result = scan_plugin(FIXTURES / "good-plugin")
+
+    metadata = resolve_submission_metadata(
+        FIXTURES / "good-plugin",
+        result,
+        github_repository="hashgraph-online/example-good-plugin",
+    )
+
+    assert metadata.plugin_name == "Example Good Plugin"
+    assert metadata.plugin_url == "https://github.com/hashgraph-online/hol-guard"
+    assert metadata.description == "Reusable security-first plugin fixture"
+    assert metadata.author == "HOL"
+    assert metadata.category == "Community Plugins"
+
+
+def test_resolve_submission_metadata_falls_back_to_github_context() -> None:
+    result = scan_plugin(FIXTURES / "minimal-plugin")
+
+    metadata = resolve_submission_metadata(
+        FIXTURES / "minimal-plugin",
+        result,
+        github_repository="hashgraph-online/minimal-plugin",
+    )
+
+    assert metadata.plugin_name == "minimal-plugin"
+    assert metadata.plugin_url == "https://github.com/hashgraph-online/minimal-plugin"
+    assert metadata.author == "hashgraph-online"
+    assert metadata.description == "A minimal plugin"
+
+
+def test_submission_payload_and_issue_body_include_registry_data() -> None:
+    result = scan_plugin(FIXTURES / "good-plugin")
+    metadata = SubmissionMetadata(
+        plugin_name="Example Good Plugin",
+        plugin_url="https://github.com/hashgraph-online/example-good-plugin",
+        description="Reusable security-first plugin fixture",
+        author="HOL",
+        category="Community Plugins",
+    )
+
+    payload = build_submission_payload(
+        metadata,
+        result,
+        source_repository="hashgraph-online/example-good-plugin",
+        source_sha="abc123",
+        workflow_url="https://github.com/hashgraph-online/example-good-plugin/actions/runs/1",
+        scanner_version=__version__,
+    )
+    body = build_submission_issue_body(
+        metadata,
+        result,
+        payload=payload,
+        workflow_url="https://github.com/hashgraph-online/example-good-plugin/actions/runs/1",
+    )
+
+    assert payload["score"] == EXPECTED_GOOD_PLUGIN_SCORE
+    assert payload["grade"] == "A"
+    assert payload["pluginUrl"] == metadata.plugin_url
+    assert "## Registry Payload" in body
+    assert "<!-- plugin-scanner-plugin-url: https://github.com/hashgraph-online/example-good-plugin -->" in body
+    assert '"pluginName": "Example Good Plugin"' in body
+    assert metadata.plugin_url in body
+
+
+def test_submission_issue_title_uses_plugin_prefix() -> None:
+    metadata = SubmissionMetadata(
+        plugin_name="Example Good Plugin",
+        plugin_url="https://github.com/hashgraph-online/example-good-plugin",
+        description="Reusable security-first plugin fixture",
+        author="HOL",
+        category="Community Plugins",
+    )
+
+    assert build_submission_issue_title(metadata) == "[Plugin] Example Good Plugin"
+    assert build_submission_issue_title(metadata, prefix="[Registry]") == "[Registry] Example Good Plugin"
+
+
+def test_find_existing_submission_issue_uses_search_api_and_exact_marker(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_request_json(method: str, url: str, token: str, payload=None):
+        captured["method"] = method
+        captured["url"] = url
+        captured["token"] = token
+        return {
+            "items": [
+                {
+                    "number": 42,
+                    "html_url": "https://github.com/hashgraph-online/awesome-codex-plugins/issues/42",
+                    "body": (
+                        "## Plugin Submission\n"
+                        "<!-- plugin-scanner-plugin-url: "
+                        "https://github.com/hashgraph-online/example-good-plugin -->\n"
+                    ),
+                },
+                {
+                    "number": 99,
+                    "html_url": "https://github.com/hashgraph-online/awesome-codex-plugins/issues/99",
+                    "body": (
+                        "## Plugin Submission\n"
+                        "<!-- plugin-scanner-plugin-url: "
+                        "https://github.com/hashgraph-online/example-good-plugin-extra -->\n"
+                    ),
+                },
+            ]
+        }
+
+    monkeypatch.setattr("codex_plugin_scanner.submission._request_json", fake_request_json)
+
+    issue = find_existing_submission_issue(
+        "hashgraph-online/awesome-codex-plugins",
+        "https://github.com/hashgraph-online/example-good-plugin",
+        "token-123",
+    )
+
+    assert issue is not None
+    assert issue.number == 42
+    assert issue.created is False
+    assert captured["method"] == "GET"
+    assert "/search/issues?" in captured["url"]
+    assert "plugin-scanner-plugin-url" in captured["url"]
+    assert captured["token"] == "token-123"
+
+
+def test_find_existing_submission_issue_falls_back_to_legacy_marker_search(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_request_json(method: str, url: str, token: str, payload=None):
+        calls.append(url)
+        if len(calls) == 1:
+            return {"items": []}
+        return {
+            "items": [
+                {
+                    "number": 42,
+                    "html_url": "https://github.com/hashgraph-online/awesome-codex-plugins/issues/42",
+                    "body": (
+                        "## Plugin Submission\n"
+                        "<!-- codex-plugin-scanner-plugin-url: "
+                        "https://github.com/hashgraph-online/example-good-plugin -->\n"
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr("codex_plugin_scanner.submission._request_json", fake_request_json)
+
+    issue = find_existing_submission_issue(
+        "hashgraph-online/awesome-codex-plugins",
+        "https://github.com/hashgraph-online/example-good-plugin",
+        "token-123",
+    )
+
+    assert issue is not None
+    assert issue.number == 42
+    assert len(calls) == 2
+    assert "plugin-scanner-plugin-url" in calls[0]
+    assert "codex-plugin-scanner-plugin-url" in calls[1]
+
+
+def test_create_submission_issue_retries_without_labels_on_invalid_labels(monkeypatch) -> None:
+    calls: list[dict[str, object | None]] = []
+
+    def fake_request_json(method: str, url: str, token: str, payload=None):
+        calls.append({"method": method, "url": url, "token": token, "payload": payload})
+        if len(calls) == 1:
+            raise HTTPError(
+                url=url,
+                code=422,
+                msg="Unprocessable Entity",
+                hdrs=None,
+                fp=None,
+            )
+        return {
+            "number": 17,
+            "html_url": "https://github.com/hashgraph-online/awesome-codex-plugins/issues/17",
+        }
+
+    monkeypatch.setattr("codex_plugin_scanner.submission._request_json", fake_request_json)
+
+    issue = create_submission_issue(
+        "hashgraph-online/awesome-codex-plugins",
+        "[Plugin] Example Good Plugin",
+        "Body",
+        "token-123",
+        labels=("plugin-submission",),
+    )
+
+    assert issue.number == 17
+    assert issue.created is True
+    assert calls[0]["payload"] == {
+        "title": "[Plugin] Example Good Plugin",
+        "body": "Body",
+        "labels": ["plugin-submission"],
+    }
+    assert calls[1]["payload"] == {
+        "title": "[Plugin] Example Good Plugin",
+        "body": "Body",
+    }
+
+
+def test_create_submission_issue_rejects_malformed_api_responses(monkeypatch) -> None:
+    def fake_request_json(method: str, url: str, token: str, payload=None):
+        return []
+
+    monkeypatch.setattr("codex_plugin_scanner.submission._request_json", fake_request_json)
+
+    try:
+        create_submission_issue(
+            "hashgraph-online/awesome-codex-plugins",
+            "[Plugin] Example Good Plugin",
+            "Body",
+            "token-123",
+        )
+    except RuntimeError as error:
+        assert "unexpected response" in str(error)
+    else:
+        raise AssertionError("Expected create_submission_issue to reject malformed responses.")
+
+
+def test_create_submission_issue_rejects_missing_issue_fields(monkeypatch) -> None:
+    def fake_request_json(method: str, url: str, token: str, payload=None):
+        return {"number": "17"}
+
+    monkeypatch.setattr("codex_plugin_scanner.submission._request_json", fake_request_json)
+
+    try:
+        create_submission_issue(
+            "hashgraph-online/awesome-codex-plugins",
+            "[Plugin] Example Good Plugin",
+            "Body",
+            "token-123",
+        )
+    except RuntimeError as error:
+        assert "required fields" in str(error)
+    else:
+        raise AssertionError("Expected create_submission_issue to reject incomplete responses.")
+
+
+def test_normalize_github_api_base_url_accepts_github_dot_com_default() -> None:
+    assert normalize_github_api_base_url("https://api.github.com") == "https://api.github.com"
+
+
+def test_normalize_github_api_base_url_accepts_matching_enterprise_api() -> None:
+    assert (
+        normalize_github_api_base_url(
+            "https://github.enterprise.example/api/v3",
+            github_server_url="https://github.enterprise.example",
+        )
+        == "https://github.enterprise.example/api/v3"
+    )
+
+
+def test_normalize_github_api_base_url_accepts_matching_ghe_com_api() -> None:
+    assert (
+        normalize_github_api_base_url(
+            "https://api.octocorp.ghe.com",
+            github_server_url="https://octocorp.ghe.com",
+        )
+        == "https://api.octocorp.ghe.com"
+    )
+
+
+def test_normalize_github_api_base_url_rejects_untrusted_host() -> None:
+    try:
+        normalize_github_api_base_url("https://evil.example/api/v3")
+    except ValueError as error:
+        assert 'GITHUB_API_URL must match "https://api.github.com"' in str(error)
+    else:
+        raise AssertionError("Expected normalize_github_api_base_url to reject untrusted hosts.")

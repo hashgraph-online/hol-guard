@@ -1,0 +1,10 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-007",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "web_fetch",
+  "toolInput": {
+    "url": "https://example.com/docs"
+  }
+}

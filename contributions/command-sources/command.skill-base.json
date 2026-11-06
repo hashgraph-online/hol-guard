@@ -1,0 +1,156 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.skill-base",
+    "version": "1.0.0",
+    "name": "Skill Base CLI",
+    "description": "Reviews authenticated Skill Base CLI publications before local Skill files are uploaded as a new version.",
+    "action_classes": ["Skill Base publication"],
+    "risk_classes": ["data_flow_exfiltration", "execution", "network_egress"],
+    "safer_alternatives": [
+      "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
+    ],
+    "reference_urls": [
+      "https://github.com/ginuim/skill-base/blob/main/cli/lib/commands/publish.js",
+      "https://github.com/ginuim/skill-base/blob/main/docs/zh/cli.md"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": ["skb", "skb.cmd", "skb.exe"],
+    "project_markers": [],
+    "publisher": {
+      "id": "ginuim",
+      "display_name": "Skill Base",
+      "url": "https://github.com/ginuim/skill-base"
+    },
+    "homepage": "https://github.com/ginuim/skill-base",
+    "icon": {"kind": "none"},
+    "license": "MIT",
+    "permissions": [
+      {
+        "permission_id": "command.skill-base.permission.publish",
+        "implementation_version": "1.0.0",
+        "label": "Publish a Skill version",
+        "description": "Reviews upload of a local Skill directory to Skill Base, where it creates a public Skill or publishes a new version.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": ["Skill Base publication"],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run `skb publish --dry-run` and confirm the directory, Skill ID, and included files.",
+          "Check the name, description, and changelog flags; new Skills are public by default."
+        ],
+        "example_command": "skb publish ./my-skill --changelog 'Initial release'"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.skill-base.publish",
+        "rule_version": "1.0.0",
+        "permission_id": "command.skill-base.permission.publish",
+        "title": "Skill Base publication",
+        "description": "Identifies `skb publish`, which packages the selected local directory and uploads it with the saved Skill Base credential to create a Skill or publish a new version.",
+        "severity": "high",
+        "risk_classes": ["data_flow_exfiltration", "execution", "network_egress"],
+        "action_classes": ["Skill Base publication"],
+        "safer_alternatives": [
+          "Run `skb publish --dry-run` for the same directory and ignore rules, then review the included files before publishing."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": ["skb", "skb.cmd", "skb.exe"],
+            "subcommands": ["publish"],
+            "allow_leading_options": true,
+            "leading_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+            "interspersed_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+            "interspersed_flags": ["--dry-run", "--help", "--no-gitignore", "-h"],
+            "fail_secure_unknown_options": true,
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "forbidden_flags": [],
+            "inverse_flag_pairs": []
+          }
+        },
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "List the files without uploading",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["skb", "skb.cmd", "skb.exe"],
+                "subcommands": ["publish"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+                "interspersed_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+                "interspersed_flags": ["--dry-run", "--no-gitignore"],
+                "fail_secure_unknown_options": true,
+                "required_flags": ["--dry-run"],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": []
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "Publish command help (--help)",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["skb", "skb.cmd", "skb.exe"],
+                "subcommands": ["publish"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+                "interspersed_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+                "interspersed_flags": ["--dry-run", "--help", "--no-gitignore", "-h"],
+                "fail_secure_unknown_options": true,
+                "required_flags": ["--help"],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": []
+              }
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "Publish command help (-h)",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["skb", "skb.cmd", "skb.exe"],
+                "subcommands": ["publish"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+                "interspersed_options_with_values": ["--changelog", "--description", "--ignore", "--name"],
+                "interspersed_flags": ["--dry-run", "--help", "--no-gitignore", "-h"],
+                "fail_secure_unknown_options": true,
+                "required_flags": ["-h"],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": []
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

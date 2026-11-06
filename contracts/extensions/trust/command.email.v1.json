@@ -1,0 +1,5 @@
+{
+  "extension": "command.email",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "trusted-library"
+}

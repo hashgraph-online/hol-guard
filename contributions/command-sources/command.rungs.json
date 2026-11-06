@@ -1,0 +1,363 @@
+{
+  "extension": {
+    "action_classes": [
+      "rungs gate execution command",
+      "rungs module install command",
+      "rungs module upgrade command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews rungs runs that execute registered gates or write module files, gates and records into a repository, and keeps doctor and the documented previews unreviewed.",
+    "ecosystem_ids": [
+      "rungs"
+    ],
+    "executables": [
+      "rungs",
+      "rungs.cmd",
+      "rungs.exe"
+    ],
+    "extension_id": "command.rungs",
+    "homepage": "https://docs.rungscli.com/",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "rungs command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "rungs gate execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml \u2014 commands the repository owns, not rungs \u2014 and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
+        "example_command": "rungs check",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "rungs gate execution",
+        "permission_id": "command.rungs.permission.check",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Read .ai/gates.toml first; each `kind = \"command\"` gate is a repository-owned command that will run.",
+          "Use `rungs doctor --explain` to run the in-process detectors without executing any command gate."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "rungs module install command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `rungs add`, which writes module files, the gate registry, the install record and the rendered harness instruction files into the target repository. `--dry-run` reports the same plan and writes nothing, and is the only preview form.",
+        "example_command": "rungs add backlog",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "rungs module install",
+        "permission_id": "command.rungs.permission.add",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `rungs add <module> --dry-run` first: it prints every file, gate and record it would write.",
+          "Run `rungs doctor` to see what the repository already has before installing over it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "rungs module upgrade command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `rungs upgrade --apply`, which rewrites stale and missing module files, replaces gate registry blocks and updates the install record. Without --apply, upgrade only prints the plan; it never reads --dry-run, so `--apply --dry-run` still writes.",
+        "example_command": "rungs upgrade --apply",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "rungs module upgrade",
+        "permission_id": "command.rungs.permission.upgrade",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run `rungs upgrade` without --apply: it prints the stale, missing and diverged files and writes nothing."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.rungs",
+      "url": "https://github.com/ThroughTheWind/rungs"
+    },
+    "reference_urls": [
+      "https://docs.rungscli.com/",
+      "https://github.com/ThroughTheWind/rungs/blob/v0.4.0/src/cli.ts"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "rungs gate execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml \u2014 commands the repository owns, not rungs \u2014 and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "rungs",
+                  "rungs.cmd",
+                  "rungs.exe"
+                ],
+                "forbidden_flags": [
+                  "--apply",
+                  "--confirm-conflict",
+                  "--confirm-paradigm",
+                  "--confirm-threshold",
+                  "--copilot",
+                  "--dry-run",
+                  "--explain",
+                  "--fast",
+                  "--full",
+                  "--help",
+                  "--into",
+                  "--params",
+                  "--set",
+                  "--version",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--set"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "check"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.rungs.permission.check",
+        "risk_classes": [
+          "execution",
+          "destructive_shell"
+        ],
+        "rule_id": "command.rungs.check",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read .ai/gates.toml first; each `kind = \"command\"` gate is a repository-owned command that will run.",
+          "Use `rungs doctor --explain` to run the in-process detectors without executing any command gate."
+        ],
+        "severity": "high",
+        "title": "rungs gate execution"
+      },
+      {
+        "action_classes": [
+          "rungs module install command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `rungs add`, which writes module files, the gate registry, the install record and the rendered harness instruction files into the target repository. `--dry-run` reports the same plan and writes nothing, and is the only preview form.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "rungs",
+                  "rungs.cmd",
+                  "rungs.exe"
+                ],
+                "forbidden_flags": [
+                  "--apply",
+                  "--confirm-conflict",
+                  "--confirm-paradigm",
+                  "--confirm-threshold",
+                  "--copilot",
+                  "--dry-run",
+                  "--explain",
+                  "--fast",
+                  "--full",
+                  "--help",
+                  "--into",
+                  "--params",
+                  "--set",
+                  "--version",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--set"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "add"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.rungs.permission.add",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.rungs.add",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "executables": [
+                  "rungs",
+                  "rungs.cmd",
+                  "rungs.exe"
+                ],
+                "forbidden_flags": [
+                  "--apply",
+                  "--confirm-conflict",
+                  "--confirm-paradigm",
+                  "--confirm-threshold",
+                  "--copilot",
+                  "--dry-run",
+                  "--explain",
+                  "--fast",
+                  "--full",
+                  "--help",
+                  "--into",
+                  "--params",
+                  "--set",
+                  "--version",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--set"
+                ],
+                "required_flags_anywhere": [
+                  "--dry-run"
+                ],
+                "subcommands": [
+                  "add"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            "title": "rungs add dry run",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `rungs add <module> --dry-run` first: it prints every file, gate and record it would write.",
+          "Run `rungs doctor` to see what the repository already has before installing over it."
+        ],
+        "severity": "high",
+        "title": "rungs module install"
+      },
+      {
+        "action_classes": [
+          "rungs module upgrade command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `rungs upgrade --apply`, which rewrites stale and missing module files, replaces gate registry blocks and updates the install record. Without --apply, upgrade only prints the plan; it never reads --dry-run, so `--apply --dry-run` still writes.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "rungs",
+                  "rungs.cmd",
+                  "rungs.exe"
+                ],
+                "forbidden_flags": [
+                  "--apply",
+                  "--confirm-conflict",
+                  "--confirm-paradigm",
+                  "--confirm-threshold",
+                  "--copilot",
+                  "--dry-run",
+                  "--explain",
+                  "--fast",
+                  "--full",
+                  "--help",
+                  "--into",
+                  "--params",
+                  "--set",
+                  "--version",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--set"
+                ],
+                "required_flags_anywhere": [
+                  "--apply"
+                ],
+                "subcommands": [
+                  "upgrade"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.rungs.permission.upgrade",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.rungs.upgrade",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run `rungs upgrade` without --apply: it prints the stale, missing and diverged files and writes nothing."
+        ],
+        "severity": "high",
+        "title": "rungs module upgrade"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect with `rungs doctor`, preview with `rungs add --dry-run` or `rungs upgrade` without --apply, and read .ai/gates.toml before `rungs check`."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

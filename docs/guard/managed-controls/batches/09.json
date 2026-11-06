@@ -1,0 +1,15 @@
+{
+  "batch": 9,
+  "evidence": [
+    "tests/managed_controls/delegation.py",
+    "tests/managed_controls/test_delegated_package_firewall.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 135,
+    "start": 121
+  },
+  "theme": "Package Firewall delegation without detector or command-plane duplication"
+}

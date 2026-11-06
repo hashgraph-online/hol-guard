@@ -1,0 +1,3145 @@
+{
+ "description": "call_projection parity vectors recorded from the pre-change Python MCP proxy helpers",
+ "vectors": [
+  {
+   "label": "plain_mapping",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "read_file",
+    "params": {
+     "name": "read_file",
+     "arguments": {
+      "path": "README.md"
+     }
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": {
+     "path": "README.md"
+    },
+    "safe_params": {
+     "arguments": {
+      "path": "README.md"
+     },
+     "name": "read_file"
+    },
+    "launch_target": "read_file {\"path\":\"README.md\"} [arguments-sha256:7d6441497d2a000b8143602a7817c90abe7db88e139f89c062a1c36cfe0ad9d6]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "absent_arguments",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "list_tools",
+    "params": {
+     "name": "list_tools"
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": null,
+    "safe_params": {
+     "name": "list_tools"
+    },
+    "launch_target": "list_tools  [arguments-sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "null_arguments",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "list_tools",
+    "params": {
+     "name": "list_tools",
+     "arguments": null
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": null,
+    "safe_params": {
+     "arguments": null,
+     "name": "list_tools"
+    },
+    "launch_target": "list_tools  [arguments-sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "string_arguments",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "run",
+    "params": {
+     "name": "run",
+     "arguments": "{\"cmd\": \"ls\"}"
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": "{\"cmd\": \"ls\"}",
+    "safe_params": {
+     "arguments": "{\"cmd\": \"ls\"}",
+     "name": "run"
+    },
+    "launch_target": "run \"{\\\"cmd\\\": \\\"ls\\\"}\" [arguments-sha256:ebf86ae6ccc53b44d201dd39d36d79470bf983179037c8ff54e381deef4e8c65]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "list_arguments",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "run",
+    "params": {
+     "name": "run",
+     "arguments": [
+      "a",
+      1,
+      null,
+      true
+     ]
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": [
+     "a",
+     1,
+     null,
+     true
+    ],
+    "safe_params": {
+     "arguments": [
+      "a",
+      1,
+      null,
+      true
+     ],
+     "name": "run"
+    },
+    "launch_target": "run [\"a\",1,null,true] [arguments-sha256:cd94c31848337491be72ddd94b6823b7d0d074c690df880a0cb2a1595a05189e]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "number_arguments",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "run",
+    "params": {
+     "name": "run",
+     "arguments": 7.5
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": 7.5,
+    "safe_params": {
+     "arguments": 7.5,
+     "name": "run"
+    },
+    "launch_target": "run 7.5 [arguments-sha256:c4495da75095c64bf4e0587e45d7426f496ca4fc9fe72111715005361cfe0041]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "empty_mapping",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "run",
+    "params": {
+     "name": "run",
+     "arguments": {}
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": {},
+    "safe_params": {
+     "arguments": {},
+     "name": "run"
+    },
+    "launch_target": "run {} [arguments-sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "secret_keys",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "call_api",
+    "params": {
+     "name": "call_api",
+     "arguments": {
+      "api_key": "sk-live-0123456789abcdef0123456789abcdef",
+      "token": "t0k",
+      "query": "x"
+     }
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": {
+     "api_key": "*****",
+     "query": "x",
+     "token": "*****"
+    },
+    "safe_params": {
+     "arguments": {
+      "api_key": "*****",
+      "query": "x",
+      "token": "*****"
+     },
+     "name": "call_api"
+    },
+    "launch_target": "call_api {\"api_key\":\"*****\",\"query\":\"x\",\"token\":\"*****\"} [arguments-sha256:a7def4c6b008deb66066889c8abf870da1024dc8645a730f6c971ac4a581a5cd]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "url_query_secret",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "fetch",
+    "params": {
+     "name": "fetch",
+     "arguments": {
+      "url": "https://api.example.com/v1?access_token=sk-live-0123456789abcdef0123456789abcdef&q=1"
+     }
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": {
+     "url": "https://api.example.com/v1?access_token=%2A%2A%2A%2A%2A&q=1"
+    },
+    "safe_params": {
+     "arguments": {
+      "url": "https://api.example.com/v1?access_token=%2A%2A%2A%2A%2A&q=1"
+     },
+     "name": "fetch"
+    },
+    "launch_target": "fetch {\"url\":\"https://api.example.com/v1?access_token=%2A%2A%2A%2A%2A&q=1\"} [arguments-sha256:9ac433438cf3e2d1a1c782837a5cabf4539cf91eb27861ffb3d35d439b70c4a0]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "nested_secrets",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "call",
+    "params": {
+     "name": "call",
+     "arguments": {
+      "auth": {
+       "password": "hunter2",
+       "user": "a"
+      },
+      "list": [
+       {
+        "secret": "s"
+       }
+      ]
+     }
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": {
+     "auth": {
+      "password": "*****",
+      "user": "a"
+     },
+     "list": [
+      {
+       "secret": "*****"
+      }
+     ]
+    },
+    "safe_params": {
+     "arguments": {
+      "auth": {
+       "password": "*****",
+       "user": "a"
+      },
+      "list": [
+       {
+        "secret": "*****"
+       }
+      ]
+     },
+     "name": "call"
+    },
+    "launch_target": "call {\"auth\":{\"password\":\"*****\",\"user\":\"a\"},\"list\":[{\"secret\":\"*****\"}]} [arguments-sha256:e5cd1de632aa3b1d90d62f7ceb7a31273d3e356fc0505463bcde762fc2185a29]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "unicode",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "write",
+    "params": {
+     "name": "write",
+     "_meta": {
+      "progressToken": 3
+     },
+     "arguments": {
+      "text": "héllo ✓ 😀",
+      "path": "/tmp/ü"
+     }
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": {
+     "path": "/tmp/ü",
+     "text": "héllo ✓ 😀"
+    },
+    "safe_params": {
+     "_meta": {
+      "progressToken": "*****"
+     },
+     "arguments": {
+      "path": "/tmp/ü",
+      "text": "héllo ✓ 😀"
+     },
+     "name": "write"
+    },
+    "launch_target": "write {\"path\":\"/tmp/\\u00fc\",\"text\":\"h\\u00e9llo \\u2713 \\ud83d\\ude00\"} [arguments-sha256:40e8c6d25a86711cfe6b286bdfbebeff0630bb6d118c22cb53d9266c27d4eb76]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "big_numbers",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "calc",
+    "params": {
+     "name": "calc",
+     "arguments": {
+      "n": 12345678901234567890,
+      "f": 1e+300,
+      "neg": -0.0
+     }
+    },
+    "risk": null
+   },
+   "expected": {
+    "safe_arguments": {
+     "f": 1e+300,
+     "n": 12345678901234567890,
+     "neg": -0.0
+    },
+    "safe_params": {
+     "arguments": {
+      "f": 1e+300,
+      "n": 12345678901234567890,
+      "neg": -0.0
+     },
+     "name": "calc"
+    },
+    "launch_target": "calc {\"f\":1e+300,\"n\":12345678901234567890,\"neg\":-0.0} [arguments-sha256:99b9ce4bd6c6d1583374e2b1896fb7a7e6dc98248b92ba4a363ebb46d6aa7d1d]",
+    "browser": null,
+    "risk": null
+   }
+  },
+  {
+   "label": "fs_read",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "read_file",
+    "params": {
+     "name": "read_file",
+     "arguments": {
+      "path": "/srv/.env"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "filesystem:read_file",
+      "command": "read_file",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+         "command": "npx",
+         "commandHash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+         "packageName": "@modelcontextprotocol/server-filesystem",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "d2891e73f935a3f95aa5b163b3a20409139814ec67530a435fe1f77d3975b521",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+          "toolName": "read_file"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+        "command": "npx",
+        "command_hash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+        "package_name": "@modelcontextprotocol/server-filesystem",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "d2891e73f935a3f95aa5b163b3a20409139814ec67530a435fe1f77d3975b521",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+        "tool_name": "read_file"
+       },
+       "server_name": "filesystem"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "path",
+        "/srv/.env"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "path": "/srv/.env"
+    },
+    "safe_params": {
+     "arguments": {
+      "path": "/srv/.env"
+     },
+     "name": "read_file"
+    },
+    "launch_target": "read_file {\"path\":\"/srv/.env\"} [arguments-sha256:185a251183ec0b2e0ef4a102a7b9818b6a976ca093b803ad355ebfa7e3a2f26a]",
+    "browser": null,
+    "risk": {
+     "risk_categories": [
+      "filesystem_access",
+      "secret_access"
+     ],
+     "summary": "Call shape implies filesystem path access, and it also call arguments mention sensitive local files or secrets."
+    }
+   }
+  },
+  {
+   "label": "fs_write",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "write_file",
+    "params": {
+     "name": "write_file",
+     "arguments": {
+      "path": "/srv/a.txt",
+      "content": "hi"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "filesystem:write_file",
+      "command": "write_file",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+         "command": "npx",
+         "commandHash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+         "packageName": "@modelcontextprotocol/server-filesystem",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "6d7a0ce0112cda772987e4eeefc982a5edd05193dfb3bd6544d0b28d1f73589f",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+          "toolName": "write_file"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+        "command": "npx",
+        "command_hash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+        "package_name": "@modelcontextprotocol/server-filesystem",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "6d7a0ce0112cda772987e4eeefc982a5edd05193dfb3bd6544d0b28d1f73589f",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+        "tool_name": "write_file"
+       },
+       "server_name": "filesystem"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "path",
+        "/srv/a.txt"
+       ],
+       [
+        "content",
+        "hi"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "content": "hi",
+     "path": "/srv/a.txt"
+    },
+    "safe_params": {
+     "arguments": {
+      "content": "hi",
+      "path": "/srv/a.txt"
+     },
+     "name": "write_file"
+    },
+    "launch_target": "write_file {\"content\":\"hi\",\"path\":\"/srv/a.txt\"} [arguments-sha256:f643c6179664a62c7d2b08ee97ad4c3f391719c521fbf53aef2ad90fbdbce38e]",
+    "browser": null,
+    "risk": {
+     "risk_categories": [
+      "filesystem_access"
+     ],
+     "summary": "Call shape implies filesystem path access."
+    }
+   }
+  },
+  {
+   "label": "fs_absent",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "list_allowed_directories",
+    "params": {
+     "name": "list_allowed_directories"
+    },
+    "risk": {
+     "artifact": {
+      "name": "filesystem:list_allowed_directories",
+      "command": "list_allowed_directories",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+         "command": "npx",
+         "commandHash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+         "packageName": "@modelcontextprotocol/server-filesystem",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "495c6bdcd191bd9b1ee4a4ad3be20cf4206ff951be3b9469361da849e7f43494",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+          "toolName": "list_allowed_directories"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+        "command": "npx",
+        "command_hash": "7ae24697053df8eac375d6f972725b6a660309612c4632d051c633b5b0b9c4e4",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+        "package_name": "@modelcontextprotocol/server-filesystem",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "495c6bdcd191bd9b1ee4a4ad3be20cf4206ff951be3b9469361da849e7f43494",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "dbcc778fe56f020a06b7117a47288eba1a4e083d4f45b30668bd7806f8bd89c8",
+        "tool_name": "list_allowed_directories"
+       },
+       "server_name": "filesystem"
+      }
+     },
+     "arguments": {
+      "format": "other",
+      "value": null
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": null,
+    "safe_params": {
+     "name": "list_allowed_directories"
+    },
+    "launch_target": "list_allowed_directories  [arguments-sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b]",
+    "browser": null,
+    "risk": {
+     "risk_categories": [],
+     "summary": "No high-risk signal was detected in this tool call."
+    }
+   }
+  },
+  {
+   "label": "github_secret",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "create_issue",
+    "params": {
+     "name": "create_issue",
+     "arguments": {
+      "repo": "o/r",
+      "body": "token sk-live-0123456789abcdef0123456789abcdef"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "github:create_issue",
+      "command": "create_issue",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "7faeae878e6cac29aca30b80eb9f8e43c8c6960b651f58ae5a73e71818265399",
+         "command": "npx",
+         "commandHash": "7faeae878e6cac29aca30b80eb9f8e43c8c6960b651f58ae5a73e71818265399",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "a2f6527da536df0934f8c100f2436c1a278793cece4358fc8773cd031e00633e",
+         "packageName": "@modelcontextprotocol/server-github",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "a2f6527da536df0934f8c100f2436c1a278793cece4358fc8773cd031e00633e"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "632ac35ae5b6cbf5f990c91c6763381eb040ddc2b3c079e804dcc095b9e564c9",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "a2f6527da536df0934f8c100f2436c1a278793cece4358fc8773cd031e00633e",
+          "toolName": "create_issue"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "7faeae878e6cac29aca30b80eb9f8e43c8c6960b651f58ae5a73e71818265399",
+        "command": "npx",
+        "command_hash": "7faeae878e6cac29aca30b80eb9f8e43c8c6960b651f58ae5a73e71818265399",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "a2f6527da536df0934f8c100f2436c1a278793cece4358fc8773cd031e00633e",
+        "package_name": "@modelcontextprotocol/server-github",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "a2f6527da536df0934f8c100f2436c1a278793cece4358fc8773cd031e00633e"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "632ac35ae5b6cbf5f990c91c6763381eb040ddc2b3c079e804dcc095b9e564c9",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "a2f6527da536df0934f8c100f2436c1a278793cece4358fc8773cd031e00633e",
+        "tool_name": "create_issue"
+       },
+       "server_name": "github"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "repo",
+        "o/r"
+       ],
+       [
+        "body",
+        "token sk-live-0123456789abcdef0123456789abcdef"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "body": "*****",
+     "repo": "o/r"
+    },
+    "safe_params": {
+     "arguments": {
+      "body": "*****",
+      "repo": "o/r"
+     },
+     "name": "create_issue"
+    },
+    "launch_target": "create_issue {\"body\":\"*****\",\"repo\":\"o/r\"} [arguments-sha256:c48282280560efb447a1e573eca8162f3c81456e7276b5e24a67a2aeda794df0]",
+    "browser": null,
+    "risk": {
+     "risk_categories": [
+      "secret_access"
+     ],
+     "summary": "Call arguments mention sensitive local files or secrets."
+    }
+   }
+  },
+  {
+   "label": "chrome_navigate_https",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "url": "https://hol.org/guard?x=1#y"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "url",
+        "https://hol.org/guard?x=1#y"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "url": "https://hol.org/guard?x=1#y"
+    },
+    "safe_params": {
+     "arguments": {
+      "url": "https://hol.org/guard?x=1#y"
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"url\":\"https://hol.org/guard?x=1#y\"} [arguments-sha256:7d31804fc74e5ea1f94ba8c0a4ad8c14e59c791a00d85e3cf96c179c8bf96273]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page hol.org",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": "hol.org",
+      "target_origin": "https://hol.org",
+      "target_path_prefix": "/guard",
+      "target_url": "https://hol.org/guard?x=1",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation",
+      "browser_external_domain"
+     ],
+     "summary": "Browser navigation to hol.org, and it also first navigation to external domain hol.org."
+    }
+   }
+  },
+  {
+   "label": "chrome_navigate_local",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "type": "url",
+      "url": "http://127.0.0.1:3000/guard"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "type",
+        "url"
+       ],
+       [
+        "url",
+        "http://127.0.0.1:3000/guard"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "type": "url",
+     "url": "http://127.0.0.1:3000/guard"
+    },
+    "safe_params": {
+     "arguments": {
+      "type": "url",
+      "url": "http://127.0.0.1:3000/guard"
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"type\":\"url\",\"url\":\"http://127.0.0.1:3000/guard\"} [arguments-sha256:9674615aa11f9cacd52578d8bbaf70a11f2f258ba676662f237a99614ce0695d]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page 127.0.0.1",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": "127.0.0.1",
+      "target_origin": "http://127.0.0.1:3000",
+      "target_path_prefix": "/guard",
+      "target_url": "http://127.0.0.1:3000/guard",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation"
+     ],
+     "summary": "Browser navigation to 127.0.0.1."
+    }
+   }
+  },
+  {
+   "label": "chrome_debug_profile",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "type": "url",
+      "url": "http://127.0.0.1:3000/guard"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "be45137931aeff835f1aeede5884427fa49a42c269f5b245709a9dddc8882ab9",
+         "command": "npx",
+         "commandHash": "be45137931aeff835f1aeede5884427fa49a42c269f5b245709a9dddc8882ab9",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "26412def78910a291740c1537a3502232aede34cb64acf289755f8f35617f3d6",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "26412def78910a291740c1537a3502232aede34cb64acf289755f8f35617f3d6"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "7635403cd18f7e5f1c3b2626573805d5444f92328bd02c913c62fd1b640e8df7",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "26412def78910a291740c1537a3502232aede34cb64acf289755f8f35617f3d6",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "be45137931aeff835f1aeede5884427fa49a42c269f5b245709a9dddc8882ab9",
+        "command": "npx",
+        "command_hash": "be45137931aeff835f1aeede5884427fa49a42c269f5b245709a9dddc8882ab9",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "26412def78910a291740c1537a3502232aede34cb64acf289755f8f35617f3d6",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "26412def78910a291740c1537a3502232aede34cb64acf289755f8f35617f3d6"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "7635403cd18f7e5f1c3b2626573805d5444f92328bd02c913c62fd1b640e8df7",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "26412def78910a291740c1537a3502232aede34cb64acf289755f8f35617f3d6",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools",
+       "server_args": [
+        "--remote-debugging-port=9222"
+       ]
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "type",
+        "url"
+       ],
+       [
+        "url",
+        "http://127.0.0.1:3000/guard"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "type": "url",
+     "url": "http://127.0.0.1:3000/guard"
+    },
+    "safe_params": {
+     "arguments": {
+      "type": "url",
+      "url": "http://127.0.0.1:3000/guard"
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"type\":\"url\",\"url\":\"http://127.0.0.1:3000/guard\"} [arguments-sha256:9674615aa11f9cacd52578d8bbaf70a11f2f258ba676662f237a99614ce0695d]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page 127.0.0.1",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "26412def78910a291740c1537a3502232aede34cb64acf289755f8f35617f3d6",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "7635403cd18f7e5f1c3b2626573805d5444f92328bd02c913c62fd1b640e8df7",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "remote-debugging",
+      "sensitive_surface_flags": [],
+      "target_domain": "127.0.0.1",
+      "target_origin": "http://127.0.0.1:3000",
+      "target_path_prefix": "/guard",
+      "target_url": "http://127.0.0.1:3000/guard",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation",
+      "browser_shared_profile"
+     ],
+     "summary": "Browser navigation to 127.0.0.1, and it also browser MCP uses a shared or remote-debugging profile."
+    }
+   }
+  },
+  {
+   "label": "chrome_file_url",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "url": "file:///etc/passwd"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "url",
+        "file:///etc/passwd"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "url": "file:///etc/passwd"
+    },
+    "safe_params": {
+     "arguments": {
+      "url": "file:///etc/passwd"
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"url\":\"file:///etc/passwd\"} [arguments-sha256:e6649ff0031f1b9429e0d50817ed97f7e9cfeae22d2ffae76cce833c22180021]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page unknown",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": "/etc/passwd",
+      "target_url": "file:///etc/passwd",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "secret_access",
+      "browser_navigation"
+     ],
+     "summary": "Call arguments mention sensitive local files or secrets, and it also browser navigation to current page."
+    }
+   }
+  },
+  {
+   "label": "chrome_js_url",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "url": "javascript:alert(1)"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "url",
+        "javascript:alert(1)"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "url": "javascript:alert(1)"
+    },
+    "safe_params": {
+     "arguments": {
+      "url": "javascript:alert(1)"
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"url\":\"javascript:alert(1)\"} [arguments-sha256:c587cef1b196e50ba2fe241ea0acfbe6a532e4f3bba9c68f38f1b9b185bc5ab7]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page unknown",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": "alert(1)",
+      "target_url": "javascript:alert(1)",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation"
+     ],
+     "summary": "Browser navigation to current page."
+    }
+   }
+  },
+  {
+   "label": "chrome_empty_url",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "url": ""
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "url",
+        ""
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "url": ""
+    },
+    "safe_params": {
+     "arguments": {
+      "url": ""
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"url\":\"\"} [arguments-sha256:0d891cd61411a07f3c3be0426f9cfdd76d1c8c84955cdd9d3a8e3b95d986b5d6]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page unknown",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation"
+     ],
+     "summary": "Browser navigation to current page."
+    }
+   }
+  },
+  {
+   "label": "chrome_query_secret",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "url": "https://a.example/cb?code=sk-live-0123456789abcdef0123456789abcdef"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "url",
+        "https://a.example/cb?code=sk-live-0123456789abcdef0123456789abcdef"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "url": "https://a.example/cb?code=sk-live-0123456789abcdef0123456789abcdef"
+    },
+    "safe_params": {
+     "arguments": {
+      "url": "https://a.example/cb?code=sk-live-0123456789abcdef0123456789abcdef"
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"url\":\"https://a.example/cb?code=sk-live-0123456789abcdef0123456789abcdef\"} [arguments-sha256:3127c5740cc368e628e5f67579a905c6326262bee2b4ac7d1c29942cb70ed4ba]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page a.example",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": "a.example",
+      "target_origin": "https://a.example",
+      "target_path_prefix": "/cb",
+      "target_url": "https://a.example/cb?code=%5Bredacted%5D",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation",
+      "browser_external_domain"
+     ],
+     "summary": "Browser navigation to a.example, and it also first navigation to external domain a.example."
+    }
+   }
+  },
+  {
+   "label": "chrome_volatile",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": {
+      "url": "https://hol.org",
+      "timeout": 5,
+      "pageId": 2
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "url",
+        "https://hol.org"
+       ],
+       [
+        "timeout",
+        5
+       ],
+       [
+        "pageId",
+        2
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "pageId": 2,
+     "timeout": 5,
+     "url": "https://hol.org"
+    },
+    "safe_params": {
+     "arguments": {
+      "pageId": 2,
+      "timeout": 5,
+      "url": "https://hol.org"
+     },
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page {\"pageId\":2,\"timeout\":5,\"url\":\"https://hol.org\"} [arguments-sha256:53fbb70dcee54c98c67cbf50d4472f20cd52e1563347a095a2421e5ada5712e7]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page hol.org",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": "hol.org",
+      "target_origin": "https://hol.org",
+      "target_path_prefix": "",
+      "target_url": "https://hol.org",
+      "version": 1,
+      "volatile_fields_dropped": [
+       "timeout",
+       "pageId"
+      ]
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation",
+      "browser_external_domain"
+     ],
+     "summary": "Browser navigation to hol.org, and it also first navigation to external domain hol.org."
+    }
+   }
+  },
+  {
+   "label": "chrome_screenshot",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "take_screenshot",
+    "params": {
+     "name": "take_screenshot",
+     "arguments": {}
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:take_screenshot",
+      "command": "take_screenshot",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "bdccd0a5874930b93da6e0d151c86170dd90508e2cbd8acdd88f41a193a98223",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "take_screenshot"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "bdccd0a5874930b93da6e0d151c86170dd90508e2cbd8acdd88f41a193a98223",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "take_screenshot"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": []
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {},
+    "safe_params": {
+     "arguments": {},
+     "name": "take_screenshot"
+    },
+    "launch_target": "take_screenshot {} [arguments-sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a]",
+    "browser": {
+     "launch_target": "chrome-devtools take_screenshot unknown",
+     "intent": {
+      "intent": "browser.inspect",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "bdccd0a5874930b93da6e0d151c86170dd90508e2cbd8acdd88f41a193a98223",
+      "mcp_tool_name": "take_screenshot",
+      "method": "read",
+      "operation": "take_screenshot",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_inspection"
+     ],
+     "summary": "Browser inspection of current page."
+    }
+   }
+  },
+  {
+   "label": "chrome_screenshot_absent",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "take_screenshot",
+    "params": {
+     "name": "take_screenshot"
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:take_screenshot",
+      "command": "take_screenshot",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "bdccd0a5874930b93da6e0d151c86170dd90508e2cbd8acdd88f41a193a98223",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "take_screenshot"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "bdccd0a5874930b93da6e0d151c86170dd90508e2cbd8acdd88f41a193a98223",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "take_screenshot"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "other",
+      "value": null
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": null,
+    "safe_params": {
+     "name": "take_screenshot"
+    },
+    "launch_target": "take_screenshot  [arguments-sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b]",
+    "browser": {
+     "launch_target": "chrome-devtools take_screenshot unknown",
+     "intent": {
+      "intent": "browser.inspect",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "bdccd0a5874930b93da6e0d151c86170dd90508e2cbd8acdd88f41a193a98223",
+      "mcp_tool_name": "take_screenshot",
+      "method": "read",
+      "operation": "take_screenshot",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_inspection"
+     ],
+     "summary": "Browser inspection of current page."
+    }
+   }
+  },
+  {
+   "label": "chrome_evaluate",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "evaluate_script",
+    "params": {
+     "name": "evaluate_script",
+     "arguments": {
+      "function": "() => document.cookie"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:evaluate_script",
+      "command": "evaluate_script",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "3f31f5343f093311f9f3dff6a1335d01737c198245762d55078e2021ab3c02f8",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "evaluate_script"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "3f31f5343f093311f9f3dff6a1335d01737c198245762d55078e2021ab3c02f8",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "evaluate_script"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "function",
+        "() => document.cookie"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "function": "() => document.cookie"
+    },
+    "safe_params": {
+     "arguments": {
+      "function": "() => document.cookie"
+     },
+     "name": "evaluate_script"
+    },
+    "launch_target": "evaluate_script {\"function\":\"() => document.cookie\"} [arguments-sha256:b28b484f1a4ff3b15e09bad3de5e442752dc6ccef1bfe091a9ea0f3629501aae]",
+    "browser": {
+     "launch_target": "chrome-devtools evaluate_script unknown",
+     "intent": {
+      "intent": "browser.privileged",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "3f31f5343f093311f9f3dff6a1335d01737c198245762d55078e2021ab3c02f8",
+      "mcp_tool_name": "evaluate_script",
+      "method": "privileged",
+      "operation": "evaluate_script",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [
+       "script_eval"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_privileged",
+      "browser_sensitive_surface"
+     ],
+     "summary": "Privileged browser access to current page, and it also browser action touches sensitive surfaces: script_eval."
+    }
+   }
+  },
+  {
+   "label": "chrome_fill_password",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "fill",
+    "params": {
+     "name": "fill",
+     "arguments": {
+      "uid": "1_2",
+      "value": "hunter2"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:fill",
+      "command": "fill",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "120e79bab78074ae39110610896721753abea5a693bb17691a9a849a3420a6ae",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "fill"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "120e79bab78074ae39110610896721753abea5a693bb17691a9a849a3420a6ae",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "fill"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "uid",
+        "1_2"
+       ],
+       [
+        "value",
+        "hunter2"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "uid": "1_2",
+     "value": "hunter2"
+    },
+    "safe_params": {
+     "arguments": {
+      "uid": "1_2",
+      "value": "hunter2"
+     },
+     "name": "fill"
+    },
+    "launch_target": "fill {\"uid\":\"1_2\",\"value\":\"hunter2\"} [arguments-sha256:ac652a24889d0f32876be89e1755c6756915e599dcf3e50c36e6397162d2f656]",
+    "browser": null,
+    "risk": {
+     "risk_categories": [],
+     "summary": "No high-risk signal was detected in this tool call."
+    }
+   }
+  },
+  {
+   "label": "chrome_string_args",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": "{\"url\": \"https://hol.org/a\"}"
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "json",
+      "text": "{\"url\": \"https://hol.org/a\"}"
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": "{\"url\": \"https://hol.org/a\"}",
+    "safe_params": {
+     "arguments": "{\"url\": \"https://hol.org/a\"}",
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page \"{\\\"url\\\": \\\"https://hol.org/a\\\"}\" [arguments-sha256:14dd745226832aa35310f09ae0862892a3897666345d807872a95a37c50a89e7]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page hol.org",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": "hol.org",
+      "target_origin": "https://hol.org",
+      "target_path_prefix": "/a",
+      "target_url": "https://hol.org/a",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation",
+      "browser_external_domain"
+     ],
+     "summary": "Browser navigation to hol.org, and it also first navigation to external domain hol.org."
+    }
+   }
+  },
+  {
+   "label": "chrome_bad_json_args",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "navigate_page",
+    "params": {
+     "name": "navigate_page",
+     "arguments": "{not json"
+    },
+    "risk": {
+     "artifact": {
+      "name": "chrome-devtools:navigate_page",
+      "command": "navigate_page",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "command": "npx",
+         "commandHash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+         "packageName": "@modelcontextprotocol/server-chrome-devtools",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+          "toolName": "navigate_page"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "command": "npx",
+        "command_hash": "8e732ab867944ca242c88a0da59c2d37d2c97bf44ea8dd19c326ac1a5a0f0d6b",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "package_name": "@modelcontextprotocol/server-chrome-devtools",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+        "tool_name": "navigate_page"
+       },
+       "server_name": "chrome-devtools"
+      }
+     },
+     "arguments": {
+      "format": "json",
+      "text": "{not json"
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": "{not json",
+    "safe_params": {
+     "arguments": "{not json",
+     "name": "navigate_page"
+    },
+    "launch_target": "navigate_page \"{not json\" [arguments-sha256:b0e323c410688c1decb1728a0a13819fba9d6740c5eaddcaf35d1f4c30ae87ae]",
+    "browser": {
+     "launch_target": "chrome-devtools navigate_page unknown",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "8a5cbc0f4d27bea54060fc1c6b2d4b2df10333bc8ba6631de24b29d53098c6f4",
+      "mcp_tool_name": "navigate_page",
+      "method": "navigate",
+      "operation": "navigate_page",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation"
+     ],
+     "summary": "Browser navigation to current page."
+    }
+   }
+  },
+  {
+   "label": "playwright_navigate",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "browser_navigate",
+    "params": {
+     "name": "browser_navigate",
+     "arguments": {
+      "url": "https://github.com/login"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "playwright:browser_navigate",
+      "command": "browser_navigate",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "command": "npx",
+         "commandHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+         "packageName": "@playwright/mcp",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "60928a3e2f3e54d598a6d9fc5cf1983b2e0173f4afd8daf641eca9db7ec70a1f",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+          "toolName": "browser_navigate"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "command": "npx",
+        "command_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "package_name": "@playwright/mcp",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "60928a3e2f3e54d598a6d9fc5cf1983b2e0173f4afd8daf641eca9db7ec70a1f",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "tool_name": "browser_navigate"
+       },
+       "server_name": "playwright"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "url",
+        "https://github.com/login"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "url": "https://github.com/login"
+    },
+    "safe_params": {
+     "arguments": {
+      "url": "https://github.com/login"
+     },
+     "name": "browser_navigate"
+    },
+    "launch_target": "browser_navigate {\"url\":\"https://github.com/login\"} [arguments-sha256:36d27bf48294d7a9c43a79da6cf2fb1c2f7681bbef5c6f971649298bf1ce788e]",
+    "browser": {
+     "launch_target": "playwright browser_navigate github.com",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+      "mcp_server_name": "playwright",
+      "mcp_tool_identity_hash": "60928a3e2f3e54d598a6d9fc5cf1983b2e0173f4afd8daf641eca9db7ec70a1f",
+      "mcp_tool_name": "browser_navigate",
+      "method": "navigate",
+      "operation": "browser_navigate",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": "github.com",
+      "target_origin": "https://github.com",
+      "target_path_prefix": "/login",
+      "target_url": "https://github.com/login",
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation",
+      "browser_external_domain"
+     ],
+     "summary": "Browser navigation to github.com, and it also first navigation to external domain github.com."
+    }
+   }
+  },
+  {
+   "label": "playwright_cookies",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "browser_evaluate",
+    "params": {
+     "name": "browser_evaluate",
+     "arguments": {
+      "function": "() => localStorage"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "playwright:browser_evaluate",
+      "command": "browser_evaluate",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "command": "npx",
+         "commandHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+         "packageName": "@playwright/mcp",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "2ff25d6f1def6374efda52ef129821489fd4241a91033b4d5822d9d84c77b63e",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+          "toolName": "browser_evaluate"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "command": "npx",
+        "command_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "package_name": "@playwright/mcp",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "2ff25d6f1def6374efda52ef129821489fd4241a91033b4d5822d9d84c77b63e",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "tool_name": "browser_evaluate"
+       },
+       "server_name": "playwright"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "function",
+        "() => localStorage"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "function": "() => localStorage"
+    },
+    "safe_params": {
+     "arguments": {
+      "function": "() => localStorage"
+     },
+     "name": "browser_evaluate"
+    },
+    "launch_target": "browser_evaluate {\"function\":\"() => localStorage\"} [arguments-sha256:f9c04fdf4954a057264f4b0ad475cbd04d10ff4b05410546ec995f7b68d1f550]",
+    "browser": {
+     "launch_target": "playwright browser_evaluate unknown",
+     "intent": {
+      "intent": "browser.privileged",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+      "mcp_server_name": "playwright",
+      "mcp_tool_identity_hash": "2ff25d6f1def6374efda52ef129821489fd4241a91033b4d5822d9d84c77b63e",
+      "mcp_tool_name": "browser_evaluate",
+      "method": "privileged",
+      "operation": "browser_evaluate",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [
+       "script_eval"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_privileged",
+      "browser_sensitive_surface"
+     ],
+     "summary": "Privileged browser access to current page, and it also browser action touches sensitive surfaces: script_eval."
+    }
+   }
+  },
+  {
+   "label": "playwright_type",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "browser_type",
+    "params": {
+     "name": "browser_type",
+     "arguments": {
+      "element": "pw",
+      "text": "secret!",
+      "ref": "e1"
+     }
+    },
+    "risk": {
+     "artifact": {
+      "name": "playwright:browser_type",
+      "command": "browser_type",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "command": "npx",
+         "commandHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+         "packageName": "@playwright/mcp",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "9438e69be415e0669a0edfa9f1585c491e028e0d3dae9d4388ed769bb6df2f22",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+          "toolName": "browser_type"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "command": "npx",
+        "command_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "package_name": "@playwright/mcp",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "9438e69be415e0669a0edfa9f1585c491e028e0d3dae9d4388ed769bb6df2f22",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "tool_name": "browser_type"
+       },
+       "server_name": "playwright"
+      }
+     },
+     "arguments": {
+      "format": "mapping",
+      "entries": [
+       [
+        "element",
+        "pw"
+       ],
+       [
+        "text",
+        "secret!"
+       ],
+       [
+        "ref",
+        "e1"
+       ]
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": {
+     "element": "pw",
+     "ref": "e1",
+     "text": "*****"
+    },
+    "safe_params": {
+     "arguments": {
+      "element": "pw",
+      "ref": "e1",
+      "text": "*****"
+     },
+     "name": "browser_type"
+    },
+    "launch_target": "browser_type {\"element\":\"pw\",\"ref\":\"e1\",\"text\":\"*****\"} [arguments-sha256:73c154445735620a654613fdd223febc9b422606782c2e0cc6e57a0a6e89d25d]",
+    "browser": {
+     "launch_target": "playwright browser_type unknown",
+     "intent": {
+      "intent": "browser.interact",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+      "mcp_server_name": "playwright",
+      "mcp_tool_identity_hash": "9438e69be415e0669a0edfa9f1585c491e028e0d3dae9d4388ed769bb6df2f22",
+      "mcp_tool_name": "browser_type",
+      "method": "interact",
+      "operation": "browser_type",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "secret_access",
+      "browser_interaction"
+     ],
+     "summary": "Call arguments mention sensitive local files or secrets, and it also browser interaction on page element."
+    }
+   }
+  },
+  {
+   "label": "playwright_close",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "browser_close",
+    "params": {
+     "name": "browser_close",
+     "_meta": null
+    },
+    "risk": {
+     "artifact": {
+      "name": "playwright:browser_close",
+      "command": "browser_close",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "command": "npx",
+         "commandHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+         "packageName": "@playwright/mcp",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "b2a67f7451d6e318387eaa018f10dcab3f7c521a184670da8ef553e638f11b90",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+          "toolName": "browser_close"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "command": "npx",
+        "command_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "package_name": "@playwright/mcp",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "b2a67f7451d6e318387eaa018f10dcab3f7c521a184670da8ef553e638f11b90",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "tool_name": "browser_close"
+       },
+       "server_name": "playwright"
+      }
+     },
+     "arguments": {
+      "format": "other",
+      "value": null
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": null,
+    "safe_params": {
+     "_meta": null,
+     "name": "browser_close"
+    },
+    "launch_target": "browser_close  [arguments-sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b]",
+    "browser": {
+     "launch_target": "playwright browser_close unknown",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+      "mcp_server_name": "playwright",
+      "mcp_tool_identity_hash": "b2a67f7451d6e318387eaa018f10dcab3f7c521a184670da8ef553e638f11b90",
+      "mcp_tool_name": "browser_close",
+      "method": "navigate",
+      "operation": "browser_close",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation"
+     ],
+     "summary": "Browser navigation to current page."
+    }
+   }
+  },
+  {
+   "label": "playwright_list_args",
+   "query": {
+    "check": "call_projection",
+    "tool_name": "browser_navigate",
+    "params": {
+     "name": "browser_navigate",
+     "arguments": [
+      "https://hol.org"
+     ]
+    },
+    "risk": {
+     "artifact": {
+      "name": "playwright:browser_navigate",
+      "command": "browser_navigate",
+      "metadata": {
+       "mcpSkillFirewall": {
+        "mcpServer": {
+         "argsHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "command": "npx",
+         "commandHash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+         "configPath": ".mcp.json",
+         "dependencyHash": null,
+         "envKeys": [],
+         "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+         "identityHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+         "packageName": "@playwright/mcp",
+         "packageSource": "default",
+         "packageVersion": null,
+         "publisherStableId": null,
+         "transport": "stdio",
+         "transportHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+        },
+        "mcpTools": [
+         {
+          "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+          "hashScope": "manifest",
+          "identityHash": "60928a3e2f3e54d598a6d9fc5cf1983b2e0173f4afd8daf641eca9db7ec70a1f",
+          "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+          "serverHash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+          "toolName": "browser_navigate"
+         }
+        ]
+       },
+       "mcp_server_identity": {
+        "args_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "command": "npx",
+        "command_hash": "b4b5c8ca944929039c48be939b6a2c9cf44ef0fb72689ec602b97a8faaf72e9d",
+        "config_path": ".mcp.json",
+        "dependency_hash": null,
+        "env_keys": [],
+        "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "package_name": "@playwright/mcp",
+        "package_source": "default",
+        "package_version": null,
+        "publisher_stable_id": null,
+        "transport": "stdio",
+        "transport_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a"
+       },
+       "mcp_tool_identity": {
+        "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "identity_hash": "60928a3e2f3e54d598a6d9fc5cf1983b2e0173f4afd8daf641eca9db7ec70a1f",
+        "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "server_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+        "tool_name": "browser_navigate"
+       },
+       "server_name": "playwright"
+      }
+     },
+     "arguments": {
+      "format": "other",
+      "value": [
+       "https://hol.org"
+      ]
+     },
+     "risk_categories": null,
+     "summary_code": null
+    }
+   },
+   "expected": {
+    "safe_arguments": [
+     "https://hol.org"
+    ],
+    "safe_params": {
+     "arguments": [
+      "https://hol.org"
+     ],
+     "name": "browser_navigate"
+    },
+    "launch_target": "browser_navigate [\"https://hol.org\"] [arguments-sha256:49f2423ab99ccfd7e0ea50f2a01d567f37bfc46da90424275c2d575c97899c7b]",
+    "browser": {
+     "launch_target": "playwright browser_navigate unknown",
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "8356fa717923b4c72353c7b1b08f516871b12e385eedf6b856aa3194730c372a",
+      "mcp_server_name": "playwright",
+      "mcp_tool_identity_hash": "60928a3e2f3e54d598a6d9fc5cf1983b2e0173f4afd8daf641eca9db7ec70a1f",
+      "mcp_tool_name": "browser_navigate",
+      "method": "navigate",
+      "operation": "browser_navigate",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     }
+    },
+    "risk": {
+     "risk_categories": [
+      "browser_navigation"
+     ],
+     "summary": "Browser navigation to current page."
+    }
+   }
+  }
+ ]
+}

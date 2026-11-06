@@ -1,0 +1,16 @@
+{
+  "batch": 10,
+  "evidence": [
+    "tests/managed_controls/compatibility.py",
+    "tests/managed_controls/migration.py",
+    "tests/managed_controls/test_compatibility_migration.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 150,
+    "start": 136
+  },
+  "theme": "Safe compatibility exclusion and deterministic legacy migration"
+}

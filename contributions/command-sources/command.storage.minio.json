@@ -1,0 +1,1223 @@
+{
+  "extension": {
+    "action_classes": [
+      "MinIO storage destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews MinIO Client commands including copy, list, mirror, and deletion.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.storage.minio",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "MinIO command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies minio cat operations.",
+        "example_command": "mc cat",
+        "family": "minio",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MinIO cat",
+        "permission_id": "command.storage.minio.permission.cat",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies minio copy operations.",
+        "example_command": "mc cp",
+        "family": "minio",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MinIO copy",
+        "permission_id": "command.storage.minio.permission.cp",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies minio object deletion operations.",
+        "example_command": "mc rm",
+        "family": "minio",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MinIO object deletion",
+        "permission_id": "command.storage.minio.permission.deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List the exact objects and confirm retention or recovery controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies minio list operations.",
+        "example_command": "mc ls",
+        "family": "minio",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MinIO list",
+        "permission_id": "command.storage.minio.permission.ls",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies minio make bucket operations.",
+        "example_command": "mc mb",
+        "family": "minio",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MinIO make bucket",
+        "permission_id": "command.storage.minio.permission.mb",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies minio mirror operations.",
+        "example_command": "mc mirror",
+        "family": "minio",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MinIO mirror",
+        "permission_id": "command.storage.minio.permission.mirror",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies minio move operations.",
+        "example_command": "mc mv",
+        "family": "minio",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "MinIO move",
+        "permission_id": "command.storage.minio.permission.mv",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://docs.min.io/community/minio-object-store/reference/minio-mc.html",
+      "https://docs.min.io/community/minio-object-store/reference/minio-mc/mc-rm.html",
+      "https://docs.min.io/community/minio-object-store/reference/minio-mc/mc-mirror.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies minio object deletion operations.",
+        "family": "minio",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rb"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--remove"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "mirror"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.minio.permission.deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.minio.deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rb"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "--remove"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "mirror"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MinIO object deletion help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "List the exact objects and confirm retention or recovery controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "MinIO object deletion"
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies minio copy operations.",
+        "family": "minio",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cp"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.minio.permission.cp",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.minio.cp",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cp"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MinIO copy help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "MinIO copy"
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies minio list operations.",
+        "family": "minio",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "ls"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.minio.permission.ls",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.storage.minio.ls",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "ls"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MinIO list help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "severity": "low",
+        "title": "MinIO list"
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies minio make bucket operations.",
+        "family": "minio",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "mb"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.minio.permission.mb",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.minio.mb",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "mb"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MinIO make bucket help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "MinIO make bucket"
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies minio move operations.",
+        "family": "minio",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "mv"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.minio.permission.mv",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.minio.mv",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "mv"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MinIO move help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "MinIO move"
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies minio cat operations.",
+        "family": "minio",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "cat"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.minio.permission.cat",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.storage.minio.cat",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "cat"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MinIO cat help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "severity": "low",
+        "title": "MinIO cat"
+      },
+      {
+        "action_classes": [
+          "MinIO storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies minio mirror operations.",
+        "family": "minio",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mc",
+                  "mc.cmd",
+                  "mc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--remove"
+                ],
+                "interspersed_flags": [
+                  "--debug",
+                  "--disable-pager",
+                  "--dp",
+                  "--dtrace",
+                  "--insecure",
+                  "--json",
+                  "--no-color",
+                  "--quiet"
+                ],
+                "interspersed_options_with_values": [
+                  "--config-dir",
+                  "--custom-header",
+                  "--resolve",
+                  "-c",
+                  "-h"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "mirror"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.minio.permission.mirror",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.minio.mirror",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mc",
+                      "mc.cmd",
+                      "mc.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [
+                      "--remove"
+                    ],
+                    "interspersed_flags": [
+                      "--debug",
+                      "--disable-pager",
+                      "--dp",
+                      "--dtrace",
+                      "--insecure",
+                      "--json",
+                      "--no-color",
+                      "--quiet"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config-dir",
+                      "--custom-header",
+                      "--resolve",
+                      "-c",
+                      "-h"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "mirror"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MinIO mirror help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "MinIO mirror"
+      }
+    ],
+    "safer_alternatives": [
+      "List matching objects and confirm versioning or recovery controls before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

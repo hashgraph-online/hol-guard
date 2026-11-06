@@ -1,0 +1,215 @@
+name: Publish to MCP Registry
+
+on:
+  workflow_run:
+    workflows: ["Publish to PyPI"]
+    types: [completed]
+    # No ref filter. workflow_run offers only branches/branches-ignore, and declaring either one
+    # drops every run whose ref is a tag. Stable releases are dispatched on their vX.Y.Z tag, so a
+    # branch filter silently skipped them however the tag was spelled. The verify job below, and
+    # the verifier it runs, decide which completed run may publish.
+  workflow_dispatch:
+    inputs:
+      publication_run_id:
+        description: Successful Publish to PyPI run of the latest stable release to republish
+        required: true
+        type: string
+
+# New jobs start without a token grant; writers declare only their own scopes.
+permissions: {}
+
+concurrency:
+  # GitHub keeps one pending run per group and drops the older one, so no other run may share a
+  # tag run's group. Repairs queue among themselves; each push run is alone. The publish-time
+  # latest-release check, not ordering, stops an older version from replacing a newer one.
+  group: hol-guard-mcp-registry-${{ github.event_name == 'workflow_dispatch' && 'repair' || github.event.workflow_run.event == 'workflow_dispatch' && format('tag-{0}', github.event.workflow_run.head_branch) || format('push-{0}', github.event.workflow_run.id) }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: >-
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+          github.event.workflow_run.run_attempt == 1 &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          (
+            contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) ||
+            (github.event.workflow_run.event == 'workflow_dispatch' && startsWith(github.event.workflow_run.head_branch, 'v'))
+          ) &&
+          !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+        )
+      )
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/verify-mcp-release-source.yml
+    with:
+      publication_run_id: ${{ inputs.publication_run_id || '' }}
+
+  publish:
+    needs: verify
+    permissions:
+      contents: read
+      id-token: write
+    name: Publish verified MCP metadata
+    if: >-
+      needs.verify.outputs.sha != '' &&
+      needs.verify.outputs.branch != '' &&
+      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+      (
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+          github.event.workflow_run.run_attempt == 1 &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          (
+            contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) ||
+            (github.event.workflow_run.event == 'workflow_dispatch' && startsWith(github.event.workflow_run.head_branch, 'v'))
+          ) &&
+          !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+        )
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out verified immutable release source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+
+      - name: Resolve the completed release tag
+        id: release
+        env:
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+          SOURCE_REF: refs/heads/${{ needs.verify.outputs.branch }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # The trusted verifier proved both PyPI and GitHub release jobs completed.
+          # A missing tag is an integrity error, not a reason to occupy a runner for 30 minutes.
+          git fetch --force --tags origin
+          if [[ -n "$VERIFIED_TAG" ]]; then
+            # The verifier proved this exact tag names the published commit; never substitute another tag at it.
+            git tag --points-at "$SOURCE_SHA" --list 'v*' | grep -Fqx -- "$VERIFIED_TAG"
+            tag="$VERIFIED_TAG"
+          elif [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
+            tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.1a*' | sort -V | tail -n 1)
+          elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
+            tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
+          else
+            echo "Unsupported release ref: $SOURCE_REF" >&2
+            exit 1
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "Completed release has no canonical tag for $SOURCE_SHA" >&2
+            exit 1
+          fi
+          if [[ "$tag" == alpha/v* ]]; then
+            version="${tag#alpha/v}"
+          else
+            version="${tag#v}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the exact PyPI package
+        timeout-minutes: 2
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 6); do
+            if curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+              --proto '=https' --tlsv1.2 \
+              "https://pypi.org/pypi/hol-guard/${VERSION}/json" \
+              --output /tmp/hol-guard-pypi.json; then
+              jq -e --arg version "$VERSION" '.info.version == $version' /tmp/hol-guard-pypi.json >/dev/null
+              exit 0
+            fi
+            if [[ "$attempt" == "6" ]]; then
+              echo "hol-guard ${VERSION} did not become available on PyPI" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Stamp and verify Registry manifest
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          grep -Fq '<!-- mcp-name: io.github.hashgraph-online/hol-guard -->' README.md
+          jq --arg version "$VERSION" \
+            '.version = $version | .packages[0].version = $version' \
+            server.json > server.json.tmp
+          mv server.json.tmp server.json
+          jq -e '
+            (.description | type) == "string" and
+            (.description | length) >= 1 and
+            (.description | length) <= 100
+          ' server.json >/dev/null || {
+            echo "server.json description must be a non-empty string no longer than 100 characters" >&2
+            exit 1
+          }
+          jq -e --arg version "$VERSION" \
+            '.name == "io.github.hashgraph-online/hol-guard" and
+             .repository.url == "https://github.com/hashgraph-online/hol-guard" and
+             .packages[0].registryType == "pypi" and
+             .packages[0].identifier == "hol-guard" and
+             .packages[0].version == $version and
+             .version == $version and
+             .packages[0].transport.type == "stdio" and
+             [.packages[0].packageArguments[].value] == ["mcp", "serve", "--stdio"]' \
+            server.json >/dev/null
+
+      - name: Install pinned MCP Registry publisher
+        env:
+          MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+          MCP_PUBLISHER_VERSION: v1.8.1
+        run: |
+          set -euo pipefail
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${archive}" \
+            --output "$archive"
+          printf '%s  %s\n' "$MCP_PUBLISHER_SHA256" "$archive" | sha256sum --check --strict
+          tar -xzf "$archive" mcp-publisher
+          chmod 0755 mcp-publisher
+          ./mcp-publisher --help >/dev/null
+
+      - name: Refuse to replace a newer stable release
+        if: needs.verify.outputs.branch == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Rechecked at the publication boundary: a newer release may have shipped while this run waited.
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          if [[ "$latest" != "$TAG" ]]; then
+            echo "$TAG is no longer the latest stable release ($latest); the MCP Registry keeps the newer version" >&2
+            exit 1
+          fi
+
+      - name: Authenticate with GitHub OIDC
+        if: >-
+          !contains(steps.release.outputs.version, 'a') &&
+          !contains(steps.release.outputs.version, 'b') &&
+          !contains(steps.release.outputs.version, 'rc') &&
+          !contains(steps.release.outputs.version, 'dev')
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP registry
+        if: >-
+          !contains(steps.release.outputs.version, 'a') &&
+          !contains(steps.release.outputs.version, 'b') &&
+          !contains(steps.release.outputs.version, 'rc') &&
+          !contains(steps.release.outputs.version, 'dev')
+        run: ./mcp-publisher publish

@@ -1,0 +1,455 @@
+import sqlite3
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.models import GuardReceipt
+from codex_plugin_scanner.guard.runtime.observed_mcp_tools import (
+    MAX_OBSERVED_MCP_TOOLS,
+    discover_observed_mcp_tools,
+    observed_mcp_tool,
+)
+from codex_plugin_scanner.guard.store import GuardStore
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .observed_mcp_history_rows import seed_observed_mcp_history
+
+
+def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    store = GuardStore(tmp_path / "guard-home")
+    qualified_name = "mcp__codex_apps__composio__composio_search_tools"
+    seed_observed_mcp_history(store, receipts=[{"harness": "codex", "raw_command_text": "tool:" + qualified_name}])
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
+    tool = observed_mcp_tool("codex", qualified_name)
+    assert tool is not None
+    service = LocalCliApiService(store=store)
+    monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda: [])
+    result = service.recognize({"command": tool.identity.example_label, "cli_id": tool.identity.cli_id})
+    item = result["item"]
+    assert item["cli_id"] == tool.identity.cli_id
+    assert item["commands"][0]["command_id"] == tool.command_id
+    assert result["help_status"] == "ok"
+    payload = {
+        "cli_id": item["cli_id"],
+        "identity_hash": item["identity_hash"],
+        "name": item["name"],
+        "kind": item["kind"],
+        "example_label": item["example_label"],
+        "state": "allowed",
+        "previous_revision": 0,
+        "session_nonce": "test-enrollment",
+        "commands": [{"command_id": tool.command_id, "state": "allow"}],
+    }
+    assert service.preview(payload)["next_revision"] == 1
+    with pytest.raises(LocalCliApiError):
+        service.apply(payload)
+    assert store.read_local_cli_revision() == 0
+    assert store.read_observed_mcp_tool_actions() == {}
+
+
+@pytest.mark.parametrize("state", ["allowed", "blocked", "unset"])
+@pytest.mark.parametrize("rollback", [False, True])
+def test_permission_mutation_retires_native_readiness_before_writing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
+    rollback: bool,
+) -> None:
+    import threading
+    import time
+
+    from codex_plugin_scanner.guard.daemon import local_cli_api as api_module
+    from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
+    from tests.native_policy_snapshot_test_fixtures import _ack, _status
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    store = GuardStore(tmp_path / "guard-home")
+    # Discovery starts the resident. That prerequisite mints a verifier from a
+    # fresh store when the key file is absent, so the fixture key has to be
+    # on disk before the first observation.
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (b"f" * 32, "fixture-key"))
+    store._provision_resident_verifier()
+    tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__search")
+    assert tool is not None
+    seed_observed_mcp_history(store, receipts=[{"harness": "codex", "raw_command_text": "tool:" + tool.qualified_name}])
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
+    store.upsert_local_cli_grant(
+        identity=tool.identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at="2026-01-01T00:00:01Z",
+        command_states={tool.command_id: "allow"},
+    )
+    refresh = threading.Event()
+    entered = threading.Event()
+    release = threading.Event()
+
+    def client_request(**kwargs):
+        payload = kwargs["payload"]
+        if refresh.is_set():
+            entered.set()
+            assert release.wait(10)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
+
+    publisher = NativePolicySnapshotPublisher(
+        store=store, status_provider=_status, client_request=client_request, poll_interval_seconds=60
+    )
+    real_mutation = api_module.record_local_custom_extension_mutation
+
+    def record_mutation(*args, **kwargs):
+        assert not publisher.is_ready(), "old native authority remained ready before permission write"
+        assert entered.wait(10)
+        return real_mutation(*args, **kwargs)
+
+    monkeypatch.setattr(api_module, "record_local_custom_extension_mutation", record_mutation)
+    monkeypatch.setattr(api_module, "require_local_cli_trust", lambda *args, **kwargs: object())
+    monkeypatch.setattr(api_module, "consume_local_cli_trust_grant", lambda *args, **kwargs: None)
+    if rollback:
+        # Fail the continuity state row, after the grant rows in the same
+        # native transaction, so the whole permission write rolls back.
+        with store._connect() as connection:
+            connection.execute(
+                "create trigger fail_permission_write before insert on sync_state "
+                "when new.state_key like 'custom_extension_continuity%' "
+                "begin select raise(abort, 'forced_permission_rollback'); end"
+            )
+    publisher.start()
+    try:
+        assert publisher.wait_until_ready(time.monotonic() + 10), publisher._last_error
+        refresh.set()
+        payload = {
+            "cli_id": tool.identity.cli_id,
+            "identity_hash": tool.identity.identity_hash,
+            "name": tool.identity.name,
+            "kind": "executable",
+            "state": state,
+            "previous_revision": 1,
+            "session_nonce": "isolated-permission-fence",
+            "commands": [{"command_id": tool.command_id, "state": "block"}],
+        }
+        service = api_module.LocalCliApiService(store=store)
+        if rollback:
+            with pytest.raises(sqlite3.IntegrityError, match="forced_permission_rollback"):
+                service.apply(payload)
+        else:
+            assert service.apply(payload)["revision"] == 2
+        assert not publisher.is_ready()
+        assert store.read_local_cli_revision() == (1 if rollback else 2)
+        release.set()
+        assert publisher.wait_until_ready(time.monotonic() + 10), publisher._last_error
+    finally:
+        release.set()
+        publisher.close()
+
+
+def test_composio_keeps_its_connector_namespace() -> None:
+    tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__composio_search_tools")
+    assert tool is not None
+    assert tool.server_name == "composio"
+    assert tool.namespace == "mcp__codex_apps__composio__"
+    assert tool.name == "composio_search_tools"
+    other = observed_mcp_tool("codex", "mcp__codex_apps__github__search")
+    assert other is not None
+    assert other.identity.identity_hash != tool.identity.identity_hash
+    claude = observed_mcp_tool("claude", tool.qualified_name)
+    assert claude is not None
+    assert claude.identity.identity_hash != tool.identity.identity_hash
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "composio",
+        "mcp__",
+        "mcp__server__",
+        "mcp__server__tool; rm",
+        "mcp__server__tool\n",
+        "mcp__codex_apps____tool",
+        "mcp__server__" + "a" * 150,
+    ],
+)
+def test_malformed_or_unbounded_names_are_not_discovered(name: str) -> None:
+    assert observed_mcp_tool("codex", name) is None
+
+
+def test_names_that_slug_alike_keep_separate_commands() -> None:
+    first = observed_mcp_tool("codex", "mcp__server__read_file")
+    second = observed_mcp_tool("codex", "mcp__server__read-file")
+    assert first is not None and second is not None
+    assert first.identity.identity_hash == second.identity.identity_hash
+    assert first.command_id != second.command_id
+
+
+def test_discovery_preserves_choices_and_never_approves_new_tools(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    receipts = [{"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__search"}]
+    seed_observed_mcp_history(store, receipts=receipts)
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
+    tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__search")
+    assert tool is not None
+    assert store.read_observed_mcp_tool_actions() == {}
+    store.upsert_local_cli_grant(
+        identity=tool.identity,
+        state="allowed",
+        expected_revision=0,
+        updated_at="2026-01-01T00:00:01Z",
+        command_states={tool.command_id: "allow"},
+    )
+    seed_observed_mcp_history(
+        store, receipts=[{"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__execute"}]
+    )
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:02Z")
+    assert store.read_local_cli_command_states(tool.identity.cli_id)[tool.command_id] == "allow"
+    assert store.read_observed_mcp_tool_actions() == {"codex:" + tool.qualified_name: "allow"}
+    assert store.read_local_cli_revision() == 1
+    from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+
+    from .mcp_extension_driver import matching_local_mcp_grant
+
+    def artifact(name: str):
+        return build_tool_call_artifact(
+            harness="codex",
+            server_name="codex_apps",
+            tool_name=name,
+            source_scope="global",
+            config_path="",
+            transport="observed",
+        )
+
+    assert (
+        matching_local_mcp_grant(
+            store=store,
+            artifact=artifact(tool.qualified_name),
+            current_action="review",
+        )
+        == "allowed"
+    )
+    assert (
+        matching_local_mcp_grant(
+            store=store,
+            artifact=artifact(tool.qualified_name),
+            current_action="require-reapproval",
+        )
+        is None
+    )
+    assert (
+        matching_local_mcp_grant(
+            store=store,
+            artifact=artifact("mcp__codex_apps__composio__execute"),
+            current_action="review",
+        )
+        is None
+    )
+
+
+def test_server_deny_is_scoped_to_its_harness_and_connector(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    seed_observed_mcp_history(
+        store,
+        receipts=[{"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__execute"}],
+    )
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
+    tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__execute")
+    assert tool is not None
+    store.upsert_local_cli_grant(
+        identity=tool.identity,
+        state="blocked",
+        expected_revision=0,
+        updated_at="2026-01-01T00:00:01Z",
+    )
+    assert store.read_observed_mcp_tool_actions() == {"codex:mcp__codex_apps__composio__*": "block"}
+
+
+def test_paused_native_requests_discover_connectors_without_receipts(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    seed_observed_mcp_history(
+        store,
+        approvals=[
+            {"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__composio_search_tools"},
+        ],
+    )
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
+    items = store.list_local_cli_items()
+    assert len(items) == 1
+    assert items[0]["name"] == "composio"
+    assert store.read_observed_mcp_tool_actions() == {}
+
+
+def test_concurrent_catalog_growth_preserves_all_tools(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
+
+    store = GuardStore(tmp_path / "guard-home")
+    tools = [observed_mcp_tool("codex", f"mcp__server__tool_{index}") for index in range(8)]
+    first = tools[0]
+    assert first is not None
+
+    def add(tool):
+        assert tool is not None
+        store.merge_local_cli_commands(
+            first.identity.cli_id,
+            [
+                LocalCliCommand(
+                    command_id=tool.command_id, name=tool.name, usage=tool.qualified_name, description="Observed tool"
+                )
+            ],
+            limit=128,
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(add, tools))
+    assert len(store.read_local_cli_command_catalog(first.identity.cli_id)) == len(tools)
+
+
+def test_duplicate_sources_do_not_consume_catalog_capacity(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    records = [{"harness": "codex", "raw_command_text": f"tool:mcp__server__tool_{index}"} for index in range(128)]
+    seed_observed_mcp_history(store, approvals=records[:64], receipts=records)
+    discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
+    tool = observed_mcp_tool("codex", "mcp__server__tool_0")
+    assert tool is not None
+    assert len(store.read_local_cli_command_catalog(tool.identity.cli_id)) == MAX_OBSERVED_MCP_TOOLS
+
+
+def test_saturated_observed_connector_is_reported_without_blocking_other_connectors(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
+
+    store = GuardStore(tmp_path / "guard-home")
+    existing = [observed_mcp_tool("codex", f"mcp__server__tool_{index}") for index in range(MAX_OBSERVED_MCP_TOOLS)]
+    assert all(tool is not None for tool in existing)
+    first = existing[0]
+    assert first is not None
+    store.merge_local_cli_commands(
+        first.identity.cli_id,
+        [
+            LocalCliCommand(
+                command_id=tool.command_id, name=tool.name, usage=tool.qualified_name, description="Observed"
+            )
+            for tool in existing
+            if tool is not None
+        ],
+        limit=MAX_OBSERVED_MCP_TOOLS,
+    )
+    seed_observed_mcp_history(
+        store,
+        approvals=[
+            {"harness": "codex", "raw_command_text": "tool:mcp__server__new_tool"},
+            {"harness": "codex", "raw_command_text": "tool:mcp__other__read"},
+        ],
+    )
+    assert discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z") == 1
+    assert len(store.read_local_cli_command_catalog(first.identity.cli_id)) == MAX_OBSERVED_MCP_TOOLS
+    other = observed_mcp_tool("codex", "mcp__other__read")
+    assert other is not None
+    assert len(store.read_local_cli_command_catalog(other.identity.cli_id)) == 1
+
+
+def test_large_tool_catalog_is_authenticated_in_native_snapshot(tmp_path: Path) -> None:
+    import hashlib
+    import hmac
+    import json
+
+    from codex_plugin_scanner.guard.native_policy_snapshot import (
+        POLICY_SNAPSHOT_INTEGRITY_DOMAIN,
+        build_policy_snapshot_v3,
+    )
+    from tests.native_policy_snapshot_test_fixtures import _config
+
+    actions = {f"codex:mcp__server__tool_{index}": "allow" for index in range(300)}
+    snapshot = build_policy_snapshot_v3(
+        config={**_config(), "mcp_tool_actions": actions},
+        guard_home=tmp_path,
+        runtime_identity="a" * 64,
+        rule_digest="b" * 64,
+        verifier_key=b"k" * 32,
+        generation=1,
+        issued_at_ms=100,
+        expires_at_ms=200,
+    )
+    assert snapshot["effective_policy"]["mcp_tool_actions"] == actions
+    signing = dict(snapshot)
+    integrity = signing.pop("integrity")
+    message = json.dumps(signing, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    expected = hmac.new(b"k" * 32, POLICY_SNAPSHOT_INTEGRITY_DOMAIN + message, hashlib.sha256).hexdigest()
+    assert expected in integrity.values()
+    signing["effective_policy"]["mcp_tool_actions"]["codex:mcp__server__tool_0"] = "block"
+    changed = json.dumps(signing, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    assert hmac.new(b"k" * 32, POLICY_SNAPSHOT_INTEGRITY_DOMAIN + changed, hashlib.sha256).hexdigest() != expected
+
+
+def test_discovery_reads_the_projected_history_and_not_whole_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #5449: paging whole receipts through the resident broke the scan.
+
+    A store with a few hundred receipts encoded past the native response cap,
+    and the Extensions refresh failed with ``native_guard_store_unavailable``
+    instead of listing connectors. The scan reads the projected history now, so
+    neither wide read may come back.
+    """
+
+    store = GuardStore(tmp_path / "guard-home")
+
+    def refuse(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+        raise AssertionError("the connector scan must not read whole rows")
+
+    monkeypatch.setattr(store, "list_receipts", refuse)
+    monkeypatch.setattr(store, "list_approval_requests", refuse)
+    seed_observed_mcp_history(
+        store,
+        approvals=[{"harness": "codex", "raw_command_text": "tool:mcp__server__write"}],
+        receipts=[{"harness": "codex", "raw_command_text": "tool:mcp__server__read"}],
+    )
+
+    assert discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z") == 0
+    assert [item["name"] for item in store.list_local_cli_items()] == ["server"]
+    tool = observed_mcp_tool("codex", "mcp__server__read")
+    assert tool is not None
+    catalog = store.read_local_cli_command_catalog(tool.identity.cli_id)
+    assert {command.name for command in catalog} == {"read", "write"}
+
+
+def test_a_heavy_history_still_discovers_every_connector(tmp_path: Path) -> None:
+    """Issue #5449: the real store, the real scan, a history that is too wide to carry.
+
+    Each receipt below is small where the scan looks — a short tool label — and
+    heavy everywhere else, so the rows together are several times the native
+    response cap while their projection is a few kilobytes. Reading the rows
+    whole either refused the reply, which the Extensions refresh reported as a
+    failed provider scan, or came back short and lost the connectors behind the
+    truncation. Every seeded server has to survive the round trip.
+    """
+
+    store = GuardStore(tmp_path / "guard-home")
+    padding = "x" * (64 * 1024)
+    servers = [f"acme{index}" for index in range(12)]
+    for index in range(len(servers) * 5):
+        server = servers[index % len(servers)]
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-{index:04d}",
+                timestamp=f"2026-10-{(index % 28) + 1:02d}T12:00:00Z",
+                harness="claude-code",
+                artifact_id=f"mcp:{server}:read",
+                artifact_hash=f"{index:064x}",
+                policy_decision="allow",
+                capabilities_summary=padding,
+                changed_capabilities=(padding,),
+                provenance_summary=padding,
+                raw_command_text=f"tool:mcp__{server}__read",
+            )
+        )
+
+    assert discover_observed_mcp_tools(store, seen_at="2026-10-21T00:00:00Z") == 0
+    assert sorted(str(item["name"]) for item in store.list_local_cli_items()) == sorted(servers)

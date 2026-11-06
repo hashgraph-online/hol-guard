@@ -1,0 +1,62 @@
+"""Regression tests for workspace-contained manifest and lockfile reads.
+
+The resolver itself is pinned in guard-command's workspace_path_guard_tests;
+what is left here is the request path that depends on it.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
+from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
+
+def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path, package_intent_native: Path) -> None:
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (outside / "requirements.txt").write_text("leakpkg==1.0.0\n", encoding="utf-8")
+
+    intent = parse_package_intent("pip install -r ../outside/requirements.txt", workspace=workspace)
+
+    assert intent is not None
+    assert intent.manifest_paths == ()
+
+
+def test_evaluate_package_request_artifact_does_not_leak_traversal_requirements(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (outside / "requirements.txt").write_text("AWS_SECRET_ACCESS_KEY=super-secret\n", encoding="utf-8")
+    (workspace / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+
+    intent = parse_package_intent("pip install -r ../outside/requirements.txt", workspace=workspace)
+    assert intent is not None
+    artifact = build_package_request_artifact(
+        "guard-cli",
+        intent,
+        config_path="hol-guard.toml",
+        source_scope="project",
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace,
+        now="2026-06-14T00:00:00Z",
+    )
+
+    serialized = json.dumps(result.to_dict())
+    assert "AWS_SECRET_ACCESS_KEY" not in serialized
+    assert "super-secret" not in serialized

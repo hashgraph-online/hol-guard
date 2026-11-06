@@ -1,0 +1,688 @@
+"""Guard CLI command dispatch helpers."""
+
+# ruff: noqa: F403, F405
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ._commands_shared import _now, _require_guard_config, _require_guard_context, _require_guard_store
+    from .commands_support_connect import _filter_policy_items
+    from .commands_support_interaction import _emit
+    from .commands_support_prompts import (
+        _run_approval_password_settings_command,
+        _run_approval_totp_settings_command,
+        _update_guard_cli_settings,
+    )
+    from .commands_support_runtime_policy import (
+        _guard_cli_settings_payload,
+        _guard_settings_doctor_payload,
+        _guard_settings_explain_payload,
+    )
+    from .commands_support_service import _build_abom_payload, _guard_sync_failure_message
+
+
+from ..aibom_cli import _AIBOM_CLOUD_SYNC_OPTIONS, AibomCliOptions, AibomExportFormat
+from ..native_aibom_summaries import NativeAibomSummariesError
+from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError
+from ..policy_decision_explain import matched_rule_for_receipt
+from ._commands_shared import *
+from .commands_parser_helpers import *
+
+
+def _run_guard_diff_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
+    detection = detect_harness(args.harness, context)
+    payload = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+    changed_artifacts = [item for item in payload["artifacts"] if bool(item["changed"])]
+    payload["artifacts"] = changed_artifacts
+    payload["changed"] = bool(changed_artifacts)
+    _emit("diff", payload, getattr(args, "json", False))
+    return 0
+
+
+def _run_guard_test_eval_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    """Evaluate a single artifact description against local policy without persisting.
+
+    Reads a JSON file with artifact fields (artifactType, artifactId, artifactName,
+    artifactHash, capabilities) and calls evaluate_detection(persist=False).
+    """
+    import json
+    import sys
+    from pathlib import Path as _Path
+
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
+
+    input_file = getattr(args, "input_file", None)
+    if input_file:
+        raw = _Path(input_file).read_text(encoding="utf-8")
+    elif input_text:
+        raw = input_text
+    else:
+        raw = sys.stdin.read()
+
+    artifact_desc = json.loads(raw)
+    harness = getattr(args, "harness", artifact_desc.get("harness", "codex"))
+
+    artifact_metadata = artifact_desc.get("metadata", {})
+    if artifact_hash := artifact_desc.get("artifactHash", artifact_desc.get("artifact_hash")):
+        artifact_metadata["artifactHash"] = artifact_hash
+    if capabilities := artifact_desc.get("capabilities"):
+        artifact_metadata["capabilities"] = capabilities
+    if device_id := artifact_desc.get("deviceId"):
+        artifact_metadata["deviceId"] = device_id
+
+    artifact = GuardArtifact(
+        artifact_id=artifact_desc.get("artifactId", artifact_desc.get("artifact_id", "test-artifact")),
+        name=artifact_desc.get("artifactName", artifact_desc.get("artifact_name", "test-artifact")),
+        harness=harness,
+        artifact_type=artifact_desc.get("artifactType", artifact_desc.get("artifact_type", "tool_action_request")),
+        source_scope=artifact_desc.get("sourceScope", artifact_desc.get("source_scope", "test")),
+        config_path=artifact_desc.get("configPath", artifact_desc.get("config_path", "/test")),
+        publisher=artifact_desc.get("publisher"),
+        metadata=artifact_metadata,
+    )
+
+    detection = HarnessDetection(
+        harness=harness,
+        installed=True,
+        command_available=True,
+        config_paths=("/test",),
+        artifacts=(artifact,),
+    )
+
+    payload = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+    _emit("test-eval", payload, getattr(args, "json", False))
+    return 0
+
+
+def _run_guard_receipts_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    store = _require_guard_store(store)
+    _emit("receipts", {"generated_at": _now(), "items": store.list_receipts()}, getattr(args, "json", False))
+    return 0
+
+
+def _embedded_scripts_for_receipt(match: dict[str, object]) -> list[dict[str, object]]:
+    """Reconstruct heredoc script bodies recorded with a receipt.
+
+    The native runtime slices each body out of the retained command text using
+    the span and hash recorded in the receipt's ``embedded_script`` evidence.
+    """
+
+    evidence = match.get("scanner_evidence")
+    if not isinstance(evidence, list) or not any(
+        isinstance(item, dict) and item.get("source") == "embedded_script" and item.get("kind") == "heredoc"
+        for item in evidence
+    ):
+        return []
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    envelope = match.get("action_envelope_json")
+    try:
+        answer = native_runner_authority(
+            "receipt_embedded_scripts",
+            {
+                "scanner_evidence": evidence,
+                "raw_command_text": match.get("raw_command_text"),
+                "envelope_command": envelope.get("command") if isinstance(envelope, dict) else None,
+            },
+        )
+    except NativeRunnerAuthorityError:
+        # Explaining a receipt must not need the resident; the receipt and its
+        # evidence still print without the reconstructed bodies.
+        return []
+    scripts = answer.get("scripts")
+    return [dict(item) for item in scripts if isinstance(item, dict)] if isinstance(scripts, list) else []
+
+
+def _run_guard_history_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    store = _require_guard_store(store)
+    history_cmd = getattr(args, "history_command", None)
+    if history_cmd == "explain":
+        receipt_id: str = args.receipt_id
+        match = store.get_receipt(receipt_id)
+        if match is None:
+            msg = f"No receipt found for ID {receipt_id!r}"
+            _emit("history.explain", {"error": msg}, getattr(args, "json", False))
+            return 1
+        embedded_scripts = _embedded_scripts_for_receipt(match)
+        if getattr(args, "script", False):
+            _emit(
+                "history.explain.script",
+                {
+                    "receipt_id": receipt_id,
+                    "embedded_scripts": embedded_scripts,
+                    "embedded_script_count": len(embedded_scripts),
+                },
+                getattr(args, "json", False),
+            )
+            return 0
+        evidence = store.list_evidence(request_id=receipt_id, limit=10_000)
+        payload: dict[str, object] = {
+            "receipt_id": receipt_id,
+            "receipt": match,
+            "embedded_scripts": embedded_scripts,
+            "matched_rule": matched_rule_for_receipt(store, match),
+            "evidence": [
+                {
+                    "evidence_id": e.get("evidence_id", ""),
+                    "category": e.get("category", ""),
+                    "severity": e.get("severity", ""),
+                    "summary": e.get("summary", ""),
+                    "action_identity": e.get("action_identity"),
+                    "created_at": e.get("created_at", ""),
+                }
+                for e in evidence
+            ],
+        }
+        _emit("history.explain", payload, getattr(args, "json", False))
+        return 0
+    _emit("history", {"error": "Use: hol-guard history explain <receipt_id>"}, getattr(args, "json", False))
+    return 1
+
+
+def _run_guard_inventory_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
+    generated_at = _now()
+    if getattr(args, "json", False):
+        try:
+            payload: dict[str, object] = build_inventory_json_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=_aibom_cli_options_from_args(args),
+            )
+        except NativeInventoryUrlRedactionError as error:
+            return _inventory_redaction_unavailable("inventory", args, error)
+    else:
+        payload = {"generated_at": generated_at, "items": store.list_inventory()}
+    if getattr(args, "sync", False):
+        from ..runtime.fleet_posture import request_full_inventory
+
+        request_full_inventory(store, source="cli", now=generated_at)
+        payload["fleet_posture"] = {"next_sync_inventory": "full"}
+    _emit("inventory", payload, getattr(args, "json", False))
+    return 0
+
+
+def _inventory_redaction_unavailable(
+    kind: str, args: argparse.Namespace, error: NativeInventoryUrlRedactionError
+) -> int:
+    """Refuse an export the resident could not redact, without a Python fallback."""
+
+    if getattr(args, "json", False) or kind in {"aibom", "inventory"}:
+        _emit(kind, {"error": str(error)}, True)
+    else:
+        print(f"Inventory URL redaction is unavailable: {error}", file=sys.stderr)
+    return 1
+
+
+def _run_guard_aibom_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    store = _require_guard_store(store)
+    context = _require_guard_context(context)
+    generated_at = _now()
+    aibom_options = _aibom_cli_options_from_args(args)
+    aibom_command = getattr(args, "aibom_command", None)
+    if aibom_command == "status":
+        try:
+            payload = build_aibom_status_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=aibom_options,
+            )
+        except NativeInventoryUrlRedactionError as error:
+            return _inventory_redaction_unavailable("aibom.status", args, error)
+        except NativeAibomSummariesError as error:
+            return _aibom_summaries_unavailable("aibom.status", args, error)
+        _emit("aibom.status", payload, getattr(args, "json", False))
+        return 0
+    if aibom_command == "sync":
+        sync_options = AibomCliOptions(
+            include_symlinks=aibom_options.include_symlinks,
+            follow_unsafe_symlinks=aibom_options.follow_unsafe_symlinks,
+            cisco_skill_scan=getattr(
+                args,
+                "cisco_skill_scan",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_skill_scan,
+            ),
+            cisco_mcp_scan=getattr(
+                args,
+                "cisco_mcp_scan",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_mcp_scan,
+            ),
+            cisco_timeout_seconds=getattr(
+                args,
+                "cisco_timeout_seconds",
+                _AIBOM_CLOUD_SYNC_OPTIONS.cisco_timeout_seconds,
+            ),
+        )
+        try:
+            payload = sync_aibom_snapshots(
+                store,
+                context,
+                generated_at=generated_at,
+                options=sync_options,
+            )
+        except GuardSyncNotConfiguredError as error:
+            message = _guard_sync_failure_message(error)
+            if getattr(args, "json", False):
+                _emit("aibom.sync", {"synced": False, "error": message}, True)
+            else:
+                print(message, file=sys.stderr)
+            return 1
+        except (OSError, RuntimeError) as error:
+            message = str(error) if isinstance(error, RuntimeError) else "Guard Cloud AIBOM sync failed."
+            if getattr(args, "json", False):
+                _emit("aibom.sync", {"synced": False, "error": message}, True)
+            else:
+                print(message, file=sys.stderr)
+            return 1
+        _emit("aibom.sync", payload, getattr(args, "json", False))
+        return 0
+    export_format = getattr(args, "format", "json")
+    resolved_format: AibomExportFormat = "markdown" if export_format == "markdown" else "json"
+    try:
+        payload = build_aibom_export_payload(
+            store,
+            context,
+            generated_at=generated_at,
+            options=aibom_options,
+            export_format=resolved_format,
+        )
+    except NativeInventoryUrlRedactionError as error:
+        return _inventory_redaction_unavailable("aibom", args, error)
+    except NativeAibomSummariesError as error:
+        return _aibom_summaries_unavailable("aibom", args, error)
+    if resolved_format == "markdown" and not getattr(args, "json", False):
+        print(str(payload.get("markdown", "")))
+        return 0
+    _emit("aibom", payload, True)
+    return 0
+
+
+def _aibom_summaries_unavailable(kind: str, args: argparse.Namespace, error: NativeAibomSummariesError) -> int:
+    """Fail closed with the resident's code; the counts are never recomputed here."""
+
+    if getattr(args, "json", False) or kind == "aibom":
+        _emit(kind, {"error": str(error)}, True)
+    else:
+        print(f"AIBOM report summaries are unavailable: {error}", file=sys.stderr)
+    return 1
+
+
+def _run_guard_abom_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    store = _require_guard_store(store)
+    payload = _build_abom_payload(store)
+    if args.format == "markdown" and not getattr(args, "json", False):
+        print(payload["markdown"])
+    else:
+        _emit("abom", payload, True)
+    return 0
+
+
+def _run_guard_policies_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    store = _require_guard_store(store)
+    policies_command = getattr(args, "policies_command", None)
+    if policies_command == "clear":
+        harness = getattr(args, "harness", None)
+        clear_all = bool(getattr(args, "all", False))
+        decision_ids = [int(value) for value in (getattr(args, "decision_ids", None) or [])]
+        if clear_all and harness is not None:
+            _emit(
+                "policies",
+                {
+                    "error": "Choose either --all or --harness <name> when clearing Guard rules.",
+                    "cleared": 0,
+                    "harness": harness,
+                    "source": getattr(args, "source", None),
+                },
+                getattr(args, "json", False),
+            )
+            return 2
+        if not decision_ids and not clear_all and harness is None:
+            _emit(
+                "policies",
+                {
+                    "error": "Choose --decision-id <id>, --harness <name>, or --all when clearing Guard rules.",
+                    "cleared": 0,
+                },
+                getattr(args, "json", False),
+            )
+            return 2
+        scope = getattr(args, "scope", None)
+        artifact_id = getattr(args, "artifact_id", None)
+        policy_artifact_hash = getattr(args, "artifact_hash", None)
+        policy_workspace = getattr(args, "policy_workspace", None)
+        publisher = getattr(args, "publisher", None)
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            approval_gate_grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_clear",
+                approval_gate_input=gate_input,
+            )
+            cleared = store.clear_policy_decisions(
+                None if clear_all else harness,
+                getattr(args, "source", None),
+                scope=scope,
+                artifact_id=artifact_id,
+                artifact_hash=policy_artifact_hash,
+                decision_ids=set(decision_ids) if decision_ids else None,
+                workspace=str(policy_workspace) if isinstance(policy_workspace, Path) else policy_workspace,
+                publisher=publisher,
+                approval_gate_grant=approval_gate_grant,
+            )
+        except ApprovalGateError as error:
+            _emit("policies", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        _emit(
+            "policies",
+            {
+                "generated_at": _now(),
+                "cleared": cleared,
+                "harness": None if clear_all else harness,
+                "source": getattr(args, "source", None),
+                "scope": scope,
+                "artifact_id": artifact_id,
+                "artifact_hash": policy_artifact_hash,
+                "decision_ids": decision_ids,
+                "workspace": policy_workspace,
+                "publisher": publisher,
+            },
+            getattr(args, "json", False),
+        )
+        return 0
+    if policies_command == "verify":
+        payload = store.verify_policy_integrity(getattr(args, "harness", None))
+        _emit("policies", payload, getattr(args, "json", False))
+        counts = payload.get("counts")
+        if not isinstance(counts, dict) or payload.get("enforcement") != "enforce":
+            return 0
+        blocking_statuses = ("tampered", "unknown_key", "missing_integrity", "rollback_detected", "degraded_mode")
+        if any(int(counts.get(status, 0) or 0) > 0 for status in blocking_statuses):
+            return 1
+        return 0
+    if policies_command == "integrity-status":
+        payload = store.get_policy_integrity_status(getattr(args, "harness", None))
+        _emit("policies", payload, getattr(args, "json", False))
+        return 0
+    if policies_command == "repair":
+        clear_invalid = bool(getattr(args, "clear_invalid", False))
+        try:
+            approval_gate_grant = None
+            if clear_invalid:
+                gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+                approval_gate_grant = require_high_risk(
+                    store.guard_home,
+                    purpose="policy_clear",
+                    approval_gate_input=gate_input,
+                )
+            payload = store.repair_policy_integrity(
+                clear_invalid=clear_invalid,
+                harness=getattr(args, "harness", None),
+                approval_gate_grant=approval_gate_grant,
+                now=_now(),
+            )
+        except ApprovalGateError as error:
+            _emit("policies", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        _emit("policies", payload, getattr(args, "json", False))
+        return 0
+    if policies_command == "migrate-local-integrity":
+        preserve_all_local = bool(getattr(args, "preserve_all_local", False))
+        clear_unselected = bool(getattr(args, "clear_unselected", False))
+        migratable_statuses = {"missing_integrity", "unknown_key"}
+        preserve_ids = {int(value) for value in (getattr(args, "decision_ids", None) or []) if isinstance(value, int)}
+        if not preserve_all_local and not preserve_ids and not clear_unselected:
+            _emit(
+                "policies",
+                {
+                    "error": "Choose --preserve-all-local, one or more --decision-id values, or --clear-unselected.",
+                    "operation": "migrate-local-integrity",
+                },
+                getattr(args, "json", False),
+            )
+            return 2
+        if preserve_all_local:
+            verify_payload = store.verify_policy_integrity(getattr(args, "harness", None))
+            verify_items = verify_payload.get("items")
+            preserve_ids.update(
+                int(item["decision_id"])
+                for item in (verify_items if isinstance(verify_items, list) else [])
+                if isinstance(item, dict)
+                and item.get("integrity_status") in migratable_statuses
+                and isinstance(item.get("decision_id"), int)
+            )
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            approval_gate_grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_clear",
+                approval_gate_input=gate_input,
+            )
+            payload = store.migrate_local_policy_integrity(
+                preserve_decision_ids=preserve_ids,
+                clear_unselected=clear_unselected,
+                harness=getattr(args, "harness", None),
+                approval_gate_grant=approval_gate_grant,
+                now=_now(),
+            )
+        except ApprovalGateError as error:
+            _emit("policies", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        except RuntimeError as error:
+            _emit(
+                "policies",
+                {"error": str(error), "operation": "migrate-local-integrity"},
+                getattr(args, "json", False),
+            )
+            return 1
+        _emit("policies", payload, getattr(args, "json", False))
+        return 0
+    from ..store_policy_list import list_remembered_policy_decisions
+
+    policy_items = list_remembered_policy_decisions(store, getattr(args, "harness", None))
+    items = _filter_policy_items(policy_items, active_only=True)
+    _emit("policies", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
+    return 0
+
+
+def _run_fleet_posture_setting(
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig,
+    store: GuardStore | None,
+    guard_home: Path,
+) -> int:
+    from ..runtime.fleet_posture import (
+        fleet_posture_managed,
+        fleet_posture_opted_out,
+        set_fleet_posture_reporting,
+    )
+
+    if store is None:
+        from ..store import GuardStore as _GuardStore
+
+        store = _GuardStore(guard_home)
+    enabled = getattr(args, "fleet_posture", "on") == "on"
+    as_json = getattr(args, "json", False)
+    if not enabled and fleet_posture_managed(config):
+        message = "Fleet posture reporting is required on managed installs and cannot be turned off."
+        if as_json:
+            _emit("settings.fleet-posture", {"fleet_posture": "on", "managed": True, "error": message}, True)
+        else:
+            print(message, file=sys.stderr)
+        return 2
+    set_fleet_posture_reporting(store, enabled=enabled, now=_now())
+    _emit(
+        "settings.fleet-posture",
+        {
+            "fleet_posture": "off" if fleet_posture_opted_out(store) else "on",
+            "managed": fleet_posture_managed(config),
+            "detail": (
+                "Guard still reports version, tool protection state and policy status; "
+                "it omits OS version, blind-spot detail and per-item inventory."
+                if not enabled
+                else "Guard reports full fleet posture detail."
+            ),
+        },
+        as_json,
+    )
+    return 0
+
+
+def _run_guard_settings_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    if guard_home is None:
+        raise RuntimeError("Guard home is required")
+    config = _require_guard_config(config)
+    settings_sub = getattr(args, "settings_command", None)
+    if settings_sub == "set" and getattr(args, "settings_set_command", None) == "fleet-posture":
+        return _run_fleet_posture_setting(args, config=config, store=store, guard_home=guard_home)
+    if settings_sub == "set":
+        try:
+            config = _update_guard_cli_settings(args=args, config=config, guard_home=guard_home)
+        except ApprovalGateError as error:
+            _emit("settings", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+    elif settings_sub == "explain":
+        _emit("settings.explain", _guard_settings_explain_payload(config), getattr(args, "json", False))
+        return 0
+    elif settings_sub == "doctor":
+        _emit("settings.doctor", _guard_settings_doctor_payload(config), getattr(args, "json", False))
+        return 0
+    elif settings_sub == "approval-password":
+        try:
+            payload = _run_approval_password_settings_command(args=args, guard_home=guard_home)
+        except ApprovalGateError as error:
+            _emit("settings.approval-password", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("settings.approval-password", payload, getattr(args, "json", False))
+        return 0
+    elif settings_sub == "approval-totp":
+        try:
+            payload = _run_approval_totp_settings_command(args=args, guard_home=guard_home)
+        except ApprovalGateError as error:
+            _emit("settings.approval-totp", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("settings.approval-totp", payload, getattr(args, "json", False))
+        return 0
+    _emit("settings", _guard_cli_settings_payload(config), getattr(args, "json", False))
+    return 0
+
+
+__all__ = [
+    "_run_guard_abom_command",
+    "_run_guard_aibom_command",
+    "_run_guard_diff_command",
+    "_run_guard_history_command",
+    "_run_guard_inventory_command",
+    "_run_guard_policies_command",
+    "_run_guard_receipts_command",
+    "_run_guard_settings_command",
+]

@@ -1,0 +1,455 @@
+"""Authenticated daemon session used by the installed native SLO proof."""
+
+from __future__ import annotations
+
+import json
+import stat
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.parse
+from collections.abc import Mapping
+from contextlib import suppress
+from http.client import HTTPConnection, HTTPException, HTTPResponse
+from pathlib import Path
+from typing import cast
+
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
+from codex_plugin_scanner.guard.native_runtime import native_runtime_health
+from codex_plugin_scanner.guard.store import GuardStore
+from scripts.daemon_hook_auth import _DaemonResponseError
+from scripts.daemon_hook_client import _daemon_response_once, authenticated_claude_hook_response
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
+from scripts.native_slo_adapter import Observation, is_allowed, payload
+from scripts.native_slo_contract import MAX_READINESS_P95_MS
+from scripts.native_slo_diagnostics import preserve_session_diagnostics
+from scripts.native_slo_recovery_cleanup import recover_failed_stop
+from scripts.native_slo_route_provenance import RequestRouteTracker
+from scripts.native_slo_stop_diagnostics import (
+    _STOP_DIAGNOSTIC_FIELDS,
+    _STOP_FAILURE_STATUSES,
+    _STOP_RETRY_DELAY_SECONDS,
+    _TRANSIENT_STOP_ERRORS,
+    NativeStopResult,
+    _build_stop_diagnostic,
+    _stop_diagnostic_from_stderr,
+    _write_stop_diagnostic,
+)
+
+_MAX_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024
+_CAPACITY_FAIL_SAFE = {
+    "decision": "deny",
+    "model_output_action": "block",
+    "policy_action": "deny",
+    "reason_code": "daemon_capacity",
+}
+_CAPACITY_REASON_CODES = frozenset(
+    {
+        "daemon_capacity",
+        "daemon_overloaded",
+        "daemon_hook_queue_capacity",
+        "daemon_hook_queue_bytes",
+        "daemon_hook_deadline_exhausted",
+        "native_overloaded",
+    }
+)
+
+
+def _resident_state_may_exist(state_dir: Path) -> bool:
+    """Return whether a bounded resident-stop probe has state to contain."""
+
+    try:
+        metadata = state_dir.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        return True
+    try:
+        for scope in state_dir.iterdir():
+            if stat.S_ISLNK(scope.lstat().st_mode) or not scope.is_dir():
+                continue
+            if any(
+                stat.S_ISREG(candidate.lstat().st_mode) and candidate.name.startswith("generation-")
+                for candidate in scope.iterdir()
+            ):
+                return True
+    except OSError:
+        return True
+    return False
+
+
+def stop_native_resident(
+    runtime: Path,
+    guard_home: Path,
+    *,
+    write_diagnostic: bool = True,
+    preserve_clients: bool = False,
+) -> NativeStopResult:
+    """Stop one Rust resident and retain bounded containment evidence."""
+
+    state_dir = guard_home / "native-runtime"
+    if _resident_state_may_exist(state_dir):
+        diagnostic: dict[str, object] | None = None
+        for attempt in range(2):
+            try:
+                result = subprocess.run(
+                    (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
+                    check=False,
+                    capture_output=True,
+                    timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                diagnostic = _build_stop_diagnostic(
+                    "failed",
+                    error="native_resident_stop_process_failed",
+                )
+                diagnostic["process_outcome"] = (
+                    "timed_out" if isinstance(error, subprocess.TimeoutExpired) else "launch_failed"
+                )
+                break
+            if result.returncode == 0:
+                diagnostic = _build_stop_diagnostic(
+                    "contained",
+                    fields={field: "verified" for field in _STOP_DIAGNOSTIC_FIELDS},
+                )
+                break
+            diagnostic = _stop_diagnostic_from_stderr(result.stderr)
+            diagnostic["process_outcome"] = "exited"
+            diagnostic["process_returncode"] = result.returncode
+            if attempt == 0 and diagnostic.get("error") in _TRANSIENT_STOP_ERRORS:
+                time.sleep(_STOP_RETRY_DELAY_SECONDS)
+                continue
+            break
+        assert diagnostic is not None
+        if diagnostic.get("status") != "contained":
+            if write_diagnostic:
+                _write_stop_diagnostic(diagnostic)
+            return NativeStopResult(False, diagnostic)
+    else:
+        diagnostic = _build_stop_diagnostic("already-stopped")
+    # Keep persistent client processes alive until the Rust stop command has
+    # verified containment. Their resident supervisor reaper must remain
+    # runnable while it waits for the serving process to exit.
+    if not preserve_clients and close_native_resident_clients(guard_home) is not True:
+        diagnostic = {
+            **diagnostic,
+            "status": "contained_client_cleanup_failed",
+            "error": "native_resident_stop_client_cleanup_failed",
+        }
+        if write_diagnostic:
+            _write_stop_diagnostic(diagnostic)
+        return NativeStopResult(False, diagnostic)
+    if write_diagnostic:
+        _write_stop_diagnostic(diagnostic)
+    return NativeStopResult(True, diagnostic)
+
+
+def _loopback_response(
+    daemon: GuardDaemonServer,
+    *,
+    path: str,
+    encoded: str,
+    connection: HTTPConnection | None,
+) -> tuple[int, bytes]:
+    # The target is an authenticated loopback listener. Match the production
+    # Codex/Claude transports: never consult system proxy settings for it.
+    # Concurrent calls still open a fresh TCP connection inside their timer.
+    transport = connection or HTTPConnection("127.0.0.1", daemon.port, timeout=5)
+    opened: HTTPResponse | None = None
+    try:
+        transport.request(
+            "POST",
+            path,
+            body=encoded.encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        )
+        opened = transport.getresponse()
+        return opened.status, opened.read(_MAX_HTTP_RESPONSE_BYTES + 1)
+    finally:
+        try:
+            if opened is not None:
+                opened.close()
+        finally:
+            if connection is None:
+                transport.close()
+
+
+def _request(
+    daemon: GuardDaemonServer,
+    *,
+    guard_home: Path,
+    workspace: Path,
+    harness: str,
+    request_payload: Mapping[str, object],
+    connection: HTTPConnection | None = None,
+) -> Mapping[str, object]:
+    query = urllib.parse.urlencode({"home": str(guard_home), "workspace": str(workspace)})
+    encoded = json.dumps(request_payload, separators=(",", ":"))
+    if harness == "codex":
+        try:
+            response = cast(
+                object,
+                _daemon_response_once(
+                    state_path=guard_home / "daemon-state.json",
+                    query=query,
+                    data=encoded,
+                    timeout_seconds=5,
+                ),
+            )
+        except _DaemonResponseError as error:
+            if error.status != 503:
+                raise RuntimeError("adapter request failed") from error
+            return _CAPACITY_FAIL_SAFE.copy()
+    elif harness == "claude-code":
+        try:
+            response = json.loads(
+                authenticated_claude_hook_response(
+                    state_path=guard_home / "daemon-state.json",
+                    query=query,
+                    data=encoded,
+                    timeout_seconds=5,
+                )
+            )
+        except _DaemonResponseError as error:
+            if error.status != 503:
+                raise RuntimeError("adapter request failed") from error
+            return _CAPACITY_FAIL_SAFE.copy()
+        except (OSError, ValueError) as error:
+            raise RuntimeError("adapter request failed") from error
+    else:
+        try:
+            status, raw = _loopback_response(
+                daemon,
+                path=f"/v1/hooks/{harness}?{query}",
+                encoded=encoded,
+                connection=connection,
+            )
+        except (OSError, HTTPException) as error:
+            raise RuntimeError("adapter request failed") from error
+        if len(raw) > _MAX_HTTP_RESPONSE_BYTES:
+            raise RuntimeError("adapter response exceeded bound")
+        if status == 503:
+            return _CAPACITY_FAIL_SAFE.copy()
+        if status != 200:
+            raise RuntimeError("adapter request failed")
+        try:
+            response = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RuntimeError("adapter response was not JSON") from error
+    if not isinstance(response, Mapping):
+        raise RuntimeError("native_installed_slo_failed: adapter response was not an object")
+    return response
+
+
+def _is_explicit_capacity_response(response: Mapping[str, object]) -> bool:
+    """Recognize only the daemon's bounded overload/capacity outcomes."""
+
+    reason_code = response.get("reason_code")
+    return isinstance(reason_code, str) and reason_code in _CAPACITY_REASON_CODES
+
+
+class AdapterSession:
+    """One private daemon and workspace, with deterministic resident cleanup."""
+
+    def __init__(self, runtime: Path, *, diagnostics_dir: Path | None = None) -> None:
+        self._diagnostics_dir = diagnostics_dir
+        # A resident that is still exiting can leave files behind for a moment;
+        # a leftover scratch directory must not discard a finished measurement.
+        self.temporary = tempfile.TemporaryDirectory(prefix="hol-guard-slo-", ignore_cleanup_errors=True)
+        # Keep the synthetic paths canonical. macOS may expose ``/tmp`` as
+        # ``/private/tmp`` after the daemon validates a hook workspace; using
+        # one spelling avoids registering the same workspace twice and
+        # invalidating the ACKed native policy snapshot on the first request.
+        self.root = Path(self.temporary.name).resolve()
+        self.guard_home = self.root / "guard-home"
+        self.workspace = self.root / "workspace"
+        self.guard_home.mkdir(mode=0o700)
+        self.workspace.mkdir(mode=0o700)
+        self.store = GuardStore(self.guard_home)
+        self.daemon = GuardDaemonServer(self.store, host="127.0.0.1", port=0)
+        self._route_tracker = RequestRouteTracker(self.daemon._server.hook_worker)
+        self.runtime = runtime
+        self.readiness_ms = 0.0
+        self._connection: HTTPConnection | None = None
+        self._owner_thread_id = 0
+        self.last_stop_diagnostic = _build_stop_diagnostic("not-run")
+        self._stop_diagnostic_written = False
+
+    def __enter__(self) -> AdapterSession:
+        try:
+            self.start()
+        except BaseException:
+            # Capture only aggregate capacity before close() withdraws it.
+            with suppress(Exception):
+                stats = self.daemon._server.runtime_hook_scheduler.stats()
+                counters = {
+                    name: value
+                    for name in ("active", "active_limit", "queued", "queued_limit", "expired", "cancelled")
+                    if type(value := stats.get(name)) is int and 0 <= value <= 2**31 - 1
+                }
+                print(
+                    json.dumps({"schema": "hol-guard.native-startup-failure.v1", "workers": counters}, sort_keys=True),
+                    file=sys.stderr,
+                )
+            self.close()
+            raise
+        return self
+
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
+        del exc_type, exc_value, traceback
+        self.close()
+
+    def start(self) -> None:
+        # Match the installed all-harness probe: register the actual workspace
+        # before daemon startup so the readiness barrier measures its initial
+        # acknowledged policy, rather than invalidating a home-only snapshot
+        # and timing a second publication on slower runners.
+        self.daemon._server.hook_worker.policy_snapshot_publisher.register_workspace(self.workspace)
+        self.daemon.start()
+        self._connection = HTTPConnection("127.0.0.1", self.daemon.port, timeout=5)
+        self._owner_thread_id = threading.get_ident()
+        started = time.perf_counter()
+        deadline = time.monotonic() + (MAX_READINESS_P95_MS / 1_000.0)
+        prepared = None
+        while True:
+            prepared = self.daemon._server.hook_worker.prepare_workspace_policy(
+                self.workspace,
+                deadline=deadline,
+            )
+            if prepared is not None or time.monotonic() >= deadline:
+                break
+            time.sleep(0.01)
+        self.readiness_ms = (time.perf_counter() - started) * 1_000.0
+        if prepared is None:
+            raise RuntimeError("native_installed_slo_failed: native policy was not ready")
+        if self.readiness_ms > MAX_READINESS_P95_MS:
+            raise RuntimeError(
+                f"native_installed_slo_failed: native readiness exceeded budget ({self.readiness_ms:.3f} ms)"
+            )
+
+    def observe(
+        self,
+        harness: str,
+        event: str,
+        size_class: str,
+        request_payload: Mapping[str, object] | None = None,
+    ) -> Observation:
+        enclosing_started = time.perf_counter()
+        request, token = self._route_tracker.begin(request_payload or payload(event, size_class))
+        started = time.perf_counter()
+        try:
+            response = _request(
+                self.daemon,
+                guard_home=self.guard_home,
+                workspace=self.workspace,
+                harness=harness,
+                request_payload=request,
+                connection=self._connection if threading.get_ident() == self._owner_thread_id else None,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1_000.0
+        finally:
+            route = self._route_tracker.finish(token)
+        allowed = is_allowed(event, response)
+        overloaded = _is_explicit_capacity_response(response)
+        enclosing_ms = (time.perf_counter() - enclosing_started) * 1_000.0
+        return Observation(
+            harness,
+            event,
+            size_class,
+            elapsed_ms,
+            route,
+            allowed,
+            overloaded,
+            enclosing_latency_ms=enclosing_ms,
+        )
+
+    def native_overload_count(self) -> int:
+        return native_runtime_health(self.guard_home).overloads
+
+    def close(self) -> None:
+        try:
+            self._close()
+        finally:
+            if (tracker := getattr(self, "_route_tracker", None)) is not None:
+                tracker.close()
+
+    def _close(self) -> None:
+        try:
+            if self._connection is not None:
+                self._connection.close()
+        finally:
+            # Quiesce daemon producers while their resident can still accept
+            # queued evidence. Persistent client reapers remain alive until
+            # the subsequent authenticated resident Stop verifies containment.
+            self.daemon_stop_contained = False
+            try:
+                self.daemon.stop()
+                self.daemon_stop_contained = getattr(self.daemon, "_finish_service_completed", False) is True
+            finally:
+                deadline = time.monotonic() + 2.0
+                while getattr(self.daemon._server, "active_hook_requests", 0) > 0 and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                # An earlier strict failure remains authoritative even when
+                # final cleanup later succeeds. Recovery measurements still
+                # call stop_resident explicitly with their original order.
+                if getattr(self, "last_stop_diagnostic", {}).get("status") not in _STOP_FAILURE_STATUSES:
+                    with suppress(Exception):
+                        self.stop_resident()
+                # The final pass must not overwrite an earlier worker-cleanup
+                # failure before we decide which bounded diagnostic to retain.
+                final_result = stop_native_resident(
+                    self.runtime,
+                    self.guard_home,
+                    write_diagnostic=False,
+                )
+                final_diagnostic = final_result.diagnostic
+                self.final_stop_diagnostic = final_diagnostic
+                prior_diagnostic = getattr(self, "last_stop_diagnostic", {})
+                final_failure = final_diagnostic.get("status") in _STOP_FAILURE_STATUSES
+                if final_failure:
+                    diagnostic = final_diagnostic
+                elif prior_diagnostic.get("status") in _STOP_FAILURE_STATUSES:
+                    # stop_resident already emitted this failure diagnostic;
+                    # preserve that artifact instead of writing it twice.
+                    diagnostic = prior_diagnostic
+                else:
+                    diagnostic = final_diagnostic
+
+                if final_failure or not getattr(self, "_stop_diagnostic_written", False):
+                    _write_stop_diagnostic(diagnostic)
+                    self._stop_diagnostic_written = True
+                self.last_stop_diagnostic = diagnostic
+                preserve_session_diagnostics(self, getattr(self, "_diagnostics_dir", None))
+                self.recovery_cleanup = recover_failed_stop(self.guard_home) if final_failure else None
+                if not self.daemon_stop_contained or (
+                    self.recovery_cleanup is not None and not self.recovery_cleanup["contained"]
+                ):
+                    # Python 3.10 has no TemporaryDirectory(delete=False).
+                    # Keep failed private state available to native recovery;
+                    # deleting it would destroy the authenticated Stop route
+                    # or remove state still owned by a quarantined producer.
+                    self.temporary._finalizer.detach()
+                else:
+                    self.temporary.cleanup()
+
+    def stop_resident(self, *, preserve_clients: bool = False) -> bool:
+        """Verify resident containment, optionally retaining clients for recovery."""
+
+        result = stop_native_resident(self.runtime, self.guard_home, preserve_clients=preserve_clients)
+        self._stop_diagnostic_written = True
+        if isinstance(result, NativeStopResult):
+            self.last_stop_diagnostic = result.diagnostic
+        else:
+            self.last_stop_diagnostic = _build_stop_diagnostic(
+                "contained" if result else "failed",
+                error=None if result else "native_resident_stop_process_failed",
+            )
+        return bool(result)
+
+
+__all__ = ["AdapterSession", "NativeStopResult", "stop_native_resident"]

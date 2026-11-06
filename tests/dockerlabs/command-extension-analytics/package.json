@@ -1,0 +1,11 @@
+{
+  "name": "hol-guard-command-extension-analytics-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "guard:test:command-extension-analytics": "bun runner.ts",
+    "guard:test:teardown": "bun teardown.ts",
+    "test": "bun test runner.test.ts",
+    "typecheck": "../../../dashboard/node_modules/.bin/tsc --project tsconfig.json"
+  }
+}

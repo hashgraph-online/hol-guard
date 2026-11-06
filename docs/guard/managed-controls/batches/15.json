@@ -1,0 +1,14 @@
+{
+  "batch": 15,
+  "evidence": [
+    "tests/managed_controls/test_adversarial_managed_controls.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 225,
+    "start": 211
+  },
+  "theme": "Adversarial downgrade, bypass, unknown-target, and partial-apply coverage"
+}

@@ -1,0 +1,99 @@
+services:
+  guard:
+    build:
+      context: ../../..
+      dockerfile: tests/dockerlabs/command-extension-analytics/Dockerfile
+      args:
+        HOL_GUARD_LAB_WHEEL: ${HOL_GUARD_LAB_WHEEL:?set by runner}
+    environment:
+      HOL_GUARD_LAB_EXPECTED_VERSION: ${HOL_GUARD_LAB_EXPECTED_VERSION:?set by runner}
+      # Exercise the installed native authority; off is a fail-safe denial,
+      # not a supported Python policy fallback.
+      HOL_GUARD_NATIVE: "auto"
+      HOL_GUARD_TEST_MODE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    read_only: true
+    tmpfs:
+      # The installed source compiler is materialized under /tmp and executed
+      # there, so this mount needs exec (Docker tmpfs defaults to noexec) and
+      # room for the native binary.
+      - /tmp:size=256m,mode=1777,exec
+      - /workspace:size=32m,mode=0755,uid=10001,gid=10001
+    volumes:
+      - guard-state:/guard-home
+    networks:
+      - guard-analytics
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4781/healthz', timeout=2)"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  relay:
+    build:
+      context: ../../..
+      dockerfile: tests/dockerlabs/command-extension-analytics/Dockerfile
+      args:
+        HOL_GUARD_LAB_WHEEL: ${HOL_GUARD_LAB_WHEEL:?set by runner}
+    command: ["python", "/opt/guard-lab/tcp_relay.py"]
+    environment:
+      HOL_GUARD_LAB_RELAY_ROLE: guard
+    depends_on:
+      guard:
+        condition: service_healthy
+    network_mode: "service:guard"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 4782), timeout=2).close()"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  host_relay:
+    build:
+      context: ../../..
+      dockerfile: tests/dockerlabs/command-extension-analytics/Dockerfile
+      args:
+        HOL_GUARD_LAB_WHEEL: ${HOL_GUARD_LAB_WHEEL:?set by runner}
+    command: ["python", "/opt/guard-lab/tcp_relay.py"]
+    environment:
+      HOL_GUARD_LAB_RELAY_ROLE: host_relay
+    depends_on:
+      relay:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    ports:
+      - "127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4783"
+    networks:
+      - guard-analytics
+      - host-access
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 4783), timeout=2).close()"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  guard-state:
+
+networks:
+  guard-analytics:
+    internal: true
+  host-access:

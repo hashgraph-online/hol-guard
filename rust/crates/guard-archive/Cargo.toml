@@ -1,0 +1,26 @@
+[package]
+name = "guard-archive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+guard-secure-fs = { path = "../guard-secure-fs" }
+# Safe-Rust Brotli (forbid(unsafe_code) without its `unsafe`/`ffi-api` features).
+brotli-decompressor = { version = "5.0.3", default-features = false, features = ["std"] }
+caseless = "0.2.2"
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
+hex.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tar = { version = "0.4.44", default-features = false }
+unicode-normalization = "0.1.25"
+
+[dev-dependencies]
+guard-alloc-probe = { path = "../guard-alloc-probe" }
+
+[lints]
+workspace = true

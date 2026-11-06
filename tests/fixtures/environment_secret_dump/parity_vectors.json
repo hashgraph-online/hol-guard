@@ -1,0 +1,694 @@
+{
+  "schema": "environment-secret-dump-python-vectors.v1",
+  "source_commit": "d3bf08bbcacfcb8f1f8d5f2f8647c47ca3124e33",
+  "source_sha256": "d3a225db4de9a7d52e25b96b44123ef0f917b25623b439033603234bbbf41a6c",
+  "fixtures": {
+    "reader.py": "import os\nprint(os.environ[\"TOKEN\"])\n",
+    "benign.py": "print(\"hello\")\n",
+    "reader.js": "console.log(process.env.TOKEN)\n",
+    "benign.js": "console.log(process.env.PATH)\n",
+    "nested/reader.py": "import os\nprint(os.environ)\n"
+  },
+  "cases": [
+    {
+      "command": "",
+      "matched": false
+    },
+    {
+      "command": "ls",
+      "matched": false
+    },
+    {
+      "command": "printenv",
+      "matched": true
+    },
+    {
+      "command": "printenv PATH",
+      "matched": false
+    },
+    {
+      "command": "printenv HOME API_KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv --null TOKEN",
+      "matched": true
+    },
+    {
+      "command": "printenv -u TOKEN PATH",
+      "matched": false
+    },
+    {
+      "command": "env",
+      "matched": true
+    },
+    {
+      "command": "env -i",
+      "matched": true
+    },
+    {
+      "command": "env PATH=/bin",
+      "matched": true
+    },
+    {
+      "command": "env echo hello",
+      "matched": false
+    },
+    {
+      "command": "env -u TOKEN printenv PATH",
+      "matched": false
+    },
+    {
+      "command": "env -u TOKEN printenv SECRET",
+      "matched": true
+    },
+    {
+      "command": "env --unknown",
+      "matched": false
+    },
+    {
+      "command": "echo $API_KEY",
+      "matched": true
+    },
+    {
+      "command": "echo ${AWS_SECRET_ACCESS_KEY:-missing}",
+      "matched": true
+    },
+    {
+      "command": "echo $PATH",
+      "matched": false
+    },
+    {
+      "command": "echo \\\\$TOKEN",
+      "matched": false
+    },
+    {
+      "command": "printf '%s' $PASSWORD",
+      "matched": true
+    },
+    {
+      "command": "echo hello; printenv TOKEN",
+      "matched": true
+    },
+    {
+      "command": "echo hello && printenv HOME",
+      "matched": false
+    },
+    {
+      "command": "command printenv API_KEY",
+      "matched": true
+    },
+    {
+      "command": "sudo -u sample printenv TOKEN",
+      "matched": true
+    },
+    {
+      "command": "X=1 printenv PRIVATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "python -c 'import os; print(os.environ)'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"TOKEN\"))'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ.get(\"PATH\"))'",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.environ[\"SECRET\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[name])'",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.environ.copy())'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'os.environ.setdefault(\"PATH\", \"x\")'",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(\"hello\")'",
+      "matched": false
+    },
+    {
+      "command": "python -cprint(os.environ)",
+      "matched": true
+    },
+    {
+      "command": "python3.12 -c 'print(os.environ.items())'",
+      "matched": true
+    },
+    {
+      "command": "pythonw.exe -c 'print(os.environ)'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env)'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env.TOKEN)'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env.PATH)'",
+      "matched": false
+    },
+    {
+      "command": "node -e 'console.log(process.env[name])'",
+      "matched": true
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"PASSWORD\"]'",
+      "matched": true
+    },
+    {
+      "command": "perl -e 'print $TOKEN'",
+      "matched": true
+    },
+    {
+      "command": "php -e 'echo $API_KEY'",
+      "matched": true
+    },
+    {
+      "command": "bash -c 'echo $TOKEN'",
+      "matched": false
+    },
+    {
+      "command": "printenv auth_token",
+      "matched": true
+    },
+    {
+      "command": "printenv monkey",
+      "matched": false
+    },
+    {
+      "command": "printenv mykey",
+      "matched": false
+    },
+    {
+      "command": "printenv key",
+      "matched": true
+    },
+    {
+      "command": "printenv secret-value",
+      "matched": true
+    },
+    {
+      "command": "printenv PR\u0130VATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv PR\u0131VATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv API_\u212aEY",
+      "matched": true
+    },
+    {
+      "command": "printenv AP\u0130KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv AP\u0131KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv CREDENT\u0130ALS",
+      "matched": true
+    },
+    {
+      "command": "printenv pr\u0131vatekey",
+      "matched": true
+    },
+    {
+      "command": "printenv 'TOKEN\u001c'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"AP\u0130KEY\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"TOKEN\u001c\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.env\u0131ron[\"TOKEN\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[AP\u0131KEY])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\u001c\"TOKEN\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\u001c\"TOKEN\"])'",
+      "matched": true
+    },
+    {
+      "command": "echo ${TOKEN}",
+      "matched": true
+    },
+    {
+      "command": "echo $api_key",
+      "matched": true
+    },
+    {
+      "command": "echo '$TOKEN'",
+      "matched": true
+    },
+    {
+      "command": "python reader.py",
+      "matched": true
+    },
+    {
+      "command": "python benign.py",
+      "matched": false
+    },
+    {
+      "command": "node reader.js",
+      "matched": true
+    },
+    {
+      "command": "node benign.js",
+      "matched": false
+    },
+    {
+      "command": "python -m reader",
+      "matched": false
+    },
+    {
+      "command": "python missing.py",
+      "matched": false
+    },
+    {
+      "command": "python linked.py",
+      "matched": true
+    },
+    {
+      "command": "python linked-outside.py",
+      "matched": false
+    },
+    {
+      "command": "python ./reader.py",
+      "matched": true
+    },
+    {
+      "command": "python ~/reader.py",
+      "matched": true
+    },
+    {
+      "command": "python invalid.py",
+      "matched": false
+    },
+    {
+      "command": "python huge.py",
+      "matched": false
+    },
+    {
+      "command": "python nested/reader.py",
+      "matched": true
+    },
+    {
+      "command": "python ../outside.py",
+      "matched": false
+    },
+    {
+      "command": "printenv --null PATH",
+      "matched": false
+    },
+    {
+      "command": "env printenv PATH",
+      "matched": false
+    },
+    {
+      "command": "command printenv PATH",
+      "matched": false
+    },
+    {
+      "command": "echo ${PATH:-missing}",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.environ[\"PATH\"])'",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"PATH\"))'",
+      "matched": false
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"PATH\"])'",
+      "matched": false
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"PATH\"]'",
+      "matched": false
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"PATH\")'",
+      "matched": false
+    },
+    {
+      "command": "printenv HOME",
+      "matched": false
+    },
+    {
+      "command": "printenv --null HOME",
+      "matched": false
+    },
+    {
+      "command": "env printenv HOME",
+      "matched": false
+    },
+    {
+      "command": "command printenv HOME",
+      "matched": false
+    },
+    {
+      "command": "echo $HOME",
+      "matched": false
+    },
+    {
+      "command": "echo ${HOME:-missing}",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.environ[\"HOME\"])'",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"HOME\"))'",
+      "matched": false
+    },
+    {
+      "command": "node -e 'console.log(process.env.HOME)'",
+      "matched": false
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"HOME\"])'",
+      "matched": false
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"HOME\"]'",
+      "matched": false
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"HOME\")'",
+      "matched": false
+    },
+    {
+      "command": "printenv TOKEN",
+      "matched": true
+    },
+    {
+      "command": "env printenv TOKEN",
+      "matched": true
+    },
+    {
+      "command": "command printenv TOKEN",
+      "matched": true
+    },
+    {
+      "command": "echo $TOKEN",
+      "matched": true
+    },
+    {
+      "command": "echo ${TOKEN:-missing}",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[\"TOKEN\"])'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"TOKEN\"])'",
+      "matched": true
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"TOKEN\"]'",
+      "matched": true
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"TOKEN\")'",
+      "matched": true
+    },
+    {
+      "command": "printenv api_key",
+      "matched": true
+    },
+    {
+      "command": "printenv --null api_key",
+      "matched": true
+    },
+    {
+      "command": "env printenv api_key",
+      "matched": true
+    },
+    {
+      "command": "command printenv api_key",
+      "matched": true
+    },
+    {
+      "command": "echo ${api_key:-missing}",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[\"api_key\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"api_key\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env.api_key)'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"api_key\"])'",
+      "matched": true
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"api_key\"]'",
+      "matched": true
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"api_key\")'",
+      "matched": true
+    },
+    {
+      "command": "printenv PRIVATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv --null PRIVATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "env printenv PRIVATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "command printenv PRIVATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "echo $PRIVATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "echo ${PRIVATE_KEY:-missing}",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[\"PRIVATE_KEY\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"PRIVATE_KEY\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env.PRIVATE_KEY)'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"PRIVATE_KEY\"])'",
+      "matched": true
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"PRIVATE_KEY\"]'",
+      "matched": true
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"PRIVATE_KEY\")'",
+      "matched": true
+    },
+    {
+      "command": "printenv --null key",
+      "matched": true
+    },
+    {
+      "command": "env printenv key",
+      "matched": true
+    },
+    {
+      "command": "command printenv key",
+      "matched": true
+    },
+    {
+      "command": "echo $key",
+      "matched": true
+    },
+    {
+      "command": "echo ${key:-missing}",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[\"key\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"key\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env.key)'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"key\"])'",
+      "matched": true
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"key\"]'",
+      "matched": true
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"key\")'",
+      "matched": true
+    },
+    {
+      "command": "printenv --null monkey",
+      "matched": false
+    },
+    {
+      "command": "env printenv monkey",
+      "matched": false
+    },
+    {
+      "command": "command printenv monkey",
+      "matched": false
+    },
+    {
+      "command": "echo $monkey",
+      "matched": false
+    },
+    {
+      "command": "echo ${monkey:-missing}",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.environ[\"monkey\"])'",
+      "matched": false
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"monkey\"))'",
+      "matched": false
+    },
+    {
+      "command": "node -e 'console.log(process.env.monkey)'",
+      "matched": false
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"monkey\"])'",
+      "matched": false
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"monkey\"]'",
+      "matched": false
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"monkey\")'",
+      "matched": false
+    },
+    {
+      "command": "printenv --null secret-value",
+      "matched": true
+    },
+    {
+      "command": "env printenv secret-value",
+      "matched": true
+    },
+    {
+      "command": "command printenv secret-value",
+      "matched": true
+    },
+    {
+      "command": "echo $secret-value",
+      "matched": true
+    },
+    {
+      "command": "echo ${secret-value:-missing}",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[\"secret-value\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"secret-value\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env.secret-value)'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"secret-value\"])'",
+      "matched": true
+    },
+    {
+      "command": "ruby -e 'puts ENV[\"secret-value\"]'",
+      "matched": true
+    },
+    {
+      "command": "php -e 'echo System.getenv(\"secret-value\")'",
+      "matched": true
+    },
+    {
+      "command": "python reader.py",
+      "cwd": null,
+      "matched": true
+    },
+    {
+      "command": "python linked.py",
+      "cwd": null,
+      "matched": true
+    },
+    {
+      "command": "python ../outside.py",
+      "cwd": null,
+      "matched": false
+    },
+    {
+      "command": "python linked-outside.py",
+      "cwd": null,
+      "matched": false
+    }
+  ]
+}

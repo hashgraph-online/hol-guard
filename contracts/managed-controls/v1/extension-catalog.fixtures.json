@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "valid": {
+    "schemaVersion": "guard.extension-catalog.v1",
+    "catalogDigest": "c4b0c22d97418dfa85745f77c3f3b14e951f14a514ac74c237e6977388334035",
+    "guardVersion": "3.0.0a1",
+    "controlSchemaVersion": "guard.extension-controls.v1",
+    "generatedAt": "2026-08-21T00:00:00Z",
+    "limits": {
+      "maxExtensions": 512,
+      "maxPermissionsPerExtension": 512,
+      "maxPayloadBytes": 1000000,
+      "maxStringLength": 8192
+    },
+    "extensions": [
+      {
+        "id": "command.git",
+        "version": "1.0.0",
+        "name": "Git protection",
+        "source": "built-in",
+        "executables": ["git"],
+        "ecosystemIds": ["git"],
+        "riskClasses": ["source-control"],
+        "delegatedProtection": null,
+        "deprecated": false,
+        "replacementId": null,
+        "permissions": [
+          {
+            "id": "command.git.permission.force-push",
+            "name": "Force push",
+            "configurable": true,
+            "required": false,
+            "riskClasses": ["destructive"],
+            "typedCapabilities": ["git.push.force"]
+          }
+        ]
+      }
+    ]
+  },
+  "canonicalizationVectors": [
+    {
+      "name": "unicode-and-input-order",
+      "catalogDigest": "9e977cd8fbdfae5277c2d893595ac07b74fb1a0d6c2242f756690f83c795f01a",
+      "canonicalJson": "[{\"delegatedProtection\":null,\"deprecated\":false,\"ecosystemIds\":[\"git\"],\"executables\":[\"git\"],\"id\":\"command.git\",\"name\":\"Git protection — 東京\",\"permissions\":[{\"configurable\":true,\"id\":\"command.git.permission.force-push\",\"name\":\"Force push\",\"required\":false,\"riskClasses\":[\"destructive\"],\"typedCapabilities\":[\"git.push.force\"]}],\"replacementId\":null,\"riskClasses\":[\"source-control\"],\"source\":\"built-in\",\"version\":\"1.0.0\"},{\"delegatedProtection\":null,\"deprecated\":false,\"ecosystemIds\":[\"unicode\"],\"executables\":[\"zed\"],\"id\":\"command.zed\",\"name\":\"Zed — café 🛡\",\"permissions\":[{\"configurable\":false,\"id\":\"command.zed.permission.alpha\",\"name\":\"Alpha\",\"required\":true,\"riskClasses\":[\"read\"],\"typedCapabilities\":[\"zed.alpha\"]},{\"configurable\":true,\"id\":\"command.zed.permission.zeta\",\"name\":\"Zéta Ω\",\"required\":false,\"riskClasses\":[\"write\"],\"typedCapabilities\":[\"zed.zeta\"]}],\"replacementId\":null,\"riskClasses\":[\"source-control\"],\"source\":\"built-in\",\"version\":\"1.0.0\"}]",
+      "extensions": [
+        {
+          "id": "command.zed",
+          "version": "1.0.0",
+          "name": "Zed — café 🛡",
+          "source": "built-in",
+          "executables": ["zed"],
+          "ecosystemIds": ["unicode"],
+          "riskClasses": ["source-control"],
+          "delegatedProtection": null,
+          "deprecated": false,
+          "replacementId": null,
+          "permissions": [
+            {
+              "id": "command.zed.permission.zeta",
+              "name": "Zéta Ω",
+              "configurable": true,
+              "required": false,
+              "riskClasses": ["write"],
+              "typedCapabilities": ["zed.zeta"]
+            },
+            {
+              "id": "command.zed.permission.alpha",
+              "name": "Alpha",
+              "configurable": false,
+              "required": true,
+              "riskClasses": ["read"],
+              "typedCapabilities": ["zed.alpha"]
+            }
+          ]
+        },
+        {
+          "id": "command.git",
+          "version": "1.0.0",
+          "name": "Git protection — 東京",
+          "source": "built-in",
+          "executables": ["git"],
+          "ecosystemIds": ["git"],
+          "riskClasses": ["source-control"],
+          "delegatedProtection": null,
+          "deprecated": false,
+          "replacementId": null,
+          "permissions": [
+            {
+              "id": "command.git.permission.force-push",
+              "name": "Force push",
+              "configurable": true,
+              "required": false,
+              "riskClasses": ["destructive"],
+              "typedCapabilities": ["git.push.force"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "invalidMutations": [
+    {
+      "name": "invalid-generated-at",
+      "field": "generatedAt",
+      "value": "not-a-date"
+    }
+  ],
+  "invalid": {
+    "duplicateExtension": "duplicate Extension IDs",
+    "duplicatePermission": "duplicate permission IDs",
+    "unknownField": "unknown fields are rejected",
+    "oversized": "wire bodies above 1000000 bytes are rejected",
+    "unicode": "Unicode is accepted only inside bounded text fields and canonicalized as UTF-8",
+    "privateField": "raw command history, environment, file contents, source paths, and secrets are rejected"
+  }
+}

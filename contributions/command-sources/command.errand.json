@@ -1,0 +1,213 @@
+{
+ "extension": {
+  "action_classes": [
+   "Errand execution command",
+   "Errand checkout apply command"
+  ],
+  "aliases": [],
+  "conflicts": [],
+  "delegated_protection": null,
+  "dependencies": [],
+  "description": "Requires Errand 0.4.2 or later. Reviews job execution (any operand-bearing invocation) and `fetch --apply`; flag-only and help invocations remain automatic. Conservative port of the v1 detector: declarative matchers cannot exclude known read-only subcommands, so operand-bearing calls like `errand ps` also review.",
+  "ecosystem_ids": [
+   "errand"
+  ],
+  "executables": [
+   "errand"
+  ],
+  "extension_id": "command.errand",
+  "icon": {
+   "background": "#4338CA",
+   "kind": "react-icon",
+   "name": "HiMiniCommandLine"
+  },
+  "license": "MIT",
+  "name": "Errand",
+  "permissions": [
+   {
+    "action_classes": [
+     "Errand execution command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies operand-bearing `errand` invocations, which submit a job to the selected runner, may upload a working-tree snapshot, and may apply retained changes to the originating checkout.",
+    "example_command": "errand --on linux -- make test",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Errand job execution",
+    "permission_id": "command.errand.permission.exec",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Review the selected runner, snapshot scope, forwarded environment, and command before submission.",
+     "Use --no-apply to keep retained changes out of the originating checkout until explicitly applied."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Errand checkout apply command"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies `errand fetch --apply`, which merges retained runner changes into the originating checkout.",
+    "example_command": "errand fetch --apply linux/job",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "2.2.0",
+    "label": "Errand retained-change application",
+    "permission_id": "command.errand.permission.fetch-apply",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Run errand fetch HANDLE to stage retained changes for inspection before applying them.",
+     "Check errand status HANDLE and review the destination checkout before applying retained changes."
+    ],
+    "typed_capabilities": []
+   }
+  ],
+  "project_markers": [],
+  "publisher": {
+   "display_name": "George Lydakis",
+   "id": "community.lydakis"
+  },
+  "reference_urls": [],
+  "required": false,
+  "risk_classes": [
+   "execution",
+   "network_egress",
+   "destructive_shell"
+  ],
+  "rules": [
+   {
+    "action_classes": [
+     "Errand execution command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies operand-bearing `errand` invocations (`errand [options] -- COMMAND` or a job operand), which execute on the selected runner.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "errand",
+       "errand.cmd",
+       "errand.exe"
+      ],
+      "forbidden_flags": [
+       "--help",
+       "-h",
+       "--version"
+      ],
+      "minimum_operands": 1,
+      "options_with_values": [
+       "--on",
+       "--url",
+       "--where",
+       "--profile",
+       "--workdir",
+       "-w",
+       "--env",
+       "-e",
+       "--env-file",
+       "--passenv",
+       "--forward",
+       "-L",
+       "--artifact",
+       "--cache",
+       "--workspace",
+       "--workspace-root",
+       "--output",
+       "-o"
+      ]
+     },
+     "op": "leading-operand-count.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.errand.permission.exec",
+    "risk_classes": [
+     "execution",
+     "network_egress",
+     "destructive_shell"
+    ],
+    "rule_id": "command.errand.run",
+    "rule_version": "1.0.0",
+    "safe_variants": [],
+    "safer_alternatives": [
+     "Review the selected runner, snapshot scope, forwarded environment, and command before submission.",
+     "Use --no-apply to keep retained changes out of the originating checkout until explicitly applied."
+    ],
+    "severity": "high",
+    "title": "Errand job execution"
+   },
+   {
+    "action_classes": [
+     "Errand checkout apply command"
+    ],
+    "default_mode": "review",
+    "description": "Identifies `errand fetch --apply`, which merges retained runner changes into the originating checkout.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "executables": [
+       "errand",
+       "errand.cmd",
+       "errand.exe"
+      ],
+      "forbidden_flags_before_delimiter": [
+       "--help",
+       "-h",
+       "--version"
+      ],
+      "options_with_values": [
+       "--on",
+       "--url",
+       "--output",
+       "-o"
+      ],
+      "required_flags_anywhere": [
+       "--apply"
+      ],
+      "subcommands": [
+       "fetch"
+      ]
+     },
+     "op": "leading-subcommand.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.errand.permission.fetch-apply",
+    "risk_classes": [
+     "destructive_shell"
+    ],
+    "rule_id": "command.errand.fetch-apply",
+    "rule_version": "1.0.0",
+    "safe_variants": [],
+    "safer_alternatives": [
+     "Run errand fetch HANDLE to stage retained changes for inspection before applying them.",
+     "Check errand status HANDLE and review the destination checkout before applying retained changes."
+    ],
+    "severity": "high",
+    "title": "Errand retained-change application"
+   }
+  ],
+  "safer_alternatives": [
+   "Inspect jobs with errand ps or errand status HANDLE before executing or applying changes.",
+   "Stage retained changes with errand fetch HANDLE before applying them."
+  ],
+  "source": "built-in",
+  "version": "1.0.0"
+ },
+ "schema": "guard.command-extension-source.v1"
+}

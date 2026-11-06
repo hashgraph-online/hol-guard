@@ -1,0 +1,368 @@
+"""Guard CLI command entrypoint."""
+
+# fmt: off
+# ruff: noqa: F403, F405
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .commands_support_connect import _synced_policy_payload
+    from .commands_support_workspace import _resolve_guard_workspace
+
+
+from ._commands_shared import *
+from .approval_gate_prompt import print_approval_gate_error
+from .codebase_commands import run_codebases_command  # noqa: F401  (looked up by name in _COMMON_HANDLERS)
+from .commands_lifecycle_gate import (
+    enforce_lifecycle_gate,
+    explain_missing_native_runtime,
+    restore_missing_native_runtime,
+)
+from .commands_parser_helpers import *
+from .inventory_list_commands import is_inventory_list_command, run_inventory_list_command
+
+_EARLY_HANDLERS = {
+    "mdm": "_run_guard_mdm_command",
+    "cloud-actions": "_run_guard_cloud_actions_command",
+    "command": "_run_guard_command_inspection_command",
+    "pytest-contained": "_run_guard_pytest_contained_command",
+    "verified-read": "_run_guard_verified_read_command",
+    "scan": "_run_guard_scan_command",
+    "preflight": "_run_guard_safe_preflight_command",
+    "mcp": "_run_guard_mcp_command",
+}
+
+# Commands that stand up, repair or report this machine's protection. Each is
+# a user-invoked one-shot, so it values arriving at an answer over arriving
+# quickly; see `bind_context_digest_lifecycle_budget`.
+_NATIVE_LIFECYCLE_COMMANDS = frozenset(
+    {"apps", "bootstrap", "doctor", "init", "install", "repair", "uninstall", "update"}
+)
+
+_PRESTORE_HANDLERS = {
+    "daemon": "_run_guard_daemon_command",
+    "update": "_run_guard_update_command",
+    "trust": "_run_guard_trust_command",
+}
+
+_COMMON_HANDLERS = {
+    "codebases": "run_codebases_command",
+    "protect": "_run_guard_protect_command",
+    "start": "_run_guard_start_command",
+    "status": "_run_guard_status_command",
+    "risk-report": "run_guard_risk_report_command",
+    "network": "_run_guard_network_command",
+    "init": "_run_guard_init_command",
+    "dashboard": "_run_guard_dashboard_command",
+    "admin": "_run_guard_dashboard_command",
+    "bootstrap": "_run_guard_bootstrap_command",
+    "desktop": "_run_guard_desktop_command",
+    "detect": "_run_guard_detect_command",
+    "apps": "_run_guard_apps_command",
+    "install": "_run_guard_install_command",
+    "codex-mcp-proxy": "_run_guard_codex_mcp_proxy_command",
+    "cursor-mcp-proxy": "_run_guard_cursor_mcp_proxy_command",
+    "cline-mcp-proxy": "_run_guard_cline_mcp_proxy_command",
+    "mcp-proxy": "_run_guard_cline_mcp_proxy_command",
+    "opencode-mcp-proxy": "_run_guard_opencode_mcp_proxy_command",
+    "copilot-mcp-proxy": "_run_guard_copilot_mcp_proxy_command",
+    "hermes-mcp-proxy": "_run_guard_hermes_mcp_proxy_command",
+    "uninstall": "_run_guard_uninstall_command",
+    "package-shims": "_run_guard_package_shims_command",
+    "contained-write": "_run_guard_contained_write_command",
+    "execute-contained-test": "_run_guard_execute_contained_test_command",
+    "execute-bound-bash": "_run_guard_execute_bound_bash_command",
+    "ack-bound-bash": "_run_guard_ack_bound_bash_command",
+    "run": "_run_guard_run_command",
+    "run-shim": "_run_guard_run_command",
+    "diff": "_run_guard_diff_command",
+    "test-eval": "_run_guard_test_eval_command",
+    "receipts": "_run_guard_receipts_command",
+    "history": "_run_guard_history_command",
+    "inventory": "_run_guard_inventory_command",
+    "aibom": "_run_guard_aibom_command",
+    "abom": "_run_guard_abom_command",
+    "policy": "_run_guard_policy_document_command",
+    "policies": "_run_guard_policies_command",
+    "settings": "_run_guard_settings_command",
+    "exceptions": "_run_guard_exceptions_command",
+    "advisories": "_run_guard_advisories_command",
+    "events": "_run_guard_events_command",
+    "approvals": "_run_guard_approvals_command",
+    "explain": "_run_guard_explain_command",
+    "allow": "_run_guard_policy_action_command",
+    "deny": "_run_guard_policy_action_command",
+    "doctor": "_run_guard_doctor_command",
+    "login": "_run_guard_login_command",
+    "remote-pair": "_run_guard_remote_pair_command",
+    "connect": "_run_guard_connect_command",
+    "disconnect": "_run_guard_disconnect_command",
+    "bridge": "_run_guard_bridge_command",
+    "sync": "_run_guard_sync_command",
+    "health-leases": "_run_guard_health_leases_command",
+    "cloud": "_run_guard_cloud_command",
+    "supply-chain": "_run_guard_supply_chain_command",
+    "service": "_run_guard_service_command",
+    "device": "_run_guard_device_command",
+    "commands": "_run_guard_commands_command",
+    "cloud-review": "_run_guard_cloud_review_command",
+    "daemon": "_run_guard_daemon_command",
+    "hook": "_run_guard_hook_command",
+    "hooks": "_run_guard_hooks_command",
+    "repair": "_run_guard_repair_command",
+}
+
+
+def _resolve_guard_handler(mapping: dict[str, str], command: str) -> object | None:
+    handler_name = mapping.get(command)
+    if handler_name is None:
+        return None
+    return globals().get(handler_name)
+
+
+def _normalize_guard_handler_result(result: object) -> int:
+    if result is None:
+        return 0
+    return result if isinstance(result, int) else 1
+
+
+def _invoke_guard_handler(
+    handler: object,
+    args: argparse.Namespace,
+    *,
+    error_output_stream: TextIO | None = None,
+    **kwargs: object,
+) -> int:
+    if not callable(handler):
+        return 1
+    try:
+        result = handler(args, **kwargs)
+    except KeyboardInterrupt:
+        print("Interrupted.", file=error_output_stream if error_output_stream is not None else sys.stderr)
+        return 130
+    return _normalize_guard_handler_result(result)
+
+
+def _should_prime_policy_integrity(args: argparse.Namespace) -> bool:
+    """Do not prime integrity while constructing the daemon process.
+
+    Desktop waits for the approval-center URL. Secret-store priming on a large
+    Guard home can exceed that timeout before HTTP accepts.
+    """
+
+    del args
+    return False
+
+
+def _should_allow_system_keyring(args: argparse.Namespace) -> bool:
+    """Limit macOS Keychain access to explicit foreground account actions."""
+
+    return args.guard_command in {"cloud-review", "connect", "disconnect", "login", "remote-pair"}
+
+
+def run_guard_command(
+    args: argparse.Namespace,
+    *,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
+) -> int:
+    """Execute a Guard subcommand under the digest budget it is entitled to.
+
+    Lifecycle commands install, repair or report protection: each runs once at
+    a keystroke, each pays for a cold native runtime nothing else pays for, and
+    none of them has a fallback when the answer does not arrive in time.  A
+    slow first install has to stay an install.  The floor is bound here, ahead
+    of every dispatch below, because an install reaches native authority long
+    before it resolves a guard home, and it is released here, because a process
+    that dispatches more than one command must not run enforcement on it.
+    """
+
+    if args.guard_command not in _NATIVE_LIFECYCLE_COMMANDS:
+        return _dispatch_guard_command(
+            args,
+            input_text=input_text,
+            output_stream=output_stream,
+            error_stream=error_stream,
+        )
+    from ..native_context_budget import bind_context_digest_lifecycle_budget, reset_context_digest_budget
+
+    token = bind_context_digest_lifecycle_budget()
+    try:
+        return _dispatch_guard_command(
+            args,
+            input_text=input_text,
+            output_stream=output_stream,
+            error_stream=error_stream,
+        )
+    finally:
+        reset_context_digest_budget(token)
+
+
+def _dispatch_guard_command(
+    args: argparse.Namespace,
+    *,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
+) -> int:
+    "Route one Guard subcommand to its handler."
+
+    if args.guard_command == "context":
+        from .context_assistance_commands import run_context_command
+
+        return _invoke_guard_handler(run_context_command, args, input_text=input_text, output_stream=output_stream)
+
+    inventory_list = is_inventory_list_command(args)
+    if args.guard_command == "extensions" and not inventory_list:
+        from .extension_builder_commands import run_extension_builder_command
+
+        return run_extension_builder_command(args, output_stream=output_stream)
+    if args.guard_command == "policy":
+        from .commands_dispatch_policy_dx import FILE_COMMANDS, run_policy_file_command
+
+        if args.policy_command in FILE_COMMANDS:
+            # These read one policy file and need neither a Guard home nor a store, so they run in CI.
+            return _invoke_guard_handler(
+                run_policy_file_command,
+                args,
+                input_text=input_text,
+                output_stream=output_stream,
+            )
+    handler = None if inventory_list else _resolve_guard_handler(_EARLY_HANDLERS, args.guard_command)
+    if callable(handler):
+        return _invoke_guard_handler(
+            handler,
+            args,
+            error_output_stream=error_stream,
+            input_text=input_text,
+            output_stream=output_stream,
+        )
+
+    home_override = getattr(args, "home", None)
+    home_dir = Path(home_override).expanduser().resolve() if home_override else Path.home().resolve()
+    home_override_explicit = bool(home_override)
+    guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
+    # Detection runs before the consumer/protect entry points that bind the
+    # digest home, so bind at the router: every enforcement subcommand below
+    # resolves its context-digest calls against this deployment's resident.
+    from ..native_context import bind_context_digest_home
+
+    bind_context_digest_home(guard_home)
+    workspace = _resolve_guard_workspace(
+        args,
+        guard_home=guard_home,
+        home_dir=home_dir,
+        home_override_explicit=home_override_explicit,
+    )
+    executable_overrides: dict[str, str] = {}
+    grok_executable = getattr(args, "grok_executable", None)
+    if isinstance(grok_executable, str) and grok_executable.strip():
+        executable_overrides["grok"] = grok_executable.strip()
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace,
+        guard_home=guard_home,
+        executable_overrides=executable_overrides,
+        home_override_explicit=home_override_explicit,
+        workspace_override_explicit=bool(getattr(args, "workspace", None)),
+    )
+    if args.guard_command == "runtime":
+        # Read-only: describes executables without starting them and decides nothing.
+        from .runtime_posture_command import run_runtime_posture_command
+
+        return run_runtime_posture_command(args, context=context, output_stream=output_stream)
+    if args.guard_command == "doctor" and bool(getattr(args, "incident", False)):
+        from .doctor_incident import run_codex_incident_export
+
+        return run_codex_incident_export(args, context, output_stream=output_stream)
+    try:
+        try:
+            lifecycle_gate_context = enforce_lifecycle_gate(
+                args,
+                guard_home=guard_home,
+                error_stream=error_stream,
+            )
+        except ApprovalGateError as error:
+            if not restore_missing_native_runtime(error, context=context, guard_home=guard_home):
+                raise
+            # The authority can answer now; the command still needs the gate's approval.
+            lifecycle_gate_context = enforce_lifecycle_gate(
+                args,
+                guard_home=guard_home,
+                error_stream=error_stream,
+            )
+        args._lifecycle_gate_context = lifecycle_gate_context
+    except ApprovalGateError as error:
+        return print_approval_gate_error(
+            explain_missing_native_runtime(error),
+            as_json=bool(getattr(args, "json", False)),
+            output_stream=output_stream,
+        )
+
+    handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)
+    if callable(handler):
+        handler_kwargs: dict[str, object] = {
+            "guard_home": guard_home,
+            "workspace": workspace,
+            "context": context,
+            "input_text": input_text,
+            "output_stream": output_stream,
+        }
+        if args.guard_command == "daemon":
+            handler_kwargs["error_stream"] = error_stream
+        return _invoke_guard_handler(
+            handler,
+            args,
+            error_output_stream=error_stream,
+            **handler_kwargs,
+        )
+
+    source = getattr(args, "source", "default")
+    try:
+        store = GuardStore(
+            guard_home,
+            source=source,
+            prime_policy_integrity=_should_prime_policy_integrity(args),
+            allow_system_keyring=_should_allow_system_keyring(args),
+        )
+    except (TimeoutError, ValueError) as error:
+        print(
+            f"Error: {error}",
+            file=error_stream if error_stream is not None else sys.stderr,
+        )
+        return 2
+    if args.guard_command == "hook":
+        # Native hooks receive the raw envelope before any request-time
+        # configuration or policy-file read.  HookWorker's startup publisher
+        # owns the cached ACKed snapshot; a barrier miss returns fail-safe.
+        config = None
+    else:
+        config = load_guard_config(guard_home, workspace=workspace)
+        config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
+
+    if inventory_list:
+        return _invoke_guard_handler(
+            run_inventory_list_command, args, store=store, context=context, output_stream=output_stream
+        )
+    handler = _resolve_guard_handler(_COMMON_HANDLERS, args.guard_command)
+    if callable(handler):
+        return _invoke_guard_handler(
+            handler,
+            args,
+            error_output_stream=error_stream,
+            guard_home=guard_home,
+            workspace=workspace,
+            context=context,
+            store=store,
+            config=config,
+            input_text=input_text,
+            output_stream=output_stream,
+        )
+    return 1
+
+__all__ = [
+    "run_guard_command",
+]

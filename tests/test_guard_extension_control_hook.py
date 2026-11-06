@@ -1,0 +1,133 @@
+from __future__ import annotations
+
+import argparse
+import io
+import json
+import sqlite3
+import time
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import commands_hook
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
+from codex_plugin_scanner.guard.runtime.extension_control_contract import (
+    CONTROL_SCHEMA_VERSION,
+    ControlLayerKind,
+    ControlState,
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
+)
+from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _native_receipt_decisions(guard_home: Path) -> list[str]:
+    with sqlite3.connect(guard_home / "guard.db") as connection:
+        rows = connection.execute("select decision from native_hook_decision_receipts").fetchall()
+    return [str(row[0]) for row in rows]
+
+
+@pytest.mark.parametrize(
+    ("command", "permission_id", "receipt_expected"),
+    (
+        (
+            "gh api -X PUT repos/example/project/pulls/5115/merge -f merge_method=squash",
+            "command.github.permission.merge-remote",
+            True,
+        ),
+        (
+            "gh pr merge 5134 --repo example/project --squash --delete-branch && "
+            "gh pr view 5134 --repo example/project --json state,mergedAt,mergeCommit,url",
+            "command.github.permission.routine-merge-remote",
+            False,
+        ),
+        (
+            'gh pr edit 5134 --repo example/project --title "fix: corrected title"',
+            "command.github.permission.content-remote",
+            True,
+        ),
+        ("git push --force origin feature", "command.git.permission.force-push", True),
+    ),
+)
+@pytest.mark.usefixtures("native_hook_force")
+def test_guard_hook_honors_explicit_extension_permission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    permission_id: str,
+    receipt_expected: bool,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(guard_home)
+    config = GuardConfig(guard_home=guard_home, workspace=workspace, default_action="review")
+    layer = ExtensionControlLayer(
+        schema_version=CONTROL_SCHEMA_VERSION,
+        kind=ControlLayerKind.LOCAL_ADMIN,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        global_lockdown=False,
+        controls=(
+            ExtensionControl(
+                target=ControlTarget(ControlTargetKind.PERMISSION, permission_id),
+                state=ControlState.ENABLED,
+            ),
+        ),
+    )
+    authority = ExtensionControlAuthorityView(
+        health=AuthorityHealth.PROTECTED,
+        revision=9,
+        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        layers=(layer,),
+    )
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: authority)
+    output = io.StringIO()
+    result = commands_hook._run_guard_hook_command(
+        argparse.Namespace(
+            artifact_id=None,
+            artifact_name=None,
+            event_file=None,
+            harness="codex",
+            json=True,
+            policy_action=None,
+            runtime_harness=None,
+        ),
+        guard_home=guard_home,
+        workspace=workspace,
+        context=HarnessContext(tmp_path, workspace, guard_home),
+        store=store,
+        config=config,
+        input_text=json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+                "source_scope": "project",
+            }
+        ),
+        output_stream=output,
+    )
+
+    assert result == 0
+    assert json.loads(output.getvalue())["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert store.list_approval_requests(limit=1) == []
+    # The resident records the decision receipt on its own thread after the
+    # hook answers.
+    decisions = _native_receipt_decisions(guard_home)
+    deadline = time.monotonic() + 10
+    while receipt_expected and not decisions and time.monotonic() < deadline:
+        time.sleep(0.05)
+        decisions = _native_receipt_decisions(guard_home)
+    if receipt_expected:
+        assert decisions == ["allow"]
+    else:
+        # An enabled permission does not skip independent artifact policy.
+        assert set(decisions) <= {"allow"}

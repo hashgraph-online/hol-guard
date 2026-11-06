@@ -1,0 +1,55 @@
+name: Dependabot Lockfile Sync
+
+on:
+  push:
+    branches:
+      - "dependabot/**"
+    paths:
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "docker-requirements.txt"
+      - ".github/dependabot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-lockfile:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Dependabot branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: "0.9.26"
+          enable-cache: true
+
+      - name: Refresh lockfile
+        run: uv lock --no-build
+
+      - name: Commit lockfile updates
+        run: |
+          if git diff --quiet -- uv.lock; then
+            echo "uv.lock unchanged"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add uv.lock
+          git commit -m "chore: sync uv.lock for dependabot"
+          git push

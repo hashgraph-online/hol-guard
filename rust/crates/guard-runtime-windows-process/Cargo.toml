@@ -1,0 +1,44 @@
+[package]
+name = "guard-runtime-windows-process"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "guard_runtime_windows_process"
+path = "src/lib.rs"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { workspace = true, features = [
+    "combaseapi",
+    "dpapi",
+    "errhandlingapi",
+    "fileapi",
+    "handleapi",
+    "ioapiset",
+    "jobapi2",
+    "knownfolders",
+    "namedpipeapi",
+    "processenv",
+    "processthreadsapi",
+    "securitybaseapi",
+    "shellapi",
+    "shlobj",
+    "stringapiset",
+    "synchapi",
+    "sysinfoapi",
+    "tlhelp32",
+    "winbase",
+    "winerror",
+    "wincred",
+    "wincrypt",
+    "winnt",
+    "winreg",
+] }
+windows-permissions.workspace = true
+getrandom.workspace = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "fleet-posture/v1",
+  "collectedAt": "2026-10-16T12:00:00Z",
+  "client": {
+    "version": "3.48.0",
+    "channel": "stable",
+    "runtime": "python",
+    "autoUpdate": {
+      "enabled": true,
+      "lastCheckedAt": "2026-10-16T06:00:00Z",
+      "lastResult": "up_to_date"
+    }
+  },
+  "machine": {
+    "osName": "macos",
+    "osVersion": null,
+    "arch": "arm64",
+    "hostnameHash": "sha256:f570de045b41b8b02b1bed6470a8ff159e40940c3a22e2d3b80070ffa117235e"
+  },
+  "aiTools": [
+    {
+      "harness": "claude-code",
+      "toolVersion": "2.1.0",
+      "setupStatus": "active",
+      "protectionState": "protected",
+      "hooks": {
+        "nativeHooks": true,
+        "browserFallback": false,
+        "mcpProxy": false,
+        "promptHooks": true
+      },
+      "blindSpots": [],
+      "postureOverride": "default",
+      "artifactCount": 3,
+      "lastActivityAt": "2026-10-16T12:00:00Z",
+      "inventoryDigest": "sha256:fcb89083690de3b0c84e448e213fce76b97a69f8f216fe0e4f603c27e442b9c8"
+    },
+    {
+      "harness": "cursor",
+      "toolVersion": "1.7.2",
+      "setupStatus": "not_found",
+      "protectionState": "needs_setup",
+      "hooks": {
+        "nativeHooks": false,
+        "browserFallback": false,
+        "mcpProxy": true,
+        "promptHooks": false
+      },
+      "blindSpots": [],
+      "postureOverride": null,
+      "artifactCount": 1,
+      "lastActivityAt": null,
+      "inventoryDigest": "sha256:a2c96006bc099b67c2fe468ac06f6731acb29d80780a69436937d841e231086d"
+    },
+    {
+      "harness": "codex",
+      "toolVersion": "0.48.0",
+      "setupStatus": "partial",
+      "protectionState": "broken",
+      "hooks": {
+        "nativeHooks": false,
+        "browserFallback": false,
+        "mcpProxy": false,
+        "promptHooks": false
+      },
+      "blindSpots": [],
+      "postureOverride": "default",
+      "artifactCount": 1,
+      "lastActivityAt": "2026-10-16T12:00:00Z",
+      "inventoryDigest": "sha256:df470eea52a6099c3f41ebded9b3949438944820017c92a43ba56de8aa666748"
+    }
+  ],
+  "inventory": {
+    "digest": "sha256:a0dc4e34befa696d3b15c85c69a578a6c7ef7009739193ce168e6ad257e38605",
+    "mode": "digest_only",
+    "items": [],
+    "removed": []
+  },
+  "policy": {
+    "appliedBundleVersion": null,
+    "appliedBundleHash": null,
+    "appliedPolicyVersionNumber": null,
+    "status": "none",
+    "errorCode": null,
+    "appliedAt": null
+  }
+}

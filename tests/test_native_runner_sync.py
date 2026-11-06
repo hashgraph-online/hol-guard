@@ -1,0 +1,236 @@
+"""Recorded parity and fail-closed behaviour for the native Guard Cloud sync owner.
+
+``fixtures/runner_sync_authority/vectors.json`` was recorded from the retired
+Python helpers in ``guard/runtime/runner.py`` before they were deleted; the same
+file is replayed by the Rust unit tests, so a divergence here means the resident
+changed behaviour.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+from codex_plugin_scanner.guard.runtime import runner_native_sync as sync
+from tests.policy_bundle_parser_support import POLICY_BUNDLE_RULE_MATCHER_FAMILIES
+
+_VECTORS = Path(__file__).parent / "fixtures" / "runner_sync_authority" / "vectors.json"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_url_cache() -> None:
+    sync._derived_url.cache_clear()
+
+
+def _vectors() -> list[dict[str, Any]]:
+    document = json.loads(_VECTORS.read_text(encoding="utf-8"))
+    assert document["version"] == 1
+    return document["vectors"]
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_recorded_python_vectors_match_the_resident() -> None:
+    vectors = _vectors()
+    assert len(vectors) > 800
+    mismatches = [
+        f"{vector['kind']} / {vector['name']}"
+        for vector in vectors
+        if native_runner_authority(vector["kind"], vector["args"]) != vector["expected"]
+    ]
+    assert mismatches == []
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_typed_adapters_return_the_owner_answer() -> None:
+    assert sync.guard_events_sync_url("https://hol.org/guard/receipts/sync") == "https://hol.org/api/v1/guard/events"
+    assert sync.pain_signal_sync_url("https://hol.org/api/v1") == "https://hol.org/api/v1/signals/pain"
+    events = [
+        {
+            "event_name": "install_time_block",
+            "occurred_at": "2026-01-01T00:00:00Z",
+            "payload": {"artifact_id": "a", "artifact_name": "A", "reason": "bad", "unrelated": "x" * 10},
+        }
+    ]
+    items, carried = sync.pain_signal_batch(events, {})
+    assert [item["signalId"] for item in items] == ["install_time_block:unknown:a"]
+    assert carried == {}
+    metrics, digest = sync.value_metrics(events, "2026-01-02T00:00:00Z")
+    assert metrics["installs_stopped_before_execution"]["value"] == 1
+    assert digest["generated_at"] == "2026-01-02T00:00:00Z"
+    older = {"issuedAt": "2026-01-01T00:00:00Z", "bundleVersion": "1", "bundleHash": "old"}
+    newer = {"issuedAt": "2026-02-01T00:00:00Z", "bundleVersion": "2", "bundleHash": "new"}
+    assert sync.policy_bundle_downgrade_reference([older, None, newer], None) is newer
+    assert sync.policy_bundle_downgrade_reference([None, "x"], None) is None
+    assert sync.completed_guard_event_ids({"statuses": [{"status": "accepted", "eventId": "e"}]}) == ["e"]
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_value_metrics_accepts_a_store_wider_than_the_resident_array_limit() -> None:
+    # A store with more events than one resident JSON array may hold failed every sync.
+    # Events arrive newest first; the older tail is distinguishable, so keeping the
+    # oldest window instead would count 3,399 stops.
+    newest_event = {
+        "event_name": "install_time_block",
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "payload": {"artifact_id": "a", "artifact_name": "A"},
+    }
+    older_event = {**newest_event, "event_name": "install_time_allow"}
+    events = [newest_event] * sync.VALUE_METRIC_EVENT_LIMIT + [older_event] * (4_793 - sync.VALUE_METRIC_EVENT_LIMIT)
+    metrics, digest = sync.value_metrics(events, "2026-01-02T00:00:00Z")
+    assert metrics["installs_stopped_before_execution"]["value"] == sync.VALUE_METRIC_EVENT_LIMIT
+    assert digest["generated_at"] == "2026-01-02T00:00:00Z"
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_runtime_session_payload_ignores_fields_the_runtime_never_reads() -> None:
+    # A session carrying an unused field the transport cannot carry (a set, or a
+    # list past the resident array limit) used to fail before the Cloud request.
+    session = {
+        "workspace": "/work/repo",
+        "sessionId": "session-1",
+        "operations": set(),
+        "history": list(range(5_000)),
+    }
+    payload = sync.runtime_session_payload(
+        session, device_id="device", device_name="Laptop", cwd="/gone", now="2026-01-01T00:00:00Z", version="1"
+    )
+    assert payload["sessionId"] == "session-1"
+    assert payload["workspace"] == "/work/repo"
+
+
+def test_runtime_session_sync_survives_a_removed_working_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    class CapturedCwdError(Exception):
+        pass
+
+    def removed_directory() -> str:
+        raise FileNotFoundError("cwd removed")
+
+    def capture(_session: object, **kwargs: object) -> dict[str, object]:
+        raise CapturedCwdError(kwargs["cwd"])
+
+    monkeypatch.setattr(runner.os, "getcwd", removed_directory)
+    monkeypatch.setattr(runner, "_guard_device_metadata", lambda _store: ("device", "Laptop"))
+    monkeypatch.setattr(runner._sync, "runtime_session_payload", capture)
+    with pytest.raises(CapturedCwdError, match="/work/repo"):
+        runner._cloud_runtime_session_payload(cast(Any, None), {"workspace": "/work/repo"})
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_rollout_reads_the_environment_value_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(sync.POLICY_CANONICAL_ENFORCEMENT_ENV, "canonical")
+    assert sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id=None) is True
+    monkeypatch.setenv(sync.POLICY_CANONICAL_ENFORCEMENT_ENV, "off")
+    assert sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id=None) is False
+    monkeypatch.delenv(sync.POLICY_CANONICAL_ENFORCEMENT_ENV)
+    assert sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id="w") is False
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "sync_url",
+        "pain_signal_batch",
+        "value_metrics",
+        "completed_event_ids",
+        "canonical_rollout",
+        "downgrade_reference",
+        "policy_simulation",
+        "cloud_exceptions",
+        "runtime_session_payload",
+        "cloud_http_error",
+        "stale_intel",
+    ],
+)
+def test_malformed_arguments_fail_closed(kind: str) -> None:
+    with pytest.raises(NativeRunnerAuthorityError):
+        native_runner_authority(kind, {"unexpected": 1})
+
+
+def test_native_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(kind: str, args: object, guard_home: object = None) -> dict[str, Any]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(sync, "native_runner_authority", refuse)
+    with pytest.raises(NativeRunnerAuthorityError):
+        sync.normalized_receipts_sync_url("https://hol.org/guard/receipts/sync")
+    with pytest.raises(NativeRunnerAuthorityError):
+        sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id=None)
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_simulation_covers_every_parser_matcher_family() -> None:
+    """The resident's family list must not drift from the bundle parser's."""
+
+    families = sorted(POLICY_BUNDLE_RULE_MATCHER_FAMILIES)
+    receipts = [
+        {
+            "receipt_id": f"r-{family}",
+            "artifact_id": f"guard:{family}:x",
+            "harness": "codex",
+            "policy_decision": "allow",
+        }
+        for family in families
+    ]
+    result = native_runner_authority(
+        "policy_simulation",
+        {
+            "receipts": receipts,
+            "decisions": [],
+            "bundle_version": "1",
+            "bundle_hash": "h",
+            "now": "2026-04-11T00:00:00Z",
+        },
+    )
+    assert sorted(match["matcher_family"] for match in result["matches"]) == families
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_url_derivation_is_reused_for_the_same_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "https://hol.org/guard/receipts/sync"
+    first = sync.normalized_runtime_sessions_sync_url(url)
+
+    def refuse(kind: str, args: object, guard_home: object = None) -> dict[str, Any]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(sync, "native_runner_authority", refuse)
+    assert sync.normalized_runtime_sessions_sync_url(url) == first
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_cloud_exceptions_list_a_bundle_wider_than_the_transport_allows() -> None:
+    entries = [
+        {
+            "exceptionId": f"artifact:npm/pkg-{index}",
+            "scope": "artifact",
+            "owner": "sec@example.test",
+            "expiresAt": "2099-01-01T00:00:00Z",
+        }
+        for index in range(5_000)
+    ]
+    items = sync.cloud_exceptions({"bundleHash": "sha256:abc", "cloudExceptions": entries}, device_id=None)
+    assert len(items) == 5_000
+    assert items[-1]["id"] == "artifact:npm/pkg-4999"
+
+
+def test_a_refused_cloud_exception_listing_is_a_native_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_policy_bundle import PolicyBundleNativeUnavailableError
+    from codex_plugin_scanner.guard.runtime import runner
+
+    def refuse(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(runner._sync, "cloud_exceptions", refuse)
+    with pytest.raises(PolicyBundleNativeUnavailableError):
+        runner._policy_bundle_cloud_exception_items(
+            cast(Any, None),
+            device_id="device-1",
+            policy_bundle={"cloudExceptions": []},
+            policy_bundle_ack={},
+        )

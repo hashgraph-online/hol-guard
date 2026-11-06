@@ -1,0 +1,63 @@
+header:
+  schema-version: 2.2.0
+  last-updated: '2026-08-14'
+  last-reviewed: '2026-08-14'
+  url: https://raw.githubusercontent.com/hashgraph-online/hol-guard/main/security-insights.yml
+  comment: |
+    Machine-readable security metadata for the HOL Guard repository.
+
+project:
+  name: HOL Guard
+  homepage: https://hol.org/guard
+  administrators:
+    - name: HOL Maintainers
+      affiliation: HOL
+      email: security@hol.org
+      social: https://github.com/hashgraph-online
+      primary: true
+  repositories:
+    - name: HOL Guard
+      url: https://github.com/hashgraph-online/hol-guard
+      comment: |
+        Primary repository for HOL Guard, its scanner tooling, release artifacts,
+        and maintained security integrations.
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    contact:
+      name: HOL Security
+      affiliation: HOL
+      email: security@hol.org
+      primary: true
+    policy: https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md
+    comment: |
+      Please report suspected vulnerabilities privately using the published
+      security policy rather than opening a public issue.
+  documentation:
+    detailed-guide: https://hol.org/guard
+    quickstart-guide: https://github.com/hashgraph-online/hol-guard#readme
+
+repository:
+  url: https://github.com/hashgraph-online/hol-guard
+  status: active
+  accepts-change-request: true
+  accepts-automated-change-request: false
+  core-team:
+    - name: HOL Maintainers
+      affiliation: HOL
+      email: security@hol.org
+      social: https://github.com/hashgraph-online
+      primary: true
+  license:
+    url: https://github.com/hashgraph-online/hol-guard/blob/main/LICENSE
+    expression: Apache-2.0
+  documentation:
+    contributing-guide: https://github.com/hashgraph-online/hol-guard/blob/main/CONTRIBUTING.md
+    security-policy: https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md
+  security:
+    assessments:
+      self:
+        comment: |
+          Security posture is maintained through the public SECURITY.md and
+          repository CI/release controls. This file does not claim an
+          independent third-party security assessment.

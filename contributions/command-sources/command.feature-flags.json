@@ -1,0 +1,179 @@
+{
+  "extension": {
+    "action_classes": [
+      "Feature flag destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews permanent feature-flag deletion through LaunchDarkly CLI.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.feature-flags",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Feature flag command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Feature flag destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies documented feature flag deletion operations through supported command-line tools.",
+        "example_command": "ldcli flags delete",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Feature flag deletion",
+        "permission_id": "command.feature-flags.permission.delete",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "Archive the flag and remove code references before permanent deletion."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://github.com/launchdarkly/ldcli",
+      "https://launchdarkly.com/docs/api/feature-flags/delete-feature-flag"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Feature flag destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies documented feature flag deletion operations through supported command-line tools.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "ldcli",
+                  "ldcli.cmd",
+                  "ldcli.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--analytics-opt-out",
+                  "--json"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token",
+                  "--base-uri",
+                  "--feature-flag-key",
+                  "--output",
+                  "--project-key",
+                  "-o"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "flags",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.feature-flags.permission.delete",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.feature-flags.delete",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "ldcli",
+                      "ldcli.cmd",
+                      "ldcli.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--analytics-opt-out",
+                      "--json"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token",
+                      "--base-uri",
+                      "--feature-flag-key",
+                      "--output",
+                      "--project-key",
+                      "-o"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "flags",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Archive the flag and remove code references before permanent deletion."
+        ],
+        "severity": "critical",
+        "title": "Feature flag deletion"
+      }
+    ],
+    "safer_alternatives": [
+      "Archive the flag and remove code references before permanent deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

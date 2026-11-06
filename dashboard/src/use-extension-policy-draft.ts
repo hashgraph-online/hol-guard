@@ -1,0 +1,501 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  applyExtensionMutation,
+  ExtensionControlApiError,
+  fetchEffectiveExtensionControls,
+  previewExtensionMutation,
+  type EffectiveExtensionControls,
+  type ExtensionCatalogItem,
+  type ExtensionMutationApplyResponse,
+  type ExtensionMutationPreview,
+} from "./extension-controls-api";
+import { loadCatalogReadModel } from "./extension-catalog-v2";
+import {
+  buildExtensionPolicyDraftMutation,
+  extensionPolicyDraftIsDirty,
+  isCurrentExtensionPolicyDraft,
+  localPermissionDraftState,
+  newExtensionPolicyDraftIdentity,
+  setLocalPermissionDraftState,
+  setLocalPermissionDraftStates,
+  type PermissionDraftState,
+} from "./extension-policy-draft";
+import {
+  keepExtensionPolicyRebaseConflicts,
+  rebaseExtensionPolicyDraft,
+  type ExtensionPolicyRebaseConflict,
+  type ExtensionPolicyRebaseResult,
+} from "./extension-policy-rebase";
+import {
+  authorityRecoverySentence,
+  knownProtectionChangeMessage,
+  protectionChangeErrorMessage,
+} from "./protection-center/protection-change-error";
+import {
+  extensionPolicyRepairBase,
+  isExtensionPolicyConflict,
+  sameReviewedExtensionPolicyEffect,
+} from "./extension-policy-self-repair";
+
+export type PendingPolicyRebase = {
+  result: ExtensionPolicyRebaseResult;
+  latestEffective: EffectiveExtensionControls;
+  latestExtensions: ExtensionCatalogItem[];
+};
+
+export type AppliedPolicySnapshot = {
+  revision: number;
+  previousLayers: EffectiveExtensionControls["layers"];
+  changedPermissionIds: string[];
+};
+
+export type PolicyDraftMutationCredentials = {
+  approval_password?: string;
+  approval_totp_code?: string;
+};
+
+function cloneLayers(effective: EffectiveExtensionControls) {
+  return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
+}
+
+type ExtensionPolicyDraftIdentity = { idempotencyKey: string; nonce: string };
+
+/**
+ * Extension-agnostic protection-setting draft state machine.
+ *
+ * One draft spans every permission the surface shows: the tool page lists one
+ * extension's permissions while the landing console can mix patterns from
+ * several tools. Preview, approval-proof binding, rebase, and apply behave
+ * identically in both surfaces.
+ */
+export function useExtensionPolicyDraft(props: {
+  effective: EffectiveExtensionControls;
+  onRefresh: () => Promise<void> | void;
+}) {
+  const [baseEffective, setBaseEffective] = useState(props.effective);
+  const [draftLayers, setDraftLayers] = useState(() => cloneLayers(props.effective));
+  const [identity, setIdentity] = useState(() => newExtensionPolicyDraftIdentity());
+  const [preview, setPreview] = useState<ExtensionMutationPreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
+  const [pendingRebase, setPendingRebase] = useState<PendingPolicyRebase | null>(null);
+  const [refreshRequired, setRefreshRequired] = useState(false);
+  const [lastApplied, setLastApplied] = useState<AppliedPolicySnapshot | null>(null);
+  const draftGeneration = useRef(0);
+  const { onRefresh } = props;
+  const dirty = useMemo(() => extensionPolicyDraftIsDirty(baseEffective, draftLayers), [baseEffective, draftLayers]);
+
+  // Integrity health and lockdown transitions can change the effective layers
+  // without advancing the revision or digest; both must re-seed the draft so
+  // lock notices and editing gates never go stale on a health-only change.
+  useEffect(() => {
+    draftGeneration.current += 1;
+    setBaseEffective(props.effective);
+    setDraftLayers(cloneLayers(props.effective));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setRefreshRequired(false);
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [props.effective.revision, props.effective.catalog_digest, props.effective.health, props.effective.global_lockdown]);
+
+  const changeCountFor = useCallback((permissionIds: readonly string[]) => {
+    return permissionIds.filter((permissionId) =>
+      localPermissionDraftState(baseEffective.layers, permissionId) !== localPermissionDraftState(draftLayers, permissionId),
+    ).length;
+  }, [baseEffective, draftLayers]);
+
+  const changedPermissionCount = useMemo(
+    () => changeCountFor([...new Set(
+      baseEffective.layers.concat(draftLayers).flatMap((layer) => layer.controls)
+        .map((control) => (control.target_kind === "permission" ? control.target_id : null))
+        .filter((id): id is string => Boolean(id)),
+    )]),
+    [baseEffective.layers, changeCountFor, draftLayers],
+  );
+
+  const resetDraft = useCallback(() => {
+    draftGeneration.current += 1;
+    setDraftLayers(cloneLayers(baseEffective));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective]);
+
+  const setPermissionState = useCallback((permissionId: string, state: PermissionDraftState) => {
+    draftGeneration.current += 1;
+    setDraftLayers((current) => setLocalPermissionDraftState(current, baseEffective.catalog_digest, permissionId, state));
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+    setLastApplied(null);
+  }, [baseEffective.catalog_digest]);
+
+  const setPermissionStates = useCallback((permissionIds: readonly string[], state: PermissionDraftState) => {
+    if (!permissionIds.length) return;
+    draftGeneration.current += 1;
+    setDraftLayers((current) => setLocalPermissionDraftStates(
+      current,
+      baseEffective.catalog_digest,
+      permissionIds,
+      state,
+    ));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+    setLastApplied(null);
+  }, [baseEffective.catalog_digest]);
+
+  const mutationOn = useCallback(
+    (base: EffectiveExtensionControls, draftIdentity: ExtensionPolicyDraftIdentity) =>
+      buildExtensionPolicyDraftMutation(base, base.catalog_digest, draftLayers, draftIdentity),
+    [draftLayers],
+  );
+
+  /**
+   * The revision a conflicted draft can be re-seeded on without asking.
+   *
+   * Guard refuses a mutation that names a revision it no longer holds, which is
+   * what keeps one admin from overwriting another's policy. The committed
+   * revision can move on its own, though, so the refusal does not by itself
+   * mean the policy changed. When the authority Guard now holds is the one this
+   * draft was composed against, there is nothing to rebase and nothing for the
+   * operator to decide, and the draft is re-seeded in place. Anything else
+   * keeps the draft stale and asks.
+   */
+  const repairedBase = useCallback(async (base: EffectiveExtensionControls, caught: unknown) => {
+    if (!isExtensionPolicyConflict(caught)) return null;
+    let latest: EffectiveExtensionControls;
+    try {
+      latest = await fetchEffectiveExtensionControls();
+    } catch {
+      return null;
+    }
+    return extensionPolicyRepairBase(base, latest);
+  }, []);
+
+  // Read from the live projection rather than the draft's base, so a daemon
+  // that restarted at a new path is named correctly without re-seeding edits.
+  const terminalCommands = props.effective.terminal_commands;
+
+  /**
+   * Only apply can have committed before it failed, so only apply may say the
+   * outcome is unknown. Preview and rebase never write: they get a sentence for
+   * a code with a known meaning and their own wording otherwise, and the
+   * daemon's protocol code is never printed as the message.
+   */
+  const handleApiError = useCallback((caught: unknown, fallback: string, phase: "preview" | "apply" | "rebase") => {
+    if (isExtensionPolicyConflict(caught)) {
+      setStale(true);
+      setError("The authoritative extension policy changed while this draft was open. Rebase the draft before applying; Guard will not silently overwrite security policy.");
+      return;
+    }
+    const command = terminalCommands?.recover_authority;
+    const shell = terminalCommands?.shell;
+    if (phase === "apply") {
+      setError(caught instanceof Error ? protectionChangeErrorMessage(caught, command, shell) : fallback);
+      return;
+    }
+    const known = phase === "preview"
+      ? knownProtectionChangeMessage(caught, command, shell)
+      : authorityRecoverySentence(caught, command, shell);
+    if (known) setError(phase === "rebase" ? `${fallback} ${known}` : known);
+    else if (caught instanceof ExtensionControlApiError && caught.code) setError(fallback);
+    else setError(caught instanceof Error && caught.message ? caught.message : fallback);
+  }, [terminalCommands]);
+
+  const runPreview = useCallback(async () => {
+    if (!dirty) return;
+    const generation = draftGeneration.current;
+    setPreviewBusy(true);
+    setError(null);
+    setStale(false);
+    try {
+      let base = baseEffective;
+      let next: ExtensionMutationPreview;
+      try {
+        next = await previewExtensionMutation(mutationOn(base, identity));
+      } catch (caught) {
+        const repaired = await repairedBase(base, caught);
+        if (!repaired) throw caught;
+        base = repaired;
+        next = await previewExtensionMutation(mutationOn(base, identity));
+      }
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) return;
+      if (base !== baseEffective) setBaseEffective(base);
+      setPreview(next);
+      setReviewOpen(true);
+    } catch (caught) {
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not preview this draft.", "preview");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }, [baseEffective, dirty, handleApiError, identity, mutationOn, repairedBase]);
+
+  /**
+   * Issue the approval proof for this exact draft and commit it. The proof is
+   * bound to the mutation it was previewed with, so the preview, the digest
+   * check and the apply all name the same base revision.
+   */
+  const commitDraft = useCallback(async (
+    base: EffectiveExtensionControls,
+    draftIdentity: ExtensionPolicyDraftIdentity,
+    credentials: PolicyDraftMutationCredentials,
+    reviewed: ExtensionMutationPreview,
+  ): Promise<ExtensionMutationApplyResponse> => {
+    const payload = mutationOn(base, draftIdentity);
+    const proofPreview = await previewExtensionMutation({
+      ...payload,
+      ...credentials,
+      session_nonce: crypto.randomUUID().replaceAll("-", ""),
+    });
+    if (!proofPreview.proof_id) throw new Error("Guard did not issue an approval proof for this exact draft.");
+    if (!sameReviewedExtensionPolicyEffect(proofPreview, reviewed)) throw new Error("The policy draft changed after preview. Preview it again before applying.");
+    return applyExtensionMutation({ ...payload, proof_id: proofPreview.proof_id });
+  }, [mutationOn]);
+
+  const apply = useCallback(async (credentials: PolicyDraftMutationCredentials) => {
+    if (!preview || !dirty || stale) return;
+    setApplyBusy(true);
+    setError(null);
+    try {
+      let base = baseEffective;
+      const appliedLayersBefore = cloneLayers(base);
+      let applied: ExtensionMutationApplyResponse;
+      try {
+        applied = await commitDraft(base, identity, credentials, preview);
+      } catch (caught) {
+        const repaired = await repairedBase(base, caught);
+        if (!repaired) throw caught;
+        base = repaired;
+        // The retry names a revision the refused attempt never reached, so it
+        // carries its own idempotency key rather than replaying that one.
+        const retryIdentity = newExtensionPolicyDraftIdentity();
+        setIdentity(retryIdentity);
+        applied = await commitDraft(base, retryIdentity, credentials, preview);
+      }
+      setApprovalOpen(false);
+      setPreview(null);
+      setReviewOpen(false);
+      setError(null);
+      setStale(false);
+      if (applied.revision <= base.revision) throw new Error("Guard did not advance the committed extension-control revision.");
+      const changedPermissionIds = base.layers
+        .flatMap((layer) => layer.controls)
+        .concat(draftLayers.flatMap((layer) => layer.controls))
+        .map((control) => (control.target_kind === "permission" ? control.target_id : null))
+        .filter((id): id is string => Boolean(id));
+      const previouslyRequested = new Set(
+        draftLayers.flatMap((layer) => layer.controls)
+          .map((control) => (control.target_kind === "permission" ? control.target_id : null))
+          .filter((id): id is string => Boolean(id)),
+      );
+      setLastApplied({
+        revision: applied.revision,
+        previousLayers: appliedLayersBefore,
+        changedPermissionIds: [...new Set(changedPermissionIds)].filter((id) => previouslyRequested.has(id) || localPermissionDraftState(base.layers, id) !== localPermissionDraftState(draftLayers, id)),
+      });
+      draftGeneration.current += 1;
+      setBaseEffective(base);
+      setDraftLayers(cloneLayers(base));
+      setIdentity(newExtensionPolicyDraftIdentity());
+      setRefreshRequired(true);
+      try {
+        await onRefresh();
+      } catch {
+        setError("The policy was applied, but Guard could not refresh the latest state. Refresh this page to confirm the committed policy.");
+      }
+    } catch (caught) {
+      handleApiError(caught, "Guard could not apply this draft.", "apply");
+    } finally {
+      setApplyBusy(false);
+    }
+  }, [baseEffective, commitDraft, dirty, draftLayers, handleApiError, identity, onRefresh, preview, repairedBase, stale]);
+
+  const rebaseDraft = useCallback(async (
+    touched: readonly ExtensionCatalogItem[] | (() => Promise<readonly ExtensionCatalogItem[]>),
+  ) => {
+    const generation = draftGeneration.current;
+    setPreviewBusy(true);
+    setError(null);
+    try {
+      // Read the touched extensions inside the try: a detail request that fails
+      // must leave the draft exactly as the operator left it, not rebase the
+      // extensions that did resolve and drop the edits for the one that did not.
+      const oldExtensions = typeof touched === "function" ? await touched() : touched;
+      const [latestCatalog, latestEffective] = await Promise.all([loadCatalogReadModel(), fetchEffectiveExtensionControls()]);
+      // Match on index rows, then read details only for the affected extensions.
+      const matches = oldExtensions
+        .map((oldExtension) => {
+          const exact = latestCatalog.extensions.find((item) => item.extension_id === oldExtension.extension_id);
+          if (exact) return { oldExtension, latestId: exact.extension_id };
+          const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(oldExtension.extension_id));
+          return aliasMatches.length === 1 ? { oldExtension, latestId: aliasMatches[0]!.extension_id } : null;
+        })
+        .filter((match): match is { oldExtension: ExtensionCatalogItem; latestId: string } => Boolean(match));
+      const pairs = await Promise.all(matches.map(async ({ oldExtension, latestId }) => (
+        { oldExtension, latestExtension: await latestCatalog.detail(latestId) }
+      )));
+      if (!pairs.length) {
+        setError("These extensions no longer exist in the authoritative catalog. Discard the draft and refresh before continuing.");
+        return;
+      }
+      if (!isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) {
+        setError("The draft changed while Guard was loading current policy. Rebase again to preserve the latest edits.");
+        return;
+      }
+      const chained = pairs.reduce<ExtensionPolicyRebaseResult | null>((result, { oldExtension, latestExtension }) => {
+        const next = rebaseExtensionPolicyDraft(
+          baseEffective,
+          latestEffective,
+          oldExtension,
+          latestExtension,
+          draftLayers,
+          result?.draft_layers,
+        );
+        return {
+          draft_layers: next.draft_layers,
+          conflicts: [...(result?.conflicts ?? []), ...next.conflicts],
+          remapped_permission_ids: { ...(result?.remapped_permission_ids ?? {}), ...next.remapped_permission_ids },
+        };
+      }, null);
+      if (!chained) {
+        setError("Guard could not rebase this draft against the current catalog.");
+        return;
+      }
+      const result: ExtensionPolicyRebaseResult = chained;
+      setBaseEffective(latestEffective);
+      setIdentity(newExtensionPolicyDraftIdentity());
+      setPreview(null);
+      setReviewOpen(false);
+      if (result.conflicts.length) {
+        setPendingRebase({ result, latestEffective, latestExtensions: pairs.map((pair) => pair.latestExtension) });
+        setDraftLayers(result.draft_layers);
+        setStale(true);
+        setError("The latest policy overlaps this draft. Choose whether to keep your overlapping changes or use current authoritative values. Removed permissions cannot be restored.");
+      } else {
+        setDraftLayers(result.draft_layers);
+        setPendingRebase(null);
+        setStale(false);
+        setError(null);
+      }
+    } catch (caught) {
+      if (isCurrentExtensionPolicyDraft(generation, draftGeneration.current)) handleApiError(caught, "Guard could not rebase this draft.", "rebase");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }, [baseEffective, draftLayers, handleApiError]);
+
+  const keepConflicts = useCallback(() => {
+    if (!pendingRebase) return;
+    setDraftLayers(keepExtensionPolicyRebaseConflicts(pendingRebase.result, pendingRebase.latestEffective));
+    setPendingRebase(null);
+    setStale(false);
+    setError(null);
+    setIdentity(newExtensionPolicyDraftIdentity());
+  }, [pendingRebase]);
+
+  const useCurrent = useCallback(() => {
+    if (!pendingRebase) return;
+    setDraftLayers(cloneLayers(pendingRebase.latestEffective));
+    setPendingRebase(null);
+    setStale(false);
+    setError(null);
+    setPreview(null);
+    setIdentity(newExtensionPolicyDraftIdentity());
+  }, [pendingRebase]);
+
+  const applyProfile = useCallback((permissions: readonly { permission_id: string; configurable: boolean }[], profile: "recommended" | "stricter" | "custom") => {
+    if (profile === "custom") return;
+    draftGeneration.current += 1;
+    let next = cloneLayers(baseEffective);
+    for (const permission of permissions) {
+      if (!permission.configurable) continue;
+      const state: PermissionDraftState = profile === "recommended" ? "inherit" : "block";
+      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission.permission_id, state);
+    }
+    setDraftLayers(next);
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+    setLastApplied(null);
+  }, [baseEffective]);
+
+  const useHistoricalDraft = useCallback((historicalLayers: EffectiveExtensionControls["layers"]) => {
+    draftGeneration.current += 1;
+    const historicalLocal = historicalLayers.find((layer) => layer.kind === "local-admin");
+    const next = baseEffective.layers.flatMap((layer) => (layer.kind === "local-admin" ? (historicalLocal ? [historicalLocal] : []) : [layer]));
+    if (historicalLocal && !baseEffective.layers.some((layer) => layer.kind === "local-admin")) next.push(historicalLocal);
+    setDraftLayers(next);
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+  }, [baseEffective.layers]);
+
+  const undoLastApplied = useCallback(() => {
+    if (!lastApplied) return false;
+    draftGeneration.current += 1;
+    setDraftLayers(cloneLayers({ ...baseEffective, layers: lastApplied.previousLayers }));
+    setIdentity(newExtensionPolicyDraftIdentity());
+    setPreview(null);
+    setReviewOpen(false);
+    setError(null);
+    setStale(false);
+    setPendingRebase(null);
+    setLastApplied(null);
+    return true;
+  }, [baseEffective, lastApplied]);
+
+  return {
+    baseEffective,
+    draftLayers,
+    dirty,
+    preview,
+    previewBusy,
+    applyBusy,
+    reviewOpen,
+    approvalOpen,
+    error,
+    stale,
+    pendingRebase,
+    refreshRequired,
+    lastApplied,
+    undoLastApplied,
+    changedPermissionCount,
+    setReviewOpen,
+    setApprovalOpen,
+    permissionState: useCallback((permissionId: string) => localPermissionDraftState(draftLayers, permissionId), [draftLayers]),
+    changeCountFor,
+    setPermissionState,
+    setPermissionStates,
+    resetDraft,
+    runPreview,
+    apply,
+    rebaseDraft,
+    keepConflicts,
+    useCurrent,
+    applyProfile,
+    useHistoricalDraft,
+  };
+}

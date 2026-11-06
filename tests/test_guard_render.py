@@ -1,0 +1,1163 @@
+from __future__ import annotations
+
+import json
+import sys
+import types
+from pathlib import Path
+
+from rich.console import Console
+
+from codex_plugin_scanner.guard.cli import render
+from codex_plugin_scanner.guard.cli.render import _redact_sensitive_assignments, emit_guard_payload
+
+
+def _normalize_render_output(output: str) -> str:
+    return " ".join(output.split())
+
+
+def test_guard_connect_render_clarifies_paid_plan_pending_state(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "first_sync_pending",
+            "reason": "Guard Cloud sync requires a paid Guard plan",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Browser paired" in output
+    assert "Connection" in output
+    assert "Guard is running locally" in output
+    assert "Upgrade to sync this device to Guard Cloud" in output
+
+
+def test_guard_connect_render_clarifies_unauthorized_pending_state(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "first_sync_pending",
+            "reason": "HTTP Error 401: Unauthorized",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Guard is running locally" in output
+    assert "Sign in to finish Guard Cloud setup" in output
+
+
+def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_renderer(_console, payload: dict[str, object]) -> None:
+        captured["payload"] = payload
+
+    monkeypatch.setitem(render._RENDERERS, "status", fake_renderer)
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+
+    emit_guard_payload(
+        "status",
+        {
+            "api_key": "secret value",
+            "launch_summary": 'api_key="secret value" token=supersecret',
+        },
+        False,
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["api_key"] == "*****"
+    assert payload["launch_summary"] == "api_key=***** token=*****"
+
+
+def test_linear_sensitive_assignment_redaction_handles_quoted_unquoted_and_invalid_values() -> None:
+    rendered = _redact_sensitive_assignments(
+        "token=plain api_key='quoted value' password=\"double value\" ordinary=value secret='unterminated value"
+    )
+    assert "token=*****" in rendered
+    assert "api_key=*****" in rendered
+    assert "password=*****" in rendered
+    assert "ordinary=value" in rendered
+    assert "secret=***** value" in rendered
+    assert _redact_sensitive_assignments("ordinary=value token=") == "ordinary=value token="
+
+
+def test_guard_render_fallback_redacts_local_paths_when_redaction_module_is_stale() -> None:
+    home_dir = Path("/Users/example")
+
+    assert render.redact_local_path("/Users/example/project/file.txt", home_dir=home_dir) == "~/project/file.txt"
+    assert render.redact_local_path("/Users/other/project/file.txt", home_dir=home_dir) == "~/project/file.txt"
+    assert render.redact_local_path(r"C:\Users\example\project\file.txt") == r"~\project\file.txt"
+
+
+def test_guard_render_import_tolerates_stale_redaction_module_without_local_path_helper(monkeypatch) -> None:
+    module_name = "codex_plugin_scanner.guard.cli.render"
+    stale_redaction = types.ModuleType("codex_plugin_scanner.guard.redaction")
+
+    def fake_redact_text(value: str) -> object:
+        return types.SimpleNamespace(text=value)
+
+    stale_redaction.redact_text = fake_redact_text  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "codex_plugin_scanner.guard.redaction", stale_redaction)
+    monkeypatch.delitem(sys.modules, module_name)
+
+    try:
+        imported = __import__(module_name, fromlist=["redact_local_path"])
+    finally:
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    assert imported.redact_local_path("/Users/example/project/file.txt", home_dir=Path("/Users/example")) == (
+        "~/project/file.txt"
+    )
+
+
+def test_guard_json_render_redacts_after_command_specific_payload_shape(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "connect_url": "https://hol.org/guard/connect?token=super-secret-token",
+            "sync_url": "https://hol.org/api/guard/receipts/sync?api_key=super-secret-key",
+            "api_key": "super-secret-key",
+        },
+        True,
+    )
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "super-secret" not in output
+    assert rendered["connect_url"] == "https://hol.org/guard/connect?token=*****"
+    assert rendered["sync_url"] == "https://hol.org/api/guard/receipts/sync?api_key=*****"
+    assert rendered["api_key"] == "*****"
+
+
+def test_guard_json_render_redacts_private_key_without_breaking_json(capsys) -> None:
+    private_key = "-----BEGIN PRIVATE KEY-----\nsuper-secret-material\n-----END PRIVATE KEY-----"
+
+    emit_guard_payload("status", {"details": private_key}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "super-secret-material" not in output
+    assert rendered["details"] == "*****"
+
+
+def test_guard_json_render_redacts_token_lines_without_breaking_json(capsys) -> None:
+    emit_guard_payload("status", {"details": "_authToken:abcdefghi"}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "abcdefghi" not in output
+    assert rendered["details"] == "npm token redacted"
+
+
+def test_guard_json_render_redacts_connection_string_without_breaking_json(capsys) -> None:
+    emit_guard_payload("status", {"details": "postgres://user:password@localhost/db"}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "password" not in output
+    assert rendered["details"] == "*****"
+
+
+def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:
+    def mutating_renderer(payload: dict[str, object]) -> dict[str, object]:
+        payload["api_key"] = "mutated-secret"
+        return payload
+
+    source_payload: dict[str, object] = {"api_key": "original-secret"}
+    monkeypatch.setitem(render._JSON_RENDERERS, "mutating", mutating_renderer)
+
+    emit_guard_payload("mutating", source_payload, True)
+
+    output = capsys.readouterr().out
+    assert source_payload["api_key"] == "original-secret"
+    assert "mutated-secret" not in output
+
+
+def test_guard_protect_render_without_rich_uses_plain_text(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", False)
+
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "minimist@1.2.8"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "review",
+                "reason": "Guard cloud evaluation was not authorized, so this package request needs review.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "ask",
+                "user_copy": {
+                    "next_step": "hol-guard connect repair",
+                    "dashboard_url": "http://127.0.0.1:5474/requests/req-package-1",
+                    "harness_message": (
+                        "Open HOL Guard to approve or keep this blocked: "
+                        "http://127.0.0.1:5474/requests/req-package-1. "
+                        "Then run `hol-guard connect repair` and retry the same install."
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert '"verdict"' not in output
+    assert "HOL Guard paused this install for review before it ran." in output
+    assert "npm install minimist@1.2.8" in output
+    assert "Guard cloud evaluation was not authorized" in output
+    assert "http://127.0.0.1:5474/requests/req-package-1" in output
+    assert "hol-guard connect repair" in output
+
+
+def test_guard_protect_render_uses_supply_chain_user_copy(capsys) -> None:
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "minimist@1.2.5"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "block",
+                "reason": "Known exploited package.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "block",
+                "user_copy": {
+                    "title": "HOL Guard blocked `minimist@1.2.5` before install.",
+                    "summary": "Known exploited package.",
+                    "next_step": "Install `minimist@1.2.9` instead.",
+                    "dashboard_url": None,
+                    "harness_message": (
+                        "HOL Guard blocked `minimist@1.2.5` before install.\n"
+                        "Reason: Known exploited package.\n"
+                        "Fix: Install `minimist@1.2.9` instead."
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert "HOL Guard blocked" in output
+    assert "Install `minimist@1.2.9` instead." in output
+    assert "Review this request in HOL Guard, then retry." not in output
+
+
+def test_guard_protect_render_uses_supply_chain_review_copy(capsys) -> None:
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "left-pad@1.3.0"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "require-reapproval",
+                "reason": "Package install needs review.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "review",
+                "user_copy": {
+                    "harness_message": (
+                        "HOL Guard paused `left-pad@1.3.0` before install.\n"
+                        "Reason: Package install needs review.\n"
+                        "Choose: approve once, block, or inspect in Guard."
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert "HOL Guard paused" in output
+    assert "approve once, block, or inspect in Guard" in output
+
+
+def test_guard_protect_render_uses_supply_chain_warning_copy(capsys) -> None:
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "left-pad@1.3.0"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "warn",
+                "reason": "Package looks risky but is not blocked.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "warn",
+                "user_copy": {
+                    "harness_message": (
+                        "HOL Guard warned on `left-pad@1.3.0` before install.\n"
+                        "Reason: Package looks risky but is not blocked.\n"
+                        "Continue only if you trust the source."
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert "HOL Guard warned" in output
+    assert "Continue only if you trust the source." in output
+
+
+def test_guard_settings_json_omits_billing_flag(capsys) -> None:
+    emit_guard_payload(
+        "settings",
+        {
+            "generated_at": "2026-04-17T00:00:00Z",
+            "guard_home": "/tmp/guard-home",
+            "config_path": "/tmp/guard-home/config.toml",
+            "settings": {
+                "mode": "prompt",
+                "security_level": "balanced",
+                "default_action": "warn",
+                "unknown_publisher_action": "review",
+                "changed_hash_action": "require-reapproval",
+                "new_network_domain_action": "warn",
+                "subprocess_action": "warn",
+                "risk_actions": {"destructive_shell": "require-reapproval"},
+                "risk_action_overrides": {},
+                "harness_risk_actions": {},
+                "approval_wait_timeout_seconds": 120,
+                "approval_surface_policy": "auto-open-once",
+                "telemetry": False,
+                "sync": True,
+                "billing": True,
+            },
+        },
+        True,
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["settings"]["sync"] is True
+    assert "billing" not in output["settings"]
+
+
+def test_guard_hook_render_shows_local_secrets_without_internal_jargon(capsys) -> None:
+    raw_secret = "sk-" + "A" * 32
+
+    emit_guard_payload(
+        "hook",
+        {
+            "recorded": True,
+            "artifact_name": "Bash local secret output",
+            "policy_action": "require-reapproval",
+            "risk_summary": f"Local secrets from local .env file. {raw_secret}",
+            "path_summary": ".env",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "local secrets" in output.lower()
+    assert ".env file" in output
+    assert raw_secret not in output
+    assert "credential-looking output" not in output.lower()
+
+
+def test_guard_connect_render_defaults_sync_not_available_to_upgrade_guidance(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "sync_not_available",
+            "reason": "Sync is not available right now.",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Guard is running locally" in output
+    assert "Upgrade to sync this device to Guard Cloud" in output
+    assert "First Guard Cloud proof is on the way" not in output
+
+
+def test_guard_connect_render_tolerates_non_numeric_sync_counts(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "first_sync_succeeded",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "sync": {
+                "receipts_stored": "pending",
+                "inventory_tracked": "unknown",
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Receipts stored" in output
+    assert "Inventory tracked" in output
+    assert "0" in output
+
+
+def test_guard_connect_render_tolerates_non_finite_sync_counts(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "first_sync_succeeded",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "sync": {
+                "receipts_stored": float("nan"),
+                "inventory_tracked": float("inf"),
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Receipts stored" in output
+    assert "Inventory tracked" in output
+    assert "0" in output
+
+
+def test_guard_connect_render_clarifies_browser_approval_wait(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": False,
+            "browser_opened": True,
+            "status": "waiting",
+            "milestone": "waiting_for_browser",
+            "completed_at": None,
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Browser paired" in output
+    assert "Browser approval pending" in output
+    assert "Waiting for browser approval" in output
+
+
+def test_supply_chain_posture_panel_shows_unknown_cloud_advisories_consistently() -> None:
+    panel = render._build_supply_chain_posture_panel(
+        {
+            "status": "synced",
+            "policy": {
+                "security_level": "balanced",
+                "cloud_advisory_action": None,
+            },
+        }
+    )
+    console = Console(record=True, width=120)
+
+    console.print(panel)
+
+    output = _normalize_render_output(console.export_text())
+    assert "Security" in output
+    assert "balanced" in output
+    assert "Cloud advisories" in output
+    assert "unknown" in output
+
+
+def test_supply_chain_posture_panel_snapshot_shows_health_state_and_next_refresh() -> None:
+    panel = render._build_supply_chain_posture_panel(
+        {
+            "status": "synced",
+            "health_status": "stale",
+            "detail": "Signed supply-chain bundle is ready for local install protection.",
+            "bundle": {
+                "bundle_version": "1747612800000-deadbeef",
+                "next_refresh_at": "2026-05-19T12:15:00+00:00",
+                "tier": "premium",
+                "workspace_id": "workspace-alpha",
+            },
+            "policy": {
+                "security_level": "balanced",
+                "cloud_advisory_action": "warn",
+            },
+        }
+    )
+    console = Console(record=True, width=120)
+
+    console.print(panel)
+
+    output = _normalize_render_output(console.export_text())
+    assert "Supply-chain firewall" in output
+    assert "Status" in output
+    assert "Protection" in output
+    assert "stale" in output
+    assert "Next refresh" in output
+    assert "2026-05-19T12:15:00+00:00" in output
+
+
+def test_guard_status_render_rewrites_internal_next_action_labels(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "managed_harnesses": 1,
+            "receipt_count": 3,
+            "pending_approvals": 1,
+            "sync_configured": False,
+            "cloud_state": "local_only",
+            "cloud_state_label": "Local only",
+            "cloud_state_detail": "Guard is protecting this machine locally.",
+            "dashboard_url": "https://hol.org/guard",
+            "connect_url": "https://hol.org/guard/connect",
+            "advisory_count": 0,
+            "harnesses": [
+                {
+                    "harness": "codex",
+                    "managed": False,
+                    "artifact_count": 2,
+                    "review_count": 0,
+                    "next_action": "install",
+                },
+                {
+                    "harness": "claude-code",
+                    "managed": True,
+                    "artifact_count": 4,
+                    "review_count": 2,
+                    "next_action": "review",
+                },
+                {
+                    "harness": "copilot",
+                    "managed": True,
+                    "artifact_count": 1,
+                    "review_count": 0,
+                    "next_action": "run",
+                },
+                {
+                    "harness": "cursor",
+                    "managed": False,
+                    "artifact_count": 0,
+                    "review_count": 0,
+                    "next_action": "install-harness",
+                },
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Recommended action" in output
+    assert "Install Guard" in output
+    assert "Review 2 changes" in output
+    assert "Run through Guard" in output
+    assert "Install harness first" in output
+
+
+def test_guard_bootstrap_render_rewrites_skip_reason_labels(capsys) -> None:
+    emit_guard_payload(
+        "bootstrap",
+        {
+            "recommended_harness": "codex",
+            "approval_center_url": "http://127.0.0.1:4781",
+            "approval_center_reachable": True,
+            "bootstrap_install": {
+                "installed": False,
+                "harness": "codex",
+                "reason": "skipped_by_flag",
+            },
+            "shell_alias": {
+                "snippet": "alias guardp='hol-guard protect'",
+            },
+            "next_steps": [],
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Install skipped for now" in output
+    assert "skipped_by_flag" not in output
+
+
+def test_guard_bootstrap_render_rewrites_missing_harness_reason(capsys) -> None:
+    emit_guard_payload(
+        "bootstrap",
+        {
+            "recommended_harness": None,
+            "approval_center_url": "http://127.0.0.1:4781",
+            "approval_center_reachable": True,
+            "bootstrap_install": {
+                "installed": False,
+                "reason": "no_harness_detected",
+            },
+            "next_steps": [],
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "No supported harness detected yet" in output
+    assert "no_harness_detected" not in output
+
+
+def test_guard_install_render_surfaces_proxy_details_and_skipped_servers(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": True,
+                "workspace": "/repo",
+                "manifest": {
+                    "mode": "codex-mcp-proxy",
+                    "config_path": "/repo/.codex/config.toml",
+                    "managed_servers": ["global_tools", "workspace_skill"],
+                    "skipped_servers": ["existing_global"],
+                    "notes": ["Guard rewrote the workspace config with proxy entries."],
+                },
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Protection" in output
+    assert "Installed" in output
+    assert "Mode" in output
+    assert "Codex MCP proxy" in output
+    assert "Managed servers" in output
+    assert "2" in output
+    assert "Skipped servers" in output
+    assert "existing_global" in output
+
+
+def test_guard_sync_render_surfaces_policy_and_alert_details(capsys) -> None:
+    emit_guard_payload(
+        "sync",
+        {
+            "synced_at": "2026-04-20T19:00:00Z",
+            "receipts": 3,
+            "inventory_tracked": 4,
+            "receipts_stored": 2,
+            "advisories_stored": 1,
+            "exceptions_stored": 2,
+            "remote_policies_stored": 5,
+            "pain_signals_uploaded": 1,
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Remote policies" in output
+    assert "Exceptions stored" in output
+    assert "Pain signals uploaded" in output
+    assert "5" in output
+    assert "2" in output
+    assert "1" in output
+
+
+def test_guard_uninstall_render_adds_removal_note_without_manifest(capsys) -> None:
+    emit_guard_payload(
+        "uninstall",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": False,
+                "workspace": "/repo",
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Removed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." in output
+
+
+def test_guard_uninstall_render_adds_removal_note_without_manifest_notes(capsys) -> None:
+    emit_guard_payload(
+        "uninstall",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": False,
+                "workspace": "/repo",
+                "manifest": {
+                    "mode": "codex-mcp-proxy",
+                },
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Removed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." in output
+
+
+def test_guard_install_render_skips_notes_when_manifest_is_missing_and_active(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": True,
+                "workspace": "/repo",
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Installed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." not in output
+    assert "Notes" not in output
+
+
+def test_guard_batch_install_render_surfaces_auto_detected_summary(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "auto_detected": True,
+            "managed_installs": [
+                {
+                    "harness": "codex",
+                    "active": True,
+                    "workspace": "/repo",
+                    "manifest": {
+                        "mode": "codex-mcp-proxy",
+                        "config_path": "/repo/.codex/config.toml",
+                        "managed_servers": ["global_tools", "workspace_skill"],
+                    },
+                },
+                {
+                    "harness": "claude-code",
+                    "active": False,
+                    "workspace": "/repo",
+                    "manifest": {
+                        "config_path": "/repo/.claude/settings.json",
+                    },
+                },
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Auto-detected" in output
+    assert "Protection" in output
+    assert "Mode" in output
+    assert "Installed" in output
+    assert "Removed" in output
+    assert "Codex" in output
+    assert "MCP" in output
+    assert "proxy" in output
+    assert "Servers" in output
+
+
+def test_guard_batch_install_render_shortens_home_relative_config_paths(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_installs": [
+                {
+                    "harness": "codex",
+                    "active": True,
+                    "workspace": "/repo",
+                    "manifest": {
+                        "mode": "codex-mcp-proxy",
+                        "config_path": str(Path.home() / ".codex" / "config.toml"),
+                        "managed_servers": ["global_tools"],
+                    },
+                }
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out).replace(" ", "")
+    assert "~/.codex/config.toml" in output
+
+
+def test_guard_batch_install_render_collects_per_harness_notes(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_installs": [
+                {
+                    "harness": "codex",
+                    "active": True,
+                    "workspace": "/repo",
+                    "manifest": {
+                        "config_path": "/repo/.codex/config.toml",
+                        "skipped_servers": ["existing_global"],
+                    },
+                },
+                {
+                    "harness": "claude-code",
+                    "active": False,
+                    "workspace": "/repo",
+                },
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "Notes" in output
+    assert "codex: Skipped existing server entries: existing_global" in output
+    assert "claude-code: Guard removed the managed wrapper configuration" in output
+
+
+def test_emit_guard_payload_uses_adaptive_console_width(monkeypatch) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    class FakeConsole:
+        def __init__(self, **kwargs: object) -> None:
+            captured_kwargs.update(kwargs)
+
+    def _fake_renderer(console: object, payload: dict[str, object]) -> None:
+        return None
+
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    monkeypatch.setattr(render, "Console", FakeConsole)
+    monkeypatch.setitem(render._RENDERERS, "status", _fake_renderer)
+
+    emit_guard_payload("status", {"harnesses": []}, False)
+
+    assert captured_kwargs["file"] is not None
+    assert captured_kwargs["soft_wrap"] is True
+    assert "width" not in captured_kwargs
+
+
+def test_emit_guard_payload_redacts_sensitive_json_fields(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "token": "secret-token",
+            "authorization": "Bearer super-secret",
+            "nested": {
+                "api_key": "abc123",
+                "message": "Authorization: Bearer top-secret",
+            },
+        },
+        True,
+    )
+
+    output = capsys.readouterr().out
+    assert "secret-token" not in output
+    assert "super-secret" not in output
+    assert "top-secret" not in output
+    assert '"token": "*****"' in output
+    assert '"api_key": "*****"' in output
+
+
+def test_emit_guard_payload_preserves_policy_literals_for_risk_action_keys(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "settings": {
+                "harness_risk_actions": {
+                    "codex": {
+                        "local_secret_read": "allow",
+                    }
+                }
+            }
+        },
+        True,
+    )
+
+    output = capsys.readouterr().out
+    assert '"local_secret_read": "allow"' in output
+
+
+def test_guard_render_redacts_non_dict_oauth_storage_health_values(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_renderer(_console, payload: dict[str, object]) -> None:
+        captured["payload"] = payload
+
+    monkeypatch.setitem(render._RENDERERS, "status", fake_renderer)
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+
+    emit_guard_payload(
+        "status",
+        {
+            "oauth_storage_health": "Authorization: Bearer super-secret /Users/example/private",
+        },
+        False,
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["oauth_storage_health"] == "Authorization: ***** ~/private"
+
+
+def test_guard_render_preserves_authority_diagnostics_while_redacting_values(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_renderer(_console, payload: dict[str, object]) -> None:
+        captured["payload"] = payload
+
+    monkeypatch.setitem(render._RENDERERS, "run", fake_renderer)
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+
+    emit_guard_payload(
+        "run",
+        {
+            "authority_error": "authoritative_decision_inconsistent",
+            "authority_error_message": "Authorization: Bearer super-secret /Users/example/private",
+        },
+        False,
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["authority_error"] == "authoritative_decision_inconsistent"
+    assert payload["authority_error_message"] == "Authorization: ***** ~/private"
+
+
+def test_emit_guard_payload_renders_supply_chain_risks_table(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    emit_guard_payload(
+        "install",
+        {
+            "supply_chain_risks": [
+                {
+                    "signal_id": "supply-chain.curl-pipe-exec",
+                    "severity": "critical",
+                    "confidence": "strong",
+                    "plain_reason": "Shell executes a remote script via curl pipe.",
+                }
+            ]
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Supply chain risks" in output
+    assert "1 signal(s)" in output
+
+
+def test_emit_guard_payload_renders_safe_decode_risks_table(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    emit_guard_payload(
+        "install",
+        {
+            "safe_decode_risks": [
+                {
+                    "signal_id": "encoded.code-execution",
+                    "severity": "high",
+                    "confidence": "strong",
+                    "plain_reason": "Decoded base64 layer contains eval() call.",
+                    "technical_detail": "Layers: ['base64']; eval=1 exec=0 marshal=0",
+                }
+            ]
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Encoded payload risks" in output
+    assert "1 signal(s)" in output
+
+
+def test_emit_guard_payload_renders_sandbox_analysis_table(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    emit_guard_payload(
+        "install",
+        {
+            "sandbox_analysis": [
+                {
+                    "signals_detected": ["network.outbound"],
+                    "writes": ["/tmp/exfil.txt"],
+                    "network_attempts": ["curl https://evil.example/"],
+                    "process_attempts": [],
+                    "timed_out": False,
+                    "exit_code": 0,
+                    "duration_ms": 42.0,
+                    "failure_safe": False,
+                }
+            ]
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Sandbox analysis" in output
+    assert "1 result(s)" in output
+
+
+def test_approvals_open_render_shows_url(capsys) -> None:
+    emit_guard_payload(
+        "approvals",
+        {"request_id": "req-render-01", "approval_url": "http://127.0.0.1:5474/approvals/req-render-01"},
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "http://127.0.0.1:5474/approvals/req-render-01" in output
+
+
+def test_approvals_retry_hint_render_shows_title_and_body(capsys) -> None:
+    emit_guard_payload(
+        "approvals",
+        {"title": "Approved. Retry in chat.", "body": "Return to Codex and retry"},
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Approved. Retry in chat." in output
+    assert "Return to Codex and retry" in output
+
+
+def test_approvals_render_error_shows_panel(capsys) -> None:
+    emit_guard_payload(
+        "approvals",
+        {"error": "not_found", "request_id": "req-missing"},
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "not_found" in output
+
+
+def test_sync_render_shows_ecosystem_support_table(capsys) -> None:
+    emit_guard_payload(
+        "sync",
+        {
+            "status": "synced",
+            "synced_at": "2026-05-19T00:00:00Z",
+            "ecosystem_support": [
+                {"ecosystem": "npm", "display_name": "npm", "support_level": "protected", "support_label": "Protected"},
+                {"ecosystem": "cargo", "display_name": "Cargo", "support_level": "beta", "support_label": "Beta"},
+                {
+                    "ecosystem": "system",
+                    "display_name": "System packages",
+                    "support_level": "monitor-only",
+                    "support_label": "Monitor-only",
+                },
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Ecosystem support" in output
+    assert "Protected" in output
+    assert "Beta" in output
+    assert "Monitor-only" in output
+
+
+def test_status_panel_says_protection_is_not_in_effect_when_no_app_is_registered(capsys) -> None:
+    # The installed failure this guards against: every hook array in the
+    # harness settings file is empty, yet the panel still read "Protected".
+    emit_guard_payload(
+        "status",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "managed_harnesses": 1,
+            "receipt_count": 0,
+            "pending_approvals": 0,
+            "harnesses": [
+                {"harness": "claude-code", "managed": True, "artifact_count": 0},
+                {"harness": "codex", "managed": False, "artifact_count": 0},
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "protection: Protected (not in effect: no app has Guard hooks registered)" in output
+
+
+def test_status_panel_keeps_the_plain_protection_line_when_an_app_is_registered(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "managed_harnesses": 1,
+            "receipt_count": 0,
+            "pending_approvals": 0,
+            "harnesses": [{"harness": "claude-code", "managed": True, "artifact_count": 6}],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "protection: Protected" in output
+    assert "not in effect" not in output
+
+
+def test_doctor_panel_says_protection_is_not_in_effect_when_every_adapter_is_broken(capsys) -> None:
+    emit_guard_payload(
+        "doctor",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "tables": ["receipts"],
+            "adapters": [
+                {"harness": "claude-code", "setup_status": "partial"},
+                {"harness": "codex", "setup_status": "broken"},
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "protection: Protected (not in effect: no app has Guard hooks registered)" in output
+
+
+def test_single_harness_doctor_says_protection_is_not_in_effect_when_registration_is_broken(capsys) -> None:
+    emit_guard_payload(
+        "doctor",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "harness": "claude-code",
+            "installed": True,
+            "setup_status": "broken",
+            "command_available": True,
+            "warnings": [],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    # The single-harness table wraps the detail, so the box rules sit between
+    # "hooks" and "registered". The row still has to carry the lapse.
+    assert "Protection Protected (not in effect: no app has Guard hooks" in output

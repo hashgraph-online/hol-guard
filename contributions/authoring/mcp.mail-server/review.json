@@ -1,0 +1,160 @@
+{
+  "discoveryDigest": "9d45c23fb67c15f7a6c1d3568246e6b5a22350b36fe9ebd885310b0dd415a353",
+  "entries": {
+    "tool-2895a1ad3cd9458e": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Searches received/sent messages for thread replies. Keep inherited handling; this focused profile grants no additional permission to this tool.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-2bf45e47cbc3de63": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Moves mail and may clean up the source after copying. It is not classified as a safe read; inherit host policy outside the focused permanent-delete boundary.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-331c6012c4333529": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/search-service.ts#L485-L515",
+      "rationale": "SearchService opens mailboxes read-only and fetches summaries or full bodies with markSeen=false. It does not change mailbox contents or Seen flags; allow this explicit read-only control when locally enabled.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "allow"
+    },
+    "tool-4da5ab6b72564e5b": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "markSeen=true modifies Seen flags for the requested UIDs. Keep inherited handling because tool-level defaults cannot restrict allow to markSeen=false.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-5936686265c85ef4": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Writes attachments to allowed local paths. Preserve inherited handling; this is not a read-only allow default.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-5e656fb2455234f9": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/imap-client.ts#L641-L706",
+      "rationale": "The handler calls IMAPClient.deleteMessage, sets the Deleted flag and performs targeted UID EXPUNGE after checking UIDPLUS, UID existence and UIDVALIDITY. Permanent deletion of one mailbox-scoped UID requires user review.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "review"
+    },
+    "tool-5ea65a010d5012d5": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Moves each requested UID independently and may remove source messages. Keep inherited handling outside the focused permanent-delete boundary.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-5f6fe9f8dd346786": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Sends a continuation with recipients and quoted history. This SMTP mutation is outside the permanent-delete contribution; inherit host policy.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-733bdd3564088076": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Sends a reply over SMTP and stores a sent copy. Preserve inherited handling for this out-of-scope sending operation.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-8e8b572b7a914ce1": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Checks IMAP/SMTP connectivity. Keep inherited handling outside the permanent-delete boundary.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-9e5026b7679eff23": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "markSeen=true modifies the Seen flag. Tool-level defaults cannot distinguish argument variants, so inherit host policy rather than allow every retrieval.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-a1ceb71dd9160bb9": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/tool-definitions.ts",
+      "rationale": "Sends via SMTP and attempts to save a sent copy. Preserve inherited handling outside the permanent-delete boundary.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "inherit"
+    },
+    "tool-a8529ad07b15b766": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/mail-mcp-server.ts#L610-L659",
+      "rationale": "The batch handler calls IMAPClient.deleteMessage for each of up to 200 distinct UIDs, continuing after individual failures. Targeted UID EXPUNGE permanently deletes messages; require user review before the entire batch.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "review"
+    },
+    "tool-c74f93899985530e": {
+      "evidenceUrl": "https://github.com/yunfeizhu/mcp-mail-server/blob/5eee32f0de8fb3d7a4f3b9664c73c4093fdd8b11/src/mail-mcp-server.ts#L232-L276",
+      "rationale": "The handler only ensures IMAP connectivity and calls getBoxes to list mailbox names and attributes. It does not change messages or mailboxes; allow this explicit read-only control when locally enabled.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "List mailboxes and search for the exact mailbox and UIDs; confirm the permanent-delete targets before approving.",
+      "state": "allow"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}

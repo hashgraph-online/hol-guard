@@ -1,0 +1,389 @@
+"""Structured report formatters for scan results."""
+
+from __future__ import annotations
+
+import json
+
+from .contributor_review import build_contributor_review, contributor_review_lines
+from .markdown_support import escape_markdown_text
+from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, ScanResult, Severity, severity_from_value
+from .version import __version__
+
+
+def _sorted_findings(findings: tuple[Finding, ...]) -> list[Finding]:
+    return sorted(findings, key=lambda finding: SEVERITY_ORDER[finding.severity], reverse=True)
+
+
+def _serialize_trust(result: ScanResult) -> dict[str, object]:
+    report = result.trust_report
+    if report is None:
+        return {
+            "total": 0.0,
+            "execution": {"includeExternal": False, "computedAt": result.timestamp},
+            "domains": [],
+        }
+    return {
+        "total": report.total,
+        "execution": {
+            "includeExternal": report.include_external,
+            "computedAt": report.computed_at,
+        },
+        "domains": [
+            {
+                "domain": domain.domain,
+                "label": domain.label,
+                "score": domain.score,
+                "spec": {
+                    "id": domain.spec_id,
+                    "version": domain.spec_version,
+                    "path": domain.spec_path,
+                    "derivedFrom": list(domain.derived_from),
+                },
+                "profile": {
+                    "id": domain.profile_id,
+                    "version": domain.profile_version,
+                },
+                "adapters": [
+                    {
+                        "id": adapter.adapter_id,
+                        "label": adapter.label,
+                        "weight": adapter.weight,
+                        "contributionMode": adapter.contribution_mode,
+                        "applicable": adapter.applicable,
+                        "emitted": adapter.emitted,
+                        "includedInDenominator": adapter.included_in_denominator,
+                        "score": adapter.score,
+                        "components": [
+                            {
+                                "key": component.key,
+                                "score": component.score,
+                                "rationale": component.rationale,
+                                "evidence": list(component.evidence),
+                            }
+                            for component in adapter.components
+                        ],
+                    }
+                    for adapter in domain.adapters
+                ],
+            }
+            for domain in report.domains
+        ],
+    }
+
+
+def build_json_payload(
+    result: ScanResult,
+    *,
+    profile: str = "default",
+    policy_pass: bool = True,
+    verify_pass: bool = True,
+    raw_score: int | None = None,
+    effective_score: int | None = None,
+) -> dict[str, object]:
+    """Convert a scan result into a JSON-serializable payload."""
+
+    payload: dict[str, object] = {
+        "schema_version": "scan-result.v1",
+        "contributorReview": build_contributor_review(result),
+        "tool_version": __version__,
+        "profile": profile,
+        "policy_pass": policy_pass,
+        "verify_pass": verify_pass,
+        "scope": result.scope,
+        "score": result.score,
+        "raw_score": result.score if raw_score is None else raw_score,
+        "effective_score": result.score if effective_score is None else effective_score,
+        "grade": result.grade,
+        "ecosystems": list(result.ecosystems),
+        "packages": [
+            {
+                "ecosystem": package.ecosystem,
+                "packageKind": package.package_kind,
+                "rootPath": package.root_path,
+                "manifestPath": package.manifest_path,
+                "name": package.name,
+                "version": package.version,
+            }
+            for package in result.packages
+        ],
+        "summary": {
+            "gradeLabel": GRADE_LABELS.get(result.grade, "Unknown"),
+            "findings": result.severity_counts,
+            "integrations": [
+                {
+                    "name": integration.name,
+                    "status": integration.status,
+                    "message": integration.message,
+                    "findingsCount": integration.findings_count,
+                    "metadata": integration.metadata,
+                }
+                for integration in result.integrations
+            ],
+        },
+        "trust": _serialize_trust(result),
+        "categories": [
+            {
+                "name": category.name,
+                "score": sum(check.points for check in category.checks),
+                "max": sum(check.max_points for check in category.checks),
+                "checks": [
+                    {
+                        "name": check.name,
+                        "passed": check.passed,
+                        "points": check.points,
+                        "maxPoints": check.max_points,
+                        "message": check.message,
+                        "findings": [
+                            {
+                                "ruleId": finding.rule_id,
+                                "severity": finding.severity.value,
+                                "title": finding.title,
+                                "description": finding.description,
+                                "remediation": finding.remediation,
+                                "filePath": finding.file_path,
+                                "lineNumber": finding.line_number,
+                                "source": finding.source,
+                            }
+                            for finding in check.findings
+                        ],
+                    }
+                    for check in category.checks
+                ],
+            }
+            for category in result.categories
+        ],
+        "findings": [
+            {
+                "ruleId": finding.rule_id,
+                "severity": finding.severity.value,
+                "category": finding.category,
+                "title": finding.title,
+                "description": finding.description,
+                "remediation": finding.remediation,
+                "filePath": finding.file_path,
+                "lineNumber": finding.line_number,
+                "source": finding.source,
+            }
+            for finding in _sorted_findings(result.findings)
+        ],
+        "timestamp": result.timestamp,
+        "pluginDir": result.plugin_dir,
+    }
+    if result.scope == "repository":
+        payload["repository"] = {
+            "marketplaceFile": result.marketplace_file,
+            "localPluginCount": len(result.plugin_results),
+        }
+        payload["plugins"] = [
+            {
+                "name": plugin.plugin_name or plugin.plugin_dir.rsplit("/", 1)[-1],
+                "pluginDir": plugin.plugin_dir,
+                "score": plugin.score,
+                "grade": plugin.grade,
+                "trust": _serialize_trust(plugin),
+                "summary": {
+                    "findings": plugin.severity_counts,
+                    "integrations": [
+                        {
+                            "name": integration.name,
+                            "status": integration.status,
+                            "message": integration.message,
+                            "findingsCount": integration.findings_count,
+                            "metadata": integration.metadata,
+                        }
+                        for integration in plugin.integrations
+                    ],
+                },
+            }
+            for plugin in result.plugin_results
+        ]
+        payload["skippedTargets"] = [
+            {
+                "name": skipped.name,
+                "reason": skipped.reason,
+                "sourcePath": skipped.source_path,
+            }
+            for skipped in result.skipped_targets
+        ]
+    return payload
+
+
+def format_json(
+    result: ScanResult,
+    *,
+    profile: str = "default",
+    policy_pass: bool = True,
+    verify_pass: bool = True,
+    raw_score: int | None = None,
+    effective_score: int | None = None,
+) -> str:
+    """Render a scan result as indented JSON."""
+
+    return json.dumps(
+        build_json_payload(
+            result,
+            profile=profile,
+            policy_pass=policy_pass,
+            verify_pass=verify_pass,
+            raw_score=raw_score,
+            effective_score=effective_score,
+        ),
+        indent=2,
+    )
+
+
+def format_markdown(result: ScanResult) -> str:
+    """Render a scan result as a markdown report."""
+
+    lines = [
+        "# Plugin Scanner Report",
+        "",
+        f"- {'Repository' if result.scope == 'repository' else 'Plugin'}: `{escape_markdown_text(result.plugin_dir)}`",
+        f"- Score: **{result.score}/100**",
+        f"- Grade: **{result.grade} - {GRADE_LABELS.get(result.grade, 'Unknown')}**",
+        f"- Trust: **{result.trust_report.total if result.trust_report else 0.0}/100**",
+        f"- Ecosystems: **{escape_markdown_text(', '.join(result.ecosystems) if result.ecosystems else 'unknown')}**",
+        "",
+        "## Findings Summary",
+        "",
+    ]
+    for severity in Severity:
+        lines.append(f"- {severity.value.title()}: {result.severity_counts.get(severity.value, 0)}")
+
+    if result.scope == "repository":
+        lines += ["", "## Local Plugins", ""]
+        for plugin in result.plugin_results:
+            trust_total = plugin.trust_report.total if plugin.trust_report else 0.0
+            lines.append(
+                f"- **{escape_markdown_text(plugin.plugin_name or plugin.plugin_dir)}**: "
+                f"{plugin.score}/100 ({plugin.grade}), trust {trust_total}/100"
+            )
+        if result.skipped_targets:
+            lines += ["", "## Skipped Marketplace Entries", ""]
+            for skipped in result.skipped_targets:
+                source_path = f" (`{escape_markdown_text(skipped.source_path)}`)" if skipped.source_path else ""
+                lines.append(
+                    f"- **{escape_markdown_text(skipped.name)}**{source_path}: {escape_markdown_text(skipped.reason)}"
+                )
+
+    lines += ["", "## Categories", ""]
+    for category in result.categories:
+        category_score = sum(check.points for check in category.checks)
+        category_max = sum(check.max_points for check in category.checks)
+        lines.append(f"- **{escape_markdown_text(category.name)}**: {category_score}/{category_max}")
+
+    top_findings = _sorted_findings(result.findings)[:10]
+    lines += ["", "## Top Findings", ""]
+    if not top_findings:
+        lines.append("- No findings detected.")
+    else:
+        for finding in top_findings:
+            path = f" (`{escape_markdown_text(finding.file_path)}`)" if finding.file_path else ""
+            lines.append(f"- **{finding.severity.value.upper()}** {escape_markdown_text(finding.title)}{path}")
+            lines.append(f"  - {escape_markdown_text(finding.description)}")
+            if finding.remediation:
+                lines.append(f"  - Remediation: {escape_markdown_text(finding.remediation)}")
+
+    if result.trust_report and result.trust_report.domains:
+        lines += ["", "## Trust Provenance", ""]
+        for domain in result.trust_report.domains:
+            lines.append(
+                f"- **{escape_markdown_text(domain.label)}** ({escape_markdown_text(domain.spec_id)}): "
+                f"{domain.score}/100"
+            )
+            for adapter in domain.adapters:
+                lines.append(
+                    f"  - {escape_markdown_text(adapter.label)}: {adapter.score}/100 (weight {adapter.weight})"
+                )
+
+    lines += ["", "## Integration Status", ""]
+    for integration in result.integrations:
+        lines.append(
+            f"- **{escape_markdown_text(integration.name)}**: `{escape_markdown_text(integration.status)}` - "
+            f"{escape_markdown_text(integration.message)}"
+        )
+
+    lines.extend(contributor_review_lines(result.findings))
+    return "\n".join(lines)
+
+
+def format_sarif(result: ScanResult) -> str:
+    """Render a scan result as SARIF 2.1.0 JSON."""
+
+    sorted_findings = _sorted_findings(result.findings)
+    rules = []
+    seen_rules: set[str] = set()
+    for finding in sorted_findings:
+        if finding.rule_id in seen_rules:
+            continue
+        rules.append(
+            {
+                "id": finding.rule_id,
+                "name": finding.title,
+                "shortDescription": {"text": finding.title},
+                "fullDescription": {"text": finding.description},
+                "help": {"text": finding.remediation or "Review and remediate this finding."},
+                "properties": {
+                    "tags": [finding.category, finding.source],
+                    "precision": "high",
+                    "problem.severity": finding.severity.value,
+                },
+            }
+        )
+        seen_rules.add(finding.rule_id)
+
+    results = []
+    for finding in sorted_findings:
+        level = "note"
+        if SEVERITY_ORDER[finding.severity] >= SEVERITY_ORDER[Severity.HIGH]:
+            level = "error"
+        elif SEVERITY_ORDER[finding.severity] >= SEVERITY_ORDER[Severity.MEDIUM]:
+            level = "warning"
+
+        result_entry: dict[str, object] = {
+            "ruleId": finding.rule_id,
+            "level": level,
+            "message": {"text": finding.description},
+            "properties": {
+                "severity": finding.severity.value,
+                "category": finding.category,
+                "source": finding.source,
+            },
+        }
+        if finding.file_path:
+            physical_location: dict[str, object] = {
+                "artifactLocation": {"uri": finding.file_path},
+            }
+            if finding.line_number:
+                physical_location["region"] = {"startLine": finding.line_number}
+            location: dict[str, object] = {"physicalLocation": physical_location}
+            result_entry["locations"] = [location]
+        results.append(result_entry)
+
+    payload: dict[str, object] = {
+        "version": "2.1.0",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "plugin-scanner",
+                        "informationUri": "https://github.com/hashgraph-online/hol-guard",
+                        "version": __version__,
+                        "rules": rules,
+                    }
+                },
+                "results": results,
+            }
+        ],
+    }
+    return json.dumps(payload, indent=2)
+
+
+def should_fail_for_severity(result: ScanResult, threshold: str | None) -> bool:
+    """Return True when the result contains a finding at or above the threshold."""
+
+    if not threshold or threshold.lower() == "none":
+        return False
+    threshold_severity = severity_from_value(threshold)
+    return any(SEVERITY_ORDER[finding.severity] >= SEVERITY_ORDER[threshold_severity] for finding in result.findings)

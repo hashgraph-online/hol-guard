@@ -1,0 +1,555 @@
+import { useEffect, useMemo, useRef, type ChangeEvent } from "react";
+import { bulkApproveConsequenceCopyForSelection } from "./approval-retry-guidance";
+import { BulkDrawerShell } from "./queue-bulk-drawer-shell";
+import { toneRing, toneChip, toneIcon } from "./queue-bulk-risk-presentation";
+import { bulkApproveCooldownOpen, isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
+import {
+  HiMiniCheckCircle,
+  HiMiniExclamationTriangle,
+  HiMiniShieldCheck,
+  HiMiniXMark,
+  HiMiniKey,
+  HiMiniNoSymbol,
+} from "react-icons/hi2";
+import {
+  buildBulkApproveConsequenceCopy,
+  summarizeBulkApproveSelection,
+  type BulkApproveRiskLine,
+} from "./approval-center-utils";
+import type { GuardApprovalGatePublicConfig } from "./guard-types";
+import type { QueueGroup } from "./queue-state";
+import type { QueueBulkStickyBarProps } from "./use-queue-bulk-approve";
+import type {
+  BulkRiskDisclosure,
+  BulkRiskTier,
+} from "./queue-bulk-risk-disclosure";
+
+export {
+  isBulkApproveGateReady,
+  bulkApproveCooldownOpen,
+  validateBulkApproveCredentials,
+  buildBulkGateCredentials,
+} from "./queue-bulk-approval-credentials";
+
+const TIER_LABEL: Record<BulkRiskTier, string> = {
+  low: "Low risk",
+  elevated: "Elevated risk",
+  high: "High risk",
+};
+
+export type { QueueBulkStickyBarProps } from "./use-queue-bulk-approve";
+
+export function QueueBulkStickyBar(props: QueueBulkStickyBarProps) {
+  const blockButton = useRef<HTMLButtonElement | null>(null);
+  const previousStep = useRef(props.blockStep);
+  useEffect(() => {
+    // Cancelling the confirmation returns focus to the button that opened it.
+    if (previousStep.current === "confirming" && props.blockStep === "idle") blockButton.current?.focus();
+    previousStep.current = props.blockStep;
+  }, [props.blockStep]);
+  if (!props.visible) {
+    // A partial block can leave nothing selected, such as when the one request
+    // that failed was settled elsewhere. Its outcome still has to be shown.
+    return props.blockError ? (
+      <p role="alert" className="mb-4 text-xs text-brand-attention">{props.blockError}</p>
+    ) : null;
+  }
+  const total = props.selectedRequestCount;
+  const unit = total === 1 ? "request" : "requests";
+  const approvableNote = props.selectedActionCount === total
+    ? "approve once"
+    : `${props.selectedActionCount} can be approved at once`;
+  const ChipIcon = toneIcon(props.riskTone);
+  const confirmingBlock = props.blockStep !== "idle";
+  const blocking = props.blockStep === "blocking";
+  return (
+    <div
+      className="sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md backdrop-blur"
+      role="region"
+      aria-label="Bulk selection"
+    >
+      {props.canApprove ? (
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`}
+        >
+          <ChipIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          {TIER_LABEL[props.riskTier]}
+        </span>
+      ) : null}
+      <p className="min-w-0 flex-1 text-sm font-medium text-brand-dark">
+        <span className="font-mono text-base font-semibold">{total}</span>
+        {" "}
+        {unit} selected{props.canApprove ? ` · ${approvableNote}` : ""}
+      </p>
+      {confirmingBlock ? (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Confirm block">
+          <p className="text-sm text-brand-dark">
+            Block {total} {unit} just this once? Any agent still waiting is told no.
+          </p>
+          <button
+            type="button"
+            onClick={props.onConfirmBlock}
+            disabled={blocking}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand-dark px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark/90 disabled:cursor-wait disabled:opacity-60"
+          >
+            <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
+            {blocking ? "Blocking…" : `Block ${total}`}
+          </button>
+          <button
+            type="button"
+            onClick={props.onCancelBlock}
+            disabled={blocking}
+            autoFocus
+            className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          {props.canApprove ? (
+            <button
+              type="button"
+              onClick={props.onStartReview}
+              className="inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90"
+            >
+              Review &amp; approve
+            </button>
+          ) : null}
+          {props.blockAvailable ? (
+            <button
+              ref={blockButton}
+              type="button"
+              onClick={props.onRequestBlock}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50"
+            >
+              <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
+              Block selected
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={props.onClearSelection}
+            className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      {props.blockError ? (
+        <p role="alert" className="w-full text-xs text-brand-attention">{props.blockError}</p>
+      ) : null}
+    </div>
+  );
+}
+
+export type QueueBulkStatusBannerProps = {
+  visible: boolean;
+  sensitiveFileReadCount: number;
+};
+
+export function QueueBulkStatusBanner(props: QueueBulkStatusBannerProps) {
+  if (!props.visible) return null;
+  return (
+    <div className="mb-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2">
+      <p className="text-xs text-brand-attention">
+        {props.sensitiveFileReadCount} sensitive file{" "}
+        {props.sensitiveFileReadCount === 1 ? "read" : "reads"} in queue — review each path before approving.
+      </p>
+    </div>
+  );
+}
+
+export type QueueBulkGatePromptProps = {
+  visible: boolean;
+  eligibleActionCount: number;
+  settingsHref: string;
+};
+
+/**
+ * Discovery prompt shown when eligible actions exist in the queue but the
+ * approval gate is not ready. Ambient selection (and the bulk drawer)
+ * require the gate, so without this banner users would never learn that bulk
+ * approval is available once they enable proof with a configured password.
+ */
+export function QueueBulkGatePrompt(props: QueueBulkGatePromptProps) {
+  if (!props.visible) return null;
+  const unit = props.eligibleActionCount === 1 ? "action" : "actions";
+  return (
+    <div className="mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-brand-dark">
+            Approve {props.eligibleActionCount} {unit} at once
+          </p>
+          <p className="mt-1 text-xs leading-5 text-brand-dark/70">
+            Enable Ask for proof with a configured approval password to review eligible actions together.
+            Bulk approval approves each action once and never remembers future actions.
+          </p>
+        </div>
+        <a
+          href={props.settingsHref}
+          className="inline-flex shrink-0 rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5"
+        >
+          Open Settings
+        </a>
+      </div>
+    </div>
+  );
+}
+
+export type QueueBulkDrawerProps = {
+  open: boolean;
+  step: "review" | "submitting" | "completed";
+  selectedGroups: QueueGroup[];
+  selectedActionCount: number;
+  /** Selected actions the agent stays blocked on after approval. */
+  retryBlockedActionCount?: number;
+  sensitiveFileReadCount: number;
+  riskDisclosure: BulkRiskDisclosure;
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  settingsHref: string;
+  bulkApprovePassword: string;
+  bulkApproveTotpCode: string;
+  typedConfirm: string;
+  confirmMatches: boolean;
+  canConfirm: boolean;
+  completedActionCount: number | null;
+  errorMessage: string | null;
+  onBulkApprovePasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onBulkApproveTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onTypedConfirmChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onConfirmApprove: () => void;
+  onCancel: () => void;
+};
+
+/** Show what a bulk line will approve: the file path, else the command, else the action title. */
+function BulkLineDetail(props: { line: BulkApproveRiskLine }) {
+  const { line } = props;
+  if (line.path !== null) {
+    return <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60">{line.path}</span>;
+  }
+  if (line.command !== null) {
+    return (
+      <span className="mt-0.5 block break-all font-mono text-[11px] text-brand-dark/60" title={line.command}>
+        {line.command}
+      </span>
+    );
+  }
+  return <span className="mt-0.5 block text-brand-dark/60">{line.title}</span>;
+}
+
+export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
+  if (!props.open) return null;
+
+  if (props.step === "completed") {
+    const approved = props.completedActionCount ?? 0;
+    const unit = approved === 1 ? "action was" : "actions were";
+    const doneFooter = (
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={props.onCancel}
+          className="min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
+        >
+          Done
+        </button>
+      </div>
+    );
+    return (
+      <BulkDrawerShell onClose={props.onCancel} labelledBy="guard-bulk-drawer-title" footer={doneFooter}>
+        <div className="flex items-start gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/30 p-4">
+          <HiMiniCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand-green" aria-hidden="true" />
+          <div>
+            <h2 id="guard-bulk-drawer-title" className="text-base font-semibold text-brand-dark">
+              {approved} {unit} approved
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Each approved once. This bulk approval cannot be repeated. Reload the queue to see the latest state.
+            </p>
+          </div>
+        </div>
+      </BulkDrawerShell>
+    );
+  }
+
+  const disclosure = props.riskDisclosure;
+  const DisclosureIcon = toneIcon(disclosure.tone);
+  const riskLines = summarizeBulkApproveSelection(props.selectedGroups);
+  const unit = props.selectedActionCount === 1 ? "action" : "actions";
+  const submitLabel =
+    props.step === "submitting"
+      ? "Approving…"
+      : `Approve once (${props.selectedActionCount} ${unit})`;
+
+  // Group every selected line by category label so the operator sees the action
+  // mix at a glance ("File reads (3)", "Shell commands (2)") and can still read
+  // each command before approving. The list scrolls instead of truncating.
+  const shownGroups = useMemo(() => {
+    const map = new Map<string, typeof riskLines>();
+    for (const line of riskLines) {
+      const bucket = map.get(line.categoryLabel) ?? [];
+      bucket.push(line);
+      map.set(line.categoryLabel, bucket);
+    }
+    return Array.from(map.entries());
+  }, [riskLines]);
+  const gateReady = isBulkApproveGateReady(props.approvalGate);
+  const executionApprovalAvailable = (props.retryBlockedActionCount ?? 0) === 0;
+
+  const actionFooter = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={props.onCancel}
+        disabled={props.step === "submitting"}
+        className="min-h-11 rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        disabled={props.step === "submitting" || !props.canConfirm || !executionApprovalAvailable}
+        className="min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {submitLabel}
+      </button>
+    </div>
+  );
+
+  return (
+    <BulkDrawerShell
+      onClose={props.onCancel}
+      labelledBy="guard-bulk-drawer-title"
+      footer={actionFooter}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (props.step !== "submitting" && props.canConfirm && executionApprovalAvailable) props.onConfirmApprove();
+      }}
+    >
+      {/* Header zone — generous top space, clear count hierarchy */}
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${toneChip(disclosure.tone)}`}
+            >
+              {TIER_LABEL[disclosure.tier]}
+            </span>
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Bulk approval
+            </p>
+          </div>
+          <h2 id="guard-bulk-drawer-title" className="mt-2 text-xl font-semibold tracking-tight text-brand-dark">
+            Review {props.selectedActionCount} selected {unit}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={props.onCancel}
+          aria-label="Close bulk approval"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark"
+        >
+          <HiMiniXMark className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </header>
+
+      {/* Risk disclosure zone — the clear disclosure surface, given breathing room */}
+      <section
+        aria-label="Risk disclosure"
+        className={`mt-6 rounded-2xl border p-5 ${toneRing(disclosure.tone)}`}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+              disclosure.tone === "attention"
+                ? "bg-brand-attention/10"
+                : disclosure.tone === "amber"
+                  ? "bg-amber-100"
+                  : "bg-brand-green/10"
+            }`}
+          >
+            <DisclosureIcon
+              className={`h-5 w-5 ${
+                disclosure.tone === "attention"
+                  ? "text-brand-attention"
+                  : disclosure.tone === "amber"
+                    ? "text-amber-600"
+                    : "text-brand-green"
+              }`}
+              aria-hidden="true"
+            />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold text-brand-dark">{disclosure.headline}</h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-brand-dark/75">{disclosure.body}</p>
+            {disclosure.bullets.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {disclosure.bullets.map((bullet) => (
+                  <li
+                    key={bullet}
+                    className="flex items-start gap-2 text-xs leading-5 text-brand-dark/85"
+                  >
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-current opacity-50" aria-hidden="true" />
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* What you're approving zone — grouped by category for scannability */}
+      <section aria-label="Selected actions" className="mt-6">
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            What you are approving
+          </h3>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {props.selectedActionCount} {unit}
+          </span>
+        </div>
+        <div className="mt-2.5 max-h-72 space-y-3 overflow-y-auto rounded-xl bg-slate-50/80 px-4 py-3">
+          {shownGroups.map(([categoryLabel, lines]) => (
+            <div key={categoryLabel}>
+              <p className="text-[11px] font-semibold text-brand-dark/70">
+                {categoryLabel}{" "}
+                <span className="font-normal text-muted-foreground">
+                  ({lines.length + lines.reduce((sum, l) => sum + l.duplicateCount, 0)})
+                </span>
+              </p>
+              <ul className="mt-1.5 space-y-1.5">
+                {lines.map((line) => (
+                  <li key={line.requestId} className="text-xs text-brand-dark">
+                    <span className="font-medium">{line.harnessLabel}</span>
+                    <BulkLineDetail line={line} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {props.sensitiveFileReadCount > 0 && (
+        <p className="mt-3 text-[11px] leading-5 text-brand-attention">
+          {props.sensitiveFileReadCount} sensitive{" "}
+          {props.sensitiveFileReadCount === 1 ? "action stays" : "actions stay"} in the queue for individual review.
+        </p>
+      )}
+
+      {/* Confirmation zone — visually separated commit step */}
+      <section aria-label="Confirm approval" className="mt-6">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Step 2 of 2
+          </span>
+          <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+        </div>
+
+        {!executionApprovalAvailable ? (
+          <p className="mt-3 text-sm text-brand-attention" role="status">
+            Run once is unavailable for part of this selection. Open those requests individually before approving the remaining actions.
+          </p>
+        ) : gateReady ? (
+          <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            {bulkApproveCooldownOpen(props.approvalGate) && (
+              <p className="text-sm text-brand-dark/80">
+                Your approval window is still open, so no password is needed.
+              </p>
+            )}
+            {props.approvalGate?.totp_enabled !== true && !bulkApproveCooldownOpen(props.approvalGate) && (
+              <>
+                <div className="flex items-center gap-2">
+              <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />
+              <label htmlFor="guard-bulk-approval-password" className="text-sm font-semibold text-brand-dark">
+                Approval password
+              </label>
+                </div>
+                <input
+              id="guard-bulk-approval-password"
+              type="password"
+              value={props.bulkApprovePassword}
+              onChange={props.onBulkApprovePasswordChange}
+              placeholder="Enter your approval password"
+              autoComplete="current-password"
+              disabled={props.step === "submitting"}
+              className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                />
+              </>
+            )}
+            {props.approvalGate?.totp_enabled === true && (
+              <>
+                <div className="flex items-center gap-2">
+                  <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />
+                  <label htmlFor="guard-bulk-approval-totp" className="text-sm font-semibold text-brand-dark">
+                    Authenticator code
+                  </label>
+                </div>
+                <input
+                  id="guard-bulk-approval-totp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={props.bulkApproveTotpCode}
+                  onChange={props.onBulkApproveTotpCodeChange}
+                  placeholder="6-digit code"
+                  disabled={props.step === "submitting"}
+                  className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                />
+              </>
+            )}
+            {disclosure.requiresTypedConfirm && (
+              <div className="rounded-lg bg-brand-attention/[0.05] px-3 py-2.5">
+                <label htmlFor="guard-bulk-typed-confirm" className="block text-xs font-semibold text-brand-dark">
+                  Type{" "}
+                  <span className="font-mono font-bold text-brand-attention">{disclosure.confirmPhrase}</span>{" "}
+                  to confirm
+                </label>
+                <input
+                  id="guard-bulk-typed-confirm"
+                  type="text"
+                  value={props.typedConfirm}
+                  onChange={props.onTypedConfirmChange}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={props.step === "submitting"}
+                  aria-invalid={props.typedConfirm.length > 0 && !props.confirmMatches}
+                  className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:opacity-60"
+                  placeholder={disclosure.confirmPhrase}
+                />
+              </div>
+            )}
+            <p className="text-[11px] leading-4 text-muted-foreground">
+              {bulkApproveConsequenceCopyForSelection(
+                props.selectedActionCount,
+                props.retryBlockedActionCount ?? 0,
+                buildBulkApproveConsequenceCopy,
+              )}
+            </p>
+          </div>
+        ) : (
+          <div className="mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3">
+            <p className="text-sm font-semibold text-brand-dark">Approval password required</p>
+            <p className="mt-1 text-xs leading-5 text-brand-dark/70">
+              Set up your local approval gate before approving multiple actions at once.
+            </p>
+            <a
+              href={props.settingsHref}
+              className="mt-2.5 inline-flex rounded-full border border-brand-blue/30 bg-white px-3.5 py-1.5 text-xs font-medium text-brand-blue no-underline transition-colors hover:bg-brand-blue/5"
+            >
+              Open Settings
+            </a>
+          </div>
+        )}
+
+        {props.errorMessage !== null && (
+          <p className="mt-3 text-xs text-brand-purple" role="alert">
+            {props.errorMessage}
+          </p>
+        )}
+      </section>
+    </BulkDrawerShell>
+  );
+}

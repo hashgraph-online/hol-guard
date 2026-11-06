@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.seahorse",
+  "version": "1.0.0",
+  "name": "Seahorse Memory MCP",
+  "description": "Persistent bi-temporal memory for LLM agents (local-first SQLite, Obsidian vault). Mutations are remember, improve, forget, skill_add; every other tool is read-only. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.seahorse",
+    "displayName": "Seahorse",
+    "url": "https://github.com/ssanvi-builds/seahorse"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0E7490" },
+  "homepage": "https://github.com/ssanvi-builds/seahorse",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "seahorse-memory"
+  },
+  "riskClasses": ["external-agent-memory-write"],
+  "tools": [
+    { "name": "remember", "state": "block" },
+    { "name": "improve", "state": "block" },
+    { "name": "forget", "state": "block" },
+    { "name": "skill_add", "state": "block" },
+    { "name": "recall", "state": "allow" },
+    { "name": "recall_full", "state": "allow" },
+    { "name": "recall_timeline", "state": "allow" },
+    { "name": "context", "state": "allow" },
+    { "name": "freshness_view", "state": "allow" },
+    { "name": "audit_log", "state": "allow" },
+    { "name": "follow_supersedes_chain", "state": "allow" },
+    { "name": "build_pit", "state": "allow" },
+    { "name": "skill_list", "state": "allow" },
+    { "name": "skill_search", "state": "allow" },
+    { "name": "skill_show", "state": "allow" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/ssanvi-builds/seahorse",
+    "https://pypi.org/project/seahorse-memory/"
+  ],
+  "saferAlternatives": [
+    "Keep the four mutation tools (remember, improve, forget, skill_add) on Block unless this device trusts the agent to write memory; every recall surface is read-only."
+  ]
+}

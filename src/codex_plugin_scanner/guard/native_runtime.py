@@ -1,0 +1,539 @@
+"""Trusted bridge from the Python control plane to the native Guard runtime.
+
+The public package remains Python. This is the only PATH-free local entry
+to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
+"""
+
+from __future__ import annotations
+
+import functools
+import importlib.metadata
+import json
+import os
+import stat
+import sys
+import threading
+import time
+from pathlib import Path
+
+from .codex_hook_launch_runtime import BoundedHookProcessResult, run_isolated_hook_process
+from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
+from .native_binary_identity import validate_native_binary as _validate_binary
+from .native_response_decoder import native_error as _native_error  # noqa: F401
+from .native_runtime_process_cache import (
+    forget_process_status,
+    process_snapshot,
+    process_status,
+    remember_process_status,
+)
+from .native_runtime_request_scope import (
+    _resolved_candidate_path,
+    primary_candidates,
+    remember_scoped_status,
+    scoped_candidates,
+    scoped_status,
+)
+from .native_runtime_resilience import (
+    NativeRuntimeHealthSnapshot,
+    native_runtime_health_snapshot,
+)
+from .native_runtime_values import (
+    _INTEGRITY_FAILURE_REASONS,  # noqa: F401
+    NativeMode,
+    NativeRuntimeCapabilities,
+    NativeRuntimeIdentity,
+    NativeRuntimeManifest,
+    NativeRuntimeStatus,
+    _decode_capabilities,
+    _identity_key,
+    _is_lower_hex,
+    _python_package_version,
+    _resolve_native_mode,
+    decode_runtime_manifest,
+    warn_legacy_hook_fast_path_once,
+)
+from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
+
+_NATIVE_PROTOCOL_VERSION = 1
+_NATIVE_BINARY_ENV = "HOL_GUARD_NATIVE_BINARY"
+_NATIVE_MODE_ENV = "HOL_GUARD_NATIVE"
+_DEFAULT_NATIVE_MODE: NativeMode = "auto"
+_NATIVE_MANIFEST_NAME = "runtime-manifest.json"
+_NATIVE_MANIFEST_SCHEMA = "hol-guard-native-runtime.v1"
+_MAX_MANIFEST_BYTES = 16 * 1024
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
+
+def native_mode() -> NativeMode:
+    warn_legacy_hook_fast_path_once(os.environ.get("HOL_GUARD_HOOK_FAST_PATH"))
+    return _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
+
+
+@functools.lru_cache(maxsize=1)
+def _installed_package_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _bundled_runtime_candidate() -> Path:
+    executable = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
+    return _installed_package_root() / "_native" / executable
+
+
+def _runtime_candidates() -> tuple[Path, ...]:
+    return scoped_candidates(
+        (native_mode(), os.environ.get(_NATIVE_BINARY_ENV)),
+        _discover_runtime_candidates,
+    )
+
+
+def _discover_runtime_candidates() -> tuple[Path, ...]:
+    mode = native_mode()
+    candidates = list(primary_candidates(mode, os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate()))
+
+    # Developer compatibility: a separately installed runtime distribution is
+    # validation-only. Automatic production selection must use the runtime
+    # bundled inside the version-matched hol-guard wheel and its manifest.
+    if mode == "force":
+        try:
+            distribution = importlib.metadata.distribution("hol-guard-runtime")
+        except importlib.metadata.PackageNotFoundError:
+            distribution = None
+        if distribution is not None:
+            executable_names = {"hol-guard-runtime", "hol-guard-runtime.exe"}
+            for entry in distribution.files or ():
+                if Path(str(entry)).name not in executable_names:
+                    continue
+                candidates.append(Path(str(distribution.locate_file(entry))))
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            unique.append(candidate)
+            seen.add(key)
+    return tuple(unique)
+
+
+def _decode_runtime_manifest(payload: object) -> NativeRuntimeManifest | None:
+    return decode_runtime_manifest(
+        payload,
+        schema=_NATIVE_MANIFEST_SCHEMA,
+        protocol_version=_NATIVE_PROTOCOL_VERSION,
+        hex_validator=_is_lower_hex,
+    )
+
+
+def _manifest_for_bundled_identity(
+    identity: NativeRuntimeIdentity,
+) -> tuple[NativeRuntimeManifest | None, str | None]:
+    manifest_path = identity.path.with_name(_NATIVE_MANIFEST_NAME)
+    try:
+        metadata = manifest_path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            return None, "native_manifest_invalid"
+        if metadata.st_size <= 0 or metadata.st_size > _MAX_MANIFEST_BYTES:
+            return None, "native_manifest_invalid"
+        if os.name != "nt" and not _trusted_owner_and_mode(metadata, manifest_path):
+            return None, "native_manifest_invalid"
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, "native_manifest_missing"
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, "native_manifest_invalid"
+    manifest = _decode_runtime_manifest(payload)
+    if manifest is None:
+        return None, "native_manifest_invalid"
+    if manifest.runtime_size != identity.size or manifest.runtime_sha256 != identity.sha256:
+        return None, "native_manifest_runtime_mismatch"
+    expected_version = _python_package_version()
+    if expected_version is not None and manifest.package_version != expected_version:
+        return None, "native_manifest_version_mismatch"
+    return manifest, None
+
+
+def _is_bundled_candidate(candidate: Path) -> bool:
+    try:
+        return candidate.expanduser().absolute() == _bundled_runtime_candidate().absolute()
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def _restore_bundled_runtime_execute_bit(path: Path) -> None:
+    """PyInstaller DATA extracts without owner execute; spawn still needs it."""
+    if os.name == "nt" or not _is_bundled_candidate(path):
+        return
+    try:
+        metadata = path.lstat()
+        mode = stat.S_IMODE(metadata.st_mode)
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or mode & stat.S_IXUSR:
+            return
+        if not _trusted_owner_and_mode(metadata, path):
+            return
+        path.chmod(mode | 0o111)
+    except (OSError, RuntimeError, ValueError):
+        return
+
+
+def _windows_native_dll_directories() -> list[str]:
+    """Trusted directories for the Windows native runtime's CRT search.
+
+    The published runtime links the Visual C++ CRT dynamically. Windows finds
+    those DLLs in System32 when the redistributable is installed machine-wide.
+    An x64 wheel on ARM, or a per-user Python install, often has the CRT only
+    beside the base interpreter. The isolated environment cannot inherit the
+    user PATH, so the loader otherwise fails with STATUS_DLL_NOT_FOUND.
+    """
+
+    roots: list[str] = []
+    system_root = os.environ.get("SYSTEMROOT") or os.environ.get("WINDIR")
+    if system_root:
+        roots.append(os.path.join(system_root, "System32"))
+    base_prefix = getattr(sys, "base_prefix", "")
+    if (
+        isinstance(base_prefix, str)
+        and base_prefix
+        and any(os.path.isfile(os.path.join(base_prefix, name)) for name in ("vcruntime140.dll", "vcruntime140_1.dll"))
+    ):
+        roots.append(base_prefix)
+    runtime_dir = _bundled_runtime_candidate().parent
+    if runtime_dir.is_dir():
+        roots.append(str(runtime_dir))
+    unique: list[str] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = root.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(root)
+    return unique
+
+
+def _isolated_environment() -> dict[str, str]:
+    allowed = {
+        "COMSPEC",
+        "HOME",
+        "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        # Dedicated opt-in for the resident's supply-chain test seams; kept
+        # separate from diagnostics so diagnostics alone never enable them.
+        "HOL_GUARD_RESIDENT_TEST_SEAMS",
+        "LANG",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "USERPROFILE",
+        "WINDIR",
+    }
+    environment = {}
+    for key in os.environ:
+        upper = key.upper()
+        if upper in allowed or upper.startswith("LC_"):
+            environment[key] = os.environ[key]
+    if os.name == "nt":
+        dll_path = os.pathsep.join(_windows_native_dll_directories())
+        if dll_path:
+            environment["PATH"] = dll_path
+    return environment
+
+
+def _run_native_process_result(
+    path: Path,
+    args: tuple[str, ...],
+    *,
+    input_text: str,
+    timeout_seconds: float,
+    output_limit: int = _MAX_RESPONSE_BYTES,
+    stop_event: threading.Event | None = None,
+) -> BoundedHookProcessResult:
+    """Run one bounded native invocation and keep its whole result.
+
+    Callers that only need the answer use :func:`_run_native_process`. This
+    form is for the one-shot arms whose failure code is the answer: the
+    runtime prints the code on stderr and exits non-zero, so collapsing the
+    result to ``None`` would lose the distinction between, say, a mismatched
+    key and a directory it could not create.
+    """
+
+    return run_isolated_hook_process(
+        (str(path), *args),
+        input_text=input_text,
+        cwd=path.parent,
+        environment=_isolated_environment(),
+        timeout_seconds=timeout_seconds,
+        output_limit=output_limit,
+        stop_event=stop_event,
+    )
+
+
+def _run_native_process(
+    path: Path,
+    args: tuple[str, ...],
+    *,
+    input_text: str,
+    timeout_seconds: float,
+    output_limit: int = _MAX_RESPONSE_BYTES,
+    stop_event: threading.Event | None = None,
+) -> str | None:
+    result = _run_native_process_result(
+        path,
+        args,
+        input_text=input_text,
+        timeout_seconds=timeout_seconds,
+        output_limit=output_limit,
+        stop_event=stop_event,
+    )
+    if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
+        return None
+    return result.stdout
+
+
+# Successful probes are cached per binary identity. Failures are not cached:
+# they carry a short retry window so a transient cold-start miss cannot poison
+# every later native check in the process, and a caller-supplied deadline caps
+# how long the probe may run so a one-shot request never overspends its budget.
+_capabilities_probe_lock = threading.Lock()
+_capabilities_cache: dict[tuple[str, int, int, str], NativeRuntimeCapabilities] = {}
+_capabilities_retry_after: dict[tuple[str, int, int, str], float] = {}
+_CAPABILITIES_PROBE_TIMEOUT_SECONDS = 5.0
+_CAPABILITIES_FIRST_PROBE_TIMEOUT_SECONDS = 20.0
+_CAPABILITIES_RETRY_BACKOFF_SECONDS = 0.25
+_CAPABILITIES_CACHE_MAX = 16
+
+
+def _clear_capabilities_probe_state() -> None:
+    """Reset the probe cache and retry windows; tests call this between
+    distinct fake binaries so a prior probe cannot leak into the next case."""
+    with _capabilities_probe_lock:
+        _capabilities_cache.clear()
+        _capabilities_retry_after.clear()
+    forget_process_status()
+
+
+def _capabilities_for_identity(
+    path: str,
+    size: int,
+    mtime_ns: int,
+    sha256: str,
+    *,
+    deadline_monotonic: float | None = None,
+) -> NativeRuntimeCapabilities | None:
+    key = (path, size, mtime_ns, sha256)
+    now = time.monotonic()
+    with _capabilities_probe_lock:
+        cached = _capabilities_cache.get(key)
+        retry_after = _capabilities_retry_after.get(key)
+    if cached is not None:
+        return cached
+    if retry_after is not None and now < retry_after:
+        return None
+    timeout_seconds = _CAPABILITIES_PROBE_TIMEOUT_SECONDS
+    if retry_after is None:
+        # The first execution of a freshly installed runtime pays one-time costs (for example a Windows
+        # antivirus scan) that exceed the warm budget. Give that first probe room instead of failing every
+        # native check behind it; the caller's deadline, when it has one, still caps it just below.
+        timeout_seconds = _CAPABILITIES_FIRST_PROBE_TIMEOUT_SECONDS
+    if deadline_monotonic is not None:
+        remaining = deadline_monotonic - now
+        if remaining <= 0:
+            # The caller's budget is already spent; starting a fresh probe
+            # would overshoot the request deadline.
+            return None
+        timeout_seconds = min(timeout_seconds, remaining)
+    output = _run_native_process(
+        Path(path),
+        ("capabilities", "--json"),
+        input_text="",
+        timeout_seconds=timeout_seconds,
+    )
+    capabilities = None
+    if output is not None:
+        try:
+            capabilities = _decode_capabilities(json.loads(output))
+        except json.JSONDecodeError:
+            capabilities = None
+    with _capabilities_probe_lock:
+        if capabilities is not None:
+            if len(_capabilities_cache) >= _CAPABILITIES_CACHE_MAX:
+                _capabilities_cache.pop(next(iter(_capabilities_cache)))
+            _capabilities_cache[key] = capabilities
+            _capabilities_retry_after.pop(key, None)
+        else:
+            _capabilities_retry_after[key] = time.monotonic() + _CAPABILITIES_RETRY_BACKOFF_SECONDS
+    return capabilities
+
+
+def _scoped_manifest_still_valid(status: NativeRuntimeStatus) -> bool:
+    """True while a bundled status's manifest still decodes identically.
+
+    ``stat()`` metadata cannot see a manifest-only rewrite, so the bounded
+    manifest JSON (<= 16 KiB) is re-read on a hit rather than trusted blindly.
+    """
+
+    manifest = status.manifest
+    identity = status.identity
+    if manifest is None:
+        return True
+    if identity is None:
+        return False
+    current, error = _manifest_for_bundled_identity(identity)
+    return error is None and current == manifest
+
+
+def _status_request_key(candidates: tuple[Path, ...]) -> tuple[str, tuple[str, ...]]:
+    return native_mode(), tuple(str(candidate) for candidate in candidates)
+
+
+def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
+    preferred = preferred_key = None
+    if native_mode() == "force":
+        preferred = primary_candidates("force", os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate())
+        preferred_key = _status_request_key(preferred)
+        expired = deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+        # A publisher can seed this request before capability lookup. Preserve
+        # the ordinary scoped binary/manifest checks without unused discovery.
+        if (
+            not expired
+            and (shared := scoped_status(preferred_key)) is not None
+            and shared.available
+            and shared.compatible
+            and shared.mode == preferred_key[0]
+            and shared.identity is not None
+            and shared.identity.path == _resolved_candidate_path(preferred[0])
+            and _scoped_manifest_still_valid(shared)
+        ):
+            return shared
+        # A fully witnessed first choice cannot be displaced by a later,
+        # lower-priority distribution. The existing cache still checks the
+        # complete binary/manifest identities and refuses fresh or moved files.
+        if not expired and (cached := process_status(preferred_key, preferred)) is not None:
+            remember_scoped_status(preferred_key, cached)
+            return cached
+    candidates = _runtime_candidates()
+    key = _status_request_key(candidates)
+    if (cached := scoped_status(key)) is not None:
+        identity = cached.identity
+        if (
+            identity is not None
+            and any(_resolved_candidate_path(candidate) == identity.path for candidate in candidates)
+            and _scoped_manifest_still_valid(cached)
+        ):
+            return cached
+    expired = deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+    if not expired and (process := process_status(key, candidates)) is not None:
+        remember_scoped_status(key, process)
+        return process
+    before = process_snapshot(candidates)
+    status = _compute_runtime_status(candidates, deadline_monotonic=deadline_monotonic)
+    remember_scoped_status(key, status)
+    remember_process_status(key, status, before)
+    if (
+        preferred is not None
+        and preferred_key is not None
+        and preferred_key != key
+        and candidates[: len(preferred)] == preferred
+        and status.mode == preferred_key[0]
+    ):
+        remember_process_status(preferred_key, status, before)
+    return status
+
+
+def native_runtime_probe_missed() -> bool:
+    """True when a runtime binary is installed but its capability probe has not succeeded yet.
+
+    A miss leaves a status with no identity, so this is what tells a transient cold-host probe failure
+    (worth waiting out) from a host with no runtime at all (not worth waiting for).
+    """
+
+    return any(_validate_binary(candidate) is not None for candidate in _runtime_candidates())
+
+
+def _compute_runtime_status(
+    candidates: tuple[Path, ...],
+    *,
+    deadline_monotonic: float | None = None,
+) -> NativeRuntimeStatus:
+    mode = native_mode()
+    for candidate in candidates:
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            break
+        _restore_bundled_runtime_execute_bit(candidate)
+        identity = _validate_binary(candidate)
+        if identity is None:
+            continue
+        manifest: NativeRuntimeManifest | None = None
+        if _is_bundled_candidate(candidate):
+            manifest, manifest_error = _manifest_for_bundled_identity(identity)
+            if manifest_error is not None:
+                return NativeRuntimeStatus(
+                    mode=mode,
+                    available=True,
+                    compatible=False,
+                    reason=manifest_error,
+                    identity=identity,
+                )
+        capabilities = _capabilities_for_identity(
+            str(identity.path),
+            identity.size,
+            identity.mtime_ns,
+            identity.sha256,
+            deadline_monotonic=deadline_monotonic,
+        )
+        if capabilities is None:
+            continue
+        if capabilities.protocol_version != _NATIVE_PROTOCOL_VERSION:
+            return NativeRuntimeStatus(
+                mode=mode,
+                available=True,
+                compatible=False,
+                reason="native_protocol_mismatch",
+                identity=identity,
+                capabilities=capabilities,
+                manifest=manifest,
+            )
+        if manifest is not None:
+            if capabilities.protocol_version != manifest.protocol_version:
+                reason = "native_manifest_protocol_mismatch"
+            elif capabilities.runtime_version != manifest.package_version:
+                reason = "native_manifest_version_mismatch"
+            elif capabilities.rule_digest != manifest.rule_digest:
+                reason = "native_manifest_rule_mismatch"
+            elif capabilities.build_sha != manifest.source_sha:
+                reason = "native_manifest_build_mismatch"
+            else:
+                reason = None
+            if reason is not None:
+                return NativeRuntimeStatus(
+                    mode=mode,
+                    available=True,
+                    compatible=False,
+                    reason=reason,
+                    identity=identity,
+                    capabilities=capabilities,
+                    manifest=manifest,
+                )
+        expected_version = _python_package_version()
+        version_compatible = expected_version is None or capabilities.runtime_version == expected_version
+        compatible = version_compatible or mode == "force"
+        return NativeRuntimeStatus(
+            mode=mode,
+            available=True,
+            compatible=compatible,
+            reason="native_ready" if compatible else "native_version_mismatch",
+            identity=identity,
+            capabilities=capabilities,
+            manifest=manifest,
+        )
+    return NativeRuntimeStatus(
+        mode=mode,
+        available=False,
+        compatible=False,
+        reason="native_unavailable",
+    )
+
+
+def native_runtime_health(guard_home: Path) -> NativeRuntimeHealthSnapshot:
+    status = native_runtime_status()
+    return native_runtime_health_snapshot(_identity_key(status), guard_home)

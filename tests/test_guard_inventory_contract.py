@@ -1,0 +1,1036 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
+
+import pytest
+
+from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
+from codex_plugin_scanner.guard.inventory_contract import (
+    GuardAgentInventoryFinding,
+    GuardAgentInventoryItem,
+    GuardAgentInventorySnapshot,
+    _artifacts_with_unique_ids,
+    fingerprint_mapping,
+    fingerprint_text,
+    inventory_item_id,
+    inventory_snapshot_from_detection,
+    redact_local_path,
+    serialize_inventory_snapshot,
+)
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
+from codex_plugin_scanner.models import Finding, Severity
+
+
+class _Detection:
+    harness = "hermes"
+    artifacts = ()
+
+    def __init__(self, config_paths: tuple[str, ...]) -> None:
+        self.config_paths = config_paths
+
+
+def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "home" / "skills" / "danger"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("use token sk-testsecretvalue and Authorization: Bearer secret\n")
+
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-hermes-1",
+        agent_id="agent-hermes",
+        agent_type="hermes",
+        generated_at="2026-05-10T00:00:00Z",
+        runtime_version="hermes-test",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="skill-danger",
+                item_kind="skill",
+                display_name="Danger skill",
+                description="Danger skill instructions for testing redaction.",
+                source_fingerprint=fingerprint_text("skill-dir"),
+                content_hash=fingerprint_text((skill_dir / "SKILL.md").read_text()),
+                capability_categories=("reads_secrets", "network_egress"),
+                metadata={
+                    # The redaction itself is pinned by the parity corpus the
+                    # resident is tested against; this snapshot only carries
+                    # its output.
+                    "headers": {"authorization": "present_redacted", "x-trace": "present"},
+                    "url": "https://example.com/mcp?token=redacted&mode=safe",
+                    "path": redact_local_path(skill_dir / "SKILL.md", home_dir=tmp_path / "home"),
+                },
+            ),
+        ),
+        findings=(
+            GuardAgentInventoryFinding(
+                finding_id="finding-1",
+                source="hol-detector",
+                severity="high",
+                confidence="high",
+                title="Secret access",
+                artifact_id="skill-danger",
+                check_id="secret-access",
+            ),
+        ),
+        redaction_report={"raw_secret_values": False, "redacted_fields": ("headers.authorization", "url.token")},
+    )
+
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+    encoded = json.dumps(payload, sort_keys=True)
+
+    assert payload["agentId"] == "agent-hermes"
+    assert payload["snapshotId"] == "snap-hermes-1"
+    assert payload["items"][0]["itemId"] == "skill-danger"
+    assert payload["redactionReport"]["rawSecretsIncluded"] is False
+
+    assert "sk-testsecretvalue" not in encoded
+    assert "Bearer secret" not in encoded
+    assert "user:pass" not in encoded
+    assert str(tmp_path / "home") not in encoded
+    assert payload["items"][0]["metadata"]["headers"]["authorization"] == "present_redacted"
+    assert payload["items"][0]["metadata"]["headers"]["x-trace"] == "present"
+
+
+def test_inventory_snapshot_omits_null_optional_finding_summary() -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-hermes-2",
+        agent_id="agent-hermes",
+        agent_type="hermes",
+        generated_at="2026-05-10T00:00:00Z",
+        findings=(
+            GuardAgentInventoryFinding(
+                finding_id="finding-1",
+                source="hol-detector",
+                severity="high",
+                confidence="high",
+                title="Secret access",
+                artifact_id="skill-danger",
+                check_id="secret-access",
+            ),
+        ),
+    )
+
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+
+    assert "summary" not in payload["findings"][0]
+
+
+def test_inventory_snapshot_serialization_preserves_free_form_metadata_keys() -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-cursor-1",
+        agent_id="cursor:local",
+        agent_type="cursor",
+        generated_at="2026-05-10T00:00:00Z",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="cursor:mcp:local",
+                item_kind="mcp_server",
+                display_name="Local MCP",
+                description="Local MCP server for schema preservation tests.",
+                source_fingerprint="sha256:source",
+                content_hash="sha256:content",
+                capability_categories=(),
+                metadata={
+                    "tool_schemas": [
+                        {
+                            "name": "read_file",
+                            "input_schema": {"properties": {"file_path": {"type": "string"}}},
+                        }
+                    ]
+                },
+            ),
+        ),
+    )
+
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+    schema = payload["items"][0]["metadata"]["tool_schemas"][0]["input_schema"]
+
+    assert schema["properties"]["file_path"]["type"] == "string"
+
+
+def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) -> None:
+    config_a = {"b": [2, 1], "a": {"nested": True}}
+    config_b = {"a": {"nested": True}, "b": [2, 1]}
+    path_a = tmp_path / "skill-a" / "SKILL.md"
+    path_b = tmp_path / "renamed" / "SKILL.md"
+    path_a.parent.mkdir()
+    path_b.parent.mkdir()
+    path_a.write_text("name: demo\n\nRun search query\n")
+    path_b.write_text("name: demo\n\nRun search   query\n")
+
+    assert fingerprint_mapping(config_a) == fingerprint_mapping(config_b)
+    assert inventory_item_id("hermes", "skill", "demo", path_a.read_text()) == inventory_item_id(
+        "hermes",
+        "skill",
+        "demo",
+        path_b.read_text(),
+    )
+    assert redact_local_path(path_a, home_dir=tmp_path) == "{home}/skill-a/SKILL.md"
+
+
+def test_inventory_snapshot_serializes_path_objects_without_local_paths(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-path-object",
+        agent_id="agent",
+        agent_type="openclaw",
+        generated_at="2026-05-10T00:00:00Z",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="item",
+                item_kind="repository",
+                display_name="Repo",
+                description="Repository inventory item for path object serialization.",
+                source_fingerprint=fingerprint_text("workspace"),
+                content_hash=fingerprint_text("repo"),
+                capability_categories=("reads_files",),
+                metadata={"pathObject": root / "safe" / "config.json"},
+            ),
+        ),
+    )
+
+    encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
+
+    assert str(tmp_path) not in encoded
+
+
+def test_inventory_snapshot_deduplicates_config_sources(tmp_path: Path) -> None:
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("mcp_servers: {}\n")
+
+    snapshot = inventory_snapshot_from_detection(
+        _Detection((str(config_path), str(config_path))),
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+
+    assert len(snapshot.sources) == 1
+
+
+def test_inventory_snapshot_extracts_mcp_tool_items(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:json:tools",
+                name="tools",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": [
+                        {
+                            "name": "search_docs",
+                            "title": "Search docs",
+                            "description": "Read-only search over project documentation.",
+                            "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+                            "outputSchema": {"type": "object"},
+                            "annotations": {"readOnlyHint": True, "destructiveHint": False},
+                        },
+                        {
+                            "name": "delete_file",
+                            "description": "Delete a file from disk.",
+                            "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}},
+                            "annotations": {"destructiveHint": True},
+                        },
+                    ]
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    items = {item.item_id: item for item in snapshot.items}
+
+    assert "hermes:mcp:json:tools:tool:search_docs" in items
+    assert "hermes:mcp:json:tools:tool:delete_file" in items
+    assert items["hermes:mcp:json:tools:tool:search_docs"].capability_categories == ("reads_files",)
+    assert "writes_files" in items["hermes:mcp:json:tools:tool:delete_file"].capability_categories
+    assert items["hermes:mcp:json:tools:tool:delete_file"].risk_level == "high"
+
+
+def test_inventory_snapshot_attaches_cisco_skill_trust_layer(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    skill_dir = workspace / "skills" / "demo-skill"
+    skill_dir.mkdir(parents=True)
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("---\nname: demo-skill\ndescription: Demo\n---\n", encoding="utf-8")
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(skill_file),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:skill:demo-skill",
+                name="demo-skill",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="project",
+                config_path=str(skill_file),
+            ),
+        ),
+    )
+    cisco_run = CiscoInventoryRun(
+        source="cisco-skill-scanner",
+        status="enabled",
+        message="Cisco skill scan completed.",
+        findings=(
+            Finding(
+                rule_id="cisco.high",
+                severity=Severity.HIGH,
+                category="security",
+                title="High finding",
+                description="Review shell access.",
+                file_path=str(skill_file),
+            ),
+        ),
+        duration_ms=42,
+        metadata={
+            "target": str(skill_dir),
+            "skillsScanned": 1,
+            "skillsSkipped": [],
+            "totalFindings": 1,
+            "findingsBySeverity": {"critical": 0, "high": 1, "medium": 0, "low": 0},
+            "analyzersUsed": ["owasp"],
+            "policyName": "balanced",
+            "mode": "auto",
+        },
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T00:00:00Z",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+        cisco_runs=(cisco_run,),
+    )
+    skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
+    trust_layers = skill_item.metadata.get("trustLayers")
+    local_security = skill_item.metadata.get("localSecurity")
+    encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
+
+    assert isinstance(trust_layers, list)
+    cisco_layer = next(
+        layer for layer in trust_layers if isinstance(layer, dict) and layer.get("layerType") == "cisco_skill_scanner"
+    )
+    assert cisco_layer.get("trustScore") == 88
+    assert isinstance(local_security, dict)
+    assert local_security.get("entityType") == "skill"
+    assert local_security.get("provider") == "cisco-skill-scanner"
+    safety = local_security.get("safety")
+    assert isinstance(safety, dict)
+    assert safety.get("score") == 88
+    assert safety.get("label") == "review"
+    findings = local_security.get("findings")
+    assert isinstance(findings, list)
+    assert findings[0].get("severity") == "high"
+    assert findings[0].get("file") == "SKILL.md"
+    assert str(skill_dir) not in encoded
+
+
+def test_inventory_snapshot_attaches_cisco_mcp_trust_layer_to_server_and_tool(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    mcp_file = workspace / ".mcp.json"
+    mcp_file.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "local-demo": {
+                        "command": "python",
+                        "args": ["-m", "demo_server"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(mcp_file),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:mcp:local-demo",
+                name="local-demo",
+                harness="codex",
+                artifact_type="mcp_server",
+                source_scope="project",
+                config_path=str(mcp_file),
+                transport="stdio",
+                metadata={
+                    "tools": [
+                        {
+                            "name": "search_docs",
+                            "title": "Search docs",
+                            "description": "Read-only search over project documentation.",
+                            "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+                            "annotations": {"readOnlyHint": True},
+                        }
+                    ]
+                },
+            ),
+        ),
+    )
+    cisco_run = CiscoInventoryRun(
+        source="cisco-mcp-scanner",
+        status="enabled",
+        message="Cisco MCP scan completed.",
+        findings=(
+            Finding(
+                rule_id="cisco.mcp.critical",
+                severity=Severity.CRITICAL,
+                category="transport",
+                title="Critical transport finding",
+                description="Remote unauthenticated endpoint.",
+                file_path=".mcp.json",
+            ),
+        ),
+        duration_ms=21,
+        metadata={
+            "target": str(workspace),
+            "targetsScanned": 1,
+            "totalFindings": 1,
+            "findingsBySeverity": {"critical": 1, "high": 0, "medium": 0, "low": 0},
+            "analyzersUsed": ["owasp"],
+            "scanMode": "static",
+            "mode": "auto",
+            "attestationBindings": {"deviceId": "local-device", "sequence": 1},
+        },
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T00:00:00Z",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+        cisco_runs=(cisco_run,),
+    )
+    server_item = next(item for item in snapshot.items if item.item_kind == "mcp_server")
+    tool_item = next(item for item in snapshot.items if item.item_kind == "mcp_tool")
+    encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
+
+    server_layers = server_item.metadata.get("trustLayers")
+    tool_layers = tool_item.metadata.get("trustLayers")
+    assert isinstance(server_layers, list)
+    local_security = server_item.metadata.get("localSecurity")
+    assert isinstance(local_security, dict)
+    assert local_security.get("entityType") == "mcp_server"
+    safety = local_security.get("safety")
+    assert isinstance(safety, dict)
+    assert safety.get("score") == 70
+    findings = local_security.get("findings")
+    assert isinstance(findings, list)
+    assert findings[0].get("file") == ".mcp.json"
+    assert any(
+        isinstance(layer, dict)
+        and layer.get("layerType") == "cisco_mcp_scanner"
+        and layer.get("trustScore") == 70
+        and isinstance(layer.get("metadata"), dict)
+        and layer["metadata"].get("attestationStatus") == "unsigned"
+        and isinstance(layer["metadata"].get("evidence"), dict)
+        and layer["metadata"]["evidence"].get("status") == "enabled"
+        and layer["metadata"]["evidence"].get("trustScore") == 70
+        and isinstance(layer["metadata"].get("evidenceHash"), str)
+        for layer in server_layers
+    )
+    assert isinstance(tool_layers, list)
+    assert any(
+        isinstance(layer, dict)
+        and layer.get("layerType") == "cisco_mcp_scanner"
+        and layer.get("trustScore") == 70
+        and isinstance(layer.get("metadata"), dict)
+        and layer["metadata"].get("attestationStatus") == "unsigned"
+        and layer["metadata"].get("attestation") is None
+        and layer["metadata"].get("attestationBindings") is None
+        and layer["metadata"].get("inheritedFromServerItemId") is None
+        for layer in tool_layers
+    )
+    assert str(workspace) not in encoded
+
+
+def test_inventory_snapshot_attaches_cisco_unavailable_status_evidence(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    mcp_file = workspace / ".mcp.json"
+    mcp_file.write_text('{"mcpServers": {"local-demo": {"command": "python"}}}\n', encoding="utf-8")
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(mcp_file),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:mcp:local-demo",
+                name="local-demo",
+                harness="codex",
+                artifact_type="mcp_server",
+                source_scope="project",
+                config_path=str(mcp_file),
+                transport="stdio",
+            ),
+        ),
+    )
+    cisco_run = CiscoInventoryRun(
+        source="cisco-mcp-scanner",
+        status="unavailable",
+        message="Cisco MCP scanner runtime unavailable.",
+        findings=(),
+        duration_ms=cast(Any, None),
+        metadata={
+            "target": ".mcp.json",
+            "_targetPath": str(workspace),
+            "_configPath": str(mcp_file),
+            "targetsScanned": 0,
+            "totalFindings": 0,
+            "findingsBySeverity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+            "analyzersUsed": [],
+            "scanMode": "static",
+            "mode": "auto",
+        },
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T00:00:00Z",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+        cisco_runs=(cisco_run,),
+    )
+    server_item = next(item for item in snapshot.items if item.item_kind == "mcp_server")
+    trust_layers = server_item.metadata.get("trustLayers")
+    encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
+
+    assert isinstance(trust_layers, list)
+    cisco_layer = next(
+        layer for layer in trust_layers if isinstance(layer, dict) and layer.get("layerType") == "cisco_mcp_scanner"
+    )
+    assert cisco_layer.get("status") == "unavailable"
+    assert cisco_layer.get("trustScore") is None
+    assert cisco_layer.get("trustComponents") == []
+    metadata = cisco_layer.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("evidenceSchemaVersion") == "guard-aibom-cisco-scanner-evidence.v1"
+    assert "durationMs" not in metadata
+    evidence = metadata.get("evidence")
+    assert isinstance(evidence, dict)
+    assert evidence.get("status") == "unavailable"
+    assert evidence.get("message") == "Cisco MCP scanner runtime unavailable."
+    assert evidence.get("totalFindings") == 0
+    assert evidence.get("targetsScanned") == 0
+    assert "durationMs" not in evidence
+    assert metadata.get("evidenceHash") == guard_evidence_hash(evidence)
+    assert str(workspace) not in encoded
+
+
+def test_inventory_snapshot_handles_missing_mcp_tool_schema_and_scale(tmp_path: Path) -> None:
+    tools = [{"name": f"tool_{index}", "description": "No schema available."} for index in range(500)]
+    detection = HarnessDetection(
+        harness="openclaw",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="openclaw:mcp:bulk",
+                name="bulk",
+                harness="openclaw",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".openclaw" / "openclaw.json"),
+                metadata={"tools": tools},
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = [item for item in snapshot.items if item.item_kind == "mcp_tool"]
+
+    assert len(tool_items) == 500
+    assert all(item.capability_categories == ("unknown",) for item in tool_items)
+
+
+def test_inventory_snapshot_preserves_empty_mcp_tool_schemas(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:empty-schema",
+                name="empty-schema",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={"tools": [{"name": "ping", "inputSchema": {}, "output_schema": {}}]},
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool = next(item for item in snapshot.items if item.item_kind == "mcp_tool")
+
+    assert tool.metadata["schemaPresent"] is True
+    assert tool.metadata["inputSchemaHash"] == fingerprint_mapping({})
+    assert tool.metadata["outputSchemaHash"] == fingerprint_mapping({})
+
+
+def test_inventory_snapshot_mcp_capabilities_avoid_substring_false_positives(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:false-positive",
+                name="false-positive",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": [
+                        {
+                            "name": "thread_listener",
+                            "description": "Returns execution_id for listened events.",
+                            "inputSchema": {"type": "object", "properties": {"execution_id": {"type": "string"}}},
+                        },
+                        {
+                            "name": "credential_probe",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "api_key": {"type": "string"},
+                                    "apiKey": {"type": "string"},
+                                },
+                            },
+                        },
+                    ]
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = {item.display_name: item for item in snapshot.items if item.item_kind == "mcp_tool"}
+
+    assert tool_items["thread_listener"].capability_categories == ("unknown",)
+    assert tool_items["credential_probe"].capability_categories == ("reads_secrets",)
+
+
+def test_inventory_snapshot_mcp_capabilities_ignore_schema_boilerplate(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:schema-boilerplate",
+                name="schema-boilerplate",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": [
+                        {
+                            "name": "local_formatter",
+                            "inputSchema": {
+                                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                                "type": "object",
+                                "properties": {"format": {"type": "string"}},
+                            },
+                        },
+                        {
+                            "name": "remote_probe",
+                            "inputSchema": {
+                                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                                "type": "object",
+                                "properties": {"url": {"type": "string"}},
+                            },
+                        },
+                    ]
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = {item.display_name: item for item in snapshot.items if item.item_kind == "mcp_tool"}
+
+    assert tool_items["local_formatter"].capability_categories == ("unknown",)
+    assert tool_items["remote_probe"].capability_categories == ("network_egress",)
+
+
+def test_inventory_snapshot_mcp_tool_fallback_skips_non_schema_tool_allowlist(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:tool-schema-fallback",
+                name="tool-schema-fallback",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": ["*"],
+                    "tool_schemas": [
+                        {
+                            "name": "search_repo",
+                            "description": "Search local project files.",
+                        }
+                    ],
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = [item for item in snapshot.items if item.item_kind == "mcp_tool"]
+
+    assert len(tool_items) == 1
+    assert tool_items[0].display_name == "search_repo"
+    assert tool_items[0].capability_categories == ("reads_files",)
+
+
+def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(tmp_path: Path) -> None:
+    skill_path = tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("---\nname: reviewer\n---\nUse safe local review.\n")
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(str(skill_path),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:skill:ops:reviewer",
+                name="reviewer",
+                harness="hermes",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_path),
+                metadata={"content_hash": "abc123"},
+            ),
+        ),
+    )
+    finding = Finding(
+        rule_id="CISCO-SKILL-PROMPT-INJECTION",
+        severity=Severity.HIGH,
+        category="skill-security",
+        title="Prompt injection token=fixture_secretvalue",
+        description=f"Unsafe instruction in {skill_path} with token=fixture_secretvalue",
+        file_path=str(skill_path),
+        line_number=7,
+        source="cisco-skill-scanner",
+    )
+    cisco_run = CiscoInventoryRun(
+        source="cisco-skill-scanner",
+        status="enabled",
+        message="Cisco skill scanner found token=fixture_secretvalue",
+        findings=(finding, finding),
+        duration_ms=42,
+        metadata={"totalFindings": 2},
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+        cisco_runs=(cisco_run,),
+    )
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+    encoded = json.dumps(payload, sort_keys=True)
+
+    assert len(payload["findings"]) == 1
+    assert payload["findings"][0]["source"] == "cisco-skill-scanner"
+    assert payload["findings"][0]["severity"] == "high"
+    assert payload["findings"][0]["confidence"] == "high"
+    assert payload["findings"][0]["artifactId"] == "hermes:skill:ops:reviewer"
+    assert payload["findings"][0]["evidence"]["durationMs"] == 42
+    assert payload["findings"][0]["evidence"]["riskComponent"]["scoreDelta"] == -25
+    assert payload["sources"][-1]["sourceType"] == "scanner"
+    assert "fixture_secretvalue" not in encoded
+    assert str(tmp_path) not in encoded
+
+
+def test_inventory_snapshot_preserves_antigravity_agent_type(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="antigravity",
+        installed=True,
+        command_available=True,
+        config_paths=(str(tmp_path / ".gemini" / "antigravity" / "mcp_config.json"),),
+        artifacts=(),
+        warnings=(),
+    )
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-13T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+
+    assert snapshot.agent_type == "antigravity"
+    assert payload["agentType"] == "antigravity"
+
+
+def test_inventory_snapshot_keeps_one_item_when_two_configs_declare_the_same_entry(tmp_path: Path) -> None:
+    cli_dir = tmp_path / ".zcode" / "cli"
+    cli_dir.mkdir(parents=True)
+    desktop_config = cli_dir / "config.json"
+    cli_config = cli_dir / "setting.json"
+    for path in (desktop_config, cli_config):
+        path.write_text('{"mcp": {"servers": {"docs": {"command": "docs-mcp"}}}}\n', encoding="utf-8")
+
+    detection = HarnessDetection(
+        harness="zcode",
+        installed=True,
+        command_available=True,
+        config_paths=(str(desktop_config), str(cli_config)),
+        artifacts=tuple(
+            GuardArtifact(
+                artifact_id="zcode:global:mcp:docs",
+                name="docs",
+                harness="zcode",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(path),
+                command="docs-mcp",
+            )
+            for path in (desktop_config, cli_config)
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-10-23T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    item_ids = [item.item_id for item in snapshot.items]
+
+    assert len(item_ids) == len(set(item_ids))
+    docs_items = [item for item in snapshot.items if item.item_id == "zcode:global:mcp:docs"]
+    assert len(docs_items) == 1
+    assert docs_items[0].metadata.get("configPath") == "{home}/.zcode/cli/config.json"
+
+
+def test_inventory_snapshot_keeps_distinct_entries_that_share_an_id(tmp_path: Path) -> None:
+    cli_dir = tmp_path / ".zcode" / "cli"
+    cli_dir.mkdir(parents=True)
+    desktop_config = cli_dir / "config.json"
+    cli_config = cli_dir / "setting.json"
+    commands = {desktop_config: "docs-mcp", cli_config: "notes-mcp"}
+    for path, command in commands.items():
+        path.write_text(f'{{"mcp": {{"servers": {{"docs": {{"command": "{command}"}}}}}}}}\n', encoding="utf-8")
+
+    detection = HarnessDetection(
+        harness="zcode",
+        installed=True,
+        command_available=True,
+        config_paths=(str(desktop_config), str(cli_config)),
+        artifacts=tuple(
+            GuardArtifact(
+                artifact_id="zcode:global:mcp:docs",
+                name="docs",
+                harness="zcode",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(path),
+                command=command,
+            )
+            for path, command in commands.items()
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-10-23T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    item_ids = [item.item_id for item in snapshot.items]
+    docs_items = [item for item in snapshot.items if item.item_id.startswith("zcode:global:mcp:docs")]
+
+    assert len(item_ids) == len(set(item_ids))
+    assert docs_items[0].item_id == "zcode:global:mcp:docs"
+    assert len(docs_items) == 2
+    assert docs_items[1].item_id.startswith("zcode:global:mcp:docs#")
+    assert {item.metadata.get("configPath") for item in docs_items} == {
+        "{home}/.zcode/cli/config.json",
+        "{home}/.zcode/cli/setting.json",
+    }
+
+
+def _docs_artifact(config_path: Path, command: str, artifact_id: str = "zcode:global:mcp:docs") -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id=artifact_id,
+        name="docs",
+        harness="zcode",
+        artifact_type="mcp_server",
+        source_scope="global",
+        config_path=str(config_path),
+        command=command,
+    )
+
+
+def test_unique_ids_never_take_an_id_a_later_artifact_owns(tmp_path: Path) -> None:
+    setting = tmp_path / ".zcode" / "cli" / "setting.json"
+    suffix = fingerprint_text(redact_local_path(str(setting), home_dir=tmp_path))[:8]
+    artifacts = (
+        _docs_artifact(tmp_path / ".zcode" / "cli" / "config.json", "docs-mcp"),
+        _docs_artifact(setting, "notes-mcp"),
+        _docs_artifact(tmp_path / ".zcode" / "other.json", "other-mcp", f"zcode:global:mcp:docs#{suffix}"),
+    )
+
+    kept = _artifacts_with_unique_ids(artifacts, home_dir=tmp_path)
+    kept_ids = [cast(GuardArtifact, artifact).artifact_id for artifact in kept]
+
+    assert len(kept_ids) == 3
+    assert len(set(kept_ids)) == 3
+    assert kept_ids[1] == f"zcode:global:mcp:docs#{suffix}-2"
+    assert kept_ids[2] == f"zcode:global:mcp:docs#{suffix}"
+
+
+def test_unique_ids_keep_distinct_entries_that_are_not_dataclasses(tmp_path: Path) -> None:
+    artifacts = (
+        SimpleNamespace(artifact_id="docs", config_path=str(tmp_path / "a.json"), command="docs-mcp"),
+        SimpleNamespace(artifact_id="docs", config_path=str(tmp_path / "b.json"), command="notes-mcp"),
+        SimpleNamespace(artifact_id="docs", config_path=str(tmp_path / "c.json"), command="docs-mcp"),
+    )
+
+    kept = _artifacts_with_unique_ids(artifacts, home_dir=tmp_path)
+    kept_ids = [cast(SimpleNamespace, artifact).artifact_id for artifact in kept]
+
+    assert len(kept_ids) == 2
+    assert kept_ids[0] == "docs"
+    assert kept_ids[1].startswith("docs#")
+    assert artifacts[1].artifact_id == "docs"
+
+
+@dataclass(frozen=True)
+class _PathlessArtifact:
+    artifact_id: str
+    command: str
+
+
+def test_unique_ids_accept_dataclass_artifacts_without_a_config_path(tmp_path: Path) -> None:
+    artifacts = (
+        _PathlessArtifact("docs", "docs-mcp"),
+        _PathlessArtifact("docs", "docs-mcp"),
+        _PathlessArtifact("docs", "notes-mcp"),
+    )
+
+    kept = _artifacts_with_unique_ids(artifacts, home_dir=tmp_path)
+    kept_ids = [cast(_PathlessArtifact, artifact).artifact_id for artifact in kept]
+
+    assert len(kept_ids) == 2
+    assert kept_ids[0] == "docs"
+    assert kept_ids[1].startswith("docs#")
+
+
+def test_inventory_snapshot_serialization_keeps_evidence_authority(tmp_path: Path) -> None:
+    trust_claim = {
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
+        "authToken": "local-value",
+    }
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-codex-1",
+        agent_id="agent-codex",
+        agent_type="codex",
+        generated_at="2026-10-23T00:00:00Z",
+        runtime_version="codex-test",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="codex:global:skill:demo",
+                item_kind="skill",
+                display_name="demo",
+                description="Demo skill.",
+                source_fingerprint=fingerprint_text("demo"),
+                content_hash=fingerprint_text("demo"),
+                capability_categories=(),
+                metadata={"trustResolution": dict(trust_claim), "trustLayers": [dict(trust_claim)]},
+            ),
+        ),
+    )
+
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+    metadata = payload["items"][0]["metadata"]
+
+    for claim in (metadata["trustResolution"], metadata["trustLayers"][0]):
+        assert claim["evidenceAuthority"] == "device_claim"
+        assert claim["affectsV4Score"] is False
+        assert claim["authToken"] == "[REDACTED]"
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["evidenceAuthorityToken", "xevidenceAuthority", "description\napiKey", "evidenceAuthor\u0131ty"],
+)
+def test_inventory_snapshot_serialization_only_exempts_the_exact_evidence_authority_key(key: str) -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-codex-1",
+        agent_id="agent-codex",
+        agent_type="codex",
+        generated_at="2026-10-23T00:00:00Z",
+        runtime_version="codex-test",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="codex:global:skill:demo",
+                item_kind="skill",
+                display_name="demo",
+                description="Demo skill.",
+                source_fingerprint=fingerprint_text("demo"),
+                content_hash=fingerprint_text("demo"),
+                capability_categories=(),
+                metadata={"trustResolution": {key: "local-value"}},
+            ),
+        ),
+    )
+
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+
+    assert payload["items"][0]["metadata"]["trustResolution"][key] == "[REDACTED]"

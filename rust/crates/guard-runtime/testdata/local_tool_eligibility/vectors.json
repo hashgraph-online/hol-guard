@@ -1,0 +1,2449 @@
+{
+  "schema": "guard-local-tool-eligibility-vectors.v1",
+  "launch_env": {
+    "PATH": "<root>/bin",
+    "HOME": "<root>/home"
+  },
+  "user_home": "<root>/home",
+  "fixture": [
+    {
+      "path": "bin/node",
+      "type": "file",
+      "content": "fake node runtime\n",
+      "mode": 493
+    },
+    {
+      "path": "bin/python3",
+      "type": "file",
+      "content": "fake python runtime\n",
+      "mode": 493
+    },
+    {
+      "path": "bin/jq",
+      "type": "file",
+      "content": "fake jq processor\n",
+      "mode": 493
+    },
+    {
+      "path": "bin/npx",
+      "type": "file",
+      "content": "fake npx runner\n",
+      "mode": 493
+    },
+    {
+      "path": "bin/bunx",
+      "type": "file",
+      "content": "fake bunx runner\n",
+      "mode": 493
+    },
+    {
+      "path": "bin/xcli",
+      "type": "file",
+      "content": "fake local cli\n",
+      "mode": 493
+    },
+    {
+      "path": "home/active/tool.mjs",
+      "type": "file",
+      "content": "export const version = 1;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/active/tool.py",
+      "type": "file",
+      "content": "print('tool')\n",
+      "mode": 420
+    },
+    {
+      "path": "home/active/filter.jq",
+      "type": "file",
+      "content": ".data\n",
+      "mode": 420
+    },
+    {
+      "path": "home/active/src/a.tsx",
+      "type": "file",
+      "content": "export const A = () => null;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/active/docs/context.md",
+      "type": "file",
+      "content": "# Context\n",
+      "mode": 420
+    },
+    {
+      "path": "home/active/.env",
+      "type": "file",
+      "content": "TOKEN=fixture\n",
+      "mode": 420
+    },
+    {
+      "path": "outside/report.txt",
+      "type": "file",
+      "content": "outside\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-next/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"ws-next\",\n  \"devDependencies\": {\n    \"next\": \"16.3.0-preview.8\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-next/node_modules/next/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"next\",\n  \"version\": \"16.3.0-preview.8\",\n  \"bin\": {\n    \"next\": \"dist/bin/next\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-next/node_modules/next/dist/bin/next",
+      "type": "file",
+      "content": "#!/usr/bin/env node\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-next/node_modules/next/lib/index.js",
+      "type": "file",
+      "content": "module.exports = 'next';\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-next/node_modules/.bin/next",
+      "type": "symlink",
+      "target": "../next/dist/bin/next"
+    },
+    {
+      "path": "home/ws-next/package-lock.json",
+      "type": "file",
+      "content": "{\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"node_modules/next\": {\n      \"version\": \"16.3.0-preview.8\",\n      \"resolved\": \"https://registry.npmjs.org/next/-/next-16.3.0-preview.8.tgz\",\n      \"integrity\": \"sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==\"\n    }\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-next/next.config.mjs",
+      "type": "file",
+      "content": "export default { reactStrictMode: true };\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"ws-eslint\",\n  \"devDependencies\": {\n    \"eslint\": \"^9.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/node_modules/eslint/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"eslint\",\n  \"version\": \"9.1.0\",\n  \"bin\": {\n    \"eslint\": \"bin/eslint.js\"\n  },\n  \"dependencies\": {\n    \"dep-a\": \"^1.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/node_modules/eslint/bin/eslint.js",
+      "type": "file",
+      "content": "#!/usr/bin/env node\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-eslint/node_modules/eslint/lib/index.js",
+      "type": "file",
+      "content": "module.exports = 'eslint';\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/node_modules/.bin/eslint",
+      "type": "symlink",
+      "target": "../eslint/bin/eslint.js"
+    },
+    {
+      "path": "home/ws-eslint/package-lock.json",
+      "type": "file",
+      "content": "{\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"node_modules/eslint\": {\n      \"version\": \"9.1.0\",\n      \"resolved\": \"https://registry.npmjs.org/eslint/-/eslint-9.1.0.tgz\",\n      \"integrity\": \"sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==\"\n    }\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/node_modules/eslint/node_modules/.bin/inner",
+      "type": "file",
+      "content": "inner\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-eslint/node_modules/dep-a/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"dep-a\",\n  \"version\": \"1.0.0\"\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/node_modules/dep-a/index.js",
+      "type": "file",
+      "content": "module.exports = 1;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/src/index.js",
+      "type": "file",
+      "content": "export const value = 1;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/eslint.config.mjs",
+      "type": "file",
+      "content": "import rules from \"./config/rules.mjs\";\nimport demo from \"eslint-plugin-demo\";\nexport default [rules, demo];\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/config/rules.mjs",
+      "type": "file",
+      "content": "export default { rules: {} };\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/node_modules/eslint-plugin-demo/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"eslint-plugin-demo\",\n  \"version\": \"2.0.0\",\n  \"dependencies\": {\n    \"dep-a\": \"1.0.0\",\n    \"not-installed\": \"1.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-eslint/node_modules/eslint-plugin-demo/index.js",
+      "type": "file",
+      "content": "module.exports = {};\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"ws-yaml\",\n  \"devDependencies\": {\n    \"eslint\": \"^9.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/node_modules/eslint/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"eslint\",\n  \"version\": \"9.1.0\",\n  \"bin\": {\n    \"eslint\": \"bin/eslint.js\"\n  },\n  \"dependencies\": {\n    \"dep-a\": \"^1.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/node_modules/eslint/bin/eslint.js",
+      "type": "file",
+      "content": "#!/usr/bin/env node\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-yaml/node_modules/eslint/lib/index.js",
+      "type": "file",
+      "content": "module.exports = 'eslint';\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/node_modules/.bin/eslint",
+      "type": "symlink",
+      "target": "../eslint/bin/eslint.js"
+    },
+    {
+      "path": "home/ws-yaml/package-lock.json",
+      "type": "file",
+      "content": "{\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"node_modules/eslint\": {\n      \"version\": \"9.1.0\",\n      \"resolved\": \"https://registry.npmjs.org/eslint/-/eslint-9.1.0.tgz\",\n      \"integrity\": \"sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==\"\n    }\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/node_modules/eslint/node_modules/.bin/inner",
+      "type": "file",
+      "content": "inner\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-yaml/node_modules/dep-a/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"dep-a\",\n  \"version\": \"1.0.0\"\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/node_modules/dep-a/index.js",
+      "type": "file",
+      "content": "module.exports = 1;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/src/index.js",
+      "type": "file",
+      "content": "export const value = 1;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-yaml/.eslintrc.yml",
+      "type": "file",
+      "content": "root: true\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"ws-computed\",\n  \"devDependencies\": {\n    \"eslint\": \"^9.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/node_modules/eslint/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"eslint\",\n  \"version\": \"9.1.0\",\n  \"bin\": {\n    \"eslint\": \"bin/eslint.js\"\n  },\n  \"dependencies\": {\n    \"dep-a\": \"^1.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/node_modules/eslint/bin/eslint.js",
+      "type": "file",
+      "content": "#!/usr/bin/env node\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-computed/node_modules/eslint/lib/index.js",
+      "type": "file",
+      "content": "module.exports = 'eslint';\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/node_modules/.bin/eslint",
+      "type": "symlink",
+      "target": "../eslint/bin/eslint.js"
+    },
+    {
+      "path": "home/ws-computed/package-lock.json",
+      "type": "file",
+      "content": "{\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"node_modules/eslint\": {\n      \"version\": \"9.1.0\",\n      \"resolved\": \"https://registry.npmjs.org/eslint/-/eslint-9.1.0.tgz\",\n      \"integrity\": \"sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==\"\n    }\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/node_modules/eslint/node_modules/.bin/inner",
+      "type": "file",
+      "content": "inner\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-computed/node_modules/dep-a/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"dep-a\",\n  \"version\": \"1.0.0\"\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/node_modules/dep-a/index.js",
+      "type": "file",
+      "content": "module.exports = 1;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/src/index.js",
+      "type": "file",
+      "content": "export const value = 1;\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-computed/eslint.config.js",
+      "type": "file",
+      "content": "const name = \"./rules\";\nmodule.exports = require(name);\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-tsc/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"ws-tsc\",\n  \"devDependencies\": {\n    \"typescript\": \"~5.4.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-tsc/node_modules/typescript/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"typescript\",\n  \"version\": \"5.4.5\",\n  \"bin\": {\n    \"tsc\": \"bin/tsc\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-tsc/node_modules/typescript/bin/tsc",
+      "type": "file",
+      "content": "#!/usr/bin/env node\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-tsc/node_modules/typescript/lib/index.js",
+      "type": "file",
+      "content": "module.exports = 'typescript';\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-tsc/node_modules/.bin/tsc",
+      "type": "symlink",
+      "target": "../typescript/bin/tsc"
+    },
+    {
+      "path": "home/ws-tsc/bun.lock",
+      "type": "file",
+      "content": "{\n  // bun lockfile\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"typescript\": [\"typescript@5.4.5\", \"\", {}, \"sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==\"],\n  },\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-tsc/tsconfig.json",
+      "type": "file",
+      "content": "{\n  \"extends\": \"./tsconfig.base.json\",\n  \"compilerOptions\": {\n    \"strict\": true\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-tsc/tsconfig.base.json",
+      "type": "file",
+      "content": "{\n  \"compilerOptions\": {\n    \"target\": \"es2022\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-untrusted/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"ws-untrusted\",\n  \"devDependencies\": {\n    \"next\": \"^15.0.0\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-untrusted/node_modules/next/package.json",
+      "type": "file",
+      "content": "{\n  \"name\": \"next\",\n  \"version\": \"15.0.0\",\n  \"bin\": {\n    \"next\": \"dist/bin/next\"\n  }\n}\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-untrusted/node_modules/next/dist/bin/next",
+      "type": "file",
+      "content": "#!/usr/bin/env node\n",
+      "mode": 493
+    },
+    {
+      "path": "home/ws-untrusted/node_modules/next/lib/index.js",
+      "type": "file",
+      "content": "module.exports = 'next';\n",
+      "mode": 420
+    },
+    {
+      "path": "home/ws-untrusted/node_modules/.bin/next",
+      "type": "symlink",
+      "target": "../next/dist/bin/next"
+    },
+    {
+      "path": "home/ws-untrusted/package-lock.json",
+      "type": "file",
+      "content": "{\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"node_modules/next\": {\n      \"version\": \"15.0.0\",\n      \"resolved\": \"https://registry.npmjs.org/next/-/next-15.0.0.tgz\",\n      \"integrity\": \"sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==\"\n    }\n  }\n}\n",
+      "mode": 420
+    }
+  ],
+  "trusted_trees": [
+    [
+      "next",
+      "16.3.0-preview.8",
+      "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+      "f027b187ba830747c6909a642ddf224c40995779bbabf55df823d111997b794d"
+    ],
+    [
+      "eslint",
+      "9.1.0",
+      "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+      "ccbe12bf3b7be2727edca25b3c6d67aedee92d0d53aedec1193894a371a38dbb"
+    ],
+    [
+      "typescript",
+      "5.4.5",
+      "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+      "04ee1438c8ffedf145abdcf94b25ec157a69ee460b1f460ee548478015fc8f53"
+    ]
+  ],
+  "vectors": [
+    {
+      "name": "routine_next_env_and_tail",
+      "command": "cd <root>/home/ws-next && HOL_NEXT_BUILD_CPUS=4 NODE_OPTIONS=--max-old-space-size=4096 ./node_modules/.bin/next build --webpack 2>&1 | tail -30",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "Next.js",
+        "capability": "build",
+        "read_only_reason": "Authenticated local developer validation command",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "package": "next",
+          "binding": {
+            "package": "next",
+            "version": "16.3.0-preview.8",
+            "integrity": "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+            "tree_digest": "f027b187ba830747c6909a642ddf224c40995779bbabf55df823d111997b794d",
+            "executable": "node_modules/next/dist/bin/next"
+          },
+          "dependency_closure_digest": "009fae2681a338365f9d2322fdba4f9f9ff3e5bf7815bd81402f02b08db1db33",
+          "configuration_digest": "2944729a31c730335a955efb73e7147973389db95c49bb70fbd3381158663eb9",
+          "workspace": {
+            "canonical_path": "<root>/home/ws-next",
+            "device": "<stat>",
+            "inode": "<stat>"
+          },
+          "grammar": "routine-local-node-v1"
+        },
+        "material_sha256": "0f6f36034c03109f49dc161526b18c675dc2345ad012b361d80f14c1d072b642"
+      }
+    },
+    {
+      "name": "routine_next_relative_cd_rejected",
+      "command": "cd ws-next && ./node_modules/.bin/next build --webpack",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_next_plain",
+      "command": "cd <root>/home/ws-next && ./node_modules/.bin/next build --webpack",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "Next.js",
+        "capability": "build",
+        "read_only_reason": "Authenticated local developer validation command",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "package": "next",
+          "binding": {
+            "package": "next",
+            "version": "16.3.0-preview.8",
+            "integrity": "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+            "tree_digest": "f027b187ba830747c6909a642ddf224c40995779bbabf55df823d111997b794d",
+            "executable": "node_modules/next/dist/bin/next"
+          },
+          "dependency_closure_digest": "009fae2681a338365f9d2322fdba4f9f9ff3e5bf7815bd81402f02b08db1db33",
+          "configuration_digest": "2944729a31c730335a955efb73e7147973389db95c49bb70fbd3381158663eb9",
+          "workspace": {
+            "canonical_path": "<root>/home/ws-next",
+            "device": "<stat>",
+            "inode": "<stat>"
+          },
+          "grammar": "routine-local-node-v1"
+        },
+        "material_sha256": "0f6f36034c03109f49dc161526b18c675dc2345ad012b361d80f14c1d072b642"
+      }
+    },
+    {
+      "name": "routine_next_missing_webpack",
+      "command": "cd <root>/home/ws-next && ./node_modules/.bin/next build",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_eslint_absolute_cd_head",
+      "command": "cd <root>/home/ws-eslint && ./node_modules/.bin/eslint src --max-warnings 0 --quiet 2>&1 | head -40",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "ESLint",
+        "capability": "lint",
+        "read_only_reason": "Authenticated local developer validation command",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "package": "eslint",
+          "binding": {
+            "package": "eslint",
+            "version": "9.1.0",
+            "integrity": "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+            "tree_digest": "ccbe12bf3b7be2727edca25b3c6d67aedee92d0d53aedec1193894a371a38dbb",
+            "executable": "node_modules/eslint/bin/eslint.js"
+          },
+          "dependency_closure_digest": "eb7983c0653e105c94f5bde057024a3bcc84b4e2e49bfa936e30a88d60d953c8",
+          "configuration_digest": "c27b1cfa49fa91d7a2a547903a749aa5b39e31e3dba389a8245cf06562e1e6e2",
+          "workspace": {
+            "canonical_path": "<root>/home/ws-eslint",
+            "device": "<stat>",
+            "inode": "<stat>"
+          },
+          "grammar": "routine-local-node-v1"
+        },
+        "material_sha256": "2ae48007e3727348863d620237cf2bcec181264145087c51f7496229c1416a07"
+      }
+    },
+    {
+      "name": "routine_eslint_fix_rejected",
+      "command": "cd <root>/home/ws-eslint && ./node_modules/.bin/eslint --fix src",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_eslint_external_target",
+      "command": "cd <root>/home/ws-eslint && ./node_modules/.bin/eslint ../other",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_eslint_superscript_warnings",
+      "command": "cd <root>/home/ws-eslint && ./node_modules/.bin/eslint src --max-warnings ²",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "ESLint",
+        "capability": "lint",
+        "read_only_reason": "Authenticated local developer validation command",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "package": "eslint",
+          "binding": {
+            "package": "eslint",
+            "version": "9.1.0",
+            "integrity": "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+            "tree_digest": "ccbe12bf3b7be2727edca25b3c6d67aedee92d0d53aedec1193894a371a38dbb",
+            "executable": "node_modules/eslint/bin/eslint.js"
+          },
+          "dependency_closure_digest": "eb7983c0653e105c94f5bde057024a3bcc84b4e2e49bfa936e30a88d60d953c8",
+          "configuration_digest": "c27b1cfa49fa91d7a2a547903a749aa5b39e31e3dba389a8245cf06562e1e6e2",
+          "workspace": {
+            "canonical_path": "<root>/home/ws-eslint",
+            "device": "<stat>",
+            "inode": "<stat>"
+          },
+          "grammar": "routine-local-node-v1"
+        },
+        "material_sha256": "2ae48007e3727348863d620237cf2bcec181264145087c51f7496229c1416a07"
+      }
+    },
+    {
+      "name": "routine_eslint_fraction_warnings",
+      "command": "cd <root>/home/ws-eslint && ./node_modules/.bin/eslint src --max-warnings ½",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_tsc_bun_lock",
+      "command": "cd <root>/home/ws-tsc && ./node_modules/.bin/tsc --noEmit --pretty false -p tsconfig.json",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "TypeScript",
+        "capability": "typecheck",
+        "read_only_reason": "Authenticated local developer validation command",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "package": "typescript",
+          "binding": {
+            "package": "typescript",
+            "version": "5.4.5",
+            "integrity": "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+            "tree_digest": "04ee1438c8ffedf145abdcf94b25ec157a69ee460b1f460ee548478015fc8f53",
+            "executable": "node_modules/typescript/bin/tsc"
+          },
+          "dependency_closure_digest": "4ff3de5ece6fd853b9a67e44e60d15b3755a1b91c1594399aaf144f7ada82e7d",
+          "configuration_digest": "7b15d67f7d2ae7cbf6062199a1f0f99fc5c73cfd3764e3c1ace57d9c013312ec",
+          "workspace": {
+            "canonical_path": "<root>/home/ws-tsc",
+            "device": "<stat>",
+            "inode": "<stat>"
+          },
+          "grammar": "routine-local-node-v1"
+        },
+        "material_sha256": "f92573a7f82e607187100bd25f23d498080ee9cd2bfdee807eefc22f7054fa58"
+      }
+    },
+    {
+      "name": "routine_tsc_unbounded_tail",
+      "command": "cd <root>/home/ws-tsc && ./node_modules/.bin/tsc --noEmit | tail -5000",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_tsc_home_from_cwd",
+      "command": "cd <root>/home/ws-tsc && ./node_modules/.bin/tsc --noEmit",
+      "cwd": "<root>/home",
+      "home_dir": null,
+      "expected": {
+        "tool_name": "TypeScript",
+        "capability": "typecheck",
+        "read_only_reason": "Authenticated local developer validation command",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "package": "typescript",
+          "binding": {
+            "package": "typescript",
+            "version": "5.4.5",
+            "integrity": "sha512-Zml4dHVyZS10ZXN0LWludGVncml0eQ==",
+            "tree_digest": "04ee1438c8ffedf145abdcf94b25ec157a69ee460b1f460ee548478015fc8f53",
+            "executable": "node_modules/typescript/bin/tsc"
+          },
+          "dependency_closure_digest": "4ff3de5ece6fd853b9a67e44e60d15b3755a1b91c1594399aaf144f7ada82e7d",
+          "configuration_digest": "7b15d67f7d2ae7cbf6062199a1f0f99fc5c73cfd3764e3c1ace57d9c013312ec",
+          "workspace": {
+            "canonical_path": "<root>/home/ws-tsc",
+            "device": "<stat>",
+            "inode": "<stat>"
+          },
+          "grammar": "routine-local-node-v1"
+        },
+        "material_sha256": "f92573a7f82e607187100bd25f23d498080ee9cd2bfdee807eefc22f7054fa58"
+      }
+    },
+    {
+      "name": "routine_yaml_config_rejected",
+      "command": "cd <root>/home/ws-yaml && ./node_modules/.bin/eslint src",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_computed_require_rejected",
+      "command": "cd <root>/home/ws-computed && ./node_modules/.bin/eslint src",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_untrusted_tree",
+      "command": "cd <root>/home/ws-untrusted && ./node_modules/.bin/next build --webpack",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "routine_command_substitution",
+      "command": "cd <root>/home/ws-next && ./node_modules/.bin/next build $(echo --webpack)",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "package_impeccable_detect",
+      "command": "npx impeccable detect src/a.tsx",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "impeccable",
+        "capability": "scan",
+        "read_only_reason": "profile_impeccable_scan",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "profile": "impeccable-local-scan:v1",
+          "package": {
+            "name": "impeccable",
+            "selector": "impeccable",
+            "trust_mode": "continuous-package-policy-veto"
+          },
+          "runner": {
+            "change_time_ns": "<stat>",
+            "command": "npx",
+            "device": "<stat>",
+            "file_format": "native",
+            "inode": "<stat>",
+            "launch_cwd": "<root>/home/active",
+            "launch_path": "<root>/bin/npx",
+            "mode": 493,
+            "modified_time_ns": "<stat>",
+            "path": "<root>/bin/npx",
+            "path_chain": [
+              {
+                "change_time_ns": "<stat>",
+                "device": "<stat>",
+                "inode": "<stat>",
+                "mode": 493,
+                "modified_time_ns": "<stat>",
+                "path": "<root>/bin/npx",
+                "target_sha256": null
+              }
+            ],
+            "sha256": "8d363811a445137b7f7207590ca6ad170b0de98bc5f598ed36845b0533f89b44",
+            "shebang_status": "not_script",
+            "size": 16,
+            "status": "verified"
+          },
+          "options": [],
+          "environment_names": []
+        },
+        "material_sha256": "dc2a06b11db2b476ad809da929bb7549c4288c329a654c0ee870dcca9a8955b9"
+      }
+    },
+    {
+      "name": "package_impeccable_pinned_indefinite",
+      "command": "npx impeccable@1.2.3 detect --json src",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "impeccable",
+        "capability": "scan",
+        "read_only_reason": "profile_impeccable_scan",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": true,
+        "material": {
+          "profile": "impeccable-local-scan:v1",
+          "package": {
+            "name": "impeccable",
+            "selector": "impeccable@1.2.3",
+            "trust_mode": "continuous-package-policy-veto"
+          },
+          "runner": {
+            "change_time_ns": "<stat>",
+            "command": "npx",
+            "device": "<stat>",
+            "file_format": "native",
+            "inode": "<stat>",
+            "launch_cwd": "<root>/home/active",
+            "launch_path": "<root>/bin/npx",
+            "mode": 493,
+            "modified_time_ns": "<stat>",
+            "path": "<root>/bin/npx",
+            "path_chain": [
+              {
+                "change_time_ns": "<stat>",
+                "device": "<stat>",
+                "inode": "<stat>",
+                "mode": 493,
+                "modified_time_ns": "<stat>",
+                "path": "<root>/bin/npx",
+                "target_sha256": null
+              }
+            ],
+            "sha256": "8d363811a445137b7f7207590ca6ad170b0de98bc5f598ed36845b0533f89b44",
+            "shebang_status": "not_script",
+            "size": 16,
+            "status": "verified"
+          },
+          "options": [
+            "--json"
+          ],
+          "environment_names": []
+        },
+        "material_sha256": "e83fc1ccce0de0030d0a2dddc1ec536e9a6ce07fd3df32d22b2ffca7d95fa5e3"
+      }
+    },
+    {
+      "name": "package_impeccable_latest_fast",
+      "command": "npx impeccable@latest src --fast",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "impeccable",
+        "capability": "scan",
+        "read_only_reason": "profile_impeccable_scan",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "profile": "impeccable-local-scan:v1",
+          "package": {
+            "name": "impeccable",
+            "selector": "impeccable@latest",
+            "trust_mode": "continuous-package-policy-veto"
+          },
+          "runner": {
+            "change_time_ns": "<stat>",
+            "command": "npx",
+            "device": "<stat>",
+            "file_format": "native",
+            "inode": "<stat>",
+            "launch_cwd": "<root>/home/active",
+            "launch_path": "<root>/bin/npx",
+            "mode": 493,
+            "modified_time_ns": "<stat>",
+            "path": "<root>/bin/npx",
+            "path_chain": [
+              {
+                "change_time_ns": "<stat>",
+                "device": "<stat>",
+                "inode": "<stat>",
+                "mode": 493,
+                "modified_time_ns": "<stat>",
+                "path": "<root>/bin/npx",
+                "target_sha256": null
+              }
+            ],
+            "sha256": "8d363811a445137b7f7207590ca6ad170b0de98bc5f598ed36845b0533f89b44",
+            "shebang_status": "not_script",
+            "size": 16,
+            "status": "verified"
+          },
+          "options": [
+            "--fast"
+          ],
+          "environment_names": []
+        },
+        "material_sha256": "1d482f0c46798d87e8f3cc73f605dc8ddb9108623e3ce775ee0da53bcb02362c"
+      }
+    },
+    {
+      "name": "package_impeccable_context_dir",
+      "command": "IMPECCABLE_CONTEXT_DIR=docs npx impeccable detect src",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "impeccable",
+        "capability": "scan",
+        "read_only_reason": "profile_impeccable_scan",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "profile": "impeccable-local-scan:v1",
+          "package": {
+            "name": "impeccable",
+            "selector": "impeccable",
+            "trust_mode": "continuous-package-policy-veto"
+          },
+          "runner": {
+            "change_time_ns": "<stat>",
+            "command": "npx",
+            "device": "<stat>",
+            "file_format": "native",
+            "inode": "<stat>",
+            "launch_cwd": "<root>/home/active",
+            "launch_path": "<root>/bin/npx",
+            "mode": 493,
+            "modified_time_ns": "<stat>",
+            "path": "<root>/bin/npx",
+            "path_chain": [
+              {
+                "change_time_ns": "<stat>",
+                "device": "<stat>",
+                "inode": "<stat>",
+                "mode": 493,
+                "modified_time_ns": "<stat>",
+                "path": "<root>/bin/npx",
+                "target_sha256": null
+              }
+            ],
+            "sha256": "8d363811a445137b7f7207590ca6ad170b0de98bc5f598ed36845b0533f89b44",
+            "shebang_status": "not_script",
+            "size": 16,
+            "status": "verified"
+          },
+          "options": [],
+          "environment_names": [
+            "IMPECCABLE_CONTEXT_DIR"
+          ]
+        },
+        "material_sha256": "37c1a562a1f949cb4c95d4b39286a594bcbb031ca2d2ceb027703908022999d9"
+      }
+    },
+    {
+      "name": "package_impeccable_home_path",
+      "command": "bunx impeccable detect ~/active/src",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "impeccable",
+        "capability": "scan",
+        "read_only_reason": "profile_impeccable_scan",
+        "trust_basis": "package-profile",
+        "indefinite_allowed": false,
+        "material": {
+          "profile": "impeccable-local-scan:v1",
+          "package": {
+            "name": "impeccable",
+            "selector": "impeccable",
+            "trust_mode": "continuous-package-policy-veto"
+          },
+          "runner": {
+            "change_time_ns": "<stat>",
+            "command": "bunx",
+            "device": "<stat>",
+            "file_format": "native",
+            "inode": "<stat>",
+            "launch_cwd": "<root>/home/active",
+            "launch_path": "<root>/bin/bunx",
+            "mode": 493,
+            "modified_time_ns": "<stat>",
+            "path": "<root>/bin/bunx",
+            "path_chain": [
+              {
+                "change_time_ns": "<stat>",
+                "device": "<stat>",
+                "inode": "<stat>",
+                "mode": 493,
+                "modified_time_ns": "<stat>",
+                "path": "<root>/bin/bunx",
+                "target_sha256": null
+              }
+            ],
+            "sha256": "78efec88cb7b5f1c25d6708fbb8fc3d10b89bbd93e55d825bdc1d562dc62fb02",
+            "shebang_status": "not_script",
+            "size": 17,
+            "status": "verified"
+          },
+          "options": [],
+          "environment_names": []
+        },
+        "material_sha256": "373659ca436a36003560f9002f18fc0d01137ed521e09ed9ab47efccb6f42f88"
+      }
+    },
+    {
+      "name": "package_impeccable_skills_rejected",
+      "command": "npx impeccable skills add",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "package_impeccable_secret_rejected",
+      "command": "npx impeccable detect .env",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "package_impeccable_outside_rejected",
+      "command": "npx impeccable detect <root>/outside/report.txt",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "package_impeccable_url_rejected",
+      "command": "npx impeccable detect https://example.com/a",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "package_impeccable_option_rejected",
+      "command": "npx impeccable detect --write src",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "package_impeccable_piped_falls_through",
+      "command": "npx impeccable detect src | jq .",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_http_get",
+      "command": "node tool.mjs request --method=GET --path=/stats --query='entity=A&start=1'",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "tool.mjs",
+        "capability": "request",
+        "read_only_reason": "http_get",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "node",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/node",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/node",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/node",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "f40f2bb4b8838aafae20343fd9d7c446b386610e850045cb790362e5d4559daa",
+              "shebang_status": "not_script",
+              "size": 18,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "change_time_ns": "<stat>",
+              "command": "<root>/home/active/tool.mjs",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "kind": "node-script",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/home/active/tool.mjs",
+              "mode": 420,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/home/active/tool.mjs",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 420,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/home/active/tool.mjs",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "920bb679b1057d30ee293eef1b7f6a6a385c7162294c0c8059f164cc20b8cf04",
+              "shebang_status": "not_script",
+              "size": 26,
+              "status": "verified"
+            }
+          },
+          "argument_shape": [
+            "--method",
+            "GET",
+            "--path",
+            "<selector>",
+            "--query",
+            "<selector>"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "87c98815afe6590262ff95d6ddfed52ffc6565c5aadc104ac1be232cc6a04b84"
+      }
+    },
+    {
+      "name": "verified_http_head_short_option",
+      "command": "node tool.mjs fetch -X head --limit 5",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "tool.mjs",
+        "capability": "fetch",
+        "read_only_reason": "http_head",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "node",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/node",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/node",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/node",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "f40f2bb4b8838aafae20343fd9d7c446b386610e850045cb790362e5d4559daa",
+              "shebang_status": "not_script",
+              "size": 18,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "change_time_ns": "<stat>",
+              "command": "<root>/home/active/tool.mjs",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "kind": "node-script",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/home/active/tool.mjs",
+              "mode": 420,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/home/active/tool.mjs",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 420,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/home/active/tool.mjs",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "920bb679b1057d30ee293eef1b7f6a6a385c7162294c0c8059f164cc20b8cf04",
+              "shebang_status": "not_script",
+              "size": 26,
+              "status": "verified"
+            }
+          },
+          "argument_shape": [
+            "-x",
+            "head",
+            "--limit",
+            "5"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "2da15b6dd852e74cc1996a06222f1dc4de157c5428b86d6e9b413c4a3f3d1154"
+      }
+    },
+    {
+      "name": "verified_http_post_rejected",
+      "command": "node tool.mjs request --method POST",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_http_missing_method",
+      "command": "node tool.mjs request --method",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_http_two_methods",
+      "command": "node tool.mjs api --method=GET --request=GET",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_method_on_read_operation",
+      "command": "node tool.mjs list --method=GET",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_python_status",
+      "command": "python3 tool.py status --verbose",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "tool.py",
+        "capability": "status",
+        "read_only_reason": "operation_status",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "python3",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/python3",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/python3",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/python3",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "baba6028fad8865c025e64e3b142723d836d90722b9744703cfe7e6a3d46779b",
+              "shebang_status": "not_script",
+              "size": 20,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "change_time_ns": "<stat>",
+              "command": "<root>/home/active/tool.py",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "kind": "python-script",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/home/active/tool.py",
+              "mode": 420,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/home/active/tool.py",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 420,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/home/active/tool.py",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "bb9d285fd6384e4448de97c8488ae48705f264b4d9ad06ce5247777cc8e97ee0",
+              "shebang_status": "not_script",
+              "size": 14,
+              "status": "verified"
+            }
+          },
+          "argument_shape": [
+            "--verbose"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "b9edb2dad3871b869dd2edc5898375380d3ed0ba433a37f28a019fc96624be4a"
+      }
+    },
+    {
+      "name": "verified_xcli_check",
+      "command": "xcli check",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "check",
+        "read_only_reason": "operation_check",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [],
+          "output_processor": null
+        },
+        "material_sha256": "c3d0f8ed9cb0f6d91b649ed8a1ad719e5cea8a4fbde9d86449d4601eb477de76"
+      }
+    },
+    {
+      "name": "verified_xcli_describe_shape",
+      "command": "xcli describe item -v --path /a --query=x -- tail",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "describe",
+        "read_only_reason": "operation_describe",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "<positional>",
+            "item",
+            "-v",
+            "--path",
+            "<selector>",
+            "--query",
+            "<selector>",
+            "--",
+            "tail"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "b86aae0fbce08000757a1050e3c19032fa85b1e15f492d15490db7142811fff7"
+      }
+    },
+    {
+      "name": "verified_xcli_diff",
+      "command": "xcli diff a b",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "diff",
+        "read_only_reason": "operation_diff",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "<positional>",
+            "a",
+            "<positional>",
+            "b"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "a7c2f56f11a71fd2263da3694e2594bbb4f1a54eed71d54ddd0ee1c5b5d01a9c"
+      }
+    },
+    {
+      "name": "verified_xcli_find_upper",
+      "command": "xcli FIND name",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "find",
+        "read_only_reason": "operation_find",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "<positional>",
+            "name"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "65f0d99f0e2fbfb08f056fec8ae866448bb66465f5104ab3aa81745b2b2e808d"
+      }
+    },
+    {
+      "name": "verified_xcli_get",
+      "command": "xcli get key --format=json",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "get",
+        "read_only_reason": "operation_get",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "<positional>",
+            "key",
+            "--format",
+            "json"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "92c4eb969cfcd52c96179ef6bf5dc18e8c2d167c7388b4f4d0302703a5fd7948"
+      }
+    },
+    {
+      "name": "verified_xcli_inspect",
+      "command": "xcli inspect",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "inspect",
+        "read_only_reason": "operation_inspect",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [],
+          "output_processor": null
+        },
+        "material_sha256": "c3d0f8ed9cb0f6d91b649ed8a1ad719e5cea8a4fbde9d86449d4601eb477de76"
+      }
+    },
+    {
+      "name": "verified_xcli_list",
+      "command": "xcli list --limit 10",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "list",
+        "read_only_reason": "operation_list",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "--limit",
+            "10"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "685e6fadb3b65183cb5b319ef0ea65667ac3e39219c53483a7c90a6cefdaedcb"
+      }
+    },
+    {
+      "name": "verified_xcli_query",
+      "command": "xcli query --path=/a",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "query",
+        "read_only_reason": "operation_query",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "--path",
+            "<selector>"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "a1dec4819e09b97c13fcb04747364ccb10cdeacdc555bdffbe416b186f339a75"
+      }
+    },
+    {
+      "name": "verified_xcli_read",
+      "command": "xcli read file.txt",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "read",
+        "read_only_reason": "operation_read",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "<positional>",
+            "file.txt"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "2b668d4af54b3daaba580b0fe89db1f575c77838b67759fbc0da93df971b8014"
+      }
+    },
+    {
+      "name": "verified_xcli_report",
+      "command": "xcli report -",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "report",
+        "read_only_reason": "operation_report",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "<positional>",
+            "-"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "a4ef37866621233715b72ce9a8e2c06674923b38cfe2eb951c364e7ef1796738"
+      }
+    },
+    {
+      "name": "verified_xcli_search",
+      "command": "xcli search term",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "search",
+        "read_only_reason": "operation_search",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [
+            "<positional>",
+            "term"
+          ],
+          "output_processor": null
+        },
+        "material_sha256": "be73f6867b0d04c19f77d78abae65248c4b7458fbd3519b1b978ac933614a47e"
+      }
+    },
+    {
+      "name": "verified_xcli_show",
+      "command": "xcli show",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "show",
+        "read_only_reason": "operation_show",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [],
+          "output_processor": null
+        },
+        "material_sha256": "c3d0f8ed9cb0f6d91b649ed8a1ad719e5cea8a4fbde9d86449d4601eb477de76"
+      }
+    },
+    {
+      "name": "verified_xcli_status",
+      "command": "xcli status",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "status",
+        "read_only_reason": "operation_status",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [],
+          "output_processor": null
+        },
+        "material_sha256": "c3d0f8ed9cb0f6d91b649ed8a1ad719e5cea8a4fbde9d86449d4601eb477de76"
+      }
+    },
+    {
+      "name": "verified_xcli_mutating_operation",
+      "command": "xcli deploy",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_xcli_option_first",
+      "command": "xcli --help",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_side_effect_output",
+      "command": "node tool.mjs get --output=out.json",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_side_effect_short_o",
+      "command": "xcli list -o out",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_side_effect_upper",
+      "command": "xcli show --FORCE",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_inline_entrypoint_rejected",
+      "command": "node -e 'console.log(1)' get",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_missing_entrypoint_rejected",
+      "command": "node missing.mjs get",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "verified_unknown_executable",
+      "command": "not-installed-cli list",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "jq_safe_filter",
+      "command": "node tool.mjs get --path=/a | jq -r '.data[0]'",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "tool.mjs",
+        "capability": "get",
+        "read_only_reason": "operation_get",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "node",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/node",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/node",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/node",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "f40f2bb4b8838aafae20343fd9d7c446b386610e850045cb790362e5d4559daa",
+              "shebang_status": "not_script",
+              "size": 18,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "change_time_ns": "<stat>",
+              "command": "<root>/home/active/tool.mjs",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "kind": "node-script",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/home/active/tool.mjs",
+              "mode": 420,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/home/active/tool.mjs",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 420,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/home/active/tool.mjs",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "920bb679b1057d30ee293eef1b7f6a6a385c7162294c0c8059f164cc20b8cf04",
+              "shebang_status": "not_script",
+              "size": 26,
+              "status": "verified"
+            }
+          },
+          "argument_shape": [
+            "--path",
+            "<selector>"
+          ],
+          "output_processor": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "jq",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/jq",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/jq",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/jq",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "2578f14a3825dc9f68efa391be1aa054474700953861d342e5a394bf69fa62cf",
+              "shebang_status": "not_script",
+              "size": 18,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            },
+            "arguments_sha256": "9c84856f197c436cf55af7b9c37affcd5dac31f471bed455c979de6b3472417d"
+          }
+        },
+        "material_sha256": "1561bbe4b603e8360198fc9b07acc35ae4839eb485ca87bf0959e43cfb1abc6c"
+      }
+    },
+    {
+      "name": "jq_safe_long_options",
+      "command": "xcli list | jq --sort-keys --compact-output .",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "list",
+        "read_only_reason": "operation_list",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [],
+          "output_processor": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "jq",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/jq",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/jq",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/jq",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "2578f14a3825dc9f68efa391be1aa054474700953861d342e5a394bf69fa62cf",
+              "shebang_status": "not_script",
+              "size": 18,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            },
+            "arguments_sha256": "5bf435a7857cfa369de9ffa7b26ee13e08c37e3ac94053d351da4ef0b2bf84db"
+          }
+        },
+        "material_sha256": "fb2e85619b5de7a0dea27c44770495bb5bad7dbd8e11c541bdd0e577c32b4a9b"
+      }
+    },
+    {
+      "name": "jq_unsafe_argument",
+      "command": "xcli list | jq --arg name value .",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "jq_file_filter_rejected",
+      "command": "xcli list | jq -f filter.jq",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "jq_two_filters_rejected",
+      "command": "xcli list | jq .a .b",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "jq_missing_filter_rejected",
+      "command": "xcli list | jq -r",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "processor_not_jq_rejected",
+      "command": "xcli list | head -5",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "redirect_rejected",
+      "command": "xcli list > out.txt",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "chaining_rejected",
+      "command": "xcli list && xcli show",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "sequence_rejected",
+      "command": "xcli list; xcli show",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "embedded_command_rejected",
+      "command": "xcli get $(whoami)",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "environment_prefix_rejected",
+      "command": "FOO=1 xcli list",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "nohup_prefix",
+      "command": "nohup xcli list",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "list",
+        "read_only_reason": "operation_list",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [],
+          "output_processor": null
+        },
+        "material_sha256": "c3d0f8ed9cb0f6d91b649ed8a1ad719e5cea8a4fbde9d86449d4601eb477de76"
+      }
+    },
+    {
+      "name": "env_wrapper",
+      "command": "env xcli list",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": {
+        "tool_name": "xcli",
+        "capability": "list",
+        "read_only_reason": "operation_list",
+        "trust_basis": "verified-files",
+        "indefinite_allowed": false,
+        "material": {
+          "version": 1,
+          "launch": {
+            "executable": {
+              "change_time_ns": "<stat>",
+              "command": "xcli",
+              "device": "<stat>",
+              "file_format": "native",
+              "inode": "<stat>",
+              "launch_cwd": "<root>/home/active",
+              "launch_path": "<root>/bin/xcli",
+              "mode": 493,
+              "modified_time_ns": "<stat>",
+              "path": "<root>/bin/xcli",
+              "path_chain": [
+                {
+                  "change_time_ns": "<stat>",
+                  "device": "<stat>",
+                  "inode": "<stat>",
+                  "mode": 493,
+                  "modified_time_ns": "<stat>",
+                  "path": "<root>/bin/xcli",
+                  "target_sha256": null
+                }
+              ],
+              "sha256": "a9913c312fe8d26ea6eed2ac1187f09a581e57f0f3836198a004d5cfd0223b4a",
+              "shebang_status": "not_script",
+              "size": 15,
+              "status": "verified"
+            },
+            "entrypoint": {
+              "kind": "direct-executable",
+              "status": "bound-by-executable"
+            }
+          },
+          "argument_shape": [],
+          "output_processor": null
+        },
+        "material_sha256": "c3d0f8ed9cb0f6d91b649ed8a1ad719e5cea8a4fbde9d86449d4601eb477de76"
+      }
+    },
+    {
+      "name": "sudo_wrapper_rejected",
+      "command": "sudo xcli list",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "three_segments_rejected",
+      "command": "xcli list | jq . | jq .",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    },
+    {
+      "name": "non_exact_parse_rejected",
+      "command": "xcli list 'unterminated",
+      "cwd": "<root>/home/active",
+      "home_dir": "<root>/home",
+      "expected": null
+    }
+  ]
+}

@@ -1,0 +1,423 @@
+//! Bounded offline corpus evaluation through the packaged production engine.
+//! Synthetic controls grant no persisted authority and commands never execute.
+
+use super::*;
+use crate::native_command_controls::CompiledNativeCommandControls;
+use crate::native_command_program::NativeCommandProgram;
+use guard_contracts::{NativeCommandControlBindingV1, NativeExtensionControlV1};
+
+const MAX_CASES: usize = 256;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Request {
+    schema: String,
+    cases: Vec<Case>,
+    #[serde(default)]
+    home_dir: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    execution_environment: Option<guard_contracts::GuardExecutionEnvironmentV1>,
+    #[serde(default)]
+    controls: Vec<NativeExtensionControlV1>,
+    #[serde(default)]
+    managed_controls: Vec<NativeExtensionControlV1>,
+    #[serde(default)]
+    global_lockdown: bool,
+    #[serde(default)]
+    managed_global_lockdown: bool,
+    /// Binds the synthetic snapshot to a non-default authority health so
+    /// offline fixtures can exercise the host health floor with evidence that
+    /// matches the unhealthy binding. Admission still validates the value.
+    #[serde(default)]
+    health: Option<String>,
+    /// Bind the snapshot a device has before it ever enrolls: unenrolled, no
+    /// layers, revision zero and the all-zero first-install authority. Packaged
+    /// first-party protection applies to it, unlike `health: "unenrolled"`
+    /// alone, which models a lost authority and blocks every command.
+    #[serde(default)]
+    never_enrolled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Case {
+    id: String,
+    command: String,
+}
+
+/// Reuse one admitted program and synthetic control snapshot for an offline
+/// batch. Every result still comes from production parsing and evaluation.
+pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
+    if bytes.is_empty() || bytes.len() > json::MAX_SOURCE_BYTES {
+        return Err("command_source_bytes_invalid");
+    }
+    // Typed decoding rejects duplicate/unknown fields without the source
+    // compiler's 4 KiB string cap. Overlong commands must reach the production
+    // parser so corpus tests retain its conservative size-limit behavior.
+    let request: Request = serde_json::from_slice(bytes)
+        .map_err(|_| "command_source_evaluation_batch_contract_invalid")?;
+    if request.schema != "guard.command-extension-evaluation-batch.v1"
+        || request.cases.is_empty()
+        || request.cases.len() > MAX_CASES
+    {
+        return Err("command_source_evaluation_batch_contract_invalid");
+    }
+    for path in [&request.home_dir, &request.cwd].into_iter().flatten() {
+        if path.is_empty() || path.len() > 32_768 || path.contains('\0') {
+            return Err("command_source_evaluation_batch_context_invalid");
+        }
+    }
+    if request.execution_environment.is_some()
+        && (request.home_dir.is_none() || request.cwd.is_none())
+    {
+        return Err("command_source_evaluation_batch_context_invalid");
+    }
+    let mut ids = BTreeSet::new();
+    for case in &request.cases {
+        if case.id.is_empty()
+            || case.id.len() > 96
+            || !case
+                .id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+            || !ids.insert(case.id.as_str())
+            || case.command.trim().is_empty()
+        {
+            return Err("command_source_evaluation_batch_case_invalid");
+        }
+    }
+
+    let program = packaged_command_program()?;
+    let mut binding = if request.never_enrolled {
+        never_enrolled_binding(&program, &request)?
+    } else {
+        synthetic_binding(&program, &request)?
+    };
+    binding.effective_digest = binding.compute_effective_digest()?;
+    let controls = CompiledNativeCommandControls::new(&binding)?;
+
+    let mut results = Vec::with_capacity(request.cases.len());
+    for case in request.cases {
+        let result = crate::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "claude-code",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":"Bash","tool_input":{"command":case.command}}),
+            Some(&controls),
+            None,
+            crate::pretool::PathContext {
+                home_dir: request.home_dir.as_deref(),
+                cwd: request.cwd.as_deref(),
+                cdpath_unset: false,
+                rustup_override_absent: false,
+                cargo_config_inert: false,
+                npm_config_inert: false,
+                pip_config_inert: false,
+                shell_home_matches: false,
+                ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                psql_environment: Default::default(),
+                creates_nothing: false,
+            },
+            request.execution_environment.as_ref(),
+        );
+        // This is the same model returned by `hol-guard-runtime pre-tool` for
+        // the single-command fixture. Preserve that adapter's provenance.
+        let command_model = crate::parse_command(&crate::CommandModelRequestV1 {
+            command: case.command,
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "guard-shell".to_owned(),
+        })
+        .map_err(|_| "command_source_evaluation_batch_command_invalid")?;
+        let mut payload =
+            serde_json::to_value(result).map_err(|_| "command_source_encoding_failed")?;
+        payload["command_model"] =
+            serde_json::to_value(command_model).map_err(|_| "command_source_encoding_failed")?;
+        results.push(serde_json::json!({"id":case.id,"payload":payload}));
+    }
+    Ok(serde_json::json!({
+        "schema":"guard.command-extension-evaluation-batch-results.v1",
+        "scope":"offline-simulation-not-authenticated-receipts","ok":true,
+        "program_digest":program.program_digest,"catalog_digest":program.catalog_digest,
+        "control_binding":binding,"cases":results,"target_commands_executed":0,
+    }))
+}
+
+fn synthetic_binding(
+    program: &NativeCommandProgram,
+    request: &Request,
+) -> Result<NativeCommandControlBindingV1, &'static str> {
+    let mut layers = vec![
+        serde_json::json!({"schema_version":"1.0.0","kind":"local-admin",
+        "catalog_digest":program.catalog_digest,"global_lockdown":request.global_lockdown,"controls":request.controls}),
+    ];
+    let managed_layer = !request.managed_controls.is_empty() || request.managed_global_lockdown;
+    if managed_layer {
+        layers.push(serde_json::json!({"schema_version":"1.0.0","kind":"signed-cloud",
+            "catalog_digest":program.catalog_digest,"global_lockdown":request.managed_global_lockdown,"controls":request.managed_controls}));
+    }
+    serde_json::from_value(serde_json::json!({
+        "schema":"guard.native-command-control-binding.v1",
+        "program_digest":program.program_digest,"catalog_digest":program.catalog_digest,
+        "trust_digest":program.trust_digest,"health":request.health.as_deref().unwrap_or("protected"),"revision":1,
+        "managed_revision":if managed_layer {1} else {0},
+        "effective_digest":"","layers":layers,
+    }))
+    .map_err(|_| "command_source_evaluation_batch_binding_invalid")
+}
+
+/// The first-install binding: it carries no controls, so any requested control,
+/// lockdown or other health contradicts it.
+fn never_enrolled_binding(
+    program: &NativeCommandProgram,
+    request: &Request,
+) -> Result<NativeCommandControlBindingV1, &'static str> {
+    if !request.controls.is_empty()
+        || !request.managed_controls.is_empty()
+        || request.global_lockdown
+        || request.managed_global_lockdown
+        || request
+            .health
+            .as_deref()
+            .is_some_and(|health| health != "unenrolled")
+    {
+        return Err("command_source_evaluation_batch_contract_invalid");
+    }
+    serde_json::from_value(serde_json::json!({
+        "schema":"guard.native-command-control-binding.v1",
+        "program_digest":program.program_digest,"catalog_digest":program.catalog_digest,
+        "trust_digest":program.trust_digest,"health":"unenrolled","revision":0,
+        "managed_revision":0,"effective_digest":"","layers":[],
+        "authority":{"epoch":1,"mutation_revision":1,"authority_key_id":"0".repeat(64),"recovery":null},
+    }))
+    .map_err(|_| "command_source_evaluation_batch_binding_invalid")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(cases: Value) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "schema":"guard.command-extension-evaluation-batch.v1","cases":cases
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn rejects_ambiguous_unbounded_or_authority_bearing_requests() {
+        for input in [
+            request(serde_json::json!([])),
+            request(serde_json::json!([{"id":"a","command":"pwd","controls":[]} ])),
+            request(serde_json::json!([{"id":"a","command":"pwd"},{"id":"a","command":"pwd"}])),
+            request(serde_json::json!([{"id":"","command":"pwd"}])),
+            request(serde_json::json!([{"id":"../a","command":"pwd"}])),
+            request(serde_json::json!([{"id":"a","command":"  "}])),
+            request(serde_json::json!(vec![serde_json::json!({"id":"a","command":"pwd"}); MAX_CASES + 1])),
+            br#"{"schema":"guard.command-extension-evaluation-batch.v1","cases":[{"id":"a","command":"pwd","command":"rm -rf /"}]}"#.to_vec(),
+            br#"{"schema":"guard.command-extension-evaluation-batch.v1","schema":"wrong","cases":[]}"#.to_vec(),
+            br#"{"schema":"guard.command-extension-evaluation-batch.v1","cases":[{"id":"a","command":"pwd"}],"authority":{}}"#.to_vec(),
+            br#"{"schema":"guard.command-extension-evaluation-batch.v1","cases":[{"id":"a","command":"pwd"}],"controls":[{"target_kind":"permission","target_id":"command.git.permission.hard-reset","state":"enabled","state":"disabled"}]}"#.to_vec(),
+            vec![b' '; json::MAX_SOURCE_BYTES + 1],
+        ] {
+            assert!(evaluate_batch(&input).is_err());
+        }
+    }
+
+    #[test]
+    fn applies_shared_synthetic_controls_with_managed_disable_precedence() {
+        let mut input: Value = serde_json::from_slice(&request(serde_json::json!([
+            {"id":"reset","command":"git reset --hard"}
+        ])))
+        .unwrap();
+        let control = serde_json::json!({"target_kind":"permission",
+            "target_id":"command.git.permission.hard-reset","state":"enabled"});
+        input["controls"] = serde_json::json!([control]);
+        let enabled = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        let enabled_payload = &enabled["cases"][0]["payload"];
+        assert_ne!(enabled_payload["minimum_action"], "block");
+        let enabled_binding = &enabled_payload["command_extensions"]["binding"];
+        assert_eq!(enabled_binding["managed_control_revision"], 0);
+
+        let mut disabled = control;
+        disabled["state"] = serde_json::json!("disabled");
+        input["managed_controls"] = serde_json::json!([disabled]);
+        let managed = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        let managed_payload = &managed["cases"][0]["payload"];
+        assert_eq!(managed_payload["minimum_action"], "block");
+        assert_eq!(
+            managed_payload["reason_code"],
+            "native_command_permission_disabled"
+        );
+        let managed_binding = &managed_payload["command_extensions"]["binding"];
+        assert_eq!(managed_binding["managed_control_revision"], 1);
+        assert_ne!(
+            enabled_binding["control_effective_digest"],
+            managed_binding["control_effective_digest"]
+        );
+
+        input["controls"][0]["target_id"] = serde_json::json!("command.missing.permission.target");
+        assert_eq!(
+            evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap_err(),
+            "native_command_control_target_unknown"
+        );
+    }
+
+    #[test]
+    fn health_is_bound_into_the_synthetic_snapshot_and_validated() {
+        let mut input: Value =
+            serde_json::from_slice(&request(serde_json::json!([{"id":"a","command":"pwd"}])))
+                .unwrap();
+        let protected = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        assert_eq!(protected["control_binding"]["health"], "protected");
+        input["health"] = serde_json::json!("tampered");
+        let tampered = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        assert_eq!(tampered["control_binding"]["health"], "tampered");
+        assert_ne!(
+            protected["control_binding"]["effective_digest"],
+            tampered["control_binding"]["effective_digest"]
+        );
+        input["health"] = serde_json::json!("healthy");
+        assert!(evaluate_batch(&serde_json::to_vec(&input).unwrap()).is_err());
+    }
+
+    #[test]
+    fn a_never_enrolled_device_keeps_packaged_protection_instead_of_a_global_block() {
+        let mut input: Value = serde_json::from_slice(&request(serde_json::json!([
+            {"id":"context","command":"docker context use staging"}
+        ])))
+        .unwrap();
+        input["health"] = serde_json::json!("unenrolled");
+        let lost = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        assert_eq!(
+            lost["cases"][0]["payload"]["reason_code"],
+            "native_command_control_authority_block"
+        );
+        input["never_enrolled"] = serde_json::json!(true);
+        let fresh = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        let binding = &fresh["control_binding"];
+        assert_eq!(binding["health"], "unenrolled");
+        assert_eq!(binding["revision"], 0);
+        assert_eq!(binding["layers"], serde_json::json!([]));
+        assert_eq!(
+            fresh["cases"][0]["payload"]["reason_code"],
+            "native_command_review_required"
+        );
+        for (field, value) in [
+            ("health", serde_json::json!("protected")),
+            ("global_lockdown", serde_json::json!(true)),
+            (
+                "controls",
+                serde_json::json!([{"target_kind":"permission",
+                    "target_id":"command.git.permission.hard-reset","state":"enabled"}]),
+            ),
+        ] {
+            let mut contradicted = input.clone();
+            contradicted[field] = value;
+            assert_eq!(
+                evaluate_batch(&serde_json::to_vec(&contradicted).unwrap()).unwrap_err(),
+                "command_source_evaluation_batch_contract_invalid"
+            );
+        }
+    }
+
+    #[test]
+    fn global_lockdown_is_bound_even_without_individual_controls() {
+        let baseline: Value = serde_json::from_slice(&request(serde_json::json!([
+            {"id":"safe","command":"pwd"}
+        ])))
+        .unwrap();
+        let allowed = evaluate_batch(&serde_json::to_vec(&baseline).unwrap()).unwrap();
+        for field in ["global_lockdown", "managed_global_lockdown"] {
+            let mut input = baseline.clone();
+            input[field] = serde_json::json!(true);
+            let blocked = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+            let payload = &blocked["cases"][0]["payload"];
+            assert_eq!(payload["minimum_action"], "block");
+            assert_eq!(
+                payload["reason_code"],
+                "native_command_control_authority_block"
+            );
+            assert!(!payload["reason"]
+                .as_str()
+                .unwrap()
+                .contains("hol-guard command controls"));
+            assert_ne!(
+                blocked["control_binding"]["effective_digest"],
+                allowed["control_binding"]["effective_digest"]
+            );
+            assert_eq!(
+                blocked["control_binding"]["managed_revision"],
+                usize::from(field == "managed_global_lockdown")
+            );
+        }
+    }
+
+    #[test]
+    fn preserves_production_models_observations_and_error_evidence() {
+        let commands = [
+            "pwd".to_owned(),
+            "git reset --hard".to_owned(),
+            "cat ~/.ssh/id_ed25519".to_owned(),
+            "env -i curl https://example.com".to_owned(),
+            "x".repeat(crate::MAX_COMMAND_BYTES + 1),
+        ];
+        let cases: Vec<_> = commands
+            .iter()
+            .enumerate()
+            .map(|(index, command)| serde_json::json!({"id":format!("case-{index}"),"command":command}))
+            .collect();
+        let output = evaluate_batch(&request(serde_json::json!(cases))).unwrap();
+        assert_eq!(output["target_commands_executed"], 0);
+        assert_eq!(output["cases"].as_array().unwrap().len(), commands.len());
+        for (index, command) in commands.iter().enumerate() {
+            let payload = &output["cases"][index]["payload"];
+            let native = crate::pretool::evaluate_pre_tool(&crate::CommandModelRequestV1 {
+                command: command.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            assert_eq!(
+                payload["command_model"],
+                serde_json::to_value(native.command_model).unwrap()
+            );
+            let extensions = &payload["command_extensions"];
+            if command.len() > crate::MAX_COMMAND_BYTES {
+                assert!(extensions.is_null());
+                assert_eq!(payload["minimum_action"], "block");
+                continue;
+            }
+            assert_eq!(
+                extensions["binding"]["program_digest"],
+                output["program_digest"]
+            );
+            assert_eq!(
+                extensions["binding"]["catalog_digest"],
+                output["catalog_digest"]
+            );
+            assert_eq!(extensions["binding"]["control_revision"], 1);
+            assert_eq!(extensions["binding"]["managed_control_revision"], 0);
+        }
+        let destructive = &output["cases"][1]["payload"]["command_extensions"];
+        assert!(destructive["observations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| { row["rule_id"] == "command.git.hard-reset" }));
+        let uncertain = &output["cases"][3]["payload"]["command_extensions"];
+        assert_eq!(
+            uncertain["evaluation_error"],
+            "native_command_evaluation_failed"
+        );
+        assert_eq!(output["cases"][3]["payload"]["minimum_action"], "block");
+        assert_eq!(
+            output["cases"][4]["payload"]["command_model"]["uncertainty_reason"],
+            "command_byte_limit_exceeded"
+        );
+    }
+}

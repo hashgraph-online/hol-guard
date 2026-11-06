@@ -1,0 +1,341 @@
+# Harness Support Matrix
+
+Local harness protection works without signing in to Guard Cloud. Cloud adds synced
+history, visibility, and team controls around the same adapters. See
+[Local Guard vs Guard Cloud](./local-vs-cloud.md).
+
+## Hook verdict exit codes
+
+`guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the
+authority for verdict exit codes, including `--json` responses. Emitters pass
+the canonical harness, resolved policy action, and normalized hook event;
+they do not maintain independent exit-code tables.
+
+| Harness | Blocking verdict | Nonblocking verdict |
+| --- | --- | --- |
+| Codex, Claude Code, Copilot, Pi, OMP, Muse | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
+| Cursor, Devin, Kimi, Hermes | `2` | `0` |
+| OpenCode, Superagent | `1` | `0` |
+| Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
+| Unknown harness | `1` | `0` |
+
+Blocking actions are `review`, `require-reapproval`, `sandbox-required`, and
+`block`. Missing event context does not imply that an envelope will be consumed.
+`PostToolUse` reports a policy violation; it cannot undo an executed tool.
+
+## Harness coverage
+
+
+Current Guard support in this repo:
+
+- `codex`
+  - detects global and project `config.toml`
+  - detects Guard-managed native hook entries in `.codex/config.toml` and migrates legacy `.codex/hooks.json` entries
+  - parses configured MCP servers
+  - installs Guard-owned Codex `PreToolUse` and `PermissionRequest` hooks as the authoritative complete-command boundary, so native shell commands can be denied before execution even when Codex itself is running in YOLO mode
+  - does not install Bash DEBUG traps, zsh debug traps, fish preexec handlers, `BASH_ENV`, or shell profile blocks; install and repair remove previously managed copies without changing unrelated profile bytes
+  - refuses wrapper-mode launch when the authoritative native hooks are missing or disabled
+  - serializes package-manager shell intent, package metadata, and the final pre-execution Guard result into the shared runtime envelope before Guard queues or blocks the action
+  - supports wrapper-mode `guard run codex`
+  - wrapper prompt screening now suppresses copied debug and incident context while still escalating risky prompt intent
+  - uses same-chat MCP elicitation for live managed MCP tool approvals in the interactive CLI and Codex App
+  - falls back to the local approval center only for nonresponsive or headless Codex sessions such as `codex exec`
+  - when a browser approval request has a live Codex thread binding, approving or blocking in the browser resumes that same Codex thread with HOL Guard continuation copy and the exact blocked command context
+  - headless Codex sessions resume through `codex exec resume` with Guard-managed hooks still enabled, so saved approvals can replay the blocked command instead of forcing a manual retry
+  - when no Codex thread binding is available, returns an explicit manual fallback instead of a false resume success
+- `claude-code`
+  - detects global and project settings, hooks, `.mcp.json`, and workspace agents
+  - supports local hook install and uninstall in `.claude/settings.local.json`
+  - has native `PreToolUse`, `PermissionRequest` and `UserPromptSubmit` Guard hook coverage, so a typed prompt is screened before Claude reads it
+  - when CIGAR project context is on, the `UserPromptSubmit` answer also carries short excerpts from the project files that match the prompt (see [CIGAR runtime and settings](./cigar-integration/runtime-and-settings.md#prompt-context-in-claude-code-and-codex))
+  - carries package-manager shell intent and pre-execution block state through the shared Guard runtime envelope before Claude sees the denied tool response
+  - on macOS and Linux, when the bundled runtime supports it, the `SessionStart` hook first checks in the native runtime that the Guard hook entries are already current and the verified daemon is live, and prints the Guard context without starting Python; otherwise it hands the session start to the Python hook, which starts the daemon and refreshes the entries as before
+  - is the best current harness for graceful approval deferral
+- `copilot`
+  - detects read-only user config in `~/.copilot/config.json` and `~/.copilot/mcp-config.json`
+  - detects workspace `.vscode/mcp.json` as documented MCP artifact input only
+  - detects repo-local Copilot CLI hooks from `.github/hooks/*.json`
+  - installs and removes Guard-owned repo hooks in `.github/hooks/hol-guard-copilot.json`
+  - supports wrapper-mode `guard run copilot`
+  - has native `userPromptSubmitted`, `preToolUse`, and `postToolUse` hook coverage normalized onto the shared Guard runtime
+  - package-manager shell tool calls now persist package intent, consistent block copy, and pre-execution Guard state before Copilot retries
+- `cursor`
+  - detects global and project `mcp.json`
+  - installs native Cursor hooks in `.cursor/hooks.json` for `beforeShellExecution`, `beforeMCPExecution`, `preToolUse`, and `beforeReadFile`
+  - supports wrapper-mode management state and `guard-cursor-agent` / `guard-cursor` CLI shims
+  - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
+  - leaves native Cursor tool approval in place for `ask` decisions and focuses Guard on artifact trust plus runtime interception
+  - managed MCP package-manager tool calls are routed through the supply-chain decision engine before Cursor receives the tool result
+  - uses the Cursor local/cloud contract in [cursor-local-cloud-contract.md](cursor-local-cloud-contract.md) to keep editor and CLI status, repair, receipts, and Cloud sync distinct under one Cursor app
+- `cline`
+  - detects the Cline CLI, VS Code installations, conservative JetBrains signals, supported global hook/plugin roots, and Cline MCP settings
+  - installs Guard-owned global `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, lifecycle hooks, or a Cline AgentPlugin transport without overwriting user-owned hooks/plugins
+  - evaluates `PreToolUse` synchronously and fails closed when Guard is unavailable, payloads are malformed/contradictory, action-bearing tools are unmapped, or bounded bridge limits are exceeded
+  - preserves Cline `run_commands` parallel semantics by reviewing each command independently rather than synthesizing sequential shell syntax
+  - uses AgentPlugin `beforeTool` for pre-execution blocking and `afterTool` for model-visible output replacement when plugin transport is active
+  - treats native `PostToolUse` as observation-only because native hooks cannot reliably replace a result already returned to the model
+  - proxies eligible local stdio MCP servers through Guard while keeping raw MCP secret values out of persisted evidence and preserving exact, conservative restore backups
+  - records synthetic bridge canaries separately from live Cline runtime proofs and does not mark a transport ready from file presence alone
+  - reports JetBrains protection as unverified until a live pre-tool proof exists; see [Cline local protection contract](cline-local-protection-contract.md)
+- `antigravity`
+  - detects user settings in `~/.config/antigravity/user/settings.json` and `~/.config/Antigravity/User/settings.json`, macOS Application Support settings, and `%APPDATA%\Antigravity\User\settings.json`
+  - reads those two XDG paths once when the filesystem is case-insensitive; when both files exist, their MCP servers keep separate artifact ids
+  - detects extension manifests in `~/.antigravity/extensions/extensions.json` and MCP configuration in `.gemini/antigravity/mcp_config.json`
+  - discovers skill directories under `.gemini/antigravity/skills/` (`skills`), `.gemini/antigravity/builtin/skills/` (`builtin-skills`), and `.gemini/config/plugins/` (`plugin-skills`), plus workspace `.agents/skills/` (`agents-skills`). Home `.agents/skills/` stays with the harnesses that own it. Each prefix is one path segment, so a nested directory under the primary skills root cannot reuse another root's artifact id. See [Skill directory identity](./skill-directory-identity.md)
+  - uses Rust runner authority `antigravity_detect`
+  - supports wrapper-mode management state; install smoke is `hol-guard install antigravity --dry-run`
+  - uses the local approval center for blocked artifact changes
+  - shell commands are not observable through the Antigravity hook surface
+- `gemini`
+  - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
+  - supports wrapper-mode management state
+  - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
+  - falls back to the local approval center when Guard blocks a launch
+  - native package-manager shell actions now use the same package intent contract, consistent block copy, and evidence payload as the other managed harnesses
+- `hermes`
+  - detects Hermes skills plus MCP servers from `~/.hermes/config.yaml` and `~/.hermes/mcp_servers.json`
+  - supports `hol-guard hermes bootstrap` and a Guard-managed Hermes overlay bundle under Guard home
+  - rewrites managed Hermes MCP entries through Guard’s existing proxy path and uses native-or-center delivery when the managed bundle is present
+  - blocks sensitive file reads and Docker-sensitive native pre-tool actions through the existing Guard hook path
+  - package-manager shell actions now emit shared package intent metadata and use the same pre-execution package block flow as Codex, Claude Code, Gemini, Copilot, and OpenCode
+- `openclaw`
+  - detects `~/.openclaw/openclaw.json`, gateway posture, channels, MCP servers, workspace skills, user skills, and OpenClaw-owned skills
+  - supports a Guard-managed OpenClaw overlay bundle under Guard home without mutating user OpenClaw config
+  - flags open DM channel posture and remote MCP endpoints before launch so chat-originated agent work can be reviewed
+  - uses native-or-center delivery when the managed bundle is present and keeps browser auto-open off for blocked requests
+  - managed MCP package-manager calls now route through the supply-chain package evaluator before OpenClaw receives the tool result
+- `opencode`
+  - detects global and project config, MCP servers, config-defined commands, markdown commands, npm plugins, local
+    plugin files, and OpenCode-compatible skill directories
+  - installs a Guard-owned pretool plugin in `~/.config/opencode/plugins/` that calls `hol-guard hook --harness opencode`
+    before bash and shell tools run, so package installs and secret-read commands are evaluated during the session
+  - supports wrapper-mode management state plus a Guard-owned runtime overlay for native skill approval prompts
+  - supports wrapper-mode `guard run opencode`
+  - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
+  - keeps managed MCP tools on OpenCode native ask so the user can allow once, allow for the session, or reject inline
+  - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
+    approval
+  - native shell and managed MCP package-manager calls now share the same package-request evaluator, evidence fields, and approval-center copy
+- `kimi`
+  - detects `~/.kimi-code/config.toml` and workspace `.kimi-code/config.toml`
+  - detects `~/.kimi-code/mcp.json` MCP server registrations
+  - detects existing `[[hooks]]` entries in Kimi Code's TOML config
+  - installs Guard-owned `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, `SessionStart`, and `Stop` hooks in `~/.kimi-code/config.toml` by calling `hol-guard hook --harness kimi`
+  - blocks dangerous tool calls and prompts by returning exit code `2` and a JSON `permissionDecision: "deny"` response in `hookSpecificOutput`
+  - fails open if a hook crashes or times out, so Kimi Code keeps working when Guard is unreachable
+  - uses the same JSON stdin/stdout wire protocol as Codex and Claude Code
+- `grok`
+  - detects a trusted absolute `grok` executable, `~/.grok/config.toml`, `~/.grok/managed_config.toml`, `~/.grok/hooks/`, skills, plugins, agents, personas, workflows, sandbox profiles, and project `.grok/` surfaces
+  - rejects relative, current-directory, workspace, unsafe-owner/mode, and workspace-targeting symlink executables before probing or launch; custom install roots can be selected once with `hol-guard run grok --grok-executable /absolute/path/to/grok`
+  - binds an explicit custom selection to its SHA-256 identity and sanitizes code-loader variables and unsafe PATH entries without adding prompts to unchanged launches
+  - installs one catch-all `PreToolUse` hook so native tools, `spawn_subagent`, `list_dir`, and `server__tool` MCP names are reviewed once
+  - screens prompts on `UserPromptSubmit` before inference; `SubagentStart` and `SessionStart` remain passive lifecycle hooks
+  - merges deny rules and identical backup hooks into `.grok/config.toml`, preserving unrelated values, comments, and hooks; leaves vendor-managed configuration and authentication intact
+  - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr
+  - waits on the original PreToolUse hook after queuing an approval, then returns allow so Grok resumes the same tool call
+  - surfaces `--always-approve`, `bypassPermissions`, and sandbox `off` as degraded protection states when detected in Grok config
+  - fails open if a hook crashes or times out, so Grok keeps working when Guard is unreachable
+- `pi`
+  - detects `~/.pi/agent/settings.json`, project `.pi/settings.json`, and Pi resource roots for packages, extensions, skills, prompts, and themes
+  - installs a Guard-managed Pi extension in `~/.pi/agent/extensions/hol-guard.ts` that screens `input` and `tool_call` events by calling `hol-guard hook --harness pi`
+  - blocks by returning Pi-native stdout JSON `{"decision":"deny","reason":"..."}` and surfaces the reason inline through Pi's extension UI
+  - keeps Pi package install and update flows out of band, so Guard observes configured package surfaces plus the runtime prompt and tool events the managed extension forwards
+- `zcode`
+  - detects `~/.zcode/cli/config.json`, configured MCP servers, enabled plugins, the plugin cache under `~/.zcode/cli/plugins/cache/`, plugin manifests and provenance seeds, plugin hooks, skills, commands, and marketplace manifests, plus a project `.zcode/cli/config.json` when present
+  - detects a running ZCode app through its non-secret process identity signals when no config file exists yet
+  - installs Guard-managed `PreToolUse` and `UserPromptSubmit` hooks in the `hooks` section of `~/.zcode/cli/config.json` without touching user `mcp`, `plugins`, or pre-existing hooks
+  - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
+  - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
+- `devin`
+  - detects `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows), `~/.config/devin/mcp_config.json`, project `.devin/config.json`, `.devin/config.local.json`, `.devin/hooks.v1.json`, `.devin/mcp_config.json`, and `.devin/mcp_config.local.json`, plus legacy `mcpServers` inside `config.json` files
+  - detects skills in `.devin/skills/` and `.agents/skills/` at both user and project scope
+  - detects Guard-managed Claude Code hooks in `.claude` settings files and warns that Devin also loads them by default (unless `read_config_from.claude` is `false`)
+  - installs Guard-managed `PreToolUse`, `PermissionRequest`, `UserPromptSubmit`, and `PostToolUse` hooks in the `hooks` section of `~/.config/devin/config.json` without touching other config keys
+  - refuses to install when the user config is JSONC (comments or trailing commas) rather than rewriting it lossy
+  - blocks by returning exit code `2` and Devin-native stdout JSON `{"decision":"block","reason":"..."}` with a `hookSpecificOutput.permissionDecision: "deny"` envelope; Guard never emits Devin's `decision: "approve"` auto-approve response
+  - fails closed (exit `2` deny) when hook input is malformed or the Guard authority denies for `PreToolUse`, `PermissionRequest`, and `UserPromptSubmit`; a timed-out or crashed review continues the session with an allow envelope so a wedged Guard cannot stall Devin, and `PostToolUse` is observation-only
+- `muse`
+  - detects `~/.config/muse/settings.json` (`$XDG_CONFIG_HOME/muse/settings.json` when set), project `.muse/settings.json`, workspace `.muse-plugin/plugin.json` hook and MCP capabilities, and Muse skill roots
+  - installs Guard-managed `PreToolUse`, `PermissionRequest`, `UserPromptSubmit`, `PostToolUse`, `SessionStart`, and `Stop` hooks in the `hooks` section of the user settings file without touching `provider`, `model`, `skills`, `mcpServers`, or pre-existing hooks; refuses to rewrite a settings file that does not parse as a JSON object
+  - blocks with a `hookSpecificOutput.permissionDecision: "deny"` envelope on exit `0` (Muse reads hook JSON on exit 0 and rejects a bare `permissionDecision: "allow"`, so an allow is empty stdout); prompt blocks use `{"decision":"block","reason":"..."}`
+  - waits inside the pending `PreToolUse` hook for a queued approval and then lets the identical call run, like Oh My Pi's approval resume; `PostToolUse` is observation-only
+  - fails closed when hook input is malformed or the Guard authority denies, so a wedged Guard cannot authorize a protected Muse tool call
+
+## Reported to Cloud
+
+When a machine is connected to Guard Cloud, [fleet posture](./fleet-posture.md) reports installed items from
+the local inventory. Only five item kinds are reported: `skill`, `mcp_server`, `plugin` (plugins, plugin files
+and extensions), `package` and `hook`. Agents, commands, instructions and rules, prompts, themes, marketplace
+entries, host rows and other settings files stay local, even when Guard detects them. This table lists, per
+harness, the reported kinds that Guard's detectors produce today. `hol-guard extensions list` prints the
+plugin rows from the same local inventory. `hol-guard mcp list` prints the MCP servers the Protect page lists.
+
+| Harness | Reported to Cloud |
+| --- | --- |
+| `codex` | `mcp_server`, `hook`, `skill` |
+| `claude-code` | `mcp_server`, `hook`, `skill` |
+| `copilot` | `mcp_server`, `hook` |
+| `cursor` | `mcp_server`, `hook`, `skill` |
+| `cline` | `mcp_server` |
+| `antigravity` | `mcp_server`, `plugin`, `skill` |
+| `gemini` | `mcp_server`, `plugin`, `hook`, `skill` |
+| `hermes` | `mcp_server`, `skill` |
+| `openclaw` | `mcp_server`, `skill` |
+| `opencode` | `mcp_server`, `plugin`, `skill` |
+| `kimi` | `mcp_server`, `hook`, `skill` |
+| `grok` | `mcp_server`, `hook`, `skill` |
+| `pi` | `plugin`, `package`, `skill` |
+| `omp` (Oh My Pi) | `plugin`, `package`, `skill` |
+| `zcode` | `mcp_server`, `plugin`, `hook`, `skill` |
+| `devin` | `mcp_server`, `hook`, `skill` |
+| `muse` | `mcp_server`, `hook`, `skill` |
+| `paseo` | none |
+
+For `codex`, `claude-code`, `cursor`, `gemini`, `kimi`, `grok`, `opencode`, `pi`, `omp`, `zcode`, `devin` and `muse`, `skill`
+rows also come from workspace skill discovery, which runs when Guard has a project workspace.
+
+Items are reported only while reporting is on. With `hol-guard settings set fleet-posture off`, Guard sends
+the inventory digest and no item rows for any harness; managed installs cannot opt out. Item locations are
+sent as keyed hashes, never as raw paths.
+
+Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
+inventory identity to the complete accepted skill directory rather than only
+`SKILL.md`. See [Skill directory identity](./skill-directory-identity.md) for
+the canonical stream, symlink rules, resource ceilings, and incomplete-state
+behavior.
+
+Approval tiers:
+
+1. native harness approval when the harness already has strong permission controls
+2. local Guard approval center on `127.0.0.1`
+3. terminal approval resolution through `hol-guard approvals`
+
+The harness adapters are designed to prefer discovery and reversible overlay behavior over invasive config mutation.
+
+The Guard Surface Server now provides one shared runtime shape across harnesses:
+
+- session attach
+- operation start and status updates
+- approval request items
+- approval-center lease and heartbeat tracking
+- resume or completion after approval
+
+Runtime intent protections:
+
+- Guard evaluates prompt and tool intent for secret-bearing files beyond `.env`, including SSH, AWS, kubeconfig, Docker, npm, and Python credential files.
+- Guard flags exfiltration verbs, staged transfer intent, destructive filesystem mutation intent, subprocess expansion, and explicit Guard bypass intent.
+- Prompt intent is converted into typed prompt-request artifacts so it follows the same policy, approval, receipt, and cloud sync pipeline as other artifact decisions.
+- Package-manager shell and MCP actions now persist package manager, primary package, install intent, and the final pre-execution Guard result in the shared runtime envelope before an approval request is queued.
+- Saved artifact-level package blocks now stop retries without creating a fresh approval request, so deny decisions stay sticky until a new allow rule or exception exists.
+- Skill protection flags package-manager install instructions inside `SKILL.md` content before the agent executes the skill.
+- Supply-chain evidence now records harness, agent app, redacted command shape, and workspace fingerprint so Cloud and local receipts stay attributable.
+
+Device identity model:
+
+- Guard sync now uses an opaque local installation ID instead of hostname-derived IDs.
+- The local label is user-controlled through `hol-guard device label set <label>`.
+- Installation IDs can be rotated with `hol-guard device rotate` without breaking local policy history.
+
+Explicit non-support:
+
+- Guard does not claim VS Code Copilot extension-host interception.
+- A VS Code Copilot inline tool prompt by itself is not proof that Guard blocked the action; that prompt can come from VS Code's own permission surface.
+- Current Copilot proof should come from Guard-owned CLI hook responses, Guard runtime receipts, or an MCP client that explicitly answers Guard elicitation.
+- Guard does not add `guard run vscode-copilot`.
+- Guard treats `~/.copilot/*` as read-only detection input and does not auto-write user-level Copilot config.
+- Guard does not claim Cline JetBrains pre-execution protection without a live Guard pre-tool proof from that host.
+- Guard does not claim native Cline `PostToolUse` output replacement; model-visible post-tool replacement is a Cline AgentPlugin capability.
+- Guard does not add Cisco AIBOM runtime or policy integration in this pass. If revisited later, AIBOM belongs on evidence or export surfaces.
+- Guard does not currently ship a Goose adapter in this repository. There is no Goose detection, install, hook, or proxy surface here to protect yet.
+
+## Protection Contract Summary
+
+Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
+
+| Harness | Install Aliases | Native Approval | Browser Fallback | Resume | Event Surfaces |
+|---------|-----------------|-----------------|------------------|--------|----------------|
+| `codex` | `codex` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
+| `claude-code` | `claude-code`, `claude` | ✅ | ✅ | ✅ | shell, mcp_tool, file_read, tool_result |
+| `opencode` | `opencode` | ❌ | ✅ | ❌ | shell, mcp_tool |
+| `copilot` | `copilot` | ✅ | ✅ | ✅ | shell, prompt |
+| `cursor` | `cursor` | ❌ | ✅ | ❌ | shell, mcp_tool, file_read |
+| `cline` | `cline`, `cline-cli`, `cline-vscode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write, tool_result, network_request |
+| `gemini` | `gemini` | ❌ | ✅ | ❌ | shell, mcp_tool |
+| `hermes` | `hermes` | ❌ | ✅ | ❌ | shell, mcp_tool, prompt |
+| `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |
+| `antigravity` | `antigravity` | ❌ | ✅ | ❌ | mcp_tool, prompt |
+| `kimi` | `kimi`, `kimi-code`, `kimi-cli` | ❌ | ✅ | ❌ | shell, prompt |
+| `grok` | `grok`, `grok-build`, `grok-build-cli`, `xai-grok` | ❌ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, file_write |
+| `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
+| `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
+| `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
+| `devin` | `devin`, `devin-cli`, `cognition-devin` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
+| `muse` | `muse`, `muse-code` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
+| `paseo` | `paseo` | ❌ | ❌ | ❌ | — |
+
+## Versioned Event Capability Report
+
+The additive `harness-capability-report.v1` is generated from the per-event
+rows attached to `HarnessProtectionContract`. The JSON and Markdown renderers
+consume the same rows, so the two outputs cannot silently drift:
+
+```sh
+PYTHONPATH=src python3 scripts/render_harness_capability_report.py --format json --build "$BUILD_ID" --commit "$COMMIT"
+PYTHONPATH=src python3 scripts/render_harness_capability_report.py --format markdown --build "$BUILD_ID" --commit "$COMMIT"
+```
+
+Each row includes its adapter, host/version scope, OS/architecture,
+local/hosted scope, event, transport, mode, declared actions, error behavior,
+mandatory compatibility condition, blind spots, and source reference. The
+observed deployment health and evidence level are independent fields. They
+default to `unverified` and `not_run`; file presence and synthetic canaries do
+not establish a live block. The checked-in schema is
+[`harness-capability-report.v1.schema.json`](schemas/harness-capability-report.v1.schema.json).
+
+An unknown requested host is rendered as an explicit unsupported row without
+being added to the adapter registry:
+
+```sh
+PYTHONPATH=src python3 scripts/render_harness_capability_report.py --format markdown --host Cowork
+```
+
+The current Cline rows below are generated with the same renderer. They keep
+the native observation-only `PostToolUse` hook separate from the AgentPlugin
+replacement/withholding transport.
+
+<!-- BEGIN GENERATED HARNESS CAPABILITY REPORT: cline -->
+
+| Harness | Adapter | Host/version scope | OS/arch | Local/hosted | Event | Transport | Mode | Declared actions | Error behavior | Mandatory compatibility | Known blind spots | Source reference | Deployment health | Evidence level | Observed at | Expires at | Evidence reference | Evidence build | Evidence host/version scope | Evidence OS/arch | Denied witness | Allowed witness | Compatibility verified |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| cline | cline | unknown | unknown | local | PreToolUse | native_hook | blocking | observe, block, approval | Malformed payload, bridge failure, or unavailable Guard authority fails closed before Cline executes the tool. | Cline must invoke the managed native PreToolUse hook and honor its response. | JetBrains protection remains unverified until a live pre-tool deny proof is observed. | src/codex_plugin_scanner/guard/adapters/cline_hooks.py:install_cline_hooks | unverified | not_run | None | None | None | None | None | None | None | None | False |
+| cline | cline | unknown | unknown | local | PreToolUse | agent_plugin | blocking | observe, block, approval | Plugin bridge failure returns a bounded blocked result before the tool call continues. | Cline must load the Guard AgentPlugin and call beforeTool for each tool invocation. | Plugin load and live pre-tool suppression still require an installed-host proof. | src/codex_plugin_scanner/guard/adapters/cline_plugin.py:plugin.hooks.beforeTool | unverified | not_run | None | None | None | None | None | None | None | None | False |
+| cline | cline | unknown | unknown | local | PostToolUse | native_hook | observe | observe | Native PostToolUse failures are recorded; the native hook cannot replace a result already returned to Cline. | Cline must invoke the managed native PostToolUse hook after the tool event. | Native Cline PostToolUse is observation-only and cannot provide model-visible replacement. | src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS | unverified | not_run | None | None | None | None | None | None | None | None | False |
+| cline | cline | unknown | unknown | local | PostToolUse | agent_plugin | replace_or_withhold | observe, block, rewrite | Unavailable review withholds the original result; reviewed output may replace it without forwarding unreviewed metadata. | Cline must load the Guard AgentPlugin and route afterTool results through Guard before model delivery. | Synthetic plugin canaries do not prove live Cline model-visible replacement. | src/codex_plugin_scanner/guard/adapters/cline_plugin.py:plugin.hooks.afterTool | unverified | not_run | None | None | None | None | None | None | None | None | False |
+| cline | cline | unknown | unknown | local | UserPromptSubmit | native_hook | screening | observe, block, approval | Prompt hook failure is handled by the native bridge's bounded fail-closed behavior. | Cline must invoke the managed UserPromptSubmit hook for prompt screening. | Prompt screening does not prove final model request redaction. | src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS | unverified | not_run | None | None | None | None | None | None | None | None | False |
+
+<!-- END GENERATED HARNESS CAPABILITY REPORT: cline -->
+
+## Harness Version Coverage
+
+The dashboard shows whether the installed app version has been tested with the
+running Guard release. Coverage is display-only and never changes enforcement.
+See [Harness version coverage](harness-version-coverage.md) for the states,
+supported apps, and the maintainer evidence-promotion procedure.
+
+## Rust Authority Boundary
+
+Every supported harness routes security semantics through the bundled,
+version-matched Rust runtime. Generic `PreToolUse` action decisions and
+supported `PostToolUse` output review do not use a Python semantic fallback. Native
+identity, protocol, rule-digest, policy-snapshot, overload, timeout, transport,
+and response failures fail closed.
+
+Python is limited to authenticated transport, harness-specific rendering,
+approval coordination, dashboard control-plane work, and bounded
+non-authoritative evidence persistence. The repository-wide ownership gate
+prevents Python command evaluation or output-scanning fallback from being
+reintroduced as PreToolUse or PostToolUse authority.
+
+## Paseo
+
+Run `hol-guard install paseo` on the Paseo daemon host to install Guard for enabled, available native providers. This is not a universal Paseo permission hook. See [Paseo setup and coverage](paseo.md) for provider support, exclusions, diagnostics, and shared-hook ownership.

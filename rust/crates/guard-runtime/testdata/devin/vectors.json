@@ -1,0 +1,4524 @@
+{
+ "cases": [
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "empty",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec",
+      "timeout": 30,
+      "type": "command"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:1",
+     "artifact_type": "hook",
+     "command": "b.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec",
+      "timeout": 2.5
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:2",
+     "artifact_type": "hook",
+     "command": "c.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:3",
+     "artifact_type": "hook",
+     "command": "d.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse"
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:4",
+     "artifact_type": "hook",
+     "command": "e.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse"
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": " spaced.sh ",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:événement:0",
+     "artifact_type": "hook",
+     "command": "accent.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "ÉVÉNEMENT"
+     },
+     "name": "ÉVÉNEMENT",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:i̇stanbul:0",
+     "artifact_type": "hook",
+     "command": "dotted.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "İstanbul"
+     },
+     "name": "İstanbul",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "a",
+      "1",
+      "1.5",
+      "1e+20",
+      "True",
+      "False"
+     ],
+     "artifact_id": "devin:global:mcp:config.json:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+       "hashBasis": "content",
+       "versionLabel": "local"
+      }
+     },
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "remote",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+       "hashBasis": "content",
+       "versionLabel": "remote"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:blank_url",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_url",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+       "hashBasis": "content",
+       "versionLabel": "blank_url"
+      }
+     },
+     "name": "blank_url",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": "   "
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:explicit",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "explicit",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+       "hashBasis": "content",
+       "versionLabel": "explicit"
+      }
+     },
+     "name": "explicit",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "sse",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:blank_transport",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_transport",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+       "hashBasis": "content",
+       "versionLabel": "blank_transport"
+      }
+     },
+     "name": "blank_transport",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:transport_not_str",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "transport_not_str",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "transport_not_str"
+      }
+     },
+     "name": "transport_not_str",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_not_list",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "args_not_list"
+      }
+     },
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:env",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+      "env_keys": [
+       "A",
+       "API_KEY",
+       "B"
+      ],
+      "env_values_hash": "c6fe7ad53878c5cca6bf280bba371cd314f49e2c0acdcb27e6d6f529f5615b91",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+       "hashBasis": "content",
+       "versionLabel": "env"
+      }
+     },
+     "name": "env",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:env_not_dict",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env_not_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "env_not_dict"
+      }
+     },
+     "name": "env_not_dict",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:environment_ignored",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "environment_ignored",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "environment_ignored"
+      }
+     },
+     "name": "environment_ignored",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"matcher\": \"exec\", \"hooks\": [{\"type\": \"command\", \"command\": \"a.sh\", \"timeout\": 30}, {\"command\": \"b.sh\", \"timeout\": 2.5, \"type\": \"\"}, {\"command\": \"   \"}, {\"command\": 7}, \"not-a-dict\", {\"command\": \"c.sh\", \"timeout\": true, \"type\": 3}]}, {\"matcher\": \"\", \"hooks\": [{\"command\": \"d.sh\", \"timeout\": \"30\"}]}, {\"matcher\": 5, \"hooks\": [{\"command\": \"e.sh\"}]}, {\"hooks\": \"not-a-list\"}, {\"command\": \"group-level.sh\"}, \"not-a-dict\"], \"Stop\": [{\"hooks\": [{\"command\": \" spaced.sh \"}]}], \"\\u00c9V\\u00c9NEMENT\": [{\"hooks\": [{\"command\": \"accent.sh\"}]}], \"\\u0130stanbul\": [{\"hooks\": [{\"command\": \"dotted.sh\"}]}], \"NotAList\": {\"hooks\": []}, \"Empty\": []}, \"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, 1.5, 1e+20, true, false, null, [\"x\"], {\"k\": 1}]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"blank_url\": {\"url\": \"   \", \"command\": \"c\"}, \"explicit\": {\"command\": \"c\", \"transport\": \" sse \", \"url\": \"https://x\"}, \"blank_transport\": {\"command\": \"c\", \"transport\": \"  \", \"url\": \"https://x\"}, \"transport_not_str\": {\"command\": \"c\", \"transport\": 3}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"env\": {\"command\": \"c\", \"env\": {\" API_KEY \": \"secret\", \"\": \"x\", \"  \": \"y\", \"NUM\": 3, \"B\": \"1\", \" B\": \"2\", \"A\": \"z\"}}, \"env_not_dict\": {\"command\": \"c\", \"env\": [\"A\"]}, \"environment_ignored\": {\"command\": \"c\", \"environment\": {\"X\": \"1\"}}, \"bare\": {}, \"only_args\": {\"args\": [\"a\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec",
+      "timeout": 30,
+      "type": "command"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:1",
+     "artifact_type": "hook",
+     "command": "b.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec",
+      "timeout": 2.5
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:2",
+     "artifact_type": "hook",
+     "command": "c.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:3",
+     "artifact_type": "hook",
+     "command": "d.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse"
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:4",
+     "artifact_type": "hook",
+     "command": "e.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse"
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": " spaced.sh ",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:événement:0",
+     "artifact_type": "hook",
+     "command": "accent.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "ÉVÉNEMENT"
+     },
+     "name": "ÉVÉNEMENT",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:i̇stanbul:0",
+     "artifact_type": "hook",
+     "command": "dotted.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "İstanbul"
+     },
+     "name": "İstanbul",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"matcher\": \"exec\", \"hooks\": [{\"type\": \"command\", \"command\": \"a.sh\", \"timeout\": 30}, {\"command\": \"b.sh\", \"timeout\": 2.5, \"type\": \"\"}, {\"command\": \"   \"}, {\"command\": 7}, \"not-a-dict\", {\"command\": \"c.sh\", \"timeout\": true, \"type\": 3}]}, {\"matcher\": \"\", \"hooks\": [{\"command\": \"d.sh\", \"timeout\": \"30\"}]}, {\"matcher\": 5, \"hooks\": [{\"command\": \"e.sh\"}]}, {\"hooks\": \"not-a-list\"}, {\"command\": \"group-level.sh\"}, \"not-a-dict\"], \"Stop\": [{\"hooks\": [{\"command\": \" spaced.sh \"}]}], \"\\u00c9V\\u00c9NEMENT\": [{\"hooks\": [{\"command\": \"accent.sh\"}]}], \"\\u0130stanbul\": [{\"hooks\": [{\"command\": \"dotted.sh\"}]}], \"NotAList\": {\"hooks\": []}, \"Empty\": []}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "user_hooks",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "python -m codex_plugin_scanner.cli ['guard', 'hook', '--harness', 'codex']",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:1",
+     "artifact_type": "hook",
+     "command": "python bounded_cli_hook_bridge {\"harness\":\"codex\"}",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:2",
+     "artifact_type": "hook",
+     "command": "guard __guard-bounded-hook harness devin",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:3",
+     "artifact_type": "hook",
+     "command": "py /g/managed/bounded-hooks/codex.py",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:4",
+     "artifact_type": "hook",
+     "command": "kept.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"matcher\": \"exec\", \"hooks\": [{\"command\": \"run HOL_GUARD_MANAGED_DEVIN=1 guard\"}, {\"command\": \"python -m codex_plugin_scanner.cli ['guard', 'hook', '--harness', 'devin']\"}, {\"command\": \"python -m codex_plugin_scanner.cli ['guard', 'hook', '--harness', 'codex']\"}, {\"command\": \"python bounded_cli_hook_bridge {\\\\\\\"harness\\\\\\\":\\\\\\\"devin\\\\\\\"}\"}, {\"command\": \"python bounded_cli_hook_bridge {\\\"harness\\\":\\\"devin\\\"}\"}, {\"command\": \"python bounded_cli_hook_bridge {\\\"harness\\\":\\\"codex\\\"}\"}, {\"command\": \"guard __guard-bounded-hook {\\\"harness\\\":\\\"devin\\\"}\"}, {\"command\": \"guard __guard-bounded-hook harness devin\"}, {\"command\": \"py C:\\\\guard\\\\managed\\\\bounded-hooks\\\\devin.py\"}, {\"command\": \"py /g/managed/bounded-hooks/devin.py\"}, {\"command\": \"py /g/managed/bounded-hooks/codex.py\"}, {\"command\": \"kept.sh\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "managed_hooks_skipped",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": [\"x\"], \"mcpServers\": \"y\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "hooks_not_dict",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "a",
+      "1",
+      "1.5",
+      "1e+20",
+      "True",
+      "False"
+     ],
+     "artifact_id": "devin:global:mcp:config.json:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+       "hashBasis": "content",
+       "versionLabel": "local"
+      }
+     },
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "remote",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+       "hashBasis": "content",
+       "versionLabel": "remote"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:blank_url",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_url",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+       "hashBasis": "content",
+       "versionLabel": "blank_url"
+      }
+     },
+     "name": "blank_url",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": "   "
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:explicit",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "explicit",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+       "hashBasis": "content",
+       "versionLabel": "explicit"
+      }
+     },
+     "name": "explicit",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "sse",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:blank_transport",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_transport",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+       "hashBasis": "content",
+       "versionLabel": "blank_transport"
+      }
+     },
+     "name": "blank_transport",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:transport_not_str",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "transport_not_str",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "transport_not_str"
+      }
+     },
+     "name": "transport_not_str",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_not_list",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "args_not_list"
+      }
+     },
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:env",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+      "env_keys": [
+       "A",
+       "API_KEY",
+       "B"
+      ],
+      "env_values_hash": "c6fe7ad53878c5cca6bf280bba371cd314f49e2c0acdcb27e6d6f529f5615b91",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+       "hashBasis": "content",
+       "versionLabel": "env"
+      }
+     },
+     "name": "env",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:env_not_dict",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env_not_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "env_not_dict"
+      }
+     },
+     "name": "env_not_dict",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:environment_ignored",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "environment_ignored",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "environment_ignored"
+      }
+     },
+     "name": "environment_ignored",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, 1.5, 1e+20, true, false, null, [\"x\"], {\"k\": 1}]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"blank_url\": {\"url\": \"   \", \"command\": \"c\"}, \"explicit\": {\"command\": \"c\", \"transport\": \" sse \", \"url\": \"https://x\"}, \"blank_transport\": {\"command\": \"c\", \"transport\": \"  \", \"url\": \"https://x\"}, \"transport_not_str\": {\"command\": \"c\", \"transport\": 3}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"env\": {\"command\": \"c\", \"env\": {\" API_KEY \": \"secret\", \"\": \"x\", \"  \": \"y\", \"NUM\": 3, \"B\": \"1\", \" B\": \"2\", \"A\": \"z\"}}, \"env_not_dict\": {\"command\": \"c\", \"env\": [\"A\"]}, \"environment_ignored\": {\"command\": \"c\", \"environment\": {\"X\": \"1\"}}, \"bare\": {}, \"only_args\": {\"args\": [\"a\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "legacy_mcp_in_config",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": "u.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:u",
+     "artifact_type": "mcp_server",
+     "command": "u",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "41abbff0c5823cc1cd538f1b61021d846f6a8376a8af0cdb037f82bd260d65de",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "u",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "41abbff0c5823cc1cd538f1b61021d846f6a8376a8af0cdb037f82bd260d65de",
+       "hashBasis": "content",
+       "versionLabel": "u"
+      }
+     },
+     "name": "u",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": "p.sh",
+     "config_path": "<ROOT>/work/.devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:config.local.json:l",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.devin/config.local.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "8f624e7c6ce57f8833736583b606f236e59d41b7e2459555ff73b4b6ca353eb8",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "l",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "8f624e7c6ce57f8833736583b606f236e59d41b7e2459555ff73b4b6ca353eb8",
+       "hashBasis": "content",
+       "versionLabel": "l"
+      }
+     },
+     "name": "l",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://l"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:hook:hooks.v1.json:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "v1.sh",
+     "config_path": "<ROOT>/work/.devin/hooks.v1.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "read"
+     },
+     "name": "PreToolUse:read",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:mcp_config.json:g",
+     "artifact_type": "mcp_server",
+     "command": "g",
+     "config_path": "<ROOT>/home/.config/devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "8ed3e896decb4c838df0ff2a2131a0f71e13b32e55d9d671dd81af670dbfbcf1",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "g",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "8ed3e896decb4c838df0ff2a2131a0f71e13b32e55d9d671dd81af670dbfbcf1",
+       "hashBasis": "content",
+       "versionLabel": "g"
+      }
+     },
+     "name": "g",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:w",
+     "artifact_type": "mcp_server",
+     "command": "w",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "c937eda83ad9c3a0f4ac98d1e95d47a05afb199d8267b812fa7e63aec23b8a26",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "w",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "c937eda83ad9c3a0f4ac98d1e95d47a05afb199d8267b812fa7e63aec23b8a26",
+       "hashBasis": "content",
+       "versionLabel": "w"
+      }
+     },
+     "name": "w",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.local.json:wl",
+     "artifact_type": "mcp_server",
+     "command": "wl",
+     "config_path": "<ROOT>/work/.devin/mcp_config.local.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "72d02b830b69350d90aa6ef55bf952ef162c1b32e70b7b995a7e15fef98ebd25",
+      "env_keys": [
+       "T"
+      ],
+      "env_values_hash": "ec277b5d4dc25bd48a9e80d8689a567b4f8953f1142e053bf6a823b944ce6d80",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "wl",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "72d02b830b69350d90aa6ef55bf952ef162c1b32e70b7b995a7e15fef98ebd25",
+       "hashBasis": "content",
+       "versionLabel": "wl"
+      }
+     },
+     "name": "wl",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"u.sh\"}]}]}, \"mcpServers\": {\"u\": {\"command\": \"u\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"p.sh\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/config.local.json",
+     "text": "{\"mcpServers\": {\"l\": {\"url\": \"https://l\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/hooks.v1.json",
+     "text": "{\"PreToolUse\": [{\"matcher\": \"read\", \"hooks\": [{\"command\": \"v1.sh\"}]}]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"g\": {\"command\": \"g\"}}, \"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"x\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"w\": {\"command\": \"w\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/mcp_config.local.json",
+     "text": "{\"mcpServers\": {\"wl\": {\"command\": \"wl\", \"env\": {\"T\": \"1\"}}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json",
+    "<ROOT>/work/.devin/config.json",
+    "<ROOT>/work/.devin/config.local.json",
+    "<ROOT>/work/.devin/hooks.v1.json",
+    "<ROOT>/home/.config/devin/mcp_config.json",
+    "<ROOT>/work/.devin/mcp_config.json",
+    "<ROOT>/work/.devin/mcp_config.local.json"
+   ],
+   "home": "home",
+   "name": "every_config_file",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.devin/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"p.sh\"}]}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "workspace_files_without_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/hooks.v1.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json",
+    "<ROOT>/work/.devin/hooks.v1.json",
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "empty_config_objects",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.devin/hooks.v1.json",
+     "text": "[1, 2]"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.devin/hooks.v1.json"
+   ],
+   "home": "home",
+   "name": "hooks_v1_not_object",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/work/.devin/hooks.v1.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.devin/hooks.v1.json",
+     "text": "{\"Stop\": \"x\", \"hooks\": {\"Stop\": []}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.devin/hooks.v1.json"
+   ],
+   "home": "home",
+   "name": "hooks_v1_list_events",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": "a // not a comment",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "x"
+     ],
+     "artifact_id": "devin:global:mcp:config.json:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "0510691a7f373f4ab5652dd02a07d0d54f57afe012c82ce441c80ac344e8e3bd",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "0510691a7f373f4ab5652dd02a07d0d54f57afe012c82ce441c80ac344e8e3bd",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "// leading comment\n{\n  /* block */ \"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"a // not a comment\", },],},],},\n  \"mcpServers\": {\"s\": {\"command\": \"c\", \"args\": [\"x\", /* gap */ ], }, // trailing\n },\n}\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_comments_and_commas",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:mcp_config.json:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\"}, // note\n /* x */ }}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_comma_before_comment_close",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:mcp_config.json:q\"//x",
+     "artifact_type": "mcp_server",
+     "command": "c\\",
+     "config_path": "<ROOT>/home/.config/devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "ffb075c3273fa0204e85a00a1f690d09244ae276da0cfe6f6a9c9cb550e07aef",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "q\"//x",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "ffb075c3273fa0204e85a00a1f690d09244ae276da0cfe6f6a9c9cb550e07aef",
+       "hashBasis": "content",
+       "versionLabel": "q\"//x"
+      }
+     },
+     "name": "q\"//x",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"q\\\"//x\": {\"command\": \"c\\\\\"}, }}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_escaped_quote_in_string",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {}} /* never closed"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_unterminated_block",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "/* only"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_unterminated_block_only",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "// nothing here\n/* or here */\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_comment_only",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"a\": 1} /"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_slash_alone",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{,}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_strip_keeps_invalid",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "[1,]"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "jsonc_top_level_list",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "[1]"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "strict_top_level_list",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "\"x\""
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "strict_top_level_string",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": " \n\t\u000b\f\u001c　"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "whitespace_only",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": ""
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "empty_file",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/hooks.v1.json",
+     "text": "{"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "nope"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json",
+    "<ROOT>/work/.devin/hooks.v1.json",
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "invalid_json",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried.",
+    "Devin config at <ROOT>/work/.devin/hooks.v1.json could not be parsed; hooks and MCP servers in it were not inventoried.",
+    "Devin config at <ROOT>/home/.config/devin/mcp_config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "efbbbf7b22686f6f6b73223a207b7d7d",
+     "mode": 420,
+     "path": "home/.config/devin/config.json"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "bom",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b22686f6f6b73223a207b22ff223a205b5d7d7d",
+     "mode": 420,
+     "path": "home/.config/devin/config.json"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "invalid_utf8",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.config/devin/config.json",
+    "home/.config/devin/mcp_config.json"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "config_is_directory",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": "l.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "elsewhere/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"l.sh\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "config_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.config/devin/config.json",
+     "target": "<ROOT>/elsewhere/config.json"
+    },
+    {
+     "path": "home/.config/devin/mcp_config.json",
+     "target": "<ROOT>/missing.json"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "nan",
+      "inf",
+      "-inf",
+      "-0.0"
+     ],
+     "artifact_id": "devin:global:mcp:mcp_config.json:n",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "24b54b5c7f921d68a1583e8df336d6774a99e8a5547474b55fd82163af640d75",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "n",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "24b54b5c7f921d68a1583e8df336d6774a99e8a5547474b55fd82163af640d75",
+       "hashBasis": "content",
+       "versionLabel": "n"
+      }
+     },
+     "name": "n",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"n\": {\"command\": \"c\", \"args\": [NaN, Infinity, -Infinity, -0.0]}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "nan_and_infinity_args",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"x\": 99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999}"
+    }
+   ],
+   "home": "home",
+   "name": "integer_limit",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"x\": 99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999,}"
+    }
+   ],
+   "home": "home",
+   "name": "integer_limit_after_strip",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"x\": 99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999}"
+    }
+   ],
+   "home": "home",
+   "name": "integer_limit_in_claude_settings",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:mcp_config.json:d",
+     "artifact_type": "mcp_server",
+     "command": "last",
+     "config_path": "<ROOT>/home/.config/devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "bab5e6c4d830c56158886165da2f14e383facc3c7dad1afcfe078803d44b5d5e",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "d",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "bab5e6c4d830c56158886165da2f14e383facc3c7dad1afcfe078803d44b5d5e",
+       "hashBasis": "content",
+       "versionLabel": "d"
+      }
+     },
+     "name": "d",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"d\": {\"command\": \"first\"}, \"e\": {}, \"d\": {\"command\": \"last\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "duplicate_keys",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:mcp_config.json:café 😀",
+     "artifact_type": "mcp_server",
+     "command": "é",
+     "config_path": "<ROOT>/home/.config/devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "18252821a4957e9b811666ec44f98d56e3d28b1bb6a65c5b4c9b78bea6114307",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "café 😀",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "18252821a4957e9b811666ec44f98d56e3d28b1bb6a65c5b4c9b78bea6114307",
+       "hashBasis": "content",
+       "versionLabel": "café 😀"
+      }
+     },
+     "name": "café 😀",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"caf\\u00e9 \\ud83d\\ude00\": {\"command\": \"\\u00e9\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "unicode_names",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"\\ud800\": {\"command\": \"c\"}}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_server",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"s\": {\"command\": \"c\", \"env\": {\"\\udc80\": \"v\"}}}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_env_key",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:mcp_config.json:s",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/mcp_config.json",
+     "text": "{\"other\": \"\\ud800\", \"mcpServers\": {\"s\": {\"command\": \"c\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "lone_surrogate_unused",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"\\udc80\"}]}]}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_hook",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"HOL_GUARD_MANAGED_DEVIN \\udc80\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "lone_surrogate_managed_hook",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"\\ud800x\"},]}]}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_jsonc",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_user_settings",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"read_config_from\": {\"claude\": false}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "overlap_disabled",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"read_config_from\": {\"claude\": 0}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "overlap_disabled_falsy_not_false",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"read_config_from\": false}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "overlap_read_config_not_dict",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/config.json",
+     "text": "{\"read_config_from\": {\"claude\": false}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.devin/config.json"
+   ],
+   "home": "home",
+   "name": "overlap_disabled_in_project_config_only",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"read_config_from\": {\"claude\": false}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "overlap_user_config_unparsed",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/home/.config/devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried.",
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"read_config_from\": {\"claude\": false,},}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "overlap_user_config_jsonc",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_workspace_settings",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_workspace_without_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude.json",
+     "text": "{\"hooks\": {\"S\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_workspace_claude_json_ignored",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.local.json",
+     "text": "{\"hooks\": {\"S\": [{\"hooks\": [{\"command\": \"x HOL_GUARD_CLAUDE_DAEMON_HOOK\"}]}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_markers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude.json",
+     "text": "{\"hooks\": {\"S\": [{\"command\": \"HOL_GUARD_CLAUDE_SESSION_START_HOOK=1 g\"}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_session_marker_group_command",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.claude/settings.local.json",
+     "text": "{\"hooks\": {\"S\": [{\"hooks\": [{\"command\": \"['--harness', 'claude-code']\"}]}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_quoted_harness_marker",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"S\": [{\"hooks\": [{\"command\": \"--harness codex\"}, {\"command\": 4}, \"x\"]}, {\"command\": [\"--harness claude-code\"]}, \"y\"], \"T\": {\"command\": \"--harness claude-code\"}}, \"command\": \"--harness claude-code\"}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.local.json",
+     "text": "{"
+    },
+    {
+     "mode": 420,
+     "path": "home/.claude.json",
+     "text": "[\"--harness claude-code\"]"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_near_misses",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b22ff223a20317d",
+     "mode": 420,
+     "path": "home/.claude/settings.json"
+    }
+   ],
+   "home": "home",
+   "name": "overlap_claude_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.claude/settings.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_claude_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.claude/settings.json"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "overlap_claude_directory",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill:a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/devin/skills/a/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill:b",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/b/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/b"
+      }
+     },
+     "name": "b",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:skill:c",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.devin/skills/c/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/c"
+      }
+     },
+     "name": "c",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:skill:d/nested",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/d/nested/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/d/nested"
+      }
+     },
+     "name": "d/nested",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/b/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/skills/c/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.agents/skills/d/nested/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/skills/a/SKILL.md",
+    "<ROOT>/home/.agents/skills/b/SKILL.md",
+    "<ROOT>/work/.devin/skills/c/SKILL.md",
+    "<ROOT>/work/.agents/skills/d/nested/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skills_every_root",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.devin/skills/c/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "skills_without_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill:.",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/devin/skills/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/."
+      }
+     },
+     "name": ".",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/skills/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/skills/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skill_at_root",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill:a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/devin/skills/a/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skillDirectoryIdentity": {
+       "entryCount": 2,
+       "incompleteStateHash": "sha256:966b19becd373942410a16733201df150d4767e4593c80ba4a60ae8d6e327e5d",
+       "reason": "unreadable_entry",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:966b19becd373942410a16733201df150d4767e4593c80ba4a60ae8d6e327e5d",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 0,
+     "path": "home/.config/devin/skills/a/data.bin",
+     "text": "d"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/skills/a/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skill_identity_incomplete",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin global skill directory identity is incomplete; approval reuse is disabled."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill:ok",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/ok/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/ok"
+      }
+     },
+     "name": "ok",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill-discovery:.agents/skills:103adacc9ee3f731",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/linked",
+     "harness": "devin",
+     "metadata": {
+      "skillDirectoryIdentity": {
+       "entryCount": 0,
+       "incompleteStateHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "reason": "symlink_directory_unsupported",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 0
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.guard-discovery/103adacc9ee3f731"
+      }
+     },
+     "name": "Incomplete Devin skill discovery",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill-discovery:.agents/skills:abb01ba87c955631",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/locked/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "skillDirectoryIdentity": {
+       "entryCount": 0,
+       "incompleteStateHash": "sha256:bf09c846d64946fdeed2604edadb1ab6fa48c36020e3141b14066a5034f2ba73",
+       "reason": "unreadable_entry",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 0
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:bf09c846d64946fdeed2604edadb1ab6fa48c36020e3141b14066a5034f2ba73",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.guard-discovery/abb01ba87c955631"
+      }
+     },
+     "name": "Incomplete Devin skill discovery",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {
+    "home/.agents/skills/locked": 0
+   },
+   "dirs": [
+    "home/.agents/skills/locked"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/ok/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "pack/s/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.agents/skills/ok/SKILL.md",
+    "<ROOT>/home/.agents/skills/linked",
+    "<ROOT>/home/.agents/skills/locked/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skill_discovery_issues",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.agents/skills/linked",
+     "target": "<ROOT>/pack/s"
+    }
+   ],
+   "warnings": [
+    "Devin global skill discovery is incomplete; approval reuse is disabled."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:project:skill-discovery:.devin/skills:f3afb602bb9bb266",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.devin/skills",
+     "harness": "devin",
+     "metadata": {
+      "skillDirectoryIdentity": {
+       "entryCount": 0,
+       "incompleteStateHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "reason": "symlink_directory_unsupported",
+       "reusable": false,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "incomplete",
+       "totalBytes": 0
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.guard-discovery/f3afb602bb9bb266"
+      }
+     },
+     "name": "Incomplete Devin skill discovery",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "pack/s/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.devin/skills"
+   ],
+   "home": "home",
+   "name": "skill_root_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "work/.devin/skills",
+     "target": "<ROOT>/pack"
+    }
+   ],
+   "warnings": [
+    "Devin project skill discovery is incomplete; approval reuse is disabled."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "home/.config/devin",
+    "cwd": "<ROOT>",
+    "harness": "devin",
+    "home": "home",
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": "r.sh",
+     "config_path": "home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"r.sh\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "home/.config/devin/config.json"
+   ],
+   "home": "home",
+   "name": "relative_context",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "home/.config/devin",
+    "cwd": "<ROOT>",
+    "harness": "devin",
+    "home": "home",
+    "workspace": "work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "home": "home",
+   "name": "relative_context_with_skills",
+   "refused": true,
+   "relative": true,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/home/.config/devin",
+    "harness": "devin",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec",
+      "timeout": 30,
+      "type": "command"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:1",
+     "artifact_type": "hook",
+     "command": "b.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec",
+      "timeout": 2.5
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:2",
+     "artifact_type": "hook",
+     "command": "c.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:3",
+     "artifact_type": "hook",
+     "command": "d.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse"
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:pretooluse:4",
+     "artifact_type": "hook",
+     "command": "e.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse"
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:stop:0",
+     "artifact_type": "hook",
+     "command": " spaced.sh ",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "Stop"
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:événement:0",
+     "artifact_type": "hook",
+     "command": "accent.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "ÉVÉNEMENT"
+     },
+     "name": "ÉVÉNEMENT",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:hook:config.json:i̇stanbul:0",
+     "artifact_type": "hook",
+     "command": "dotted.sh",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "İstanbul"
+     },
+     "name": "İstanbul",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "a",
+      "1",
+      "1.5",
+      "1e+20",
+      "True",
+      "False"
+     ],
+     "artifact_id": "devin:global:mcp:config.json:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+       "hashBasis": "content",
+       "versionLabel": "local"
+      }
+     },
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "remote",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+       "hashBasis": "content",
+       "versionLabel": "remote"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:blank_url",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_url",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+       "hashBasis": "content",
+       "versionLabel": "blank_url"
+      }
+     },
+     "name": "blank_url",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": "   "
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:explicit",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "explicit",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+       "hashBasis": "content",
+       "versionLabel": "explicit"
+      }
+     },
+     "name": "explicit",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "sse",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:blank_transport",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_transport",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+       "hashBasis": "content",
+       "versionLabel": "blank_transport"
+      }
+     },
+     "name": "blank_transport",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:transport_not_str",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "transport_not_str",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "transport_not_str"
+      }
+     },
+     "name": "transport_not_str",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_not_list",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "args_not_list"
+      }
+     },
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:env",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+      "env_keys": [
+       "A",
+       "API_KEY",
+       "B"
+      ],
+      "env_values_hash": "c6fe7ad53878c5cca6bf280bba371cd314f49e2c0acdcb27e6d6f529f5615b91",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+       "hashBasis": "content",
+       "versionLabel": "env"
+      }
+     },
+     "name": "env",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:env_not_dict",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env_not_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "env_not_dict"
+      }
+     },
+     "name": "env_not_dict",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:mcp:config.json:environment_ignored",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/devin/config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "environment_ignored",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "environment_ignored"
+      }
+     },
+     "name": "environment_ignored",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:hook:hooks.v1.json:pretooluse:0",
+     "artifact_type": "hook",
+     "command": "python -m codex_plugin_scanner.cli ['guard', 'hook', '--harness', 'codex']",
+     "config_path": "<ROOT>/work/.devin/hooks.v1.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:hook:hooks.v1.json:pretooluse:1",
+     "artifact_type": "hook",
+     "command": "python bounded_cli_hook_bridge {\"harness\":\"codex\"}",
+     "config_path": "<ROOT>/work/.devin/hooks.v1.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:hook:hooks.v1.json:pretooluse:2",
+     "artifact_type": "hook",
+     "command": "guard __guard-bounded-hook harness devin",
+     "config_path": "<ROOT>/work/.devin/hooks.v1.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:hook:hooks.v1.json:pretooluse:3",
+     "artifact_type": "hook",
+     "command": "py /g/managed/bounded-hooks/codex.py",
+     "config_path": "<ROOT>/work/.devin/hooks.v1.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:hook:hooks.v1.json:pretooluse:4",
+     "artifact_type": "hook",
+     "command": "kept.sh",
+     "config_path": "<ROOT>/work/.devin/hooks.v1.json",
+     "harness": "devin",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "exec"
+     },
+     "name": "PreToolUse:exec",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "a",
+      "1",
+      "1.5",
+      "1e+20",
+      "True",
+      "False"
+     ],
+     "artifact_id": "devin:project:mcp:mcp_config.json:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b8adf65f237ba53578479af6971efd98504f6cd9a91082320503d9428add6d08",
+       "hashBasis": "content",
+       "versionLabel": "local"
+      }
+     },
+     "name": "local",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "remote",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+       "hashBasis": "content",
+       "versionLabel": "remote"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:blank_url",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_url",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "946839a3dce26f2146497fd99986e71548b0b44867d46f5dbd7737eff087a1bb",
+       "hashBasis": "content",
+       "versionLabel": "blank_url"
+      }
+     },
+     "name": "blank_url",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": "   "
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:explicit",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "explicit",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "7c8b1d1f3e92bcd712ff78caa04eb085c4a23a2bbd63faa695498c2056d5a6fb",
+       "hashBasis": "content",
+       "versionLabel": "explicit"
+      }
+     },
+     "name": "explicit",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "sse",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:blank_transport",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "blank_transport",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b23b209647c64c94a8500928a6b77967e694384bf3729adda211af7991aa385b",
+       "hashBasis": "content",
+       "versionLabel": "blank_transport"
+      }
+     },
+     "name": "blank_transport",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://x"
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:transport_not_str",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "transport_not_str",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "transport_not_str"
+      }
+     },
+     "name": "transport_not_str",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "args_not_list",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "args_not_list"
+      }
+     },
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:env",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+      "env_keys": [
+       "A",
+       "API_KEY",
+       "B"
+      ],
+      "env_values_hash": "c6fe7ad53878c5cca6bf280bba371cd314f49e2c0acdcb27e6d6f529f5615b91",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "a6ae37f79c2cb0ad3b38d66c385915c90480a8e854b68b2855935ca401ef4883",
+       "hashBasis": "content",
+       "versionLabel": "env"
+      }
+     },
+     "name": "env",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:env_not_dict",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "env_not_dict",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "env_not_dict"
+      }
+     },
+     "name": "env_not_dict",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:mcp:mcp_config.json:environment_ignored",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.devin/mcp_config.json",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "environment_ignored",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "645ce1bfa85196a65b14739a88bbbace7ad2a11925c038e50de6c72370402f93",
+       "hashBasis": "content",
+       "versionLabel": "environment_ignored"
+      }
+     },
+     "name": "environment_ignored",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:global:skill:a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/devin/skills/a/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "devin:project:skill:b",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.devin/skills/b/SKILL.md",
+     "harness": "devin",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/b"
+      }
+     },
+     "name": "b",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/devin/config.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"matcher\": \"exec\", \"hooks\": [{\"type\": \"command\", \"command\": \"a.sh\", \"timeout\": 30}, {\"command\": \"b.sh\", \"timeout\": 2.5, \"type\": \"\"}, {\"command\": \"   \"}, {\"command\": 7}, \"not-a-dict\", {\"command\": \"c.sh\", \"timeout\": true, \"type\": 3}]}, {\"matcher\": \"\", \"hooks\": [{\"command\": \"d.sh\", \"timeout\": \"30\"}]}, {\"matcher\": 5, \"hooks\": [{\"command\": \"e.sh\"}]}, {\"hooks\": \"not-a-list\"}, {\"command\": \"group-level.sh\"}, \"not-a-dict\"], \"Stop\": [{\"hooks\": [{\"command\": \" spaced.sh \"}]}], \"\\u00c9V\\u00c9NEMENT\": [{\"hooks\": [{\"command\": \"accent.sh\"}]}], \"\\u0130stanbul\": [{\"hooks\": [{\"command\": \"dotted.sh\"}]}], \"NotAList\": {\"hooks\": []}, \"Empty\": []}, \"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, 1.5, 1e+20, true, false, null, [\"x\"], {\"k\": 1}]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"blank_url\": {\"url\": \"   \", \"command\": \"c\"}, \"explicit\": {\"command\": \"c\", \"transport\": \" sse \", \"url\": \"https://x\"}, \"blank_transport\": {\"command\": \"c\", \"transport\": \"  \", \"url\": \"https://x\"}, \"transport_not_str\": {\"command\": \"c\", \"transport\": 3}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"env\": {\"command\": \"c\", \"env\": {\" API_KEY \": \"secret\", \"\": \"x\", \"  \": \"y\", \"NUM\": 3, \"B\": \"1\", \" B\": \"2\", \"A\": \"z\"}}, \"env_not_dict\": {\"command\": \"c\", \"env\": [\"A\"]}, \"environment_ignored\": {\"command\": \"c\", \"environment\": {\"X\": \"1\"}}, \"bare\": {}, \"only_args\": {\"args\": [\"a\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/config.json",
+     "text": "{"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/hooks.v1.json",
+     "text": "{\"PreToolUse\": [{\"matcher\": \"exec\", \"hooks\": [{\"command\": \"run HOL_GUARD_MANAGED_DEVIN=1 guard\"}, {\"command\": \"python -m codex_plugin_scanner.cli ['guard', 'hook', '--harness', 'devin']\"}, {\"command\": \"python -m codex_plugin_scanner.cli ['guard', 'hook', '--harness', 'codex']\"}, {\"command\": \"python bounded_cli_hook_bridge {\\\\\\\"harness\\\\\\\":\\\\\\\"devin\\\\\\\"}\"}, {\"command\": \"python bounded_cli_hook_bridge {\\\"harness\\\":\\\"devin\\\"}\"}, {\"command\": \"python bounded_cli_hook_bridge {\\\"harness\\\":\\\"codex\\\"}\"}, {\"command\": \"guard __guard-bounded-hook {\\\"harness\\\":\\\"devin\\\"}\"}, {\"command\": \"guard __guard-bounded-hook harness devin\"}, {\"command\": \"py C:\\\\guard\\\\managed\\\\bounded-hooks\\\\devin.py\"}, {\"command\": \"py /g/managed/bounded-hooks/devin.py\"}, {\"command\": \"py /g/managed/bounded-hooks/codex.py\"}, {\"command\": \"kept.sh\"}]}]}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/mcp_config.json",
+     "text": "{\"mcpServers\": {\"local\": {\"command\": \"node\", \"args\": [\"a\", 1, 1.5, 1e+20, true, false, null, [\"x\"], {\"k\": 1}]}, \"remote\": {\"url\": \"https://mcp.example/x\", \"command\": 5}, \"blank_url\": {\"url\": \"   \", \"command\": \"c\"}, \"explicit\": {\"command\": \"c\", \"transport\": \" sse \", \"url\": \"https://x\"}, \"blank_transport\": {\"command\": \"c\", \"transport\": \"  \", \"url\": \"https://x\"}, \"transport_not_str\": {\"command\": \"c\", \"transport\": 3}, \"args_not_list\": {\"command\": \"c\", \"args\": \"abc\"}, \"env\": {\"command\": \"c\", \"env\": {\" API_KEY \": \"secret\", \"\": \"x\", \"  \": \"y\", \"NUM\": 3, \"B\": \"1\", \" B\": \"2\", \"A\": \"z\"}}, \"env_not_dict\": {\"command\": \"c\", \"env\": [\"A\"]}, \"environment_ignored\": {\"command\": \"c\", \"environment\": {\"X\": \"1\"}}, \"bare\": {}, \"only_args\": {\"args\": [\"a\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/devin/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.devin/skills/b/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.claude/settings.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"python -m codex_plugin_scanner.cli guard hook --harness claude-code\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/devin/config.json",
+    "<ROOT>/work/.devin/config.json",
+    "<ROOT>/work/.devin/hooks.v1.json",
+    "<ROOT>/work/.devin/mcp_config.json",
+    "<ROOT>/home/.config/devin/skills/a/SKILL.md",
+    "<ROOT>/work/.devin/skills/b/SKILL.md"
+   ],
+   "home": "home",
+   "name": "everything",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Devin config at <ROOT>/work/.devin/config.json could not be parsed; hooks and MCP servers in it were not inventoried.",
+    "Devin also loads Claude Code hooks by default, so Guard's Claude Code hooks will run inside Devin sessions and attribute them to Claude Code. Set read_config_from.claude to false in Devin's user config if you want Devin events attributed only to the Devin adapter."
+   ],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-devin-vectors.v1"
+}

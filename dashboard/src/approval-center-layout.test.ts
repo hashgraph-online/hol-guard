@@ -1,0 +1,665 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { createElement } from "react";
+import {
+  resolveEnvelopeDisplayText,
+  resolveActionEnvelopeDetailText,
+  friendlyMcpToolName,
+  resolveStoppedCommandText,
+  resolveTerminalLabel,
+  displayArtifactName,
+  EMPTY_QUEUE_TITLE,
+  STALE_REQUEST_COPY,
+  buildRecommendation,
+  buildRetryAfterApprovalCopy,
+  buildPauseLine,
+  isWatchOnlyObservation,
+  requestResolutionBlockReason,
+  scopeLabel,
+  buildCodexResumeUx,
+  resolveApprovalShareUrl,
+  resolveRequestWorkingDirectory,
+  watchObservedPolicyAction,
+  watchProtectedOutcome,
+} from "./approval-center-utils";
+import type {
+  GuardAction,
+  GuardActionEnvelope,
+  GuardApprovalGatePublicConfig,
+  GuardApprovalRequest,
+  GuardCodexResumeResult,
+} from "./guard-types";
+import { renderToStaticMarkup } from "react-dom/server";
+import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
+import { ReviewDecisionCard } from "./review-decision-card";
+
+function assert(condition: boolean, message: string): void {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+const BASE_ENVELOPE: GuardActionEnvelope = {
+  schema_version: 1,
+  action_id: "act-layout-test",
+  harness: "claude-code",
+  event_name: "tool_call",
+  action_type: "harness_start",
+  workspace: null,
+  workspace_hash: null,
+  tool_name: null,
+  command: null,
+  prompt_excerpt: null,
+  prompt_text: null,
+  target_paths: [],
+  network_hosts: [],
+  mcp_server: null,
+  mcp_tool: null,
+  package_manager: null,
+  package_name: null,
+  script_name: null,
+  raw_payload_redacted: {}
+};
+
+const BASE_REQUEST: GuardApprovalRequest = {
+  request_id: "request-layout-test",
+  harness: "claude-code",
+  artifact_id: "claude-code:project:bash",
+  artifact_name: "bash",
+  artifact_type: "command",
+  artifact_hash: "sha256-layout",
+  publisher: null,
+  policy_action: "require-reapproval",
+  recommended_scope: "artifact",
+  changed_fields: ["first_seen"],
+  source_scope: "project",
+  config_path: "./claude.json",
+  launch_target: "git status",
+  transport: "stdio",
+  review_command: "hol-guard approvals approve request-layout-test",
+  approval_url: "http://127.0.0.1:4781/approvals/request-layout-test",
+  status: "pending",
+  resolution_action: null,
+  resolution_scope: null,
+  reason: null,
+  created_at: "2026-04-11T12:00:00Z",
+  resolved_at: null,
+  action_envelope_json: null
+};
+
+const shellEnvelope: GuardActionEnvelope = {
+  ...BASE_ENVELOPE,
+  action_type: "shell_command",
+  command: "git diff HEAD~1 -- src/"
+};
+
+const shellRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  workspace: "/workspace/legacy",
+  action_envelope_json: { ...shellEnvelope, workspace: "/workspace/current" }
+};
+
+assert(
+  resolveStoppedCommandText(shellRequest).length > 0,
+  "T493: CTA section has non-empty command text for shell_command item (CTA content available above fold)"
+);
+
+assert(
+  resolveStoppedCommandText(shellRequest) === "git diff HEAD~1 -- src/",
+  "T494: resolveStoppedCommandText returns the envelope command for shell_command item"
+);
+
+assert(
+  resolveRequestWorkingDirectory(shellRequest) === "/workspace/current",
+  "T494: working directory prefers the typed action envelope workspace"
+);
+
+assert(
+  resolveRequestWorkingDirectory({ ...BASE_REQUEST, workspace: "/workspace/legacy" }) === "/workspace/legacy",
+  "T494: working directory falls back to the approval request workspace"
+);
+
+assert(
+  resolveRequestWorkingDirectory({ ...BASE_REQUEST, workspace: "  " }) === null,
+  "T494: working directory omits empty workspace values"
+);
+
+assert(
+  resolveRequestWorkingDirectory({
+    ...BASE_REQUEST,
+    artifact_type: "file_read",
+    workspace: "/workspace/current",
+    action_envelope_json: { ...BASE_ENVELOPE, action_type: "file_read", workspace: "/workspace/current" }
+  }) === null,
+  "T494: working directory stays scoped to executable actions"
+);
+
+const primaryActionMarkup = renderToStaticMarkup(PrimaryActionCard({ item: shellRequest }));
+assert(
+  primaryActionMarkup.includes("Working directory") && primaryActionMarkup.includes("/workspace/current"),
+  "T494: primary action card shows the full working directory next to the stopped command"
+);
+
+const longCommand = "a".repeat(200);
+const longCommandEnvelope: GuardActionEnvelope = {
+  ...BASE_ENVELOPE,
+  action_type: "shell_command",
+  command: longCommand
+};
+const longCommandRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: longCommandEnvelope
+};
+
+assert(
+  resolveStoppedCommandText(longCommandRequest) === longCommand,
+  "T495: resolveStoppedCommandText does not truncate a 200-character command string"
+);
+
+assert(
+  resolveStoppedCommandText(longCommandRequest).length === 200,
+  "T495: 200-char command preserved at full length"
+);
+
+const longPromptText = `${"Review the blocked prompt prefix. ".repeat(8)}DANGEROUS_SUFFIX_EXFILTRATE_SECRET`;
+const longPromptRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    prompt_excerpt: longPromptText.slice(0, 80),
+    prompt_text: longPromptText
+  }
+};
+
+assert(
+  resolveStoppedCommandText(longPromptRequest) === longPromptText,
+  "T495: resolveStoppedCommandText prefers full prompt_text over truncated prompt_excerpt"
+);
+
+const harnessStartEnvelope: GuardActionEnvelope = { ...BASE_ENVELOPE, action_type: "harness_start" };
+assert(
+  resolveEnvelopeDisplayText(harnessStartEnvelope) === null,
+  "T496: resolveEnvelopeDisplayText returns null for harness_start; no raw content displayed"
+);
+
+assert(
+  displayArtifactName(BASE_REQUEST) === "bash",
+  "T497: displayArtifactName returns artifact_name when present"
+);
+
+const requestNoName: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_name: "",
+  artifact_id: "claude-code:project:fallback-id"
+};
+assert(
+  displayArtifactName(requestNoName) === "claude-code:project:fallback-id",
+  "T497: displayArtifactName falls back to artifact_id when name is empty"
+);
+
+const requestNoNameOrId: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_name: "",
+  artifact_id: ""
+};
+assert(
+  displayArtifactName(requestNoNameOrId) === "this action",
+  "T497: displayArtifactName falls back to 'this action' when both name and id are empty"
+);
+
+assert(
+  resolveTerminalLabel(shellRequest) === "Command",
+  "T479: resolveTerminalLabel returns 'Command' for shell_command action type"
+);
+
+const promptRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "prompt", prompt_excerpt: "Ignore instructions" }
+};
+assert(
+  resolveTerminalLabel(promptRequest) === "Prompt excerpt",
+  "T480: resolveTerminalLabel returns 'Prompt excerpt' for prompt action type"
+);
+
+const fileReadRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "file_read", target_paths: ["/etc/hosts"] }
+};
+assert(
+  resolveTerminalLabel(fileReadRequest) === "File path",
+  "T481: resolveTerminalLabel returns 'File path' for file_read action type"
+);
+
+const applyPatchEnvelope: GuardActionEnvelope = {
+  ...BASE_ENVELOPE,
+  action_type: "file_write",
+  tool_name: "apply_patch",
+  command: "*** Begin Patch\n*** Update File: src/guard.py\n@@\n+value = 1\n*** End Patch",
+  target_paths: ["src/guard.py"]
+};
+const applyPatchRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: applyPatchEnvelope
+};
+assert(
+  resolveTerminalLabel(applyPatchRequest) === "Patch",
+  "T481: resolveTerminalLabel identifies native apply_patch actions as patches"
+);
+assert(
+  resolveEnvelopeDisplayText(applyPatchEnvelope) === applyPatchEnvelope.command,
+  "T481: resolveEnvelopeDisplayText preserves the redacted patch for native apply_patch actions"
+);
+
+const mcpRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "mcp_tool", mcp_server: "my-server", mcp_tool: "fetch" }
+};
+assert(
+  resolveTerminalLabel(mcpRequest) === "MCP server / tool",
+  "T482: resolveTerminalLabel returns 'MCP server / tool' for mcp_tool action type"
+);
+const qualifiedComposio = "mcp__codex_apps__composio__composio_search_tools";
+assert(friendlyMcpToolName(qualifiedComposio) === "Composio · Search Tools",
+  "review shows the connector and action without requiring qualified-name parsing");
+assert(displayArtifactName({ ...mcpRequest, artifact_type: "tool_call", artifact_name: qualifiedComposio })
+  === "Composio · Search Tools", "queue uses a friendly connector-action title");
+assert(resolveActionEnvelopeDetailText({ ...BASE_ENVELOPE, action_type: "mcp_tool",
+  tool_name: qualifiedComposio, mcp_tool: qualifiedComposio }) === "Composio · Search Tools",
+"review action uses a friendly label while retaining the bound underlying artifact");
+assert(friendlyMcpToolName("mcp__unsafe__../../send") === null,
+  "malformed qualified names stay uninterpreted");
+assert(friendlyMcpToolName("mcp__evil__github__delete_repo") === "Evil · Github Delete Repo",
+  "a nested tool name keeps the real server visible");
+assert(friendlyMcpToolName("mcp__github__issues__list") === "Github · Issues List",
+  "nested tools remain readable without impersonating another server");
+assert(friendlyMcpToolName("mcp__codex_apps__composio__search__tools") === "Composio · Search Tools",
+  "Codex app labels retain all action segments");
+
+const queuedBrowserTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:evaluate_script",
+  changed_fields: ["runtime_tool_call", "runtime_browser_tool_call"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools evaluate_script current page"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedBrowserTool) === "Browser tool",
+  "queued browser MCP tool calls are labeled as browser tools, not shell commands"
+);
+
+const queuedClickWithoutBrowserField: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "chrome-devtools:click",
+  changed_fields: ["runtime_tool_call", "browser interaction on page element"],
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "chrome-devtools click page element"
+  }
+};
+assert(
+  resolveTerminalLabel(queuedClickWithoutBrowserField) === "Browser tool",
+  "chrome-devtools click reviews are labeled as browser tools even without runtime_browser_tool_call"
+);
+
+const queuedMcpTool: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "filesystem:read_file",
+  changed_fields: ["runtime_tool_call"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command" }
+};
+assert(
+  resolveTerminalLabel(queuedMcpTool) === "MCP tool",
+  "queued MCP tool calls are labeled as MCP tools, not shell commands"
+);
+
+const nativeToolCall: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  artifact_type: "tool_call",
+  artifact_name: "bash",
+  changed_fields: ["first_seen"],
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "shell_command", command: "git status" }
+};
+assert(
+  resolveTerminalLabel(nativeToolCall) === "Command",
+  "native pre-tool reviews keep their envelope command label"
+);
+
+const packageRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "package_script", package_manager: "npm", package_name: "lodash", script_name: null }
+};
+assert(
+  resolveTerminalLabel(packageRequest) === "Package",
+  "T483: resolveTerminalLabel returns 'Package' for package_script action type"
+);
+
+const networkRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: { ...BASE_ENVELOPE, action_type: "network_request", network_hosts: ["api.example.com"] }
+};
+assert(
+  resolveTerminalLabel(networkRequest) === "Network destination",
+  "T484: resolveTerminalLabel returns 'Network destination' for network_request action type"
+);
+
+assert(
+  resolveTerminalLabel(BASE_REQUEST) === "Command",
+  "P45: pending requests without an envelope use a neutral command label"
+);
+
+assert(EMPTY_QUEUE_TITLE === "Review queue is clear", "C5: Empty queue reports that the review queue is clear");
+assert(!EMPTY_QUEUE_TITLE.toLowerCase().includes("blocked"), "P45: Empty review queue does not relabel pending decisions as blocks");
+assert(STALE_REQUEST_COPY === "This request was already decided.", "C6: Stale request shows already decided copy");
+assert(STALE_REQUEST_COPY.toLowerCase().includes("already decided"), "C6: Stale request copy contains already decided");
+
+assert(
+  scopeLabel("artifact") === "This retry only",
+  "C7: Artifact scope copy makes one-retry behavior clear"
+);
+
+assert(
+  scopeLabel("workspace") === "Same action in this project",
+  "C8: Workspace scope copy makes same-action project behavior clear"
+);
+
+assert(
+  buildRecommendation(BASE_REQUEST).includes("Project approval remembers this same action"),
+  "C9: Recommendation explains project approval does not trust new sensitive actions"
+);
+
+const watchOnlyRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  scanner_evidence: [
+    {
+      source: "observe_mode_inbox",
+      observed_policy_action: "require-reapproval",
+      queued_policy_action: "require-reapproval",
+      authoritative_action: "allow",
+    },
+  ] as unknown as NonNullable<GuardApprovalRequest["scanner_evidence"]>,
+};
+assert(isWatchOnlyObservation(watchOnlyRequest), "Watch-only findings are identified from trusted queue evidence");
+const explicitWatchOnlyRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  watch_only_observation: true,
+};
+assert(
+  isWatchOnlyObservation(explicitWatchOnlyRequest),
+  "Watch-only findings use the explicit Core classification without scanner metadata",
+);
+assert(
+  !isWatchOnlyObservation({ ...watchOnlyRequest, watch_only_observation: false }),
+  "An explicit actionable classification takes precedence over a legacy scanner marker",
+);
+assert(
+  buildPauseLine(watchOnlyRequest).startsWith("Would have stopped."),
+  "Watch-only findings never claim the action was paused",
+);
+assert(
+  buildRecommendation(watchOnlyRequest).includes("Save an exact allow"),
+  "Watch-only findings explain how to prevent the same false positive",
+);
+assert(
+  buildRetryAfterApprovalCopy(watchOnlyRequest, "allow").includes("no future rule was saved"),
+  "Watch-only one-time review copy never promises a remembered allow",
+);
+assert(
+  buildRetryAfterApprovalCopy(watchOnlyRequest, "allow", true).includes("allow this exact action next time"),
+  "Watch-only persisted allow copy describes the exact future rule",
+);
+assert(
+  buildRetryAfterApprovalCopy(watchOnlyRequest, "block", true).includes("stop this exact action next time"),
+  "Watch-only persisted block copy describes the exact future rule",
+);
+const watchOnlyDecisionMarkup = renderToStaticMarkup(
+  createElement(ReviewDecisionCard, {
+    detail: { item: explicitWatchOnlyRequest, diff: null, receipt: null, policy: [] },
+    onResolve: () => undefined,
+    onGoHome: () => undefined,
+    approvalGate: null,
+  }),
+);
+assert(
+  watchOnlyDecisionMarkup.includes("Watch-only finding")
+    && watchOnlyDecisionMarkup.includes("Would have stopped")
+    && watchOnlyDecisionMarkup.includes("Keep allowing")
+    && watchOnlyDecisionMarkup.includes("Stop this next time")
+    && watchOnlyDecisionMarkup.includes("What Watch observed")
+    && !watchOnlyDecisionMarkup.includes("What was stopped")
+    && !watchOnlyDecisionMarkup.includes("Why paused")
+    && watchOnlyDecisionMarkup.includes("What Protected mode would do"),
+  "Watch-only decision card renders its observation state without crashing",
+);
+const nativeScriptDecisionMarkup = renderToStaticMarkup(
+  createElement(ReviewDecisionCard, {
+    detail: {
+      item: {
+        ...BASE_REQUEST,
+        artifact_type: "native_bash_request",
+        artifact_name: "reviewed-script.sh",
+        exact_action_persistence_eligible: true,
+        scope_restrictions: ["reusable_allow_is_action_bound"],
+      },
+      diff: null,
+      receipt: null,
+      policy: [],
+    },
+    onResolve: () => undefined,
+    onGoHome: () => undefined,
+    approvalGate: null,
+  }),
+);
+assert(
+  nativeScriptDecisionMarkup.includes("Run this script?")
+    && nativeScriptDecisionMarkup.includes("Run once")
+    && nativeScriptDecisionMarkup.includes("Always allow this version in this project"),
+  "Native Bash decision cards render the version-bound approval language end to end",
+);
+const approvalGateNudge = "Set an approval password or MFA so only you can approve blocked actions.";
+const approvalGateBase = {
+  configured: false,
+  cooldown_seconds: 0,
+  cooldown_active: false,
+  cooldown_expires_at: null,
+  locked_until: null,
+  fail_closed: false,
+  strict_all_decisions: false,
+};
+const decisionMarkupWithGate = (approvalGate: GuardApprovalGatePublicConfig | null): string => {
+  // The settings link keeps the signed-link session, which reads browser location.
+  const emptyStorage = { getItem: () => null, setItem: () => undefined };
+  const globalWithWindow = globalThis as unknown as { window?: object };
+  globalWithWindow.window = {
+    location: { origin: "http://127.0.0.1:4781", pathname: "/requests/req-1", search: "", hash: "#guard-token=test-token" },
+    localStorage: emptyStorage,
+    sessionStorage: emptyStorage,
+  };
+  try {
+    return renderToStaticMarkup(
+      createElement(ReviewDecisionCard, {
+        detail: { item: explicitWatchOnlyRequest, diff: null, receipt: null, policy: [] },
+        onResolve: () => undefined,
+        onGoHome: () => undefined,
+        approvalGate,
+      }),
+    );
+  } finally {
+    delete globalWithWindow.window;
+  }
+};
+assert(
+  !watchOnlyDecisionMarkup.includes(approvalGateNudge),
+  "Approval page waits for the gate state before nudging",
+);
+const unprotectedDecisionMarkup = decisionMarkupWithGate({ ...approvalGateBase, enabled: false });
+assert(
+  unprotectedDecisionMarkup.includes(approvalGateNudge)
+    && unprotectedDecisionMarkup.includes("/settings?section=approval#guard-token=test-token")
+    && unprotectedDecisionMarkup.includes("Keep allowing"),
+  "Approval page nudges toward a password or MFA without hiding the decision",
+);
+assert(
+  !decisionMarkupWithGate({ ...approvalGateBase, enabled: true, configured: true }).includes(approvalGateNudge),
+  "Approval page stays quiet once the approval gate is on",
+);
+assert(
+  buildWhatWouldHappen(explicitWatchOnlyRequest)?.includes("Watch allowed this action to continue") === true,
+  "Watch-only consequence copy describes an allowed observation instead of a paused action",
+);
+assert(
+  watchObservedPolicyAction(watchOnlyRequest) === "require-reapproval",
+  "Watch-only copy reads the observed policy action from scanner evidence",
+);
+for (const [action, expected] of [
+  ["block", "would have blocked it"],
+  ["sandbox-required", "would have required a sandbox"],
+  ["review", "would have sent it for review"],
+] as const satisfies ReadonlyArray<readonly [GuardAction, string]>) {
+  const actionRequest = {
+    ...watchOnlyRequest,
+    scanner_evidence: [
+      {
+        source: "observe_mode_inbox",
+        observed_policy_action: action,
+        queued_policy_action: "require-reapproval",
+        authoritative_action: "allow",
+      },
+    ],
+  } as GuardApprovalRequest;
+  assert(
+    watchProtectedOutcome(actionRequest).includes(expected),
+    `Watch Protected outcome preserves the observed ${action} action`,
+  );
+}
+const watchOnlyActionMarkup = renderToStaticMarkup(
+  createElement(PrimaryActionCard, { item: explicitWatchOnlyRequest }),
+);
+assert(
+  watchOnlyActionMarkup.includes("What Watch observed")
+    && watchOnlyActionMarkup.includes("Would have stopped")
+    && !watchOnlyActionMarkup.includes("What was stopped")
+    && !watchOnlyActionMarkup.includes("Needs fresh approval"),
+  "Watch-only action details are labeled as observed rather than stopped",
+);
+
+const sandboxRequest: GuardApprovalRequest = { ...BASE_REQUEST, policy_action: "sandbox-required" };
+assert(
+  requestResolutionBlockReason(sandboxRequest)?.includes("cannot bypass") === true &&
+    !buildRecommendation(sandboxRequest).toLowerCase().includes("scope"),
+  "P45: terminal sandbox requests never advertise or enable an approval bypass",
+);
+const inconsistentRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_contract_error: "authoritative_decision_inconsistent",
+};
+assert(
+  requestResolutionBlockReason(inconsistentRequest)?.includes("cannot be approved") === true,
+  "P45: inconsistent stored authority has explicit non-resolvable UI copy",
+);
+const supersededRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST, status: "expired", superseded_by_request_id: "fresh-review",
+};
+assert(requestResolutionBlockReason(supersededRequest)?.includes("superseded by a fresh review") === true,
+  "expired requests expose the fresh review link rather than hiding it");
+
+assert(
+  scopeLabel("workspace") === "Same action in this project",
+  "C12: scopeLabel for workspace is unchanged; only button label changes (GR125)"
+);
+
+assert(
+  scopeLabel("global") !== "Remember for project",
+  "C12: scopeLabel for global is not the project-scoped label"
+);
+
+function makeResume(status: GuardCodexResumeResult["status"], extras?: Partial<GuardCodexResumeResult>): GuardCodexResumeResult {
+  return {
+    status,
+    supported: true,
+    attempt_count: 0,
+    request_id: null,
+    operation_id: null,
+    harness: null,
+    resolution_action: null,
+    strategy: null,
+    thread_id: null,
+    reason: null,
+    message: null,
+    last_error: null,
+    created_at: null,
+    updated_at: null,
+    last_attempt_at: null,
+    sent_at: null,
+    ...extras,
+  };
+}
+
+const uxPending = buildCodexResumeUx(makeResume("pending"));
+assert(uxPending.showRetry === false, "C13: pending status has showRetry false");
+assert(uxPending.headline.toLowerCase().includes("continu"), "C13: pending headline mentions continuing");
+
+const uxInProgress = buildCodexResumeUx(makeResume("in_progress"));
+assert(uxInProgress.showRetry === false, "C13: in_progress status has showRetry false");
+assert(uxInProgress.headline.toLowerCase().includes("continu"), "C13: in_progress headline mentions continuing");
+
+const uxSent = buildCodexResumeUx(makeResume("sent"));
+assert(uxSent.showRetry === false, "C13: sent status has showRetry false");
+assert(uxSent.headline.toLowerCase().includes("codex"), "C13: sent headline mentions Codex");
+
+const uxAlreadySent = buildCodexResumeUx(makeResume("already_sent"));
+assert(uxAlreadySent.showRetry === false, "C13: already_sent status has showRetry false");
+assert(uxAlreadySent.headline === uxSent.headline, "C13: already_sent and sent have same headline");
+
+const uxHeadlessSent = buildCodexResumeUx(
+  makeResume("sent", { reason: "headless_resume_started", strategy: "codex-headless-exec" })
+);
+assert(uxHeadlessSent.showRetry === false, "C13: headless sent status has showRetry false");
+assert(
+  uxHeadlessSent.headline.toLowerCase().includes("background"),
+  "C13: headless sent headline makes background resume explicit"
+);
+
+const uxFailed = buildCodexResumeUx(makeResume("failed", { last_error: "connection lost" }));
+assert(uxFailed.showRetry === true, "C13: failed status has showRetry true");
+assert(uxFailed.body === "connection lost", "C13: failed uses last_error for body");
+
+const uxFailedFallback = buildCodexResumeUx(makeResume("failed", { reason: "timeout" }));
+assert(uxFailedFallback.body === "timeout", "C13: failed falls back to reason when no last_error");
+
+const uxFailedDefault = buildCodexResumeUx(makeResume("failed"));
+assert(uxFailedDefault.body !== null, "C13: failed has non-null body even without error details");
+
+const uxSkipped = buildCodexResumeUx(makeResume("skipped"));
+assert(uxSkipped.showRetry === false, "C13: skipped status has showRetry false");
+assert(uxSkipped.body !== null && uxSkipped.body.toLowerCase().includes("codex"), "C13: skipped body mentions Codex");
+
+assert(
+  resolveApprovalShareUrl({
+    ...BASE_REQUEST,
+    request_id: "cursor-share-req",
+    approval_url: "http://127.0.0.1:4781/approvals/legacy-req"
+  }) === "http://127.0.0.1:4781/requests/cursor-share-req",
+  "T498: resolveApprovalShareUrl prefers request_id and canonical /requests/ route"
+);
+
+const layoutSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
+assert(layoutSource.includes("WatchProtectionBanner"), "inbox shows the Watch protection-off banner");
+assert(layoutSource.includes('view === "inbox"'), "Watch banner is scoped to the approval inbox");
+assert(
+  layoutSource.includes('if (props.runtime.kind === "ready") {\n    queuedCount = props.runtime.snapshot.pending_count;'),
+  "sidebar decision count uses the actionable runtime total when watch observations are visible",
+);
+assert(
+  !layoutSource.includes("queuedCount = queuedItems.length;\n  } else if (props.runtime.kind"),
+  "inbox observations do not override the actionable runtime total",
+);
+
+console.log("approval-center-layout.test.ts: all tests passed");

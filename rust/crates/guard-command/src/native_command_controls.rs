@@ -1,0 +1,671 @@
+//! Compile authenticated controls once against the exact packaged catalog.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+use std::time::Instant;
+
+use guard_contracts::{
+    NativeCommandControlBindingV1, NativeCommandObservationBatchV1, NativeCommandObservationV1,
+    NativeCommandObservationsV1, NativeCommandPermissionObservationV1,
+    NativeCommandReceiptBindingV1, PreToolActionTypeV1, PreToolResultV1,
+    NATIVE_COMMAND_OBSERVATIONS_SCHEMA, NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
+};
+
+use crate::native_command_program::{
+    digest_value, is_deadline_error, packaged_command_program, CommandCandidateIndex,
+    NativeCommandProgram,
+};
+use crate::CanonicalCommandV1;
+
+#[path = "native_command_controls_admission.rs"]
+mod admission;
+#[path = "native_command_controls_mcp.rs"]
+mod mcp;
+#[path = "native_command_controls_risk.rs"]
+mod risk;
+
+#[derive(Debug)]
+pub struct CompiledNativeCommandControls {
+    program: Arc<NativeCommandProgram>,
+    catalog: Option<Arc<crate::native_command_catalog::CommandCatalog>>,
+    binding: NativeCommandControlBindingV1,
+    active_extensions: BTreeSet<String>,
+    candidate_index: CommandCandidateIndex,
+    blocked_extensions: BTreeSet<String>,
+    blocked_permissions: BTreeSet<String>,
+    explicitly_enabled_permissions: BTreeSet<String>,
+    global_block: bool,
+    rule_indices: BTreeMap<String, usize>,
+    quarantine_index: Option<CommandCandidateIndex>,
+    quarantine_pending: bool,
+}
+
+impl CompiledNativeCommandControls {
+    fn for_program_inner(
+        binding: &NativeCommandControlBindingV1,
+        program: Arc<NativeCommandProgram>,
+        retain_inactive: bool,
+    ) -> Result<Self, &'static str> {
+        admission::validate_binding(binding, &program)?;
+        let extension_indices: BTreeMap<_, _> = program
+            .extensions
+            .iter()
+            .enumerate()
+            .map(|(index, extension)| (extension.extension_id.as_str(), index))
+            .collect();
+        let permissions: BTreeMap<_, _> = program
+            .extensions
+            .iter()
+            .flat_map(|extension| {
+                extension.permissions.iter().map(move |permission| {
+                    (permission.permission_id.as_str(), (extension, permission))
+                })
+            })
+            .collect();
+        let mut composed = BTreeMap::<(&str, &str), bool>::new();
+        let mut locally_enabled = BTreeSet::new();
+        // A never-enrolled device still gets packaged first-party protection.
+        // It cannot opt in external code or carry any permission override.
+        // The snapshot store rejects this baseline after a protected floor has
+        // ever been retained, including across expiry, quarantine and restart.
+        let initial_defaults = binding.is_initial_defaults();
+        let mut global_block = binding.health != "protected" && !initial_defaults;
+        for layer in &binding.layers {
+            global_block |= layer.global_lockdown;
+            for control in &layer.controls {
+                let is_extension = control.target_kind == "extension";
+                let unknown = (is_extension
+                    && !extension_indices.contains_key(control.target_id.as_str()))
+                    || (!is_extension && !permissions.contains_key(control.target_id.as_str()));
+                if unknown
+                    && (!retain_inactive
+                        || !admission::may_retain_inactive(control, &layer.kind, |owner| {
+                            extension_indices.contains_key(owner)
+                        }))
+                {
+                    return Err("native_command_control_target_unknown");
+                }
+                let disabled = control.state == "disabled";
+                let key = (control.target_kind.as_str(), control.target_id.as_str());
+                composed
+                    .entry(key)
+                    .and_modify(|previous| *previous |= disabled)
+                    .or_insert(disabled);
+                if is_extension && layer.kind == "local-admin" && !disabled {
+                    locally_enabled.insert(control.target_id.as_str());
+                }
+            }
+        }
+        let mut active_extensions = BTreeSet::new();
+        let mut blocked_extensions = BTreeSet::new();
+        for extension in &program.extensions {
+            let disabled =
+                composed.get(&("extension", extension.extension_id.as_str())) == Some(&true);
+            let active = extension.required
+                || extension.trust_class != "external"
+                || (locally_enabled.contains(extension.extension_id.as_str()) && !disabled);
+            if active {
+                active_extensions.insert(extension.extension_id.clone());
+            }
+            let mut pending = vec![extension.extension_id.as_str()];
+            let mut visited = BTreeSet::new();
+            while let Some(id) = pending.pop() {
+                if !visited.insert(id) {
+                    continue;
+                }
+                if composed.get(&("extension", id)) == Some(&true) {
+                    blocked_extensions.insert(extension.extension_id.clone());
+                }
+                let index = *extension_indices
+                    .get(id)
+                    .ok_or("native_command_extension_dependency_unknown")?;
+                pending.extend(
+                    program.extensions[index]
+                        .dependencies
+                        .iter()
+                        .map(String::as_str),
+                );
+            }
+        }
+        let mut blocked_permissions = BTreeSet::new();
+        let mut explicitly_enabled_permissions = BTreeSet::new();
+        for (id, (_, permission)) in &permissions {
+            if binding.health == "protected"
+                && permission.configurable
+                && composed.get(&("permission", id)) == Some(&false)
+            {
+                explicitly_enabled_permissions.insert((*id).to_owned());
+            }
+            let mut pending = vec![*id];
+            let mut visited = BTreeSet::new();
+            while let Some(current) = pending.pop() {
+                if !visited.insert(current) {
+                    continue;
+                }
+                let (owner, dependent) = permissions
+                    .get(current)
+                    .ok_or("native_command_permission_dependency_unknown")?;
+                if composed.get(&("permission", current)) == Some(&true)
+                    || blocked_extensions.contains(&owner.extension_id)
+                {
+                    blocked_permissions.insert((*id).to_owned());
+                }
+                pending.extend(
+                    dependent
+                        .dependencies
+                        .iter()
+                        .chain(&dependent.implied_permissions)
+                        .map(String::as_str),
+                );
+            }
+        }
+        let rule_indices = program
+            .rules
+            .iter()
+            .enumerate()
+            .map(|(index, rule)| (rule.rule_id.clone(), index))
+            .collect();
+        Ok(Self {
+            catalog: None,
+            candidate_index: CommandCandidateIndex::for_active(&program, &active_extensions),
+            program,
+            binding: binding.clone(),
+            active_extensions,
+            blocked_extensions,
+            blocked_permissions,
+            explicitly_enabled_permissions,
+            global_block,
+            rule_indices,
+            quarantine_index: None,
+            quarantine_pending: false,
+        })
+    }
+
+    pub fn apply(
+        &self,
+        command: &CanonicalCommandV1,
+        result: PreToolResultV1,
+        deadline: Option<Instant>,
+    ) -> PreToolResultV1 {
+        self.apply_with_tool(Some(command), result, None, &[], deadline)
+    }
+
+    pub fn apply_with_tool(
+        &self,
+        command: Option<&CanonicalCommandV1>,
+        result: PreToolResultV1,
+        tool: Option<&str>,
+        packages: &[String],
+        deadline: Option<Instant>,
+    ) -> PreToolResultV1 {
+        self.apply_with_tool_and_context(
+            command,
+            result,
+            tool,
+            packages,
+            deadline,
+            crate::pretool::PathContext::default(),
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn apply_with_tool_and_context(
+        &self,
+        command: Option<&CanonicalCommandV1>,
+        mut result: PreToolResultV1,
+        tool: Option<&str>,
+        packages: &[String],
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> PreToolResultV1 {
+        // Record the active set the decision is actually made with. Compiling
+        // a later snapshot on another thread must not change what this
+        // request reports.
+        crate::native_command_program::work_stats::record_active(self.active_extensions.len());
+        let observed = match command {
+            Some(command) => self.observe_command(command, deadline, context, environment),
+            None => Ok((NativeCommandObservationBatchV1::default(), None)),
+        };
+        // A check that stopped because its deadline passed observed nothing,
+        // which is not the same as a command the controls cannot match. The
+        // evidence field stays one value for both, because consumers pin it;
+        // this flag carries the difference to the floor below.
+        let mut deadline_expired = false;
+        // An administrator disable is a floor the user cannot clear, and a
+        // check that ran out of time cannot show the command falls outside
+        // it. Where anything is disabled, a timeout keeps the block rather
+        // than offering an approval that would override that decision.
+        let admin_disabled =
+            !self.blocked_permissions.is_empty() || !self.blocked_extensions.is_empty();
+        let (mut batch, unmodeled) = match observed {
+            Ok(observed) => observed,
+            Err(error) => {
+                deadline_expired = is_deadline_error(error);
+                (
+                    NativeCommandObservationBatchV1 {
+                        evaluation_error: Some("native_command_evaluation_failed".to_owned()),
+                        ..Default::default()
+                    },
+                    None,
+                )
+            }
+        };
+        let delegated_floor = if batch.evaluation_error.is_none() {
+            match self.delegated_observations(command, tool, packages, &mut batch, deadline) {
+                Ok(action) => action,
+                Err(error) => {
+                    deadline_expired = is_deadline_error(error);
+                    if deadline_expired {
+                        // The main pass already finished. A disabled rule or a
+                        // critical one it recorded still has to raise the floor
+                        // below, so keep those observations instead of dropping
+                        // them along with the delegated pass.
+                        batch.evaluation_error =
+                            Some("native_command_evaluation_failed".to_owned());
+                    } else {
+                        batch = NativeCommandObservationBatchV1 {
+                            evaluation_error: Some("native_command_evaluation_failed".into()),
+                            ..Default::default()
+                        };
+                    }
+                    if deadline_expired && !admin_disabled {
+                        "review"
+                    } else {
+                        "block"
+                    }
+                }
+            }
+        } else {
+            "allow"
+        };
+        let mut floor = if self.global_block {
+            "block"
+        } else {
+            delegated_floor
+        };
+        let mut reason = if self.global_block {
+            "native_command_control_authority_block"
+        } else if batch.evaluation_error.is_some() {
+            evaluation_error_reason(deadline_expired && !admin_disabled)
+        } else if delegated_floor == "block" {
+            "native_command_permission_disabled"
+        } else {
+            "native_command_extension_review"
+        };
+        // An uncertain observation may belong to any of its candidate owners,
+        // so it takes the strongest of their floors and never less than review.
+        // An unmodeled command already carries the floor of its possible owners.
+        let mut uncertain_floor: Option<&'static str> = unmodeled;
+        // Uncertainty about a rule the user explicitly allowed reviews only
+        // when that Allow does not cover the whole command, or a segment runs
+        // a shape Guard could not inspect (below).
+        let mut enabled_uncertainty = false;
+        for observation in &batch.observations {
+            if !observation.uncertainty_reasons.is_empty() {
+                let candidate = self.uncertain_candidate(&observation.rule_id);
+                enabled_uncertainty |= candidate.is_none();
+                if let Some(candidate) = candidate {
+                    let candidate = if rank(candidate) < rank("review") {
+                        "review"
+                    } else {
+                        candidate
+                    };
+                    if uncertain_floor.is_none_or(|current| rank(candidate) > rank(current)) {
+                        uncertain_floor = Some(candidate);
+                    }
+                }
+            }
+            if self.blocked_extensions.contains(&observation.extension_id) {
+                floor = "block";
+                reason = "native_command_extension_disabled";
+            }
+            if observation.effective_segment_indexes.is_empty() {
+                continue;
+            }
+            let Some(index) = self.rule_indices.get(&observation.rule_id) else {
+                floor = "block";
+                reason = "native_command_extension_identity_invalid";
+                continue;
+            };
+            let rule = &self.program.rules[*index];
+            if self.blocked_permissions.contains(&rule.permission_id) {
+                floor = "block";
+                reason = "native_command_permission_disabled";
+            }
+            if !self
+                .explicitly_enabled_permissions
+                .contains(&rule.permission_id)
+            {
+                let candidate =
+                    rule_floor(rule, self.program.extensions[rule.extension_index].required);
+                if rank(candidate) > rank(floor) {
+                    floor = candidate;
+                }
+            }
+        }
+        for observation in &batch.permission_observations {
+            // A ruleless permission has no declared floor to bound uncertainty.
+            if !observation.uncertainty_reasons.is_empty() {
+                uncertain_floor = Some("block");
+            }
+            if self.blocked_extensions.contains(&observation.extension_id)
+                || self
+                    .blocked_permissions
+                    .contains(&observation.permission_id)
+            {
+                floor = "block";
+                reason = "native_command_permission_disabled";
+            }
+        }
+        if floor::proof_owner_disabled(&self.blocked_extensions, command, context) {
+            floor = "block";
+            reason = "native_command_extension_disabled";
+        }
+        if let Some(candidate) = uncertain_floor {
+            if rank(candidate) > rank(floor) {
+                floor = candidate;
+                reason = "native_command_extension_uncertain";
+            }
+        }
+        let observations_digest =
+            match digest_value(b"hol-guard.native-command-observations.v1\0", &batch) {
+                Ok(digest) => digest,
+                Err(_) => {
+                    strengthen(
+                        &mut result,
+                        "block",
+                        "native_command_extension_evaluation_failed",
+                    );
+                    return result;
+                }
+            };
+        let binding = NativeCommandReceiptBindingV1 {
+            schema: NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA.to_owned(),
+            program_digest: self.binding.program_digest.clone(),
+            catalog_digest: self.binding.catalog_digest.clone(),
+            trust_digest: self.binding.trust_digest.clone(),
+            control_revision: self.binding.revision,
+            managed_control_revision: self.binding.managed_revision,
+            control_effective_digest: self.binding.effective_digest.clone(),
+            observations_digest,
+            observation_count: batch.observations.len() + batch.permission_observations.len(),
+            uncertainty_count: batch
+                .observations
+                .iter()
+                .filter(|observation| !observation.uncertainty_reasons.is_empty())
+                .count()
+                + batch
+                    .permission_observations
+                    .iter()
+                    .filter(|observation| !observation.uncertainty_reasons.is_empty())
+                    .count()
+                + usize::from(batch.evaluation_error.is_some()),
+        };
+        let explicit_allow = floor == "allow"
+            && self.explicit_allow(
+                &result,
+                &batch,
+                command,
+                context,
+                environment,
+                enabled_uncertainty,
+            );
+        if enabled_uncertainty && !explicit_allow && rank(floor) < rank("review") {
+            floor = "review";
+            reason = "native_command_extension_uncertain";
+        }
+        if explicit_allow && result.minimum_action != "allow" {
+            precedence::settle_with_explicit_allow(&mut result);
+        }
+        let evaluation_error = batch.evaluation_error.clone();
+        result.command_extensions = Some(NativeCommandObservationsV1 {
+            schema: NATIVE_COMMAND_OBSERVATIONS_SCHEMA.to_owned(),
+            binding,
+            observations: batch.observations,
+            permission_observations: batch.permission_observations,
+            evaluation_error: batch.evaluation_error,
+        });
+        if evaluation_error.is_some() && !self.global_block {
+            // A deadline that ran out leaves Guard unable to show the command
+            // is safe, but it has not shown the command is dangerous either,
+            // and the condition is transient: the same command usually
+            // evaluates fine once the machine is less busy. Settling it at a
+            // review keeps Allow once and Always allow on the card, instead of
+            // a block no approval can clear. Every other evaluation failure
+            // still blocks, and so does a timeout while an administrator has
+            // disabled anything the unfinished check could not rule out.
+            let softened = deadline_expired && !admin_disabled;
+            let error_floor = if softened { "review" } else { "block" };
+            if rank(floor) < rank(error_floor) {
+                floor = error_floor;
+                reason = evaluation_error_reason(softened);
+            }
+        }
+        strengthen(&mut result, floor, reason);
+        floor::explain_timed_out_review(
+            &mut result,
+            evaluation_error.is_some() && deadline_expired && !admin_disabled && !self.global_block,
+        );
+        self.enforce_quarantine(command, tool, &mut result);
+        floor::explain_home_redirect(&mut result, command, |probe| {
+            self.observe_command(probe, deadline, context, environment)
+                .is_ok_and(|(batch, _)| batch.evaluation_error.is_none())
+        });
+        floor::explain_expired_deadline(&mut result, deadline);
+        let global_lockdown = self
+            .binding
+            .layers
+            .iter()
+            .any(|layer| layer.global_lockdown);
+        add_authority_repair_hint(&mut result, &self.binding.health, global_lockdown);
+        result
+    }
+
+    /// Whether the user's authenticated extension permissions already cover
+    /// every segment of `command`. A Rust floor raised after the controls run
+    /// consults this through [`Self::explicit_allow_covers_command`]; the
+    /// controls themselves reach it through [`Self::explicit_allow`].
+    fn explicit_permissions_cover_command(
+        &self,
+        command: &CanonicalCommandV1,
+        observations: &[NativeCommandObservationV1],
+        permission_observations: &[NativeCommandPermissionObservationV1],
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> bool {
+        if command.confidence != "exact"
+            || command.path_overridden
+            || !command.wrapper_chain.is_empty()
+            || command.segments.is_empty()
+        {
+            return false;
+        }
+        let benign: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
+            .into_iter()
+            .collect();
+        let mut covered = benign.clone();
+        for observation in observations {
+            if observation.effective_segment_indexes.is_empty() {
+                continue;
+            }
+            let Some(index) = self.rule_indices.get(&observation.rule_id) else {
+                return false;
+            };
+            if !self
+                .explicitly_enabled_permissions
+                .contains(&self.program.rules[*index].permission_id)
+            {
+                if observation
+                    .effective_segment_indexes
+                    .iter()
+                    .all(|index| covered.contains(index))
+                {
+                    continue;
+                }
+                return false;
+            }
+            covered.extend(observation.effective_segment_indexes.iter().copied());
+        }
+        // GitHub permission-only owners run last so they never hide an
+        // ungranted rule.
+        covered.extend(self.github_granted_segments(permission_observations));
+        // A `cd` into the checkout a `git worktree add` of this command
+        // creates, and the `head`/`tail`/`wc` stages after it, are covered
+        // when the Git and GitHub steps after it are.
+        covered.extend(crate::pretool::entered_checkouts(
+            command,
+            context,
+            environment,
+        ));
+        // A Git ref read after covered steps keeps the proof it has alone.
+        covered.extend(crate::pretool::git_reads_after_allowed_steps(
+            command, context, &benign, &covered,
+        ));
+        // An extension whose every permission the user explicitly enabled
+        // covers the programs it watches, including the spellings no rule
+        // models. It runs last so it never hides a rule the user left off and
+        // never changes what the proofs above read.
+        covered.extend(self.fully_allowed_extension_segments(command, &benign, context));
+        // A Git step that points its own output over `.git` or out of the
+        // workspace writes whichever route covered it: a `git log` rule the
+        // user enabled reads the verb, not the `--output=.git/config` that
+        // rewrites what the next step runs under. Packaging a tree into a
+        // file the workspace names is ordinary Git work and stays covered.
+        // Only the native benign proof, which reads where the file lands,
+        // still carries the rest.
+        covered.retain(|index| {
+            benign.contains(index)
+                || command.segments.get(*index).is_none_or(|segment| {
+                    !crate::pretool::git_step_overwrites_what_runs_next(segment)
+                })
+        });
+        // Delegated package-firewall ownership is not execution consent. Only
+        // verified rule observations or the native benign proof can cover a
+        // segment; an extra unclassified command retains its own review.
+        (0..command.segments.len()).all(|index| covered.contains(&index))
+    }
+
+    /// Whether the user's authenticated extension permissions settle
+    /// `command` on their own, for a Rust floor that is raised after the
+    /// controls have run and so cannot be read off the result's reason.
+    ///
+    /// The caller establishes that the floor it is about to raise is one an
+    /// Allow may settle; this answers only whether the Allow reaches the
+    /// whole command. It reads the observations already recorded on the
+    /// result, so it classifies exactly what the controls classified, and it
+    /// keeps every fixed floor: a segment that runs a configured Git program
+    /// or names Guard itself fails `fixed_command_floor`, a Git checkout
+    /// into a protected location fails `protected_checkout_destination`, and
+    /// an evaluation error leaves nothing to read.
+    pub(crate) fn explicit_allow_covers_command(
+        &self,
+        command: &CanonicalCommandV1,
+        observations: &NativeCommandObservationsV1,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> bool {
+        observations.evaluation_error.is_none()
+            && !crate::pretool::fixed_command_floor(command)
+            && !crate::pretool::protected_checkout_destination(command, context)
+            && self.explicit_permissions_cover_command(
+                command,
+                &observations.observations,
+                &observations.permission_observations,
+                context,
+                environment,
+            )
+    }
+
+    /// Whether an enabled extension names `executable` among the programs it
+    /// watches. A projection that rewrites one spelling of a command into
+    /// another drops the program it rewrote away, and with it the extension
+    /// evidence that program carried, so a watched program keeps its own
+    /// evaluation instead.
+    ///
+    /// An extension reaches a program two ways: the list it declares, and the
+    /// executables its own rules require. Both are read the way the rest of
+    /// the program reads a program name — by basename, without case — so
+    /// `/usr/bin/tee` and `TEE` name the same watched program `tee` does.
+    ///
+    /// A rule that can match without naming any program is left out rather
+    /// than read as watching everything. A quarter of the packaged
+    /// extensions carry such a rule, the required `command.filesystem` and
+    /// `command.git` among them, so reading one as watching every program
+    /// would answer `true` for every name and leave no projection able to
+    /// run at all. Those rules name no program, which is not the same as
+    /// naming this one, and the unmodeled-command path reads its own name
+    /// sets the same way.
+    pub(crate) fn watches_executable(&self, executable: &str) -> bool {
+        let wanted = crate::command_ascii_comparison::lowercase_for_ascii_comparison(
+            crate::native_command_program::basename(executable),
+        );
+        self.program
+            .extensions
+            .iter()
+            .enumerate()
+            .any(|(index, extension)| {
+                self.active_extensions.contains(&extension.extension_id)
+                    && self
+                        .program
+                        .extension_known_names(
+                            index,
+                            unmodeled::compatibility_executables(&extension.extension_id),
+                        )
+                        .contains(&wanted)
+            })
+    }
+}
+
+#[path = "native_command_delegated.rs"]
+mod delegated;
+#[path = "native_command_quarantine.rs"]
+mod quarantine;
+pub(crate) use delegated::normalized_tool;
+
+#[path = "native_command_controls_floor.rs"]
+mod floor;
+#[path = "native_command_controls_full_allow.rs"]
+mod full_allow;
+#[path = "native_command_controls_precedence.rs"]
+mod precedence;
+#[path = "native_command_unmodeled.rs"]
+mod unmodeled;
+use floor::{add_authority_repair_hint, evaluation_error_reason, rank, rule_floor, strengthen};
+pub(crate) use unmodeled::{
+    bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
+    python_stdin, unread_file_interpreter, Handover,
+};
+
+#[cfg(test)]
+#[path = "native_command_controls_tests.rs"]
+mod review_regressions;
+
+#[cfg(test)]
+#[path = "native_command_uncertainty_tests.rs"]
+mod uncertainty_regressions;
+
+#[cfg(test)]
+#[path = "native_command_precedence_tests.rs"]
+mod precedence_regressions;
+
+#[cfg(test)]
+#[path = "native_command_precedence_generic_tests.rs"]
+mod precedence_generic_regressions;
+
+#[cfg(test)]
+#[path = "native_command_compound_controls_tests.rs"]
+mod compound_regressions;
+
+#[cfg(test)]
+#[path = "native_command_script_controls_tests.rs"]
+mod script_regressions;
+
+#[cfg(test)]
+#[path = "native_command_powershell_tests.rs"]
+mod powershell_regressions;
+
+#[cfg(test)]
+#[path = "native_command_read_permission_tests.rs"]
+mod read_permission_regressions;

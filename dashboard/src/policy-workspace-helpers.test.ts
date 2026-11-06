@@ -1,0 +1,194 @@
+import type { GuardPolicyDecision } from "./guard-types";
+import {
+  resolvePolicyApprovalRecordLabel,
+  resolveExactApprovedAction,
+  resolvePolicyDisplay,
+  resolvePolicyEvidenceHref,
+  resolvePolicyMatcherFamily,
+  resolvePolicyRowFolder,
+  resolvePolicyRowFrequency,
+  resolvePolicyRowSubtitle,
+  resolvePolicyRowTitle,
+  resolveWorkspaceLabel,
+  formatPolicyScopePath,
+  isScannerGeneratedPolicyLabel,
+} from "./policy-workspace-helpers";
+import { resolvePolicyRowSourceLabel } from "./policy-managed-authority";
+import { scopeLabel } from "./approval-center-utils";
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+const basePolicy = (overrides: Partial<GuardPolicyDecision>): GuardPolicyDecision => ({
+  harness: "opencode",
+  scope: "workspace",
+  artifact_id: "opencode:project:package-request:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
+  workspace: "workspace:c188b6362f81cac126242642b9d7baaa7026c681d5c5ea9e4cc92df615049faf",
+  publisher: null,
+  action: "allow",
+  reason: "approved in review",
+  source: "local",
+  updated_at: "2026-06-11T12:00:00.000Z",
+  ...overrides,
+});
+
+const enrichedPackageRule = basePolicy({
+  remembered_command: "pnpm install",
+  remembered_context: "Package install via pnpm",
+  workspace_label: "cloud-portal",
+  source_receipt_id: "receipt-abc123",
+  artifact_hash: "sha256:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
+});
+
+const enrichedDisplay = resolvePolicyDisplay(enrichedPackageRule);
+
+assert(enrichedDisplay.headline === "pnpm install", "POL-H1: enriched command becomes headline");
+assert(enrichedDisplay.kindLine === "Package install via pnpm", "POL-H2: enriched context becomes kind line");
+assert(
+  enrichedDisplay.rememberSentence.includes("cloud-portal"),
+  "POL-H3: remember sentence names project folder",
+);
+assert(
+  enrichedDisplay.rememberSentence.includes("pnpm install"),
+  "POL-H4: remember sentence repeats exact command",
+);
+
+const workspacePackageRule = basePolicy({});
+const display = resolvePolicyDisplay(workspacePackageRule);
+
+assert(!display.headline.includes("62de9810"), "POL-H5: headline must not expose artifact hash ids");
+assert(display.headline.toLowerCase().includes("package install"), "POL-H6: fallback names action family");
+
+const evidenceHref = resolvePolicyEvidenceHref(enrichedPackageRule);
+assert(evidenceHref.includes("selected=receipt-abc123"), "POL-H7: evidence link selects source receipt");
+assert(evidenceHref.includes("search=receipt-abc123"), "POL-H8: evidence link searches receipt id");
+assert(evidenceHref.includes("harness=opencode"), "POL-H8b: evidence link scopes harness filter");
+assert(evidenceHref.includes("view=actions"), "POL-H8c: evidence link opens actions view");
+
+const hashOnlyHref = resolvePolicyEvidenceHref(
+  basePolicy({
+    artifact_hash: "sha256:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
+  }),
+);
+assert(hashOnlyHref.includes("search=62de981049ed"), "POL-H9: hash fallback strips sha256 prefix");
+
+assert(
+  resolvePolicyApprovalRecordLabel(enrichedPackageRule) === "receipt_abc123.json",
+  "POL-H10: approval record label uses receipt json filename",
+);
+
+assert(
+  resolvePolicyRowSourceLabel(enrichedPackageRule) === "Remembered on this device",
+  "POL-H23: source column identifies device-local remembered rules",
+);
+assert(
+  resolvePolicyRowSourceLabel(basePolicy({ source: "trusted-local-tool" })) === "Trusted local tool",
+  "POL-H23b: digest-bound local tool grants have a clear source label",
+);
+for (const source of ["cloud-sync", "team-policy", "policy-bundle"]) {
+  assert(
+    resolvePolicyRowSourceLabel(basePolicy({ source })) === "Synced contextual rule",
+    `POL-H23c: ${source} remains a Cloud-managed source`,
+  );
+}
+assert(
+  resolvePolicyRowSourceLabel(basePolicy({
+    source: "policy-bundle",
+    authority_mode: "managed-restrictive",
+    cloud_workspace_label: "workspace-managed-controls",
+  })) === "Managed by workspace-managed-controls",
+  "POL-H23d: serialized authenticated managed authority names its workspace",
+);
+
+const scannerLabelRule = basePolicy({
+  remembered_command: "Bash credential-looking output",
+  reason: "Bash credential-looking output",
+  artifact_id: "cursor:project:tool-action:abc123",
+});
+assert(isScannerGeneratedPolicyLabel("Bash credential-looking output"), "POL-H18: scanner labels detected");
+assert(
+  resolvePolicyRowTitle(scannerLabelRule, resolvePolicyDisplay(scannerLabelRule)).toLowerCase().includes("shell"),
+  "POL-H19: scanner labels fall back to action family headline",
+);
+assert(resolvePolicyRowFolder(enrichedPackageRule) === "cloud-portal", "POL-H20: folder resolves workspace label");
+assert(resolvePolicyRowFrequency(enrichedPackageRule) === "This project", "POL-H21: frequency uses policy scope label");
+assert(
+  resolvePolicyRowSubtitle(enrichedPackageRule, enrichedDisplay)?.includes("This project"),
+  "POL-H22: subtitle includes scope frequency",
+);
+
+assert(
+  resolveWorkspaceLabel("workspace:c188b6362f81cac126242642b9d7baaa7026c681d5c5ea9e4cc92df615049faf") ===
+    "this project",
+  "POL-H11: workspace hash labels collapse to this project",
+);
+
+assert(
+  resolvePolicyMatcherFamily(basePolicy({ artifact_id: "family:tool-action" })) === "tool-action",
+  "POL-H12: family matcher ids parse correctly",
+);
+
+const pathDisplay = resolvePolicyDisplay(
+  basePolicy({
+    remembered_command: "pnpm install",
+    source_scope_path: "/srv/projects/sample-portal",
+    workspace_label: "sample-portal",
+  }),
+);
+assert(pathDisplay.pathLine?.includes("sample-portal"), "POL-H13: path line surfaces scope path");
+assert(pathDisplay.projectLabel === "sample-portal", "POL-H14: project label surfaces workspace label");
+assert(scopeLabel("artifact", "policy") === "Once", "POL-H15: policy scope label for once");
+assert(scopeLabel("workspace", "policy") === "This project", "POL-H16: policy scope label for project");
+assert(
+  formatPolicyScopePath(
+    "/srv/work/monorepo/services/apps/backend/sample-guard/packages/cli/src/commands/policy/workspace/helpers",
+  )?.startsWith("…/"),
+  "POL-H17: long paths truncate with ellipsis",
+);
+
+const exactRule = basePolicy({
+  scope: "artifact",
+  artifact_id: "omp:native-pretool:bash",
+  artifact_hash: "guard-approval-context:v1:token",
+  remembered_command: "cd /repo && git status && rm -rf /tmp/build",
+});
+assert(resolveExactApprovedAction(exactRule) === "cd /repo && git status && rm -rf /tmp/build", "POL-H18: exact approved action surfaces verbatim");
+assert(resolvePolicyDisplay(exactRule).headline === "cd /repo && git status && rm -rf /tmp/build", "POL-H19: row headline is the exact action");
+assert(resolvePolicyDisplay(exactRule).rememberSentence.includes("cd /repo && git status"), "POL-H20: sentence quotes the exact action");
+assert(resolveExactApprovedAction(basePolicy({ scope: "artifact", remembered_command: "credential-looking output review" })) === null, "POL-H21: scanner labels never pose as exact actions");
+assert(
+  resolveExactApprovedAction(
+    basePolicy({ scope: "global", remembered_command: "npm install left-pad" }),
+  ) === null,
+  "POL-H24: broad rules never claim one exact action",
+);
+assert(
+  resolveExactApprovedAction(
+    basePolicy({ scope: "workspace", remembered_command: "npm install left-pad" }),
+  ) === null,
+  "POL-H25: workspace rules never claim one exact action",
+);
+assert(
+  resolveExactApprovedAction(
+    basePolicy({
+      scope: "artifact",
+      remembered_command: "trusted build tool",
+      reason: "trusted build tool",
+    }),
+  ) === null,
+  "POL-H26: the reason fallback is descriptive text, not an action",
+);
+assert(
+  resolveExactApprovedAction(
+    basePolicy({ scope: "artifact", action: "block", remembered_command: "rm -rf /prod" }),
+  ) === "rm -rf /prod",
+  "POL-H27: artifact-scoped block rules still name the exact action",
+);
+const longRule = basePolicy({ scope: "artifact", remembered_command: "x".repeat(200) });
+assert(resolvePolicyDisplay(longRule).rememberSentence.length < 230, "POL-H22: row sentence bounds very long commands");
+assert(resolvePolicyDisplay(longRule).rememberSentence.includes("…"), "POL-H23: truncated sentence is marked");
+
+console.log("policy-workspace-helpers.test.ts: all assertions passed");

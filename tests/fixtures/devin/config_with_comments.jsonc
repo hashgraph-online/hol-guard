@@ -1,0 +1,16 @@
+{
+  // Devin config files are JSONC: comments are allowed.
+  "permissions": {
+    "allow": ["exec(ls*)"], /* inline block comment */
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "exec",
+        "hooks": [
+          {"type": "command", "command": "echo jsonc-hook"},
+        ],
+      },
+    ],
+  },
+}

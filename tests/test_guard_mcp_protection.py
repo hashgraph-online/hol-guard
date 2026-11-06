@@ -1,0 +1,1525 @@
+"""Behavior tests for Guard MCP identity protection primitives."""
+
+from __future__ import annotations
+
+from dataclasses import asdict, replace
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard import native_mcp_tool_policy
+from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.mcp_tool_calls import (
+    build_tool_call_artifact,
+    build_tool_call_hash,
+    evaluate_tool_call,
+)
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
+from codex_plugin_scanner.guard.runtime.mcp_protection import (
+    build_mcp_server_identity,
+)
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
+
+
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+    tool_name = str(artifact.metadata.get("tool_name"))
+    return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
+
+
+pytestmark = pytest.mark.usefixtures("_native_mcp_identity_authority")
+
+
+@pytest.fixture
+def _native_mcp_identity_authority(native_context_digest: Path) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    home = native_context.context_digest_guard_home()
+    assert home is not None, "MCP identity controls require a bound guard home"
+    result = native_context.native_context_digest(
+        "canonical_sha256",
+        {"material": None, "prefix": None},
+        guard_home=home,
+        timeout_seconds=5.0,
+    )
+    assert result is not None and result["status"] == "ok"
+
+
+def test_mcp_server_identity_hashes_args_and_sorts_env_keys() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("--yes", "@modelcontextprotocol/server-filesystem@1.2.3", "."),
+        transport="stdio",
+        env={"TOKEN": "redacted", "PATH": "redacted"},
+    )
+
+    assert identity.config_path == ".mcp.json"
+    assert identity.command == "npx"
+    assert identity.transport == "stdio"
+    assert identity.env_keys == ("PATH", "TOKEN")
+    assert identity.package_name == "@modelcontextprotocol/server-filesystem"
+    assert identity.package_version == "1.2.3"
+    assert len(identity.args_hash) == 64
+    assert len(identity.env_values_hash) == 64
+
+
+def test_mcp_transport_normalization_preserves_approval_binding() -> None:
+    request = {
+        "config_path": ".mcp.json",
+        "command": "npx",
+        "args": ("demo@1.2.3",),
+        "env": {},
+    }
+    canonical = build_mcp_server_identity(**request, transport="stdio")
+    normalized = build_mcp_server_identity(**request, transport="\u001c StDiO \u001f")
+    different = build_mcp_server_identity(**request, transport="sse")
+
+    assert normalized == canonical
+    assert different.identity_hash != canonical.identity_hash
+
+
+@pytest.mark.parametrize(
+    ("bound", "expected_schema_hash"),
+    [
+        (2**80, "6ad1ad32535acfbb75383f3bb134512ab8d49ad776db7e3a77e559af2d509b29"),
+        (2**80 + 1, "5ec3119f60d71a3ed0fe0633d28316340874adce5ccb61e351bdc6d3d977e45a"),
+        (-(2**80 + 1), "bd3d83cab34afef27cc37cb034eeecd07f89ceab527c1907d11214841ce3e19d"),
+    ],
+)
+def test_mcp_schema_identity_preserves_large_integer_boundaries(
+    bound: int,
+    expected_schema_hash: str,
+) -> None:
+    identity = build_mcp_tool_identity(
+        server_hash="bound-server",
+        tool_name="read",
+        schema={"type": "integer", "maximum": bound},
+        description="Read",
+    )
+
+    assert identity.schema_hash == expected_schema_hash
+
+
+def test_mcp_server_identity_binds_configured_env_values_without_exposing_them() -> None:
+    secret_v1 = "mcp-secret-value-one"
+    secret_v2 = "mcp-secret-value-two"
+    first = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="node",
+        args=("server.js",),
+        transport="stdio",
+        env={"TOKEN": secret_v1, "MODE": "safe"},
+    )
+    reordered = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="node",
+        args=("server.js",),
+        transport="stdio",
+        env={"MODE": "safe", "TOKEN": secret_v1},
+    )
+    changed = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="node",
+        args=("server.js",),
+        transport="stdio",
+        env={"TOKEN": secret_v2, "MODE": "safe"},
+    )
+
+    assert first == reordered
+    assert first.env_values_hash != changed.env_values_hash
+    assert first.identity_hash != changed.identity_hash
+    serialized = str(asdict(first))
+    assert secret_v1 not in serialized
+    assert secret_v2 not in serialized
+
+
+def test_managed_stdio_servers_emit_server_identity() -> None:
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(".mcp.json",),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:mcp:filesystem",
+                name="filesystem",
+                harness="codex",
+                artifact_type="mcp_server",
+                source_scope="project",
+                config_path=".mcp.json",
+                command="npx",
+                args=("--yes", "@modelcontextprotocol/server-filesystem"),
+                transport="stdio",
+                metadata={"env": {"TOKEN": "redacted"}},
+            ),
+        ),
+    )
+
+    servers = managed_stdio_servers(detection)
+
+    assert len(servers) == 1
+    identity = servers[0].identity
+    assert identity is not None
+    assert identity.command == "npx"
+    assert identity.env_keys == ("TOKEN",)
+    assert identity.package_name == "@modelcontextprotocol/server-filesystem"
+
+
+def test_tool_call_artifact_emits_tool_identity_metadata() -> None:
+    server_identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="python",
+        args=("server.py",),
+        transport="stdio",
+        env={},
+    )
+
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="read_file",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_identity=server_identity,
+        tool_schema={"properties": {"path": {"type": "string"}}},
+        tool_description="Read files from an approved project folder.",
+    )
+
+    assert artifact.metadata["mcp_server_identity"]["args_hash"] == server_identity.args_hash
+    tool_identity = artifact.metadata["mcp_tool_identity"]
+    assert tool_identity["server_hash"] == server_identity.identity_hash
+    assert tool_identity["tool_name"] == "read_file"
+    assert len(tool_identity["schema_hash"]) == 64
+    assert len(tool_identity["description_hash"]) == 64
+
+
+def test_tool_call_artifact_prefers_stable_server_id_for_tool_identity() -> None:
+    server_identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="python",
+        args=("server.py",),
+        transport="stdio",
+        env={},
+    )
+
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="read_file",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_id="mcp_server:codex:project:filesystem:abc123",
+        server_identity=server_identity,
+    )
+
+    assert artifact.metadata["mcp_tool_identity"]["server_hash"] == "mcp_server:codex:project:filesystem:abc123"
+
+
+def test_mcp_server_identity_extracts_package_name_for_pipx_run() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "black", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+
+
+def test_mcp_server_identity_skips_pipx_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--python", "3.11", "black@24.4.2"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+    assert identity.package_version == "24.4.2"
+
+
+def test_mcp_server_identity_skips_pipx_short_index_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "-i", "https://pypi.example/simple", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+
+
+def test_mcp_server_identity_skips_pipx_with_dependency_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--with", "requests", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+
+
+def test_mcp_server_identity_skips_npx_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("--registry", "https://registry.npmjs.org", "@scope/package@1.2.3"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "1.2.3"
+
+
+def test_mcp_server_identity_keeps_npx_package_names_with_dot_suffixes() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("highlight.js",),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "highlight.js"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_skips_npx_workspace_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-w", "packages/a", "create-react-app"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "create-react-app"
+
+
+def test_mcp_server_identity_normalizes_windows_launcher_suffixes() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command=r"C:\\Program Files\\nodejs\\npx.cmd",
+        args=("--registry", "https://registry.npmjs.org", "@scope/package@1.2.3"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "1.2.3"
+
+
+def test_mcp_server_identity_keeps_pipx_package_named_run() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "run"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "run"
+
+
+def test_mcp_server_identity_keeps_pnpm_package_named_x() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "x"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "x"
+
+
+def test_evaluate_tool_call_honors_strict_mcp_risk_action(tmp_path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    decision = evaluate_tool_call(
+        store=GuardStore(tmp_path / "guard-home"),
+        config=GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+            security_level="strict",
+            mode="prompt",
+        ),
+        artifact=artifact,
+        artifact_hash="tool-hash",
+        arguments={"command": "rm -rf /tmp/test"},
+    )
+
+    assert decision.action == "block"
+    assert decision.source == "policy"
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "unavailable",
+        "unbound_digest",
+        {"status": "ok", "code": "ok", "payload": {"action": "future-action"}},
+        {"status": "ok", "code": "ok", "payload": None},
+        {"status": "need", "code": "need", "payload": {"kind": "future_effect"}},
+        {"status": "error", "code": "native_mcp_tool_policy_decide_observation_invalid", "payload": None},
+    ],
+)
+def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
+    tmp_path,
+    monkeypatch,
+    reply,
+) -> None:
+    from codex_plugin_scanner.guard import native_mcp_tool_policy
+    from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
+
+    def fake_resident(*, request, **_kwargs):
+        if reply == "unavailable":
+            return None
+        digest = "sha256:" + ("0" * 64 if reply == "unbound_digest" else _canonical_request_sha256(request))
+        body = {"status": "ok", "code": "ok", "payload": None} if reply == "unbound_digest" else reply
+        return {
+            "schema": "guard-mcp-tool-policy-decide-result.v1",
+            "request_id": request["request_id"],
+            "request_sha256": digest,
+            **body,
+        }
+
+    monkeypatch.setattr(native_mcp_tool_policy, "_resident_request", fake_resident)
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    with pytest.raises(ValueError, match="native_mcp_tool_policy_unavailable"):
+        evaluate_tool_call(
+            store=GuardStore(tmp_path / "guard-home"),
+            config=GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace"),
+            artifact=artifact,
+            artifact_hash="tool-hash",
+            arguments={},
+        )
+
+
+def test_evaluate_tool_call_honors_gentle_mcp_risk_action(tmp_path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    decision = evaluate_tool_call(
+        store=GuardStore(tmp_path / "guard-home"),
+        config=GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+            security_level="gentle",
+            mode="prompt",
+        ),
+        artifact=artifact,
+        artifact_hash="tool-hash",
+        arguments={"command": "rm -rf /tmp/test"},
+    )
+
+    assert decision.action == "warn"
+    assert decision.source == "policy"
+
+
+def test_evaluate_tool_call_unknown_stored_action_requires_review(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(native_mcp_tool_policy, "_lookup_input", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        store,
+        "resolve_policy_decision_lookup_with_memory_pattern",
+        lambda *_args, **_kwargs: {
+            "decision": {"action": "future-action"},
+            "ignored_local_integrity": None,
+            "trust_status": {},
+        },
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace"),
+        artifact=artifact,
+        artifact_hash="tool-hash",
+        arguments={"key": "public-metadata"},
+    )
+
+    assert decision.action == "require-reapproval"
+    assert decision.source == "policy-invalid"
+    assert "unknown policy action" in decision.summary
+    assert decision.normalization_reason_code == "guard_action_unknown"
+    assert decision.original_action == "future-action"
+
+
+def test_evaluate_tool_call_reuses_exact_allow_only_for_current_review(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    arguments = {"command": "rm /tmp/guard-proof"}
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace, mode="prompt")
+    digest = build_tool_call_hash(artifact, arguments, workspace=workspace, config=config)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=digest,
+            reason="reviewed exact call",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=digest,
+        arguments=arguments,
+    )
+
+    assert decision.current_action == "review"
+    assert decision.action == "allow"
+    assert decision.approval_reuse_status == "accepted"
+    assert decision.approval_reuse_reason_code == "approval_reuse_accepted"
+    assert decision.signals
+
+
+@pytest.mark.parametrize("current_action", ["require-reapproval", "sandbox-required", "block"])
+def test_evaluate_tool_call_saved_allow_never_lowers_stronger_current_action(
+    tmp_path,
+    current_action,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    arguments = {"command": "rm /tmp/guard-proof"}
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        security_level="custom",
+        risk_actions={"mcp_dangerous_tool": current_action},
+    )
+    digest = build_tool_call_hash(artifact, arguments, workspace=workspace, config=config)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=digest,
+            reason="old approval",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=digest,
+        arguments=arguments,
+    )
+
+    assert decision.current_action == current_action
+    assert decision.action == current_action
+    assert decision.approval_reuse_status == "rejected"
+    assert decision.approval_reuse_reason_code in {
+        "approval_reuse_reapproval_required",
+        "approval_reuse_sandbox_required",
+        "approval_reuse_current_block",
+    }
+
+
+def test_evaluate_tool_call_preserves_saved_block_over_safe_current_call(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="block",
+            artifact_id=artifact.artifact_id,
+            artifact_hash="exact-tool-hash",
+            reason="blocked by operator",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace),
+        artifact=artifact,
+        artifact_hash="exact-tool-hash",
+        arguments={"key": "public"},
+    )
+
+    assert decision.current_action == "warn"
+    assert decision.action == "block"
+    assert decision.approval_reuse_reason_code == "approval_reuse_saved_block"
+
+
+def test_evaluate_tool_call_old_allow_cannot_lower_new_default_block(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    arguments = {"key": "public"}
+    review_config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        default_action="review",
+    )
+    reviewed_hash = build_tool_call_hash(
+        artifact,
+        arguments,
+        workspace=workspace,
+        config=review_config,
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="artifact",
+            action="allow",
+            artifact_id=artifact.artifact_id,
+            artifact_hash=reviewed_hash,
+            reason="old default review approval",
+            source="approval-gate",
+        ),
+        "2026-07-17T00:00:00Z",
+    )
+    block_config = replace(review_config, default_action="block")
+    blocked_hash = build_tool_call_hash(
+        artifact,
+        arguments,
+        workspace=workspace,
+        config=block_config,
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=block_config,
+        artifact=artifact,
+        artifact_hash=blocked_hash,
+        arguments=arguments,
+    )
+
+    assert reviewed_hash != blocked_hash
+    assert decision.current_action == "block"
+    assert decision.action == "block"
+    assert decision.approval_reuse_status == "rejected"
+    assert decision.approval_reuse_reason_code == "approval_reuse_policy_changed"
+
+
+def test_evaluate_tool_call_exact_allow_replaces_stricter_global_default(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="read_metadata",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        default_action="block",
+        artifact_actions={artifact.artifact_id: "allow"},
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash="exact-tool-hash",
+        arguments={"key": "public"},
+    )
+
+    assert decision.action == "allow"
+
+
+def test_evaluate_tool_call_exact_allow_cannot_lower_independent_risk_block(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="execute_command",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        default_action="allow",
+        artifact_actions={artifact.artifact_id: "allow"},
+        security_level="custom",
+        risk_actions={"mcp_dangerous_tool": "block"},
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash="exact-tool-hash",
+        arguments={"command": "rm -rf ./fixture"},
+    )
+
+    assert decision.action == "block"
+
+
+def test_mcp_server_identity_reads_pnpm_package_selector_flag() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "--package=@pnpm/meta-updater", "meta-updater"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@pnpm/meta-updater"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_does_not_parse_pnpm_exec_command_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("exec", "jest", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_does_not_parse_yarn_exec_command_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="yarn",
+        args=("exec", "node", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_reads_pipx_spec_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "esptool", "esp_rfc2217_server.py"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "esptool"
+
+
+def test_mcp_server_identity_reads_uvx_from_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--from", "httpie", "http"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "httpie"
+
+
+def test_mcp_server_identity_skips_uvx_short_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("-i", "https://registry.example/simple", "httpie"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "httpie"
+
+
+def test_mcp_server_identity_skips_uvx_with_dependency_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--with", "rich", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_constraints_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("-c", "constraints.txt", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_config_setting_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("-C", "index-url=https://pypi.org/simple", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_config_file_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--config-file", "uv.toml", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_index_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--index", "https://registry.example/simple", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_default_index_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--default-index", "https://registry.example/simple", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_env_file_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--env-file", ".env.guard", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_directory_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--directory", "tools", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_keyring_provider_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--keyring-provider", "subprocess", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_resolution_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--resolution", "highest", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_prerelease_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--prerelease", "allow", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_additional_value_flags_before_package() -> None:
+    option_args = (
+        ("--allow-insecure-host", "example.test"),
+        ("--cache-dir", ".uv-cache"),
+        ("--color", "never"),
+        ("--config-settings-package", "ruff:build=1"),
+        ("--exclude-newer", "2024-01-01"),
+        ("--exclude-newer-package", "ruff=2024-01-01"),
+        ("--fork-strategy", "fewest"),
+        ("--index-strategy", "first-index"),
+        ("--link-mode", "copy"),
+        ("--no-binary-package", "ruff"),
+        ("--no-build-isolation-package", "ruff"),
+        ("--no-build-package", "ruff"),
+        ("--no-sources-package", "ruff"),
+        ("--python-platform", "linux"),
+        ("--refresh-package", "ruff"),
+        ("--reinstall-package", "ruff"),
+        ("--torch-backend", "cpu"),
+        ("--upgrade-package", "typing-extensions"),
+    )
+    for option, value in option_args:
+        identity = build_mcp_server_identity(
+            config_path=".mcp.json",
+            command="uvx",
+            args=(option, value, "ruff"),
+            transport="stdio",
+            env={},
+        )
+
+        assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_overrides_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--overrides", "overrides.txt", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_build_constraints_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("-b", "build-constraints.txt", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_python_short_option_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("-p", "3.12", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_does_not_parse_pnpm_run_subcommand_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("run", "lint"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+
+
+def test_mcp_server_identity_skips_pnpm_allow_build_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "--allow-build", "esbuild", "@scope/pkg"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/pkg"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_keeps_pnpm_shell_mode_flag_without_value() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "-c", "cowsay", "hello"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "cowsay"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_skips_pnpm_reporter_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "--reporter", "ndjson", "cowsay"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "cowsay"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_does_not_parse_yarn_run_subcommand_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="yarn",
+        args=("run", "lint"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+
+
+def test_mcp_server_identity_reads_npm_exec_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "--", "@modelcontextprotocol/server-filesystem@1.2.3"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@modelcontextprotocol/server-filesystem"
+    assert identity.package_version == "1.2.3"
+
+
+def test_mcp_server_identity_reads_npm_exec_package_flag_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "--package=@scope/package@1.9.0", "--", "node", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "1.9.0"
+
+
+def test_mcp_server_identity_uses_last_npm_package_selector_when_repeated() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "--package", "typescript", "--package", "ts-node@10.9.1", "--", "ts-node", "--help"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ts-node"
+    assert identity.package_version == "10.9.1"
+
+
+def test_mcp_server_identity_skips_npm_workspace_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "-w", "packages/a", "@scope/package@2.4.0"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "2.4.0"
+
+
+def test_mcp_server_identity_skips_npm_call_short_option_value_without_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "-c", "echo hi"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+
+
+def test_mcp_server_identity_reads_npm_x_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("x", "@scope/package@2.4.0"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "2.4.0"
+
+
+def test_mcp_server_identity_does_not_parse_npm_run_subcommand_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("run", "lint"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+
+
+def test_mcp_server_identity_does_not_parse_other_npm_script_subcommands_as_packages() -> None:
+    subcommands = ("ci", "install", "start", "test")
+    for subcommand in subcommands:
+        identity = build_mcp_server_identity(
+            config_path=".mcp.json",
+            command="npm",
+            args=(subcommand, "lint"),
+            transport="stdio",
+            env={},
+        )
+
+        assert identity.package_name is None
+        assert identity.package_version is None
+
+
+def test_mcp_server_identity_redacts_vcs_url_spec_userinfo() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "git+ssh://git@github.com/psf/black", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "git+ssh://github.com/psf/black"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_redacts_http_url_spec_credentials() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "https://user:token@example.com/simple/black", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "https://example.com/simple/black"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_redacts_http_url_spec_query_secrets() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "https://example.com/simple/black?token=abc123", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "https://example.com/simple/black"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_splits_pip_style_specifier_versions() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "mypackage==2.0.0", "my-app"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "mypackage"
+    assert identity.package_version == "2.0.0"
+
+
+def test_mcp_server_identity_splits_pip_style_single_equals_versions() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "mypackage=2.0.0", "my-app"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "mypackage"
+    assert identity.package_version == "2.0.0"
+
+
+@pytest.mark.parametrize("kind", ["mcp_server_identity", "mcp_tool_identity"])
+def test_native_identity_failure_cannot_bind_mcp_approval(
+    kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    native_digest = native_context.native_context_digest
+
+    def fail_identity(operation: str, *args: object, **kwargs: object) -> object:
+        if operation == kind:
+            return None
+        return native_digest(operation, *args, **kwargs)
+
+    monkeypatch.setattr(native_context, "native_context_digest", fail_identity)
+    with pytest.raises(ValueError, match=f"native_{kind}_unavailable"):
+        if kind == "mcp_server_identity":
+            build_mcp_server_identity(
+                config_path=".mcp.json",
+                command="npx",
+                args=("demo@1.2.3",),
+                transport="stdio",
+            )
+        else:
+            build_mcp_tool_identity(
+                server_hash="server",
+                tool_name="inspect",
+                schema={"type": "object"},
+                description=None,
+            )
+
+
+def test_mcp_tool_schema_flags_file_command_and_url_arguments(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="inspect_resource",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "command": {"type": "string"},
+                "webhook": {"type": "string"},
+            },
+        },
+    )
+
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == (
+        "filesystem_access",
+        "command_execution",
+        "outbound_network",
+        "tool_schema_mismatch",
+    )
+
+
+def test_mcp_tool_schema_follows_local_refs_for_risk_categories(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"operation": {"$ref": "#/$defs/operation"}},
+            "$defs": {
+                "operation": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+
+
+def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"operation": {"$ref": "#cmdSchema"}},
+            "$defs": {
+                "operation": {
+                    "$anchor": "cmdSchema",
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+
+
+def test_mcp_tool_schema_ignores_unreferenced_schema_definitions(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "$defs": {
+                "dangerous": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ()
+
+
+def test_mcp_tool_schema_traverses_conditional_and_dependent_branches(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "if": {"properties": {"mode": {"const": "shell"}}},
+            "then": {"properties": {"cmd": {"type": "string"}}},
+            "else": {"properties": {"webhook": {"type": "string"}}},
+            "dependentSchemas": {
+                "mode": {"properties": {"url": {"type": "string"}}},
+            },
+            "patternProperties": {
+                "^remote_": {"properties": {"endpoint": {"type": "string"}}},
+            },
+            "additionalProperties": {"properties": {"command": {"type": "string"}}},
+        },
+    )
+
+    categories = set(_projected_call(native_context_digest, artifact, {}).risk_categories)
+    assert {"command_execution", "outbound_network", "tool_schema_mismatch"}.issubset(categories)
+
+
+def test_mcp_tool_schema_ignores_not_branch_when_inferring_projected_call(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "not": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+            },
+        },
+    )
+
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ()
+
+
+def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="workspace_action",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+
+    assert _projected_call(
+        native_context_digest,
+        artifact,
+        {
+            "source": "src/app.ts",
+            "cmd": "npm test",
+            "callback": "https://example.test/hook",
+        },
+    ).risk_categories == ("filesystem_access", "command_execution", "outbound_network")
+
+
+def test_mcp_tool_descriptions_emit_capability_risk_categories(native_context_digest: Path) -> None:
+    read_files = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="list_workspace",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_description="Read files from the current workspace.",
+    )
+    mutates_files = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="apply_patch",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_description="Delete, remove, or write files.",
+    )
+    executes_commands = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="task_runner",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_description="Execute shell scripts or run command lines.",
+    )
+
+    assert _projected_call(native_context_digest, read_files, {}).risk_categories == ("filesystem_access",)
+    assert _projected_call(native_context_digest, mutates_files, {}).risk_categories == ("destructive_mutation",)
+    assert _projected_call(native_context_digest, executes_commands, {}).risk_categories == ("command_execution",)
+
+
+def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={"type": "object", "properties": {"script": {"type": "string"}}},
+    )
+
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == ("command_execution", "tool_schema_mismatch")
+
+
+@pytest.mark.parametrize(
+    ("index", "expected"),
+    [
+        ("0", ("command_execution", "tool_schema_mismatch")),
+        ("5", ()),
+        ("missing", ()),
+    ],
+)
+def test_tool_risk_resolves_only_existing_array_reference(index, expected, native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "$defs": {"ops": [{"properties": {"command": {"type": "string"}}}]},
+            "$ref": f"#/$defs/ops/{index}",
+        },
+    )
+    assert _projected_call(native_context_digest, artifact, {}).risk_categories == expected

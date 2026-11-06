@@ -1,0 +1,5 @@
+{
+  "source": "../valid/basic.yaml",
+  "sha256": "2124d2a66ab9db1270737cd23bb85cce2376aa31e05bca2b6c0d5c820947de3f",
+  "canonicalJson": "{\"apiVersion\":\"guard.hashgraphonline.com/v1alpha1\",\"kind\":\"GuardPolicy\",\"metadata\":{\"id\":\"policy.team-defaults\",\"labels\":{\"environment\":\"production\"},\"name\":\"Team defaults\",\"revision\":7},\"spec\":{\"defaults\":{\"defaultAction\":\"warn\",\"mode\":\"prompt\"},\"rolloutState\":\"draft\",\"rules\":[{\"description\":\"Block untrusted package installs\",\"effect\":\"block\",\"enabled\":true,\"id\":\"rule.block-untrusted-install\",\"lifetime\":{\"expiresAt\":null,\"mode\":\"permanent\"},\"match\":{\"harnesses\":[\"claude-code\",\"codex\"],\"operations\":[\"package.install\"],\"packages\":[\"bad-package\"],\"repositories\":[\"team/example\"]},\"provenance\":{\"createdAt\":\"2026-07-15T12:00:00Z\",\"createdBy\":\"user-001\",\"receiptIds\":[\"receipt-001\"],\"source\":\"suggested-memory\",\"suggestionId\":\"suggestion-001\"}}]}}"
+}

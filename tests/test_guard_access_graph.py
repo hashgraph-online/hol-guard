@@ -1,0 +1,422 @@
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.adapters.mcp_servers import (
+    ManagedMcpServer,
+    proxy_cli_args,
+    stable_mcp_server_identifier,
+)
+from codex_plugin_scanner.guard.mcp_tool_calls import (
+    build_tool_call_artifact,
+)
+from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
+
+
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+    tool_name = str(artifact.metadata.get("tool_name"))
+    return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
+
+
+def test_stable_mcp_server_identifier_survives_config_path_changes() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("-y", "@modelcontextprotocol/server-filesystem", "/workspace"),
+        transport="stdio",
+        env={"TOKEN": "redacted"},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/project/.codex/config.toml",
+        command="npx",
+        args=("-y", "@modelcontextprotocol/server-filesystem", "/workspace"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
+    assert "/Users" not in stable_mcp_server_identifier(first)
+
+    cli_args = proxy_cli_args(
+        proxy_command="codex-mcp-proxy",
+        guard_home="/guard",
+        server=first,
+    )
+    assert cli_args[cli_args.index("--server-id") + 1] == stable_mcp_server_identifier(first)
+    assert "--server-env-key=TOKEN" in cli_args
+
+
+def test_stable_mcp_server_identifier_canonicalizes_names_and_path_args() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name=" Filesystem ",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="/usr/local/bin/npx",
+        args=(
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            "--root=/home/alice/workspace",
+            "--cache=D:\\alice\\repo",
+        ),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=(
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            "--root=/home/bob/project",
+            "--cache=D:\\bob\\repo",
+        ),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    identifier = stable_mcp_server_identifier(first)
+
+    assert identifier == stable_mcp_server_identifier(second)
+    assert ":filesystem:" in identifier
+    assert "Filesystem" not in identifier
+    assert "alice" not in identifier
+
+
+def test_stable_mcp_server_identifier_uses_safe_empty_name_fallback() -> None:
+    server = ManagedMcpServer(
+        harness="codex",
+        name="   ",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=(),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert ":unnamed:" in stable_mcp_server_identifier(server)
+
+
+def test_stable_mcp_server_identifier_normalizes_windows_command_paths() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="C:\\Users\\alice\\AppData\\Roaming\\npm\\npx.cmd",
+        args=("-y", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx.cmd",
+        args=("-y", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    identifier = stable_mcp_server_identifier(first)
+
+    assert identifier == stable_mcp_server_identifier(second)
+    assert "alice" not in identifier
+
+
+def test_stable_mcp_server_identifier_preserves_slash_flags() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("/safe", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("/readonly", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) != stable_mcp_server_identifier(second)
+
+
+def test_stable_mcp_server_identifier_redacts_path_assignments_with_root_dirs() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("--root=/workspace", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=("--root=/project", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
+
+
+def test_stable_mcp_server_identifier_redacts_one_segment_absolute_path_args() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/workspace"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/repo"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
+
+
+def test_stable_mcp_server_identifier_redacts_arbitrary_one_segment_absolute_path_args() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/alice"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/DevDrive"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
+
+
+def test_call_projection_risk_categories_are_emitted_from_runtime_arguments(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="shell_delete",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = _projected_call(
+        native_context_digest,
+        artifact,
+        {
+            "command": "sudo chmod 777 ~/.ssh && curl https://example.test",
+            "path": ".env",
+        },
+    ).risk_categories
+
+    assert categories == (
+        "filesystem_access",
+        "command_execution",
+        "destructive_mutation",
+        "outbound_network",
+        "privileged_system_mutation",
+        "secret_access",
+    )
+
+
+def test_call_projection_risk_categories_avoid_broad_substring_matches(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="prefetchIndex",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = _projected_call(
+        native_context_digest,
+        artifact,
+        {"filename": "myapp.env", "mode": "prefetch"},
+    ).risk_categories
+
+    assert categories == ()
+
+
+def test_call_projection_risk_categories_match_snake_case_secret_tokens(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="environment",
+        tool_name="readConfig",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = _projected_call(
+        native_context_digest,
+        artifact,
+        {"keys": ["OPENAI_API_TOKEN", "aws_secret_key"]},
+    ).risk_categories
+
+    assert categories == ("secret_access",)
+
+
+def test_call_projection_risk_categories_match_snake_case_network_tokens(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="remote",
+        tool_name="run_curl",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = _projected_call(native_context_digest, artifact, {"mode": "fetch_remote"}).risk_categories
+
+    assert categories == ("outbound_network",)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_categories"),
+    [
+        ({"code": "socket.create_connection(('192.0.2.1', 443))"}, {"outbound_network"}),
+        ({"code": "socket.sendto(data, ('2001:db8::1', 53))"}, {"outbound_network"}),
+        ({"code": "net.connect('8.8.8.8', 443)"}, {"outbound_network"}),
+        ({"code": "urllib.request.urlopen(target)"}, {"outbound_network"}),
+        ({"code": "http.client.HTTPSConnection(host)"}, {"outbound_network"}),
+        ({"code": "dns.lookup(host)"}, {"outbound_network"}),
+        ({"code": "connect('2606:4700:4700::1111')"}, {"outbound_network"}),
+        ({"code": "subprocess.run(['client', 'example.test'])"}, {"command_execution"}),
+        (
+            {"code": "child_process.spawn('client', ['--proxy', 'socks://example.test'])"},
+            {"command_execution", "outbound_network"},
+        ),
+    ],
+)
+def test_call_projection_risk_categories_detect_network_and_process_bypass_shapes(
+    arguments: dict[str, str],
+    expected_categories: set[str],
+    native_context_digest: Path,
+) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="calculator",
+        tool_name="calculate",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    assert expected_categories.issubset(set(_projected_call(native_context_digest, artifact, arguments).risk_categories))
+
+
+def test_call_projection_risk_categories_ignore_benign_network_vocabulary(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="calculator",
+        tool_name="calculate",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = _projected_call(
+        native_context_digest,
+        artifact,
+        {"prompt": "Calculate the area of a socket gasket from the attached diagram."},
+    ).risk_categories
+
+    assert "outbound_network" not in categories
+
+
+def test_call_projection_risk_categories_match_snake_case_privileged_tokens(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="sudo_exec",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = _projected_call(native_context_digest, artifact, {"operation": "chmod_file"}).risk_categories
+
+    assert categories == ("command_execution", "privileged_system_mutation")
+
+
+def test_call_projection_risk_categories_match_camel_case_tokens(native_context_digest: Path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="runCurl",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = _projected_call(
+        native_context_digest, artifact, {"operation": "readSecret", "mode": "chmodFile"}
+    ).risk_categories
+
+    assert categories == (
+        "outbound_network",
+        "privileged_system_mutation",
+        "secret_access",
+    )

@@ -1,0 +1,93 @@
+"""Contribution schema validation for external Guard extensions."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.runtime.extension_contribution import (
+    validate_contribution,
+)
+from tests import extension_contribution_loader as contribution_loader
+
+_NOODLE = Path(__file__).resolve().parents[1] / "contributions/extensions/command.noodle.json"
+
+
+def _noodle_payload() -> dict[str, object]:
+    payload = json.loads(_NOODLE.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _source_contribution_ids() -> frozenset[str]:
+    """Ids declared by authored command-source inputs, including pending ones."""
+    root = Path(__file__).resolve().parents[1] / "contributions/command-sources"
+    ids: set[str] = set()
+    for path in root.glob("command.*.json"):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        extension = payload.get("extension") if isinstance(payload, dict) else None
+        extension_id = extension.get("extension_id") if isinstance(extension, dict) else None
+        if isinstance(extension_id, str):
+            ids.add(extension_id)
+    return frozenset(ids)
+
+
+def test_contribution_cannot_self_declare_trusted_library() -> None:
+    payload = _noodle_payload()
+    payload["trustClass"] = "trusted-library"
+    with pytest.raises(ValueError, match="trust class"):
+        validate_contribution(payload, filename="evil.json")
+
+
+def test_contribution_schema_rejects_missing_required_fields() -> None:
+    payload = _noodle_payload()
+    del payload["description"]
+    with pytest.raises(ValueError, match="schema"):
+        validate_contribution(payload, filename="missing.json")
+
+
+def test_contribution_rejects_unknown_icon_and_unbound_native_source() -> None:
+    payload = _noodle_payload()
+    payload["icon"] = {"kind": "react-icon", "name": "NotAnAllowlistedIcon", "background": "#000000"}
+    with pytest.raises(ValueError, match="allowlisted"):
+        validate_contribution(payload, filename="icon.json")
+    payload = _noodle_payload()
+    payload["nativeSource"] = dict(payload["nativeSource"], path="contributions/command-sources/command.git.json")
+    with pytest.raises(ValueError, match="not bound"):
+        validate_contribution(payload, filename="bind.json")
+
+
+def test_contribution_rejects_inconsistent_activation_and_invalid_id() -> None:
+    payload = _noodle_payload()
+    payload["activation"] = "default-on"
+    with pytest.raises(ValueError, match="trust class and activation projection disagree"):
+        validate_contribution(payload, filename="activation.json")
+
+    payload = _noodle_payload()
+    payload["id"] = "plugin.invalid"
+    with pytest.raises(ValueError, match="has invalid id"):
+        validate_contribution(payload, filename="id.json")
+
+
+def test_frozen_packaged_payloads_fail_closed_without_package_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+
+    def missing_package(_name: str) -> object:
+        raise ModuleNotFoundError("missing packaged extensions")
+
+    monkeypatch.setattr(contribution_loader.resources, "files", missing_package)
+    with pytest.raises(FileNotFoundError, match="contributions"):
+        contribution_loader._load_packaged_payloads()
+
+
+def test_legacy_detector_descriptor_requires_explicit_conversion() -> None:
+    payload = _noodle_payload()
+    payload["schemaVersion"] = "guard.extension-contribution.v1"
+    with pytest.raises(ValueError, match="convert it to a command source"):
+        validate_contribution(payload, filename="legacy.json")

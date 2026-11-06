@@ -1,0 +1,565 @@
+#!/usr/bin/env python3
+"""Installed-wheel daemon fixture for the command extension analytics lab."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import signal
+import sqlite3
+import subprocess
+import sys
+import threading
+import time
+from collections.abc import Mapping
+from pathlib import Path
+
+from codex_plugin_scanner import __version__
+from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
+from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.store import GuardStore
+
+GUARD_HOME = Path("/guard-home")
+WORKSPACE = Path("/workspace")
+SENTINEL = "guard-private-command-sentinel"
+SESSION_HANDOFF = GUARD_HOME / ".installed-dashboard-session"
+_MAX_HOOK_DIAGNOSTIC_CHARS = 2_000
+_GH_EXECUTABLE = GUARD_HOME / "bin" / "gh"
+_GH_FIXTURE = Path("/opt/guard-lab/github-cli-fixture.sh")
+_REPOSITORY = "hashgraph-online/hol-guard"
+_VIEWER = "dashboard-reviewer"
+_WORKFLOW_COMMAND = f"{_GH_EXECUTABLE} issue lock 17 --repo {_REPOSITORY}"
+_KEYRING_FIXTURE = Path(__file__).with_name("keyring_fixture.py")
+
+
+def _safe_hook_diagnostic(value: str) -> str:
+    redacted = re.sub(r"([#&?]guard-token=)[^\s\"'&]+", r"\1[REDACTED]", value.replace(SENTINEL, "[REDACTED]"))
+    return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
+
+
+def _scrub_hook_detail(value: object) -> object:
+    """Put every string a hook response carries through the same scrub.
+
+    The fields below are the daemon's own prose, and the daemon quotes the
+    command it decided on. That command is the lab's sentinel in one case and
+    the workflow fixture in another, so a field copied straight out of the
+    response would print what `_safe_hook_diagnostic` exists to keep out of the
+    log.
+    """
+    if isinstance(value, str):
+        return _safe_hook_diagnostic(value)
+    if isinstance(value, Mapping):
+        return {_scrub_hook_detail(key): _scrub_hook_detail(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scrub_hook_detail(item) for item in value]
+    return value
+
+
+def _safe_hook_response_summary(value: str) -> str:
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return _safe_hook_diagnostic(value)
+    if not isinstance(payload, dict):
+        return "unexpected hook response shape"
+    reuse = payload.get("approval_reuse")
+    composition = payload.get("policy_composition")
+    scanner_evidence = payload.get("scanner_evidence")
+    post_claim = (
+        next(
+            (
+                item
+                for item in scanner_evidence
+                if isinstance(item, dict)
+                and item.get("source") == "approval_reuse"
+                and item.get("input_source") == "claimed_github_workflow_capability"
+            ),
+            None,
+        )
+        if isinstance(scanner_evidence, list)
+        else None
+    )
+    hook_output = payload.get("hookSpecificOutput")
+    return json.dumps(
+        {
+            "keys": sorted(payload),
+            "policy_action": payload.get("policy_action"),
+            "decision_reason_code": payload.get("decision_reason_code"),
+            "reason_code": payload.get("reason_code"),
+            "approval_reuse": {
+                "status": reuse.get("status"),
+                "reason_code": reuse.get("reason_code"),
+            }
+            if isinstance(reuse, dict)
+            else None,
+            "approval_reuse_source": composition.get("approval_reuse_source")
+            if isinstance(composition, dict)
+            else None,
+            "post_claim_validation": {
+                "context_change_reason": post_claim.get("post_claim_context_change_reason"),
+                "refresh_failed": post_claim.get("post_claim_refresh_failed"),
+            }
+            if isinstance(post_claim, dict)
+            else None,
+            # What decided the hook, so a failed canary names its cause.
+            "decision_details": _scrub_hook_detail(
+                {
+                    "decision": payload.get("decision"),
+                    "reason": payload.get("reason"),
+                    "risk_summary": payload.get("risk_summary"),
+                    "terminal_action": payload.get("terminal_action"),
+                    "hook_output": {
+                        key: hook_output.get(key) for key in ("permissionDecision", "permissionDecisionReason")
+                    }
+                    if isinstance(hook_output, dict)
+                    else None,
+                    "artifact_type": payload.get("artifact_type"),
+                    "artifact_name": payload.get("artifact_name"),
+                    "operation": payload.get("operation"),
+                    "native_edge_decision": payload.get("native_edge_decision"),
+                    "native_edge_reason_code": payload.get("native_edge_reason_code"),
+                    "risk_signals": payload.get("risk_signals"),
+                    "policy_composition": composition,
+                    "scanner_evidence": [
+                        {k: v for k, v in item.items() if isinstance(v, (str, int, bool)) or v is None}
+                        for item in scanner_evidence
+                        if isinstance(item, dict)
+                    ]
+                    if isinstance(scanner_evidence, list)
+                    else None,
+                    "approval_requests": [
+                        {
+                            k: item.get(k)
+                            for k in ("artifact_type", "artifact_name", "policy_action", "reason_code", "source")
+                        }
+                        for item in payload.get("approval_requests") or []
+                        if isinstance(item, dict)
+                    ],
+                    "trigger_summary": payload.get("trigger_summary"),
+                    "why_now": payload.get("why_now"),
+                }
+            ),
+        },
+        sort_keys=True,
+        default=str,
+    )
+
+
+def _write_dashboard_session_handoff(session: str) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW
+    descriptor = os.open(SESSION_HANDOFF, flags, 0o600)
+    _ = os.fchmod(descriptor, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as stream:
+        _ = stream.write(f"{session}\n")
+
+
+def _run_installed_hook(
+    harness: str,
+    payload: Mapping[str, object],
+    *,
+    expected_status: int = 0,
+    expect_denial: bool = False,
+    expect_approval: bool = False,
+    policy_action: str | None = None,
+) -> str:
+    if expect_denial and expect_approval:
+        raise ValueError("hook cannot expect both denial and approval")
+    command = [
+        "hol-guard",
+        "hook",
+        "--guard-home",
+        str(GUARD_HOME),
+        "--home",
+        str(GUARD_HOME),
+        "--workspace",
+        str(WORKSPACE),
+        "--harness",
+        harness,
+        "--json",
+    ]
+    if policy_action is not None:
+        command.extend(("--policy-action", policy_action))
+    completed = subprocess.run(
+        command,
+        input=json.dumps(payload),
+        capture_output=True,
+        check=False,
+        cwd=WORKSPACE,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(GUARD_HOME)},
+        timeout=30,
+    )
+    if expect_denial:
+        expected_status = native_hook_verdict_exit_code(harness, "block", str(payload.get("hook_event_name", "")))
+    native_denial = False
+    native_approval = False
+    if (expect_denial or expect_approval) and expected_status == 0 and completed.returncode == 0:
+        try:
+            response = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            response = None
+        if isinstance(response, dict):
+            hook_output = response.get("hookSpecificOutput")
+            native_denial = (
+                response.get("policy_action") in {None, "review", "require-reapproval", "sandbox-required", "block"}
+                and isinstance(hook_output, dict)
+                and hook_output.get("permissionDecision") == "deny"
+            )
+            native_approval = harness == "claude-code" and (
+                response.get("policy_action") in {"review", "require-reapproval"}
+                and isinstance(hook_output, dict)
+                and hook_output.get("permissionDecision") == "ask"
+            )
+    if (
+        completed.returncode != expected_status
+        or (expect_denial and expected_status == 0 and not native_denial)
+        or (expect_approval and not native_approval)
+    ):
+        diagnostic = (
+            f"installed {harness} hook returned {completed.returncode}, expected {expected_status}; "
+            + f"response={_safe_hook_response_summary(completed.stdout)}; "
+            + f"stderr={_safe_hook_diagnostic(completed.stderr)!r}"
+        )
+        raise RuntimeError(diagnostic)
+    return _safe_hook_response_summary(completed.stdout)
+
+
+def _invoke_real_harnesses() -> int:
+    codex_pre = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {"command": "git diff --stat"},
+        "tool_call_id": "codex_lab_0000000000000001",
+    }
+    codex_post = {
+        **codex_pre,
+        "hook_event_name": "PostToolUse",
+        "success": True,
+        "tool_response": {"stdout": "fixture.txt | 1 +\n", "stderr": "", "exit_code": 0},
+    }
+    claude_no_post = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "git status --short"},
+        "tool_use_id": "claude_lab_0000000000000001",
+    }
+    claude_review = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "rm -rf ./stale-lab-dir"},
+        "tool_use_id": "claude_lab_0000000000000002",
+    }
+    cursor_block = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {"command": f"rm -rf ./stale-lab-dir # {SENTINEL}"},
+        "generation_id": "cursor_lab_0000000000000001",
+        "cursor_source_hook_event": "beforeShellExecution",
+    }
+    _run_installed_hook("codex", codex_pre)
+    _run_installed_hook("codex", codex_post)
+    _run_installed_hook("claude-code", claude_no_post)
+    _run_installed_hook("claude-code", claude_review, expect_approval=True)
+    _run_installed_hook("cursor", cursor_block, expect_denial=True, policy_action="block")
+    return 2
+
+
+def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {"command": _WORKFLOW_COMMAND},
+        "tool_call_id": "codex_lab_workflow_initial_0001",
+    }
+    hook_summary = _run_installed_hook("codex", payload, expect_denial=True)
+    all_pending = store.list_approval_requests(status="pending")
+    pending = [
+        request
+        for request in all_pending
+        if request.get("harness") == "codex"
+        and request.get("artifact_name") == "Shell GitHub bounded maintenance command"
+    ]
+    if len(pending) != 1:
+        summary = [
+            {
+                "request_id": request.get("request_id"),
+                "harness": request.get("harness"),
+                "artifact_name": _safe_hook_diagnostic(str(request.get("artifact_name", ""))),
+            }
+            for request in all_pending
+        ]
+        raise RuntimeError(f"workflow approval request mismatch: {summary!r}; hook={hook_summary}")
+    contract = request_scope_contract(pending[0])
+    if not contract.task_capability_eligible or "artifact" not in contract.allow_scopes:
+        raise RuntimeError("workflow request did not expose the exact task-capability contract")
+    request_id = pending[0].get("request_id")
+    if not isinstance(request_id, str) or not request_id:
+        raise RuntimeError("workflow request omitted its identifier")
+    return {
+        "request_id": request_id,
+        "scope_contract_digest": contract.digest,
+        "scope_contract_version": contract.version,
+    }
+
+
+def _await_exact_allow(store: GuardStore, request_id: str) -> None:
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        request = store.get_approval_request(request_id)
+        if request is not None and request.get("status") == "resolved":
+            if request.get("resolution_action") != "allow" or request.get("resolution_scope") != "artifact":
+                raise RuntimeError("workflow request resolved outside its exact contract")
+            issued = store.list_events(event_name="workflow_capability.issued")
+            claimed = store.list_events(event_name="workflow_capability.claimed")
+            if len(issued) == 1 and not claimed:
+                return
+        time.sleep(0.05)
+    raise RuntimeError("workflow request and capability issuance did not complete")
+
+
+def _assert_capability_event_privacy(store: GuardStore) -> None:
+    events = store.list_events(event_name="workflow_capability.issued") + store.list_events(
+        event_name="workflow_capability.claimed"
+    )
+    encoded = json.dumps(events, sort_keys=True, separators=(",", ":"))
+    forbidden = (_WORKFLOW_COMMAND, _REPOSITORY, _VIEWER, str(_GH_EXECUTABLE), SENTINEL)
+    if any(value in encoded for value in forbidden):
+        raise RuntimeError("workflow capability events exposed private execution context")
+
+
+def _complete_workflow_authorization(store: GuardStore, request_id: str) -> dict[str, object]:
+    _await_exact_allow(store, request_id)
+    issued = store.list_events(event_name="workflow_capability.issued")
+    if len(issued) != 1 or store.list_events(event_name="workflow_capability.claimed"):
+        raise RuntimeError("workflow capability issuance did not remain unclaimed")
+    original = _GH_EXECUTABLE.read_bytes()
+    _ = _GH_EXECUTABLE.write_bytes(original + b"\n# executable-drift\n")
+    _GH_EXECUTABLE.chmod(0o700)
+    drift = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": {"command": _WORKFLOW_COMMAND},
+        "tool_call_id": "codex_lab_workflow_drift_0002",
+    }
+    _run_installed_hook("codex", drift, expect_denial=True)
+    if len(store.list_events(event_name="workflow_capability.issued")) != 1:
+        raise RuntimeError("executable drift changed capability issuance")
+    if store.list_events(event_name="workflow_capability.claimed"):
+        raise RuntimeError("executable drift depleted the one-shot capability")
+    _ = _GH_EXECUTABLE.write_bytes(original)
+    _GH_EXECUTABLE.chmod(0o700)
+    retry = {**drift, "tool_call_id": "codex_lab_workflow_retry_0003"}
+    retry_response = _run_installed_hook("codex", retry)
+    claimed = store.list_events(event_name="workflow_capability.claimed")
+    if len(claimed) != 1:
+        authority = store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        )
+        raise RuntimeError(
+            "restored workflow retry did not claim exactly once; "
+            + f"claimed={len(claimed)} authority={authority.health.value} response={retry_response}"
+        )
+    _assert_capability_event_privacy(store)
+    return {
+        "activity_proof": "drift-rejected-restored-one-shot-reuse",
+        "capability_claimed": 1,
+        "capability_issued": 1,
+        "drift_claimed": 0,
+        "request_flow": "authenticated-daemon-api",
+    }
+
+
+def _prepare_workspace() -> None:
+    completed = subprocess.run(
+        ["git", "init", "--quiet", str(WORKSPACE)],
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(GUARD_HOME)},
+        timeout=10,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"workspace git initialization failed: {_safe_hook_diagnostic(completed.stderr)!r}")
+    remote = subprocess.run(
+        ["git", "-C", str(WORKSPACE), "remote", "get-url", "origin"],
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        env={**os.environ, "HOME": str(GUARD_HOME)},
+        timeout=10,
+    )
+    if remote.returncode != 0:
+        configured = subprocess.run(
+            ["git", "-C", str(WORKSPACE), "remote", "add", "origin", f"https://github.com/{_REPOSITORY}.git"],
+            capture_output=True,
+            check=False,
+            encoding="utf-8",
+            env={**os.environ, "HOME": str(GUARD_HOME)},
+            timeout=10,
+        )
+        if configured.returncode != 0:
+            raise RuntimeError(f"workspace remote setup failed: {_safe_hook_diagnostic(configured.stderr)!r}")
+    _GH_EXECUTABLE.parent.mkdir(mode=0o700, exist_ok=True)
+    _ = _GH_EXECUTABLE.write_bytes(_GH_FIXTURE.read_bytes())
+    _GH_EXECUTABLE.chmod(0o700)
+    os.environ["PATH"] = f"{_GH_EXECUTABLE.parent}:{os.environ.get('PATH', '')}"
+    os.environ["GITHUB_TOKEN"] = SENTINEL
+    keyring_module = GUARD_HOME / "guard_lab_keyring.py"
+    _ = keyring_module.write_text(_KEYRING_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    keyring_module.chmod(0o600)
+    os.environ["PYTHONPATH"] = str(GUARD_HOME)
+    os.environ["PYTHON_KEYRING_BACKEND"] = "guard_lab_keyring.GuardLabKeyring"
+    if str(GUARD_HOME) not in sys.path:
+        sys.path.insert(0, str(GUARD_HOME))
+
+
+def _completed_workflow_evidence(store: GuardStore) -> dict[str, object] | None:
+    if len(store.list_events(event_name="workflow_capability.issued")) != 1:
+        return None
+    if len(store.list_events(event_name="workflow_capability.claimed")) != 1:
+        return None
+    _assert_capability_event_privacy(store)
+    return {
+        "activity_proof": "drift-rejected-restored-one-shot-reuse",
+        "capability_claimed": 1,
+        "capability_issued": 1,
+        "drift_claimed": 0,
+        "request_flow": "authenticated-daemon-api",
+    }
+
+
+def _assert_seeded_activity(store: GuardStore) -> None:
+    with sqlite3.connect(store.path) as connection:
+        rows = connection.execute(
+            """
+            select harness, hook_phase, execution_status, proof_level,
+                   policy_action, decision_reason_code, match_count, prompted,
+                   approval_reuse_status
+            from command_activity
+            order by harness, execution_status, activity_id
+            """
+        ).fetchall()
+    # The daemon enrolls the extension-control authority at startup, so each
+    # hook records the built-in extension matches that shaped its decision.
+    expected = [
+        (
+            "claude-code",
+            "pre",
+            "allowed_unconfirmed",
+            "pre_hook",
+            "warn",
+            "policy",
+            0,
+            0,
+            "not-applicable",
+        ),
+        (
+            "claude-code",
+            "pre",
+            "prevented",
+            "pre_hook",
+            "require-reapproval",
+            "extension_match",
+            2,
+            1,
+            "not-applicable",
+        ),
+        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 1, 0, "accepted"),
+        (
+            "codex",
+            "post_success",
+            "confirmed_success",
+            "post_hook",
+            "warn",
+            "extension_match",
+            1,
+            0,
+            "not-applicable",
+        ),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "rejected"),
+        ("cursor", "pre", "prevented", "pre_hook", "block", "extension_match", 2, 1, "not-applicable"),
+    ]
+    if sorted(rows) != sorted(expected):
+        raise RuntimeError(f"installed hook activity mismatch: {rows!r}")
+
+
+def _installed_origin() -> str:
+    package_file = Path(sys.modules["codex_plugin_scanner"].__file__ or "").resolve(strict=True)
+    if "site-packages" not in package_file.parts or "/workspace" in str(package_file):
+        raise RuntimeError("lab must import Guard only from installed site-packages")
+    return str(package_file)
+
+
+def main() -> None:
+    expected = os.environ["HOL_GUARD_LAB_EXPECTED_VERSION"]
+    if __version__ != expected:
+        raise RuntimeError(f"installed version mismatch: expected {expected}, got {__version__}")
+    GUARD_HOME.mkdir(parents=True, exist_ok=True)
+    _prepare_workspace()
+    store = GuardStore(GUARD_HOME, prime_policy_integrity=False)
+    from codex_plugin_scanner.guard.config import update_guard_settings
+
+    if not (GUARD_HOME / "config.toml").exists():
+        update_guard_settings(GUARD_HOME, {"blocked_request_mode": "ask"})
+    daemon = GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=4781,
+        bundle_refresh_interval_seconds=None,
+        aibom_refresh_interval_seconds=None,
+        home_dir=GUARD_HOME,
+        workspace_dir=WORKSPACE,
+    )
+    daemon.start()
+    try:
+        workflow_authorization = _completed_workflow_evidence(store)
+        prompt_free_hook_count = 2
+        auth_token = daemon._server.auth_token  # pyright: ignore[reportPrivateUsage]
+        session = build_local_dashboard_session_token(auth_token=auth_token, surface="dashboard")
+        _write_dashboard_session_handoff(session)
+        if workflow_authorization is None:
+            if store.count_command_activities() != 0:
+                raise RuntimeError("incomplete workflow authorization state cannot be resumed")
+            pending = _pending_workflow_request(store)
+            print(
+                "HOL_GUARD_LAB_PENDING "
+                + json.dumps(
+                    pending,
+                    separators=(",", ":"),
+                ),
+                flush=True,
+            )
+            workflow_authorization = _complete_workflow_authorization(store, str(pending["request_id"]))
+            prompt_free_hook_count = _invoke_real_harnesses()
+        _assert_seeded_activity(store)
+        print(
+            "HOL_GUARD_LAB_READY "
+            + json.dumps(
+                {
+                    "activity_count": store.count_command_activities(),
+                    "installed_origin": _installed_origin(),
+                    "prompt_free_hook_count": prompt_free_hook_count,
+                    "version": __version__,
+                    "workflow_authorization": workflow_authorization,
+                },
+                separators=(",", ":"),
+            ),
+            flush=True,
+        )
+        stop_requested = threading.Event()
+        _ = signal.signal(signal.SIGTERM, lambda _signum, _frame: stop_requested.set())
+        _ = signal.signal(signal.SIGINT, lambda _signum, _frame: stop_requested.set())
+        while not stop_requested.wait(3600):
+            pass
+    finally:
+        SESSION_HANDOFF.unlink(missing_ok=True)
+        daemon.stop()
+
+
+if __name__ == "__main__":
+    main()

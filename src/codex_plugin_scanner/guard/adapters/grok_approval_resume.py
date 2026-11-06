@@ -1,0 +1,160 @@
+"""Grok live-hook approval wait; ``hook_approval_wait`` decides it, this keeps the store."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
+
+from ..approvals import wait_for_approval_requests
+from ..store import GuardStore
+from . import hook_approval_wait
+from .grok_config import (
+    GROK_APPROVAL_WAIT_MAX_SECONDS,
+    GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
+    GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
+)
+
+
+def wait_for_grok_live_approval(
+    *,
+    event_name: str,
+    policy_action: str,
+    response_payload: dict[str, object],
+    store: GuardStore,
+    timeout_seconds: int,
+    json_mode: bool,
+    payload: Mapping[str, object] | None = None,
+) -> str | None:
+    """Wait for the queued Grok approval and return allow, block, or None.
+
+    ``json_mode`` is retained for callers. Compact JSON stdout still waits so
+    the original PreToolUse call can resume inside the hook deadline.
+    """
+
+    del json_mode
+    return _wait(event_name, policy_action, response_payload, store, timeout_seconds, payload)[0]
+
+
+def _wait(
+    event_name: str,
+    policy_action: str,
+    response_payload: dict[str, object],
+    store: GuardStore,
+    timeout_seconds: int,
+    payload: Mapping[str, object] | None,
+) -> tuple[str | None, Mapping[str, object]]:
+    answer = {**response_payload, "policy_action": policy_action}
+    request_ids, wait_timeout_seconds = hook_approval_wait.plan_wait(
+        "grok", event_name=event_name, response=answer, timeout_seconds=timeout_seconds
+    )
+    if not request_ids:
+        return None, {}
+    _mark_grok_operations_waiting(
+        store,
+        request_ids=request_ids,
+        payload=payload if payload is not None else response_payload,
+        wait_timeout_seconds=wait_timeout_seconds,
+        now=_now(),
+    )
+    wait_result = wait_for_approval_requests(
+        store=store,
+        request_ids=request_ids,
+        timeout_seconds=wait_timeout_seconds,
+    )
+    response_payload["approval_wait"] = wait_result
+    decision, fields, edits = hook_approval_wait.settle_wait("grok", wait_result=wait_result, request_id=request_ids[0])
+    response_payload.update(fields)
+    return decision, edits
+
+
+def _mark_grok_operations_waiting(
+    store: GuardStore,
+    *,
+    request_ids: list[str],
+    payload: Mapping[str, object],
+    wait_timeout_seconds: int,
+    now: str,
+) -> None:
+    started_at = datetime.now(timezone.utc)
+    deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
+    session_id = _optional_string(payload.get("session_id")) or _optional_string(payload.get("sessionId"))
+    wait_metadata: dict[str, object] = {
+        "grok_hook_waits_for_approval": True,
+        "grok_approval_wait_started_at": started_at.isoformat(),
+        "grok_approval_wait_deadline_at": deadline_at.isoformat(),
+        "grok_approval_wait_timeout_seconds": wait_timeout_seconds,
+    }
+    if session_id is not None:
+        wait_metadata["session_id"] = session_id
+    for request_id in request_ids:
+        existing = store.get_guard_operation_for_approval_request(request_id)
+        if existing is not None:
+            metadata = existing.get("metadata")
+            merged = dict(metadata) if isinstance(metadata, Mapping) else {}
+            merged.update(wait_metadata)
+            store.upsert_guard_operation(
+                operation_id=str(existing["operation_id"]),
+                session_id=str(existing["session_id"]),
+                harness="grok",
+                operation_type=str(existing.get("operation_type") or "tool_call"),
+                status="waiting_on_approval",
+                approval_request_ids=_existing_request_ids(existing, request_id),
+                resume_token=(str(existing["resume_token"]) if isinstance(existing.get("resume_token"), str) else None),
+                metadata=merged,
+                now=now,
+            )
+            continue
+        store.upsert_guard_operation(
+            operation_id=f"grok-{request_id}",
+            session_id=session_id or f"grok-session-{request_id}",
+            harness="grok",
+            operation_type="tool_call",
+            status="waiting_on_approval",
+            approval_request_ids=[request_id],
+            resume_token=None,
+            metadata=wait_metadata,
+            now=now,
+        )
+
+
+def _existing_request_ids(operation: Mapping[str, object], request_id: str) -> list[str]:
+    approval_request_ids = operation.get("approval_request_ids")
+    if isinstance(approval_request_ids, list):
+        cleaned = [str(item) for item in approval_request_ids if isinstance(item, str) and item.strip()]
+        if cleaned:
+            return cleaned
+    return [request_id]
+
+
+def _optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def apply_grok_pretool_approval_wait(
+    response: dict[str, object],
+    *,
+    event_name: str,
+    store: GuardStore,
+    timeout_seconds: int,
+) -> dict[str, object]:
+    """Wait on a native or daemon Grok review and rewrite allow/deny JSON."""
+
+    policy_action = str(response.get("policy_action") or "")
+    _, edits = _wait(event_name, policy_action, response, store, timeout_seconds, response)
+    return hook_approval_wait.rewrite_answer(edits, response) or response
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+__all__ = [
+    "GROK_APPROVAL_WAIT_MAX_SECONDS",
+    "GROK_HOOK_INTERNAL_TIMEOUT_SECONDS",
+    "GROK_PRETOOL_HOOK_TIMEOUT_SECONDS",
+    "apply_grok_pretool_approval_wait",
+    "wait_for_grok_live_approval",
+]

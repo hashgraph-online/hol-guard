@@ -1,0 +1,13 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-009",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "spawn_subagent",
+  "toolInput": {
+    "prompt": "Explore the src directory and summarize the adapter layout.",
+    "description": "Map adapter files",
+    "subagent_type": "explore",
+    "capability_mode": "read-only"
+  }
+}

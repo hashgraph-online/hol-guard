@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.enola",
+  "version": "1.0.0",
+  "name": "enola MCP",
+  "description": "Allows enola's read-only architecture query tools. Snapshot generation, baseline pinning, and snapshot diffing write enola's own .enola state and stay on Guard's usual handling. Matches uvx and pipx launches of the enola-cli package. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.enola-labs",
+    "displayName": "enola-labs",
+    "url": "https://github.com/enola-labs/enola"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0F172A" },
+  "homepage": "https://github.com/enola-labs/enola#readme",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "enola-cli"
+  },
+  "riskClasses": ["local-source-read", "external-filesystem-write", "localhost-listener"],
+  "tools": [
+    { "name": "query_facts", "state": "allow" },
+    { "name": "show_symbol", "state": "allow" },
+    { "name": "explore", "state": "allow" },
+    { "name": "traverse", "state": "allow" },
+    { "name": "find_path", "state": "allow" },
+    { "name": "impact_analysis", "state": "allow" },
+    { "name": "endpoint_impact", "state": "allow" },
+    { "name": "query_insights", "state": "allow" },
+    { "name": "governing_intent", "state": "allow" },
+    { "name": "constraints_for", "state": "allow" },
+    { "name": "plan_check", "state": "allow" },
+    { "name": "coverage_report", "state": "allow" },
+    { "name": "snapshot_receipt", "state": "allow" },
+    { "name": "compare_receipts", "state": "allow" },
+    { "name": "architecture_history", "state": "allow" },
+    { "name": "architecture_blame", "state": "allow" },
+    { "name": "find_orphans", "state": "allow" },
+    { "name": "package_metrics", "state": "allow" },
+    { "name": "analyze_performance", "state": "allow" },
+    { "name": "generate_snapshot", "state": "inherit" },
+    { "name": "set_baseline", "state": "inherit" },
+    { "name": "diff_snapshot", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/enola-labs/enola",
+    "https://github.com/enola-labs/enola/blob/main/docs/CLI.md",
+    "https://pypi.org/project/enola-cli/"
+  ],
+  "saferAlternatives": [
+    "Launch enola as `uvx --from enola-cli enola` or `pipx run --spec enola-cli enola`; a bare `enola` binary on PATH is not matched by this entry.",
+    "Pass an explicit repo_path to generate_snapshot so enola targets that repository; by default it writes the repository's .enola directory plus receipts and usage data under ~/.enola, and a custom output.dir or appended repository can write elsewhere.",
+    "Add --no-dashboard to the launch arguments if the MCP server should not open its dashboard on 127.0.0.1.",
+    "Set ENOLA_NO_UPDATE_CHECK=1 in the server environment to skip the release version check against GitHub."
+  ]
+}

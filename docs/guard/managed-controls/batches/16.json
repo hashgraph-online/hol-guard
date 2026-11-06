@@ -1,0 +1,15 @@
+{
+  "batch": 16,
+  "evidence": [
+    "tests/managed_controls/operations.py",
+    "tests/managed_controls/test_operations_performance.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 240,
+    "start": 226
+  },
+  "theme": "Operational health, bounded performance, and actionable recovery"
+}

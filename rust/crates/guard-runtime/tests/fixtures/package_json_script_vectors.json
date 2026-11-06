@@ -1,0 +1,3032 @@
+[
+ {
+  "command": "pnpm run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "pnpm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "pnpm run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "pnpm run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "pnpm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "pnpm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "pnpm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "pnpm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "pnpm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/pnpm-lock.yaml": ""
+  },
+  "home": "",
+  "name": "pnpm_run_build"
+ },
+ {
+  "command": "pnpm run build:web",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build",
+    "web"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "pnpm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "pnpm run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "pnpm run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "pnpm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "pnpm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "pnpm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "pnpm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build:web",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "pnpm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/pnpm-lock.yaml": ""
+  },
+  "home": "",
+  "name": "pnpm_run_nested"
+ },
+ {
+  "command": "npm test",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "test"
+   ],
+   "commands": [
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    },
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "test",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_test_shorthand"
+ },
+ {
+  "command": "npm start",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "start"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": "start",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_start_unlisted"
+ },
+ {
+  "command": "yarn test",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/yarn.lock": ""
+  },
+  "home": "",
+  "name": "yarn_shorthand_is_not_run"
+ },
+ {
+  "command": "yarn --cwd sub run lint",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "lint"
+   ],
+   "commands": [
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "yarn run lint"
+    },
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "yarn run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "yarn run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "yarn run build"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "yarn run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "yarn run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "yarn run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "lint",
+   "manifest_path": "<ROOT>/app/sub/package.json",
+   "runner": "yarn",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/sub/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/sub/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/sub/yarn.lock": ""
+  },
+  "home": "",
+  "name": "yarn_cwd_flag"
+ },
+ {
+  "command": "npm --prefix=sub run lint",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "lint"
+   ],
+   "commands": [
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "lint",
+   "manifest_path": "<ROOT>/app/sub/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/sub/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/sub/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_prefix_assigned"
+ },
+ {
+  "command": "npm -C sub run",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": null,
+   "manifest_path": "<ROOT>/app/sub/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/sub/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/sub/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_c_flag_no_script"
+ },
+ {
+  "command": "pnpm --dir sub run test",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "test"
+   ],
+   "commands": [
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "pnpm run test"
+    },
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "pnpm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "pnpm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "pnpm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "pnpm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "pnpm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "pnpm run root"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "test",
+   "manifest_path": "<ROOT>/app/sub/package.json",
+   "runner": "pnpm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/sub/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/sub/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/sub/pnpm-lock.yaml": ""
+  },
+  "home": "",
+  "name": "pnpm_dir_flag"
+ },
+ {
+  "command": "pnpm --workspace-dir=sub run-script db:migrate:up",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "db",
+    "migrate",
+    "up"
+   ],
+   "commands": [
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "db:migrate:up",
+   "manifest_path": "<ROOT>/app/sub/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/sub/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/sub/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "pnpm_workspace_dir"
+ },
+ {
+  "command": "bun run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "bun run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "bun run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "bun run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "bun run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "bun run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "bun run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "bun run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "bun",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/bun.lockb": "",
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "bun_lockb"
+ },
+ {
+  "command": "bun build",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "bun_not_a_run"
+ },
+ {
+  "command": "npm run --silent build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "silent-379f30dd"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": "--silent",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_run_silent"
+ },
+ {
+  "command": "npm -- run lint",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "lint"
+   ],
+   "commands": [
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "lint",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_double_dash"
+ },
+ {
+  "command": "npm run missing",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "missing"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": "missing",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_missing_script"
+ },
+ {
+  "command": "npm.cmd run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_cmd_suffix"
+ },
+ {
+  "command": "/usr/local/bin/NPM.EXE run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "npm_exe_path"
+ },
+ {
+  "command": "'npm' run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "quoted_manager"
+ },
+ {
+  "command": "FOO=1 npm run build",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "env_prefix_refused"
+ },
+ {
+  "command": "npm run build | cat",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "pipeline_refused"
+ },
+ {
+  "command": "sudo npm run build",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "wrapper_refused"
+ },
+ {
+  "command": "npm run build && npm test",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "chain_refused"
+ },
+ {
+  "command": "npm run build > out.txt",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "redirect_refused"
+ },
+ {
+  "command": "make build",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "not_a_manager"
+ },
+ {
+  "command": "   ",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "empty_command"
+ },
+ {
+  "command": "npm run lint",
+  "cwd": "app/src/lib",
+  "expected": {
+   "command_tokens": [
+    "lint"
+   ],
+   "commands": [
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "pnpm run lint"
+    },
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "pnpm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "pnpm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "pnpm run build"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "pnpm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "pnpm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "pnpm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "lint",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "pnpm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/pnpm-lock.yaml": "",
+   "app/src/lib/x.txt": ""
+  },
+  "home": "",
+  "name": "walk_up"
+ },
+ {
+  "command": "npm run lint",
+  "cwd": "home/proj",
+  "expected": null,
+  "files": {
+   "home/proj/x.txt": "",
+   "package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "home",
+  "name": "stops_at_home"
+ },
+ {
+  "command": "npm run lint",
+  "cwd": "a/b/c/d/e/f/g/h/i",
+  "expected": null,
+  "files": {
+   "a/b/c/d/e/f/g/h/i/x.txt": "",
+   "package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "walk_limit"
+ },
+ {
+  "command": "npm --prefix nowhere run build",
+  "cwd": "app",
+  "expected": null,
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "prefix_missing_dir"
+ },
+ {
+  "command": "app/package.json",
+  "cwd": "",
+  "expected": {
+   "command_tokens": [],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "yarn run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "yarn run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "yarn run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "yarn run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "yarn run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "yarn run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "yarn run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": null,
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "yarn",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/yarn.lock": ""
+  },
+  "home": "",
+  "name": "path_manifest"
+ },
+ {
+  "command": "app/package.json/",
+  "cwd": "",
+  "expected": {
+   "command_tokens": [],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": null,
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "path_manifest_trailing_slash"
+ },
+ {
+  "command": "app",
+  "cwd": "",
+  "expected": {
+   "command_tokens": [],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": null,
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "path_directory"
+ },
+ {
+  "command": ".",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": null,
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "path_dot"
+ },
+ {
+  "command": "~/proj",
+  "cwd": "",
+  "expected": {
+   "command_tokens": [],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": null,
+   "manifest_path": "<ROOT>/home/proj/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/home/proj/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "home/proj/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "home",
+  "name": "path_home_tilde"
+ },
+ {
+  "command": "<ROOT>/app",
+  "cwd": "",
+  "expected": {
+   "command_tokens": [],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": null,
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "path_absolute_root_token"
+ },
+ {
+  "command": "app",
+  "cwd": "",
+  "expected": null,
+  "files": {
+   "app/x.txt": ""
+  },
+  "home": "",
+  "name": "path_dir_without_manifest"
+ },
+ {
+  "command": "app/other.json",
+  "cwd": "",
+  "expected": null,
+  "files": {
+   "app/other.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "path_other_json"
+ },
+ {
+  "command": "npm run Build Web!",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "Build"
+   ],
+   "commands": [
+    {
+     "command_id": "UPPER.case",
+     "description": "x",
+     "name": "UPPER:case",
+     "parent_id": "UPPER",
+     "usage": "npm run UPPER:case"
+    },
+    {
+     "command_id": "a-b-c-d-e-c443c81e",
+     "description": "x",
+     "name": "a:b:c:d:e",
+     "parent_id": null,
+     "usage": "npm run a:b:c:d:e"
+    },
+    {
+     "command_id": "x--y-6798864a",
+     "description": "x",
+     "name": "x::y",
+     "parent_id": null,
+     "usage": "npm run x::y"
+    },
+    {
+     "command_id": "script-57cb980e",
+     "description": "x",
+     "name": "1abc",
+     "parent_id": null,
+     "usage": "npm run 1abc"
+    },
+    {
+     "command_id": "build-web-48586dfa",
+     "description": "x",
+     "name": "Build Web!",
+     "parent_id": null,
+     "usage": "npm run Build Web!"
+    },
+    {
+     "command_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-160b4e43",
+     "description": "x",
+     "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "parent_id": null,
+     "usage": "npm run aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+     "command_id": "script-850f7dc4",
+     "description": "x",
+     "name": "café",
+     "parent_id": null,
+     "usage": "npm run café"
+    },
+    {
+     "command_id": "dev",
+     "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "name": "dev",
+     "parent_id": null,
+     "usage": "npm run dev"
+    },
+    {
+     "command_id": "lint",
+     "description": "x",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "padded",
+     "description": "x",
+     "name": "padded",
+     "parent_id": null,
+     "usage": "npm run padded"
+    }
+   ],
+   "focused_listed": false,
+   "focused_script": "Build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "230752bd9a43d0870b9741421d8eebec85a23bdafe64a1baf69a0d2a47c6bd0a",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"a:b:c:d:e\": \"x\",\n    \"Build Web!\": \"x\",\n    \"1abc\": \"x\",\n    \"x::y\": \"x\",\n    \"caf\\u00e9\": \"x\",\n    \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\": \"x\",\n    \"UPPER:case\": \"x\",\n    \"  padded  \": \"x\",\n    \"postlint\": \"x\",\n    \"lint\": \"x\",\n    \"\": \"x\",\n    \"number\": 5,\n    \"dev\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  }\n}"
+  },
+  "home": "",
+  "name": "odd_script_names"
+ },
+ {
+  "command": "npm run UPPER:case",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "UPPER",
+    "case"
+   ],
+   "commands": [
+    {
+     "command_id": "UPPER.case",
+     "description": "x",
+     "name": "UPPER:case",
+     "parent_id": "UPPER",
+     "usage": "npm run UPPER:case"
+    },
+    {
+     "command_id": "a-b-c-d-e-c443c81e",
+     "description": "x",
+     "name": "a:b:c:d:e",
+     "parent_id": null,
+     "usage": "npm run a:b:c:d:e"
+    },
+    {
+     "command_id": "x--y-6798864a",
+     "description": "x",
+     "name": "x::y",
+     "parent_id": null,
+     "usage": "npm run x::y"
+    },
+    {
+     "command_id": "script-57cb980e",
+     "description": "x",
+     "name": "1abc",
+     "parent_id": null,
+     "usage": "npm run 1abc"
+    },
+    {
+     "command_id": "build-web-48586dfa",
+     "description": "x",
+     "name": "Build Web!",
+     "parent_id": null,
+     "usage": "npm run Build Web!"
+    },
+    {
+     "command_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-160b4e43",
+     "description": "x",
+     "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "parent_id": null,
+     "usage": "npm run aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+     "command_id": "script-850f7dc4",
+     "description": "x",
+     "name": "café",
+     "parent_id": null,
+     "usage": "npm run café"
+    },
+    {
+     "command_id": "dev",
+     "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "name": "dev",
+     "parent_id": null,
+     "usage": "npm run dev"
+    },
+    {
+     "command_id": "lint",
+     "description": "x",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "padded",
+     "description": "x",
+     "name": "padded",
+     "parent_id": null,
+     "usage": "npm run padded"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "UPPER:case",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "230752bd9a43d0870b9741421d8eebec85a23bdafe64a1baf69a0d2a47c6bd0a",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"a:b:c:d:e\": \"x\",\n    \"Build Web!\": \"x\",\n    \"1abc\": \"x\",\n    \"x::y\": \"x\",\n    \"caf\\u00e9\": \"x\",\n    \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\": \"x\",\n    \"UPPER:case\": \"x\",\n    \"  padded  \": \"x\",\n    \"postlint\": \"x\",\n    \"lint\": \"x\",\n    \"\": \"x\",\n    \"number\": 5,\n    \"dev\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  }\n}"
+  },
+  "home": "",
+  "name": "odd_focused_nested"
+ },
+ {
+  "command": "npm run task050",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "task050"
+   ],
+   "commands": [
+    {
+     "command_id": "task050",
+     "description": "echo 50",
+     "name": "task050",
+     "parent_id": null,
+     "usage": "npm run task050"
+    },
+    {
+     "command_id": "task000",
+     "description": "echo 0",
+     "name": "task000",
+     "parent_id": null,
+     "usage": "npm run task000"
+    },
+    {
+     "command_id": "task001",
+     "description": "echo 1",
+     "name": "task001",
+     "parent_id": null,
+     "usage": "npm run task001"
+    },
+    {
+     "command_id": "task002",
+     "description": "echo 2",
+     "name": "task002",
+     "parent_id": null,
+     "usage": "npm run task002"
+    },
+    {
+     "command_id": "task003",
+     "description": "echo 3",
+     "name": "task003",
+     "parent_id": null,
+     "usage": "npm run task003"
+    },
+    {
+     "command_id": "task004",
+     "description": "echo 4",
+     "name": "task004",
+     "parent_id": null,
+     "usage": "npm run task004"
+    },
+    {
+     "command_id": "task005",
+     "description": "echo 5",
+     "name": "task005",
+     "parent_id": null,
+     "usage": "npm run task005"
+    },
+    {
+     "command_id": "task006",
+     "description": "echo 6",
+     "name": "task006",
+     "parent_id": null,
+     "usage": "npm run task006"
+    },
+    {
+     "command_id": "task007",
+     "description": "echo 7",
+     "name": "task007",
+     "parent_id": null,
+     "usage": "npm run task007"
+    },
+    {
+     "command_id": "task008",
+     "description": "echo 8",
+     "name": "task008",
+     "parent_id": null,
+     "usage": "npm run task008"
+    },
+    {
+     "command_id": "task009",
+     "description": "echo 9",
+     "name": "task009",
+     "parent_id": null,
+     "usage": "npm run task009"
+    },
+    {
+     "command_id": "task010",
+     "description": "echo 10",
+     "name": "task010",
+     "parent_id": null,
+     "usage": "npm run task010"
+    },
+    {
+     "command_id": "task011",
+     "description": "echo 11",
+     "name": "task011",
+     "parent_id": null,
+     "usage": "npm run task011"
+    },
+    {
+     "command_id": "task012",
+     "description": "echo 12",
+     "name": "task012",
+     "parent_id": null,
+     "usage": "npm run task012"
+    },
+    {
+     "command_id": "task013",
+     "description": "echo 13",
+     "name": "task013",
+     "parent_id": null,
+     "usage": "npm run task013"
+    },
+    {
+     "command_id": "task014",
+     "description": "echo 14",
+     "name": "task014",
+     "parent_id": null,
+     "usage": "npm run task014"
+    },
+    {
+     "command_id": "task015",
+     "description": "echo 15",
+     "name": "task015",
+     "parent_id": null,
+     "usage": "npm run task015"
+    },
+    {
+     "command_id": "task016",
+     "description": "echo 16",
+     "name": "task016",
+     "parent_id": null,
+     "usage": "npm run task016"
+    },
+    {
+     "command_id": "task017",
+     "description": "echo 17",
+     "name": "task017",
+     "parent_id": null,
+     "usage": "npm run task017"
+    },
+    {
+     "command_id": "task018",
+     "description": "echo 18",
+     "name": "task018",
+     "parent_id": null,
+     "usage": "npm run task018"
+    },
+    {
+     "command_id": "task019",
+     "description": "echo 19",
+     "name": "task019",
+     "parent_id": null,
+     "usage": "npm run task019"
+    },
+    {
+     "command_id": "task020",
+     "description": "echo 20",
+     "name": "task020",
+     "parent_id": null,
+     "usage": "npm run task020"
+    },
+    {
+     "command_id": "task021",
+     "description": "echo 21",
+     "name": "task021",
+     "parent_id": null,
+     "usage": "npm run task021"
+    },
+    {
+     "command_id": "task022",
+     "description": "echo 22",
+     "name": "task022",
+     "parent_id": null,
+     "usage": "npm run task022"
+    },
+    {
+     "command_id": "task023",
+     "description": "echo 23",
+     "name": "task023",
+     "parent_id": null,
+     "usage": "npm run task023"
+    },
+    {
+     "command_id": "task024",
+     "description": "echo 24",
+     "name": "task024",
+     "parent_id": null,
+     "usage": "npm run task024"
+    },
+    {
+     "command_id": "task025",
+     "description": "echo 25",
+     "name": "task025",
+     "parent_id": null,
+     "usage": "npm run task025"
+    },
+    {
+     "command_id": "task026",
+     "description": "echo 26",
+     "name": "task026",
+     "parent_id": null,
+     "usage": "npm run task026"
+    },
+    {
+     "command_id": "task027",
+     "description": "echo 27",
+     "name": "task027",
+     "parent_id": null,
+     "usage": "npm run task027"
+    },
+    {
+     "command_id": "task028",
+     "description": "echo 28",
+     "name": "task028",
+     "parent_id": null,
+     "usage": "npm run task028"
+    },
+    {
+     "command_id": "task029",
+     "description": "echo 29",
+     "name": "task029",
+     "parent_id": null,
+     "usage": "npm run task029"
+    },
+    {
+     "command_id": "task030",
+     "description": "echo 30",
+     "name": "task030",
+     "parent_id": null,
+     "usage": "npm run task030"
+    },
+    {
+     "command_id": "task031",
+     "description": "echo 31",
+     "name": "task031",
+     "parent_id": null,
+     "usage": "npm run task031"
+    },
+    {
+     "command_id": "task032",
+     "description": "echo 32",
+     "name": "task032",
+     "parent_id": null,
+     "usage": "npm run task032"
+    },
+    {
+     "command_id": "task033",
+     "description": "echo 33",
+     "name": "task033",
+     "parent_id": null,
+     "usage": "npm run task033"
+    },
+    {
+     "command_id": "task034",
+     "description": "echo 34",
+     "name": "task034",
+     "parent_id": null,
+     "usage": "npm run task034"
+    },
+    {
+     "command_id": "task035",
+     "description": "echo 35",
+     "name": "task035",
+     "parent_id": null,
+     "usage": "npm run task035"
+    },
+    {
+     "command_id": "task036",
+     "description": "echo 36",
+     "name": "task036",
+     "parent_id": null,
+     "usage": "npm run task036"
+    },
+    {
+     "command_id": "task037",
+     "description": "echo 37",
+     "name": "task037",
+     "parent_id": null,
+     "usage": "npm run task037"
+    },
+    {
+     "command_id": "task038",
+     "description": "echo 38",
+     "name": "task038",
+     "parent_id": null,
+     "usage": "npm run task038"
+    },
+    {
+     "command_id": "task039",
+     "description": "echo 39",
+     "name": "task039",
+     "parent_id": null,
+     "usage": "npm run task039"
+    },
+    {
+     "command_id": "task040",
+     "description": "echo 40",
+     "name": "task040",
+     "parent_id": null,
+     "usage": "npm run task040"
+    },
+    {
+     "command_id": "task041",
+     "description": "echo 41",
+     "name": "task041",
+     "parent_id": null,
+     "usage": "npm run task041"
+    },
+    {
+     "command_id": "task042",
+     "description": "echo 42",
+     "name": "task042",
+     "parent_id": null,
+     "usage": "npm run task042"
+    },
+    {
+     "command_id": "task043",
+     "description": "echo 43",
+     "name": "task043",
+     "parent_id": null,
+     "usage": "npm run task043"
+    },
+    {
+     "command_id": "task044",
+     "description": "echo 44",
+     "name": "task044",
+     "parent_id": null,
+     "usage": "npm run task044"
+    },
+    {
+     "command_id": "task045",
+     "description": "echo 45",
+     "name": "task045",
+     "parent_id": null,
+     "usage": "npm run task045"
+    },
+    {
+     "command_id": "task046",
+     "description": "echo 46",
+     "name": "task046",
+     "parent_id": null,
+     "usage": "npm run task046"
+    },
+    {
+     "command_id": "task047",
+     "description": "echo 47",
+     "name": "task047",
+     "parent_id": null,
+     "usage": "npm run task047"
+    },
+    {
+     "command_id": "task048",
+     "description": "echo 48",
+     "name": "task048",
+     "parent_id": null,
+     "usage": "npm run task048"
+    },
+    {
+     "command_id": "task049",
+     "description": "echo 49",
+     "name": "task049",
+     "parent_id": null,
+     "usage": "npm run task049"
+    },
+    {
+     "command_id": "task051",
+     "description": "echo 51",
+     "name": "task051",
+     "parent_id": null,
+     "usage": "npm run task051"
+    },
+    {
+     "command_id": "task052",
+     "description": "echo 52",
+     "name": "task052",
+     "parent_id": null,
+     "usage": "npm run task052"
+    },
+    {
+     "command_id": "task053",
+     "description": "echo 53",
+     "name": "task053",
+     "parent_id": null,
+     "usage": "npm run task053"
+    },
+    {
+     "command_id": "task054",
+     "description": "echo 54",
+     "name": "task054",
+     "parent_id": null,
+     "usage": "npm run task054"
+    },
+    {
+     "command_id": "task055",
+     "description": "echo 55",
+     "name": "task055",
+     "parent_id": null,
+     "usage": "npm run task055"
+    },
+    {
+     "command_id": "task056",
+     "description": "echo 56",
+     "name": "task056",
+     "parent_id": null,
+     "usage": "npm run task056"
+    },
+    {
+     "command_id": "task057",
+     "description": "echo 57",
+     "name": "task057",
+     "parent_id": null,
+     "usage": "npm run task057"
+    },
+    {
+     "command_id": "task058",
+     "description": "echo 58",
+     "name": "task058",
+     "parent_id": null,
+     "usage": "npm run task058"
+    },
+    {
+     "command_id": "task059",
+     "description": "echo 59",
+     "name": "task059",
+     "parent_id": null,
+     "usage": "npm run task059"
+    },
+    {
+     "command_id": "task060",
+     "description": "echo 60",
+     "name": "task060",
+     "parent_id": null,
+     "usage": "npm run task060"
+    },
+    {
+     "command_id": "task061",
+     "description": "echo 61",
+     "name": "task061",
+     "parent_id": null,
+     "usage": "npm run task061"
+    },
+    {
+     "command_id": "task062",
+     "description": "echo 62",
+     "name": "task062",
+     "parent_id": null,
+     "usage": "npm run task062"
+    },
+    {
+     "command_id": "task063",
+     "description": "echo 63",
+     "name": "task063",
+     "parent_id": null,
+     "usage": "npm run task063"
+    },
+    {
+     "command_id": "task064",
+     "description": "echo 64",
+     "name": "task064",
+     "parent_id": null,
+     "usage": "npm run task064"
+    },
+    {
+     "command_id": "task065",
+     "description": "echo 65",
+     "name": "task065",
+     "parent_id": null,
+     "usage": "npm run task065"
+    },
+    {
+     "command_id": "task066",
+     "description": "echo 66",
+     "name": "task066",
+     "parent_id": null,
+     "usage": "npm run task066"
+    },
+    {
+     "command_id": "task067",
+     "description": "echo 67",
+     "name": "task067",
+     "parent_id": null,
+     "usage": "npm run task067"
+    },
+    {
+     "command_id": "task068",
+     "description": "echo 68",
+     "name": "task068",
+     "parent_id": null,
+     "usage": "npm run task068"
+    },
+    {
+     "command_id": "task069",
+     "description": "echo 69",
+     "name": "task069",
+     "parent_id": null,
+     "usage": "npm run task069"
+    },
+    {
+     "command_id": "task070",
+     "description": "echo 70",
+     "name": "task070",
+     "parent_id": null,
+     "usage": "npm run task070"
+    },
+    {
+     "command_id": "task071",
+     "description": "echo 71",
+     "name": "task071",
+     "parent_id": null,
+     "usage": "npm run task071"
+    },
+    {
+     "command_id": "task072",
+     "description": "echo 72",
+     "name": "task072",
+     "parent_id": null,
+     "usage": "npm run task072"
+    },
+    {
+     "command_id": "task073",
+     "description": "echo 73",
+     "name": "task073",
+     "parent_id": null,
+     "usage": "npm run task073"
+    },
+    {
+     "command_id": "task074",
+     "description": "echo 74",
+     "name": "task074",
+     "parent_id": null,
+     "usage": "npm run task074"
+    },
+    {
+     "command_id": "task075",
+     "description": "echo 75",
+     "name": "task075",
+     "parent_id": null,
+     "usage": "npm run task075"
+    },
+    {
+     "command_id": "task076",
+     "description": "echo 76",
+     "name": "task076",
+     "parent_id": null,
+     "usage": "npm run task076"
+    },
+    {
+     "command_id": "task077",
+     "description": "echo 77",
+     "name": "task077",
+     "parent_id": null,
+     "usage": "npm run task077"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "task050",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "f064ed50d4b637b28121c6b1186f6e048c2b1ccdb92b37b1d8d9e24de7dab4c4",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"task000\": \"echo 0\",\n    \"task001\": \"echo 1\",\n    \"task002\": \"echo 2\",\n    \"task003\": \"echo 3\",\n    \"task004\": \"echo 4\",\n    \"task005\": \"echo 5\",\n    \"task006\": \"echo 6\",\n    \"task007\": \"echo 7\",\n    \"task008\": \"echo 8\",\n    \"task009\": \"echo 9\",\n    \"task010\": \"echo 10\",\n    \"task011\": \"echo 11\",\n    \"task012\": \"echo 12\",\n    \"task013\": \"echo 13\",\n    \"task014\": \"echo 14\",\n    \"task015\": \"echo 15\",\n    \"task016\": \"echo 16\",\n    \"task017\": \"echo 17\",\n    \"task018\": \"echo 18\",\n    \"task019\": \"echo 19\",\n    \"task020\": \"echo 20\",\n    \"task021\": \"echo 21\",\n    \"task022\": \"echo 22\",\n    \"task023\": \"echo 23\",\n    \"task024\": \"echo 24\",\n    \"task025\": \"echo 25\",\n    \"task026\": \"echo 26\",\n    \"task027\": \"echo 27\",\n    \"task028\": \"echo 28\",\n    \"task029\": \"echo 29\",\n    \"task030\": \"echo 30\",\n    \"task031\": \"echo 31\",\n    \"task032\": \"echo 32\",\n    \"task033\": \"echo 33\",\n    \"task034\": \"echo 34\",\n    \"task035\": \"echo 35\",\n    \"task036\": \"echo 36\",\n    \"task037\": \"echo 37\",\n    \"task038\": \"echo 38\",\n    \"task039\": \"echo 39\",\n    \"task040\": \"echo 40\",\n    \"task041\": \"echo 41\",\n    \"task042\": \"echo 42\",\n    \"task043\": \"echo 43\",\n    \"task044\": \"echo 44\",\n    \"task045\": \"echo 45\",\n    \"task046\": \"echo 46\",\n    \"task047\": \"echo 47\",\n    \"task048\": \"echo 48\",\n    \"task049\": \"echo 49\",\n    \"task050\": \"echo 50\",\n    \"task051\": \"echo 51\",\n    \"task052\": \"echo 52\",\n    \"task053\": \"echo 53\",\n    \"task054\": \"echo 54\",\n    \"task055\": \"echo 55\",\n    \"task056\": \"echo 56\",\n    \"task057\": \"echo 57\",\n    \"task058\": \"echo 58\",\n    \"task059\": \"echo 59\",\n    \"task060\": \"echo 60\",\n    \"task061\": \"echo 61\",\n    \"task062\": \"echo 62\",\n    \"task063\": \"echo 63\",\n    \"task064\": \"echo 64\",\n    \"task065\": \"echo 65\",\n    \"task066\": \"echo 66\",\n    \"task067\": \"echo 67\",\n    \"task068\": \"echo 68\",\n    \"task069\": \"echo 69\",\n    \"task070\": \"echo 70\",\n    \"task071\": \"echo 71\",\n    \"task072\": \"echo 72\",\n    \"task073\": \"echo 73\",\n    \"task074\": \"echo 74\",\n    \"task075\": \"echo 75\",\n    \"task076\": \"echo 76\",\n    \"task077\": \"echo 77\",\n    \"task078\": \"echo 78\",\n    \"task079\": \"echo 79\",\n    \"task080\": \"echo 80\",\n    \"task081\": \"echo 81\",\n    \"task082\": \"echo 82\",\n    \"task083\": \"echo 83\",\n    \"task084\": \"echo 84\",\n    \"task085\": \"echo 85\",\n    \"task086\": \"echo 86\",\n    \"task087\": \"echo 87\",\n    \"task088\": \"echo 88\",\n    \"task089\": \"echo 89\",\n    \"task090\": \"echo 90\",\n    \"task091\": \"echo 91\",\n    \"task092\": \"echo 92\",\n    \"task093\": \"echo 93\",\n    \"task094\": \"echo 94\",\n    \"task095\": \"echo 95\",\n    \"task096\": \"echo 96\",\n    \"task097\": \"echo 97\",\n    \"task098\": \"echo 98\",\n    \"task099\": \"echo 99\"\n  }\n}"
+  },
+  "home": "",
+  "name": "many_scripts"
+ },
+ {
+  "command": "npm run dev",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "dev"
+   ],
+   "commands": [
+    {
+     "command_id": "dev",
+     "description": "x",
+     "name": "dev",
+     "parent_id": null,
+     "usage": "npm run dev"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "dev",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "3e783f888f80bc6b707a0317e01a6fc31fe5106118ba04aa05fe3fc4d66c186a",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "scope-pkg",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \" @scope/pkg \",\n  \"scripts\": {\n    \"dev\": \"x\"\n  }\n}"
+  },
+  "home": "",
+  "name": "scoped_name"
+ },
+ {
+  "command": "npm run dev",
+  "cwd": "proj-dir",
+  "expected": {
+   "command_tokens": [
+    "dev"
+   ],
+   "commands": [
+    {
+     "command_id": "dev",
+     "description": "x",
+     "name": "dev",
+     "parent_id": null,
+     "usage": "npm run dev"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "dev",
+   "manifest_path": "<ROOT>/proj-dir/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "8463dbe580d23e6d5327028fa1bf46ed0e84c60bc20eb509e92943c3fd6cefe6",
+    "manifest_path": "<ROOT>/proj-dir/package.json",
+    "package_name": "proj-dir",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "proj-dir/package.json": "{\n  \"name\": \"  \",\n  \"scripts\": {\n    \"dev\": \"x\"\n  }\n}"
+  },
+  "home": "",
+  "name": "blank_name"
+ },
+ {
+  "command": "npm run dev",
+  "cwd": "proj-dir",
+  "expected": {
+   "command_tokens": [
+    "dev"
+   ],
+   "commands": [
+    {
+     "command_id": "dev",
+     "description": "x",
+     "name": "dev",
+     "parent_id": null,
+     "usage": "npm run dev"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "dev",
+   "manifest_path": "<ROOT>/proj-dir/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "53b58688b0e33d6a1e93cd9e5ebdd04161be53ddf20177cc6f0259d3f5d65b30",
+    "manifest_path": "<ROOT>/proj-dir/package.json",
+    "package_name": "proj-dir",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "proj-dir/package.json": "{\n  \"name\": 7,\n  \"scripts\": {\n    \"dev\": \"x\"\n  }\n}"
+  },
+  "home": "",
+  "name": "numeric_name"
+ },
+ {
+  "command": "npm run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [],
+   "focused_listed": false,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "8c0cf79dfb9693354275352281089acdb5afb98b727f8317132837ebf3846fce",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": [\n    \"build\"\n  ]\n}"
+  },
+  "home": "",
+  "name": "scripts_not_object"
+ },
+ {
+  "command": "npm run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [],
+   "focused_listed": false,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "3a316d6d3226f84c1e46e4447fa8d5fd800bff4a1bc6498152523cd4a602b69b",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "[1, 2]"
+  },
+  "home": "",
+  "name": "manifest_not_object"
+ },
+ {
+  "command": "npm run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [],
+   "focused_listed": false,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "26b8317cfd9d065b7325a6ff3e6260dc62890ecf626448028a14a23fd6c1e04c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{nope"
+  },
+  "home": "",
+  "name": "manifest_invalid_json"
+ },
+ {
+  "command": "npm run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [],
+   "focused_listed": false,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": ""
+  },
+  "home": "",
+  "name": "manifest_empty"
+ },
+ {
+  "command": "npm run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "pnpm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "pnpm run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "pnpm run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "pnpm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "pnpm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "pnpm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "pnpm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "pnpm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package-lock.json": "",
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}",
+   "app/pnpm-lock.yaml": "",
+   "app/yarn.lock": ""
+  },
+  "home": "",
+  "name": "lockfile_precedence"
+ },
+ {
+  "command": "yarn run build",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "build"
+   ],
+   "commands": [
+    {
+     "command_id": "build.web",
+     "description": "vite build --mode web",
+     "name": "build:web",
+     "parent_id": "build",
+     "usage": "npm run build:web"
+    },
+    {
+     "command_id": "build",
+     "description": "vite build",
+     "name": "build",
+     "parent_id": null,
+     "usage": "npm run build"
+    },
+    {
+     "command_id": "db.migrate.up",
+     "description": "prisma migrate deploy",
+     "name": "db:migrate:up",
+     "parent_id": "db.migrate",
+     "usage": "npm run db:migrate:up"
+    },
+    {
+     "command_id": "lint",
+     "description": "eslint .",
+     "name": "lint",
+     "parent_id": null,
+     "usage": "npm run lint"
+    },
+    {
+     "command_id": "other-d9298a10",
+     "description": "echo other",
+     "name": "other",
+     "parent_id": null,
+     "usage": "npm run other"
+    },
+    {
+     "command_id": "root-4813494d",
+     "description": "echo root",
+     "name": "root",
+     "parent_id": null,
+     "usage": "npm run root"
+    },
+    {
+     "command_id": "test",
+     "description": "vitest run --coverage",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "build",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "6a168912b5b450d77747729215833ac3a85a83bdafbb8fa6920979c05ba8b33c",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/npm-shrinkwrap.json": "",
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"build\": \"vite build\",\n    \"build:web\": \"vite build --mode web\",\n    \"prebuild\": \"rm -rf dist\",\n    \"postinstall\": \"husky install\",\n    \"test\": \"vitest   run\\n --coverage\",\n    \"lint\": \"eslint .\",\n    \"db:migrate:up\": \"prisma migrate deploy\",\n    \"root\": \"echo root\",\n    \"other\": \"echo other\"\n  }\n}"
+  },
+  "home": "",
+  "name": "shrinkwrap_runner"
+ },
+ {
+  "command": "npm run test",
+  "cwd": "app",
+  "expected": {
+   "command_tokens": [
+    "test"
+   ],
+   "commands": [
+    {
+     "command_id": "test",
+     "description": "a",
+     "name": "test",
+     "parent_id": null,
+     "usage": "npm run test"
+    },
+    {
+     "command_id": "post",
+     "description": "e",
+     "name": "post",
+     "parent_id": null,
+     "usage": "npm run post"
+    },
+    {
+     "command_id": "prefix",
+     "description": "d",
+     "name": "prefix",
+     "parent_id": null,
+     "usage": "npm run prefix"
+    }
+   ],
+   "focused_listed": true,
+   "focused_script": "test",
+   "manifest_path": "<ROOT>/app/package.json",
+   "runner": "npm",
+   "source": {
+    "content_sha256": "cafbecd875a1a8158e3545ec55053e7aff62664018de62c9f61e6f2c1f161207",
+    "manifest_path": "<ROOT>/app/package.json",
+    "package_name": "demo-app",
+    "source": "package_json"
+   }
+  },
+  "files": {
+   "app/package.json": "{\n  \"name\": \"demo-app\",\n  \"scripts\": {\n    \"test\": \"a\",\n    \"pretest\": \"b\",\n    \"posttest\": \"c\",\n    \"prefix\": \"d\",\n    \"post\": \"e\"\n  }\n}"
+  },
+  "home": "",
+  "name": "pre_post_companions"
+ }
+]

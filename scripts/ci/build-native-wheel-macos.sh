@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Build and assemble the native wheel using the workflow target and source identity.
+set -eo pipefail
+
+VERSION=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+build_target=()
+target_dir="rust/target"
+if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then
+  build_target=(--target "$TARGET")
+  target_dir="$target_dir/$TARGET"
+fi
+cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source "${build_target[@]}"
+runtime="$target_dir/release/hol-guard-runtime"
+source_compiler="$target_dir/release/guard-command-source"
+export HOL_GUARD_BUILD_SOURCE_COMPILER="$source_compiler"
+# The ARM image includes Rosetta for this build-time sanity check.
+# Installed Intel performance is measured on macos-15-intel below.
+"$runtime" self-test --json
+# Match Linux: prepare and verify the complete current source tree for every
+# event. Source-only PRs never need to commit generated catalogs or fixtures.
+verification_arguments=(--compiler "$source_compiler")
+if [[ -n "${NATIVE_PR_BASE_SHA:-}" ]]; then
+  if [[ ! "$NATIVE_PR_BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    echo "NATIVE_PR_BASE_SHA must be a full Git commit SHA" >&2
+    exit 1
+  fi
+  verification_arguments+=(--changed-from "$NATIVE_PR_BASE_SHA")
+fi
+python scripts/ci/verify_native_command_program.py "${verification_arguments[@]}"
+uv build --wheel --out-dir pure-dist
+RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+# Authoring against the packaged base carries the global validation context the
+# compiler checks the addition against: the catalog this binary embeds, with no
+# installed packs. Read it from the binary rather than from the generated
+# contracts file, which the program build writes later.
+"$runtime" export-built > source-built.json
+jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
+  --slurpfile built source-built.json \
+  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' > source-build.json
+"$runtime" compile < source-build.json > source-compiled.json
+# Gauntlet development wheels carry every workspace crate at opt-level 0 with
+# per-crate codegen, which on macOS arm64 is several times the shipped size.
+# They are installed for qualification runs and never published, so they name a
+# larger runtime bound; the published path keeps the builder's default.
+wheel_bound=()
+if [[ "${HOL_GUARD_DEV_WHEEL:-}" == "1" ]]; then
+  wheel_bound=(--max-runtime-bytes $((512 * 1024 * 1024)))
+fi
+python scripts/build_native_hol_guard_wheel.py \
+  --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+  --runtime "$runtime" \
+  --output-dir native-dist \
+  --version "$VERSION" \
+  --platform-tag "$PLATFORM_TAG" \
+  --target "$TARGET" \
+  --source-sha "$HOL_GUARD_BUILD_SHA" \
+  --rule-digest "$RULE_DIGEST" \
+  --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
+  --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)" \
+  ${wheel_bound[@]+"${wheel_bound[@]}"}
+# Gauntlet development wheels use per-crate codegen and are never published.
+# The Gauntlet driver detects development-profile support by this marker.
+if [[ "${HOL_GUARD_DEV_WHEEL:-}" == "1" ]]; then
+  echo "HOL_GUARD_DEV_WHEEL=1: unpublished development-profile wheel"
+fi

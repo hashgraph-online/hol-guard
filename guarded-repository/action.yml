@@ -1,0 +1,235 @@
+name: "HOL Guarded Repository"
+description: "Scan a repository, emit SARIF, create GitHub-signed provenance, and optionally register an expiring Guarded Repository verification."
+author: "HOL"
+
+inputs:
+  plugin_dir:
+    description: "Repository path to scan"
+    required: false
+    default: "."
+  profile:
+    description: "HOL Guard scanner policy profile"
+    required: false
+    default: "strict-security"
+  min_score:
+    description: "Minimum accepted scanner score (0-100)"
+    required: false
+    default: "0"
+  fail_on_severity:
+    description: "Fail if a finding reaches this severity"
+    required: false
+    default: "critical"
+  upload_sarif:
+    description: "Upload SARIF to GitHub code scanning"
+    required: false
+    default: "false"
+  visibility:
+    description: "Portal evidence visibility: public or private"
+    required: false
+    default: "private"
+  register_verification:
+    description: "Register evidence with the HOL Guard verifier. Use the trusted reusable workflow for this mode."
+    required: false
+    default: "false"
+  verification_endpoint:
+    description: "HTTPS Guarded Repository verification endpoint"
+    required: false
+    default: "https://hol.org/api/guard/repository-attestations"
+
+outputs:
+  score:
+    description: "Scanner score"
+    value: ${{ steps.scan.outputs.score }}
+  grade:
+    description: "Scanner grade"
+    value: ${{ steps.scan.outputs.grade }}
+  max_severity:
+    description: "Most severe finding"
+    value: ${{ steps.scan.outputs.max_severity }}
+  findings_total:
+    description: "Total scanner findings"
+    value: ${{ steps.scan.outputs.findings_total }}
+  sarif_path:
+    description: "Generated SARIF path"
+    value: ${{ steps.scan.outputs.report_path }}
+  evidence_path:
+    description: "Sanitized evidence path"
+    value: ${{ steps.evidence.outputs.evidence_path }}
+  evidence_sha256:
+    description: "Sanitized evidence SHA-256"
+    value: ${{ steps.evidence.outputs.evidence_sha256 }}
+  attestation_url:
+    description: "GitHub artifact attestation URL"
+    value: ${{ steps.attest.outputs.attestation-url }}
+  verification_status:
+    description: "Portal verification status"
+    value: ${{ steps.register.outputs.verification_status }}
+  verification_url:
+    description: "Public verification URL when available"
+    value: ${{ steps.register.outputs.verification_url }}
+  badge_url:
+    description: "Expiring public badge URL when available"
+    value: ${{ steps.register.outputs.badge_url }}
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        VISIBILITY: ${{ inputs.visibility }}
+        REGISTER_VERIFICATION: ${{ inputs.register_verification }}
+        VERIFICATION_ENDPOINT: ${{ inputs.verification_endpoint }}
+      run: |
+        set -euo pipefail
+        case "$VISIBILITY" in public|private) ;; *) echo "visibility must be public or private" >&2; exit 2 ;; esac
+        case "$REGISTER_VERIFICATION" in true|false) ;; *) echo "register_verification must be true or false" >&2; exit 2 ;; esac
+        if [ "$REGISTER_VERIFICATION" = "true" ] && [[ "$VERIFICATION_ENDPOINT" != https://* ]]; then
+          echo "verification_endpoint must use HTTPS" >&2
+          exit 2
+        fi
+
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: "3.12"
+
+    - name: Install action source
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 -P -m pip install "$GITHUB_ACTION_PATH/.."
+
+    - name: Scan repository to SARIF
+      id: scan
+      shell: bash
+      env:
+        MODE: scan
+        PLUGIN_DIR: ${{ inputs.plugin_dir }}
+        FORMAT: sarif
+        OUTPUT: ${{ runner.temp }}/guarded-repository.sarif
+        PROFILE: ${{ inputs.profile }}
+        MIN_SCORE: ${{ inputs.min_score }}
+        FAIL_ON: ${{ inputs.fail_on_severity }}
+        CISCO_SCAN: "off"
+        CISCO_MCP_SCAN: "off"
+        WRITE_STEP_SUMMARY: "true"
+        PR_COMMENT: "off"
+        SUBMISSION_ENABLED: "false"
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
+      run: python3 -P -m codex_plugin_scanner.action_runner
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload_sarif == 'true' && steps.scan.outputs.report_path != '' }}
+      uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7
+      with:
+        sarif_file: ${{ steps.scan.outputs.report_path }}
+        category: guarded-repository
+
+    - name: Build sanitized evidence
+      id: evidence
+      shell: bash
+      env:
+        REPOSITORY: ${{ github.repository }}
+        COMMIT_SHA: ${{ github.sha }}
+        RUN_ID: ${{ github.run_id }}
+        PROFILE: ${{ inputs.profile }}
+        SCORE: ${{ steps.scan.outputs.score }}
+        GRADE: ${{ steps.scan.outputs.grade }}
+        MAX_SEVERITY: ${{ steps.scan.outputs.max_severity }}
+        FINDINGS_TOTAL: ${{ steps.scan.outputs.findings_total }}
+        SARIF_PATH: ${{ steps.scan.outputs.report_path }}
+        VISIBILITY: ${{ inputs.visibility }}
+        EVIDENCE_PATH: ${{ runner.temp }}/guarded-repository-evidence.json
+      run: |
+        set -euo pipefail
+        python3 -P - <<'PY'
+        import os
+        from pathlib import Path
+        from codex_plugin_scanner import __version__ as scanner_version
+        from codex_plugin_scanner.guarded_repository_evidence import (
+            build_guarded_repository_evidence,
+            file_sha256,
+            guarded_repository_evidence_json,
+            guarded_repository_evidence_sha256,
+        )
+        evidence = build_guarded_repository_evidence(
+            repository=os.environ["REPOSITORY"],
+            commit_sha=os.environ["COMMIT_SHA"],
+            workflow_run_id=os.environ["RUN_ID"],
+            scanner_version=scanner_version,
+            scanner_profile=os.environ["PROFILE"],
+            score=int(os.environ["SCORE"] or "0"),
+            grade=os.environ["GRADE"] or "unknown",
+            max_severity=os.environ["MAX_SEVERITY"] or "none",
+            findings_total=int(os.environ["FINDINGS_TOTAL"] or "0"),
+            sarif_sha256=file_sha256(Path(os.environ["SARIF_PATH"])),
+            visibility=os.environ["VISIBILITY"],
+        )
+        path = Path(os.environ["EVIDENCE_PATH"])
+        path.write_text(guarded_repository_evidence_json(evidence), encoding="utf-8")
+        digest = guarded_repository_evidence_sha256(evidence)
+        with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+            handle.write(f"evidence_path={path}\n")
+            handle.write(f"evidence_sha256={digest}\n")
+        PY
+
+    - name: Create GitHub-signed provenance attestation
+      id: attest
+      uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d
+      with:
+        subject-path: ${{ steps.evidence.outputs.evidence_path }}
+        show-summary: true
+
+    - name: Register verification
+      id: register
+      shell: bash
+      env:
+        REGISTER_VERIFICATION: ${{ inputs.register_verification }}
+        VERIFICATION_ENDPOINT: ${{ inputs.verification_endpoint }}
+        EVIDENCE_PATH: ${{ steps.evidence.outputs.evidence_path }}
+        ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+        ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
+      run: |
+        set -euo pipefail
+        if [ "$REGISTER_VERIFICATION" != "true" ]; then
+          echo "verification_status=disabled" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        python3 -P - <<'PY'
+        import datetime
+        import json
+        import os
+        from pathlib import Path
+        from codex_plugin_scanner.guarded_repository_evidence import build_guarded_repository_evidence
+        from codex_plugin_scanner.guarded_repository_registration import register_guarded_repository_evidence
+        raw = json.loads(Path(os.environ["EVIDENCE_PATH"]).read_text(encoding="utf-8"))
+        evidence = build_guarded_repository_evidence(
+            repository=raw["repository"], commit_sha=raw["commit_sha"], workflow_run_id=raw["workflow_run_id"],
+            scanner_version=raw["scanner_version"], scanner_profile=raw["scanner_profile"], score=raw["score"],
+            grade=raw["grade"], max_severity=raw["max_severity"], findings_total=raw["findings_total"],
+            sarif_sha256=raw["sarif_sha256"], visibility=raw["visibility"],
+            generated_at=datetime.datetime.fromisoformat(raw["generated_at"].replace("Z", "+00:00")),
+        )
+        try:
+            result = register_guarded_repository_evidence(
+                evidence=evidence,
+                attestation_url=os.environ["ATTESTATION_URL"],
+                attestation_id=os.environ["ATTESTATION_ID"],
+                endpoint=os.environ["VERIFICATION_ENDPOINT"],
+                oidc_request_url=os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"],
+                oidc_request_token=os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"],
+            )
+        except Exception as error:
+            print(f"Guarded Repository portal registration unavailable: {type(error).__name__}")
+            result = {"status": "unavailable"}
+        with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+            handle.write(f"verification_status={result.get('status', 'unavailable')}\n")
+            handle.write(f"verification_url={result.get('verificationUrl', '')}\n")
+            handle.write(f"badge_url={result.get('badgeUrl', '')}\n")
+        PY

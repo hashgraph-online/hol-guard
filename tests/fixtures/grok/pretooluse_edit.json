@@ -1,0 +1,12 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-005",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "search_replace",
+  "toolInput": {
+    "path": "<workspace>/src/main.ts",
+    "old_string": "foo",
+    "new_string": "bar"
+  }
+}

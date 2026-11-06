@@ -1,0 +1,708 @@
+"""Tests for security checks."""
+
+import json
+import tempfile
+from pathlib import Path
+
+import pytest
+
+import codex_plugin_scanner.checks.security as security
+from codex_plugin_scanner.checks.security import (
+    _scan_all_files,
+    check_license,
+    check_mcp_transport_security,
+    check_no_approval_bypass_defaults,
+    check_no_dangerous_mcp,
+    check_no_hardcoded_secrets,
+    check_security_md,
+    run_security_checks,
+)
+from codex_plugin_scanner.models import ScanOptions
+from codex_plugin_scanner.scanner import scan_plugin
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _symlink_or_skip(link_path: Path, target: Path) -> None:
+    try:
+        link_path.symlink_to(target)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlinks are not supported in this environment")
+
+
+class TestSecurityMd:
+    def test_passes_when_found(self):
+        r = check_security_md(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 3
+
+    def test_fails_when_missing(self):
+        r = check_security_md(FIXTURES / "minimal-plugin")
+        assert not r.passed and r.points == 0
+
+
+class TestLicense:
+    def test_passes_for_apache(self):
+        r = check_license(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 3
+
+    def test_rejects_symlinked_license(self, tmp_path: Path):
+        outside = tmp_path.parent / f"{tmp_path.name}-license"
+        outside.write_text("Apache License, Version 2.0", encoding="utf-8")
+        _symlink_or_skip(tmp_path / "LICENSE", outside)
+
+        result = check_license(tmp_path)
+
+        assert result.passed is False
+
+    def test_passes_for_apache_canonical_url(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = Path(tmpdir)
+            (d / "LICENSE").write_text(
+                "Apache License\nSee https://www.apache.org/licenses/LICENSE-2.0 for the full text.\n"
+            )
+            r = check_license(d)
+            assert r.passed and r.points == 3
+            assert r.message == "LICENSE found (Apache-2.0)"
+
+    def test_does_not_treat_arbitrary_apache_hostname_text_as_canonical_license(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = Path(tmpdir)
+            (d / "LICENSE").write_text("Apache project notes mentioning www.apache.org are included here.")
+            r = check_license(d)
+            assert r.passed and r.points == 3
+            assert r.message == "LICENSE found"
+
+    def test_passes_for_mit(self):
+        r = check_license(FIXTURES / "mit-license")
+        assert r.passed and r.points == 3
+        assert "MIT" in r.message
+
+    def test_fails_when_missing(self):
+        r = check_license(FIXTURES / "minimal-plugin")
+        assert not r.passed and r.points == 0
+
+
+class TestNoHardcodedSecrets:
+    def test_passes_clean_dir(self):
+        r = check_no_hardcoded_secrets(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 7
+
+    def test_fails_with_secrets(self):
+        r = check_no_hardcoded_secrets(FIXTURES / "bad-plugin")
+        assert not r.passed and r.points == 0
+        assert "secrets.js" in r.message
+
+    def test_message_lists_file(self):
+        r = check_no_hardcoded_secrets(FIXTURES / "bad-plugin")
+        assert "secrets.js" in r.message
+
+    def test_handles_empty_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            r = check_no_hardcoded_secrets(Path(tmpdir))
+            assert r.passed and r.points == 7
+
+    def test_detects_provider_specific_tokens_in_text_svg_and_lock_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            github_token = "".join(("github_", "pat_", "abcdefghij", "klmnopqrst", "uvwxyz0123", "456789_ABCD"))
+            openai_token = "".join(("sk-", "proj-", "abcdefghij", "klmnopqrst", "uvwxyz0123", "456789ABCD"))
+            slack_app_token = "".join(("xapp-", "1-", "abcdefghij", "klmnopqrst", "uvwxyz0123456789"))
+            slack_user_token = "".join(("xoxe-", "1-", "abcdefghij", "klmnopqrst", "uvwxyz0123456789"))
+            slack_config_token = "".join(("xoxr-", "1-", "abcdefghij", "klmnopqrst", "uvwxyz0123456789"))
+            (root / "logo.svg").write_text(
+                f"<svg><!-- {github_token} --></svg>",
+                encoding="utf-8",
+            )
+            (root / "deps.lock").write_text(
+                f'openai = "{openai_token}"\n'
+                f'slack_app = "{slack_app_token}"\n'
+                f'slack_user = "{slack_user_token}"\n'
+                f'slack_config = "{slack_config_token}"\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert "logo.svg" in result.message
+            assert "deps.lock" in result.message
+
+    def test_ignores_placeholder_credentials_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "README.md").write_text(
+                'export JIRA_API_TOKEN="your-api-token"\n'
+                'const apiKey = "sk-proj-xxxxx"\n'
+                'export NUTRIENT_API_KEY="pdf_live_..."\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+
+    def test_detects_real_looking_generic_secret_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            jira_token = "".join(("A1b2C3d4", "E5f6G7h8", "I9j0K1l2"))
+            (root / "README.md").write_text(
+                f'export JIRA_API_TOKEN="{jira_token}"\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].file_path == "README.md"
+            assert result.findings[0].line_number == 1
+
+    def test_ignores_synthetic_secret_sequences_in_test_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            tests_dir = root / "tests"
+            tests_dir.mkdir()
+            aws_token = "".join(("AKIA", "ABCDEFGH", "IJKLMNOP"))
+            openai_token = "".join(("sk-proj-", "abcdefghij", "1234567890"))
+            github_token = "".join(("ghp_", "abcdefghij", "klmnopqrst", "uvwxyz", "ABCDEFGHIJ"))
+            (tests_dir / "secret_examples.test.js").write_text(
+                "if (await test('detectSecrets finds provider tokens', async () => {\n"
+                f"  const findings = detectSecrets('{aws_token} {openai_token} {github_token}');\n"
+                "  assert.ok(findings.length > 0);\n"
+                "})) passed += 1;\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+
+    def test_detects_real_provider_secret_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            openai_token = "".join(("sk-proj-", "A1b2C3d4", "E5f6G7h8", "I9j0K1l2"))
+            (root / "README.md").write_text(
+                f'const apiKey = "{openai_token}";\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
+
+    def test_ignores_truncated_private_key_example_but_detects_full_block(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pem_header = "-----BEGIN " + "RSA PRIVATE KEY-----"
+            pem_footer = "-----END " + "RSA PRIVATE KEY-----"
+            (root / "README.md").write_text(
+                f"Example:\n{pem_header}\nMIIE...\n",
+                encoding="utf-8",
+            )
+            assert check_no_hardcoded_secrets(root).passed is True
+
+            (root / "README.md").write_text(
+                f"{pem_header}\nMIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n{pem_footer}\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
+
+    def test_detects_short_real_secret_in_documentation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "README.md").write_text('token = "realpass123"\n', encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
+
+    def test_detects_placeholder_like_secret_in_source_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "app.py").write_text('token = "prod-demo-A1b2C3d4"\n', encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].file_path == "src/app.py"
+
+    def test_ignores_env_interpolations_in_scripts(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            scripts_dir = root / "scripts"
+            scripts_dir.mkdir()
+            (scripts_dir / "x.sh").write_text('API_KEY="${GEMINI_API_KEY:-}"\n', encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+            assert all(finding.rule_id != "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_ignores_bracketed_placeholders_in_source_code(self):
+        """Verify that enclosed, word-like bracketed placeholders in source code are not flagged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "tools.ts").write_text(
+                'const nextCall = { email: "user@example.com", password: "<password>" };\n'
+                'export const REDACTED_APP_TOKEN = "[redacted - call the reveal tool for appToken]";\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is True
+            assert all(finding.rule_id != "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_detects_bracket_prefixed_real_secret_in_source_code(self):
+        """Verify that unclosed or non-placeholder credentials starting with brackets are still caught."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "config.ts").write_text(
+                'const dbConfig = { password: "[Xk9!q2mZ7" };\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert any(finding.rule_id == "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_detects_closed_bracket_credential_looking_like_placeholder(self):
+        """Verify that enclosed pure-alphanumeric credentials like [Xk9q2mZ7] are still flagged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "config.ts").write_text(
+                'const dbConfig = { password: "[Xk9q2mZ7]" };\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert any(finding.rule_id == "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_detects_bracketed_prefix_in_multiline_literal(self):
+        """Verify that a bracketed prefix inside an unterminated or multiline literal is not skipped."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            src_dir = root / "src"
+            src_dir.mkdir()
+            (src_dir / "config.ts").write_text(
+                'const dbConfig = { password: "[REDACTED]\n' + 's3cr3tP@ssw0rd!" };\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert any(finding.rule_id == "HARDCODED_SECRET" for finding in result.findings)
+
+    def test_bracketed_placeholder_text_boundaries(self):
+        """Credential-shaped bracket contents stay flagged; word-like placeholders pass."""
+        helper = security._is_bracketed_placeholder_text
+        for placeholder in (
+            "<password>",
+            "<your-token-here>",
+            "<path/to/file>",
+            "[redacted - call the reveal tool for appToken]",
+            "[key: value]",
+            "[sha256-of-file]",
+            "<YOUR_API_KEY>",
+        ):
+            assert helper(placeholder) is True
+        for credential in (
+            "[Xk9q2mZ7]",
+            "[hunter2hunter2]",
+            "[Xk9q-2mZ7]",
+            "<Prod_Db.Pass2024>",
+            "[unclosed",
+        ):
+            assert helper(credential) is False
+
+    def test_detects_plain_provider_token_examples_without_illustrative_context(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            github_token = "".join(("ghp_", "abcdefghij", "klmnopqrst", "uvwxyz", "ABCDEFGHIJ"))
+            (root / "README.md").write_text(f"{github_token}\n", encoding="utf-8")
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].file_path == "README.md"
+
+    def test_detects_truncated_private_key_with_real_body(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pem_header = "-----BEGIN " + "RSA PRIVATE KEY-----"
+            (root / "README.md").write_text(
+                f"{pem_header}\nMIIEpAIBAAKCAQEA1234567890abcdefghijklmnopqrstuv==\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.findings[0].line_number == 1
+
+
+class TestNoDangerousMcp:
+    def test_passes_when_no_mcp(self):
+        r = check_no_dangerous_mcp(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 0
+        assert not r.applicable
+
+    def test_fails_with_dangerous_commands(self):
+        r = check_no_dangerous_mcp(FIXTURES / "bad-plugin")
+        assert not r.passed and r.points == 0
+
+    def test_passes_when_mcp_is_safe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"command":"echo","args":["hello"]}}}')
+            r = check_no_dangerous_mcp(Path(tmpdir))
+            assert r.passed and r.points == 4
+
+    def test_rejects_symlinked_mcp_config(self, tmp_path: Path):
+        outside = tmp_path.parent / f"{tmp_path.name}-mcp.json"
+        outside.write_text('{"mcpServers": {}}', encoding="utf-8")
+        _symlink_or_skip(tmp_path / ".mcp.json", outside)
+
+        dangerous = check_no_dangerous_mcp(tmp_path)
+        transport = check_mcp_transport_security(tmp_path)
+
+        assert dangerous.passed is False
+        assert dangerous.findings[0].rule_id == "MCP_CONFIG_UNREADABLE"
+        assert transport.passed is False
+
+    def test_rejects_dangling_mcp_config_symlink(self, tmp_path: Path):
+        _symlink_or_skip(tmp_path / ".mcp.json", tmp_path / "host-only-mcp.json")
+
+        dangerous = check_no_dangerous_mcp(tmp_path)
+        transport = check_mcp_transport_security(tmp_path)
+
+        assert dangerous.passed is False
+        assert dangerous.applicable is True
+        assert dangerous.findings[0].rule_id == "MCP_CONFIG_UNREADABLE"
+        assert transport.passed is False
+        assert transport.applicable is True
+
+
+class TestMcpTransportSecurity:
+    def test_not_applicable_for_stdio_only_configs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"command":"echo","args":["hello"]}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 0
+            assert not r.applicable
+
+    def test_passes_for_https_remote_transport(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"url":"https://example.com/mcp"}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 4
+
+    def test_fails_for_insecure_remote_transport(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"unsafe":{"url":"http://0.0.0.0:8080/mcp"}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert not r.passed and r.points == 0
+
+    def test_passes_for_loopback_remote_transport(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"url":"http://127.0.0.2:8080/mcp"}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 4
+
+    def test_ignores_metadata_urls_when_collecting_transport_endpoints(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text(
+                ('{"mcpServers":{"safe":{"command":"echo","metadata":{"homepage":{"url":"http://example.com"}}}}}'),
+                encoding="utf-8",
+            )
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 0
+            assert not r.applicable
+
+    def test_fails_for_invalid_mcp_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text("{invalid", encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert not r.passed and r.points == 0
+            assert r.max_points == 4
+            assert r.findings[0].rule_id == "MCP_CONFIG_INVALID_JSON"
+
+
+class TestScanAllFiles:
+    def test_skips_excluded_dirs(self):
+        files = _scan_all_files(FIXTURES / "good-plugin")
+        paths = [str(f) for f in files]
+        for p in paths:
+            assert "node_modules" not in p
+            assert ".git" not in p
+
+    def test_skips_binary_files(self):
+        files = _scan_all_files(FIXTURES / "good-plugin")
+        binary_exts = {".png", ".jpg", ".wasm"}
+        for f in files:
+            assert f.suffix.lower() not in binary_exts
+
+    def test_keeps_text_svg_and_lock_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "logo.svg").write_text("<svg>safe</svg>", encoding="utf-8")
+            (root / "deps.lock").write_text("package = 1\n", encoding="utf-8")
+
+            files = _scan_all_files(root)
+            names = {path.name for path in files}
+
+            assert "logo.svg" in names
+            assert "deps.lock" in names
+
+    def test_returns_list_of_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "test.txt").write_text("hello")
+            files = _scan_all_files(Path(tmpdir))
+            assert len(files) == 1
+            assert files[0].name == "test.txt"
+
+    def test_skips_symlinked_files_outside_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outside = root.parent / "outside-secret.txt"
+            outside.write_text('token = "super-secret-token"', encoding="utf-8")
+            _symlink_or_skip(root / "linked-secret.txt", outside)
+            files = _scan_all_files(root)
+            assert files == []
+
+    def test_hardcoded_secret_check_ignores_symlinked_files_outside_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outside = root.parent / "outside-secret.js"
+            outside.write_text('const token = "super-secret-token";', encoding="utf-8")
+            _symlink_or_skip(root / "linked-secret.js", outside)
+            result = check_no_hardcoded_secrets(root)
+            assert result.passed is True
+
+    def test_explicit_scan_paths_are_normalized_under_a_symlinked_root(self, tmp_path: Path):
+        root = tmp_path / "plugin"
+        root.mkdir()
+        candidate = root / "README.md"
+        candidate.write_text("safe", encoding="utf-8")
+        alias = tmp_path / "plugin-alias"
+        try:
+            alias.symlink_to(root, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            pytest.skip("directory symlinks are not supported in this environment")
+
+        result = check_no_hardcoded_secrets(alias, (alias / candidate.name,))
+
+        assert result.passed is True
+
+    def test_missing_explicit_scan_path_fails_closed(self, tmp_path: Path):
+        result = check_no_hardcoded_secrets(tmp_path, (tmp_path / "missing.md",))
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "SCAN_INPUT_UNREADABLE"
+
+    def test_resource_budget_exhaustion_blocks_incomplete_secret_scan(self, tmp_path, monkeypatch):
+        (tmp_path / "one.txt").write_text("safe", encoding="utf-8")
+        (tmp_path / "two.txt").write_text("safe", encoding="utf-8")
+        monkeypatch.setattr(security, "MAX_SCAN_FILES", 1)
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "SCAN_RESOURCE_BUDGET_EXCEEDED"
+
+    def test_match_budget_exhaustion_blocks_incomplete_secret_scan(self, tmp_path, monkeypatch):
+        (tmp_path / "README.md").write_text(
+            "\n".join('token = "your-api-token"' for _index in range(4)),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(security, "MAX_SECRET_MATCHES_PER_FILE", 2)
+
+        result = check_no_hardcoded_secrets(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "SCAN_RESOURCE_BUDGET_EXCEEDED"
+
+
+class TestNoApprovalBypassDefaults:
+    def test_flags_shipped_config(self, tmp_path: Path):
+        """A shipped config that sets the sandbox default is reported on its path."""
+        (tmp_path / ".codex").mkdir()
+        (tmp_path / ".codex" / "config.toml").write_text('sandbox_mode = "danger-full-access"\n', encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is False
+        assert result.points == 0
+        assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
+        assert result.findings[0].file_path == ".codex/config.toml"
+
+    @pytest.mark.parametrize(
+        ("path", "content"),
+        [
+            (
+                "docs/rules/agent-shell.md",
+                "- Codex: `--full-auto`, sandbox `danger-full-access`, or `safety-strategy: unsafe`;\n",
+            ),
+            ("CHANGELOG.md", "Codex runs with sandbox `danger-full-access` are now reported.\n"),
+            ("README.md", "```\nexample\n```\n\nNever ship `danger-full-access` as a default.\n"),
+            ("docs/setup.md", "The sandbox modes are listed below,\n    and `danger-full-access` is one of them.\n"),
+            ("README.md", "Never enable `danger-full-access` by default.\n"),
+            ("docs/setup.md", "Using `danger-full-access` is risky; keep the default sandbox.\n"),
+            ("README.md", "Avoid using `danger-full-access`.\n"),
+            ("README.md", "Do not enable `danger-full-access`.\n"),
+            ("README.md", "Use the default sandbox and never enable `danger-full-access`.\n"),
+            ("docs/setup.md", "> ```\n> example\n> ```\n\nThe modes include `danger-full-access`.\n"),
+        ],
+    )
+    def test_documentation_that_names_the_value_passes(self, tmp_path: Path, path: str, content: str):
+        """Prose that only names the value in an inline code span is not reported."""
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is True
+        assert result.points == 3
+
+    @pytest.mark.parametrize(
+        ("path", "content"),
+        [
+            ("docs/setup.md", '```toml\nsandbox_mode = "danger-full-access"\n```\n'),
+            ("docs/setup.md", "```\n`danger-full-access`\n```\n"),
+            ("docs/setup.md", "````\n```\nsandbox `danger-full-access`\n````\n"),
+            ("docs/setup.md", "```\nunclosed fence\nsandbox `danger-full-access`\n"),
+            ("docs/setup.md", "    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "Intro.\n\n    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "# Modes\n    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "> ```\n> sandbox `danger-full-access`\n> ```\n"),
+            ("docs/setup.md", "- ```\n  sandbox `danger-full-access`\n  ```\n"),
+            ("docs/setup.md", "- outer\n  - inner\n    ```bash\n    sandbox `danger-full-access`\n    ```\n"),
+            ("docs/setup.md", "```\n    ```\nsandbox `danger-full-access`\n```\n"),
+            ("docs/setup.md", "```\n> ```\nsandbox `danger-full-access`\n"),
+            ("docs/setup.md", "> ```\n> > ```\n> sandbox `danger-full-access`\n"),
+            ("README.md", "Use `danger-full-access` to run without approval prompts.\n"),
+            ("README.md", "Enable `danger-full-access` instead of `workspace-write`.\n"),
+            ("README.md", "To avoid approval prompts, use `danger-full-access`.\n"),
+            ("README.md", "Do not use the default sandbox, select `danger-full-access`.\n"),
+            ("README.md", "For setup, disable the Codex sandbox by selecting `danger-full-access`.\n"),
+            ("docs/setup.md", "Set `sandbox_mode` to `danger-full-access` to disable the sandbox.\n"),
+            ("docs/setup.md", "Use `danger-full-access` for this project.\n"),
+            ("docs/setup.md", '1. ```toml\n   sandbox_mode = "danger-full-access"\n   ```\n'),
+            ("docs/setup.md", "Run `codex --sandbox` `danger-full-access`.\n"),
+            ("docs/setup.md", "Set `sandbox_mode =` `danger-full-access`.\n"),
+            ("docs/setup.md", "--sandbox" + " " * 300 + "`danger-full-access`\n"),
+            ("docs/setup.md", "sandbox_mode =" + " " * 300 + "`danger-full-access`\n"),
+            ("docs/setup.md", "Start with `codex --sandbox danger-full-access`.\n"),
+            ("docs/setup.md", "Start with --sandbox `danger-full-access`.\n"),
+            ("docs/setup.md", "Set sandbox_mode: `danger-full-access`.\n"),
+            ("docs/setup.md", "Set sandbox_mode = `danger-full-access`.\n"),
+            ("docs/setup.md", "Set the sandbox to danger-full-access.\n"),
+            ("docs/setup.md", "sandbox ``danger-full-access``\n"),
+            ("docs/setup.md", 'Use `approval_policy = "never"`.\n'),
+            ("docs/setup.md", 'approval_policy =\n"never"\n'),
+            ("docs/setup.md", 'sandbox `danger-full-access` with `approvalMode: "bypass"`\n'),
+            ("skills/review/SKILL.md", "Run with sandbox `danger-full-access`.\n"),
+            ("commands/deploy.md", "Use sandbox `danger-full-access`.\n"),
+            ("AGENTS.md", "Use sandbox `danger-full-access`.\n"),
+            (".claude/rules/shell.md", "Use sandbox `danger-full-access`.\n"),
+            ("system-prompt.md", "Use sandbox `danger-full-access`.\n"),
+        ],
+    )
+    def test_documentation_that_sets_or_instructs_still_fails(self, tmp_path: Path, path: str, content: str):
+        """Code, settings, flags, prose without a code span and instruction files are still reported."""
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
+        assert result.findings[0].file_path == path
+
+    def test_many_mentions_on_one_line_stay_linear(self, tmp_path: Path):
+        """A long line full of harmless mentions is scanned without copying its prefix per match."""
+        (tmp_path / "README.md").write_text("`danger-full-access` " * 50_000 + "\n", encoding="utf-8")
+
+        assert check_no_approval_bypass_defaults(tmp_path).passed is True
+
+    def test_instruction_files_are_strict_and_the_directory_is_still_scanned(self, tmp_path: Path):
+        """A manifest-declared instruction file is reported, and so is a config elsewhere in the directory."""
+        (tmp_path / "boot.md").write_text("Supported modes include `danger-full-access`.\n", encoding="utf-8")
+        (tmp_path / "settings.toml").write_text('sandbox_mode = "danger-full-access"\n', encoding="utf-8")
+
+        before = check_no_approval_bypass_defaults(tmp_path)
+        assert [finding.file_path for finding in before.findings] == ["settings.toml"]
+        result = check_no_approval_bypass_defaults(tmp_path, instruction_files=(tmp_path / "./boot.md",))
+
+        assert sorted(finding.file_path or "" for finding in result.findings) == ["boot.md", "settings.toml"]
+
+    def test_gemini_context_file_is_read_as_instructions(self, tmp_path: Path):
+        """A Gemini extension's manifest-declared context file gets no documentation exception."""
+        manifest = {"name": "ext", "version": "1.0.0", "contextFileName": "boot.md"}
+        (tmp_path / "gemini-extension.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (tmp_path / "boot.md").write_text("Supported modes include `danger-full-access`.\n", encoding="utf-8")
+
+        result = scan_plugin(tmp_path, ScanOptions(ecosystem="gemini", cisco_skill_scan="off"))
+
+        flagged = [finding.file_path for finding in result.findings if finding.rule_id == "RISKY_APPROVAL_DEFAULT"]
+        assert flagged == ["boot.md"]
+
+    def test_declared_files_are_read_as_instructions(self, tmp_path: Path):
+        """A file an ecosystem declares as package content gets no documentation exception."""
+        target = tmp_path / "guide.md"
+        target.write_text("Supported modes include `danger-full-access`.\n", encoding="utf-8")
+
+        assert check_no_approval_bypass_defaults(tmp_path).passed is True
+        result = check_no_approval_bypass_defaults(tmp_path, (target,))
+
+        assert result.passed is False
+        assert result.findings[0].file_path == "guide.md"
+
+
+class TestRunSecurityChecks:
+    def test_good_plugin_gets_16(self):
+        results = run_security_checks(FIXTURES / "good-plugin")
+        assert sum(c.points for c in results) == 16
+        assert sum(c.max_points for c in results) == 16
+
+    def test_bad_plugin_detects_issues(self):
+        results = run_security_checks(FIXTURES / "bad-plugin")
+        names = {c.name: c.passed for c in results}
+        assert names["No hardcoded secrets"] is False
+        assert names["No dangerous MCP commands"] is False
+
+    def test_minimal_plugin_partial(self):
+        results = run_security_checks(FIXTURES / "minimal-plugin")
+        total = sum(c.points for c in results)
+        assert 0 < total < 16
+
+    def test_returns_tuple_of_correct_length(self):
+        results = run_security_checks(FIXTURES / "good-plugin")
+        assert isinstance(results, tuple)
+        assert len(results) == 7

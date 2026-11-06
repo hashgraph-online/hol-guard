@@ -1,0 +1,180 @@
+"""Regression coverage for Cisco packaging and repo install surfaces."""
+
+from __future__ import annotations
+
+import sys
+from importlib.metadata import metadata
+from pathlib import Path
+
+import yaml
+from packaging.markers import default_environment
+from packaging.requirements import Requirement
+
+from tests.support.ci_workflow import expand_ci_job_actions
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject["project"]
+    requires_python = project["requires-python"]
+    dependency_entries = project["dependencies"]
+    dependencies = " ".join(dependency_entries)
+    cisco_extra = " ".join(project["optional-dependencies"]["cisco"])
+    cisco_mcp_group = " ".join(pyproject["dependency-groups"]["cisco-mcp"])
+    override_entries = pyproject["tool"]["uv"]["override-dependencies"]
+
+    assert requires_python == ">=3.10"
+    assert "cisco-ai-mcp-scanner" not in dependencies
+    assert "cisco-ai-mcp-scanner" not in cisco_extra
+    assert "cisco-ai-mcp-scanner==4.8.1" in cisco_mcp_group
+    assert "cisco-ai-skill-scanner~=2.0.12" in cisco_extra
+    assert "litellm==1.93.2" in cisco_extra
+    assert "python_version < '3.15'" in cisco_extra
+    assert "python_full_version >= '3.11.4'" in cisco_mcp_group
+    assert "cisco-ai-skill-scanner" not in dependencies
+    assert "litellm" not in dependencies
+    assert "requests>=2.32,<3" in dependency_entries
+    assert "cryptography>=50.0.0" in dependency_entries
+    assert "aiohttp==3.14.4" in override_entries
+    assert "click==8.4.1" in override_entries
+    assert "cisco-ai-skill-scanner==2.0.12" in override_entries
+    assert "filelock==3.20.3; python_version < '3.11'" in override_entries
+    assert "filelock>=4.2.1; python_version >= '3.11'" in override_entries
+    assert "importlib-metadata==8.9.0" in override_entries
+    assert "jsonschema==4.26.0" in override_entries
+    assert "litellm==1.93.2" in override_entries
+    assert "magika==1.0.3" in override_entries
+    assert "openai==2.41.1" in override_entries
+    assert "multidict>=6.9.1" in override_entries
+    assert "pyjwt==2.15.0" in override_entries
+    assert "python-dotenv==1.2.2" in override_entries
+    assert "python-multipart==0.0.32" in override_entries
+    assert "setuptools>=84.1.0" in override_entries
+    assert "starlette==1.3.1" in override_entries
+    assert "tokenizers==0.23.1" in override_entries
+    assert "urllib3==2.8.0" in override_entries
+    assert "cisco-ai-a2a-scanner" not in dependencies
+    assert "cisco-ai-a2a-scanner" not in cisco_extra
+    assert "rich>=14.0,<15" in dependency_entries
+    assert "rich>=15.0.0" not in dependency_entries
+
+
+def test_installed_metadata_constrains_optional_litellm_on_python_314() -> None:
+    requirements = [Requirement(value) for value in metadata("hol-guard").get_all("Requires-Dist", [])]
+    optional_litellm = [
+        requirement
+        for requirement in requirements
+        if requirement.name == "litellm" and "extra" in str(requirement.marker)
+    ]
+    assert len(optional_litellm) == 1
+    assert str(optional_litellm[0].specifier) == "==1.93.2"
+
+    python_314: dict[str, str] = default_environment() | {
+        "python_full_version": "3.14.6",
+        "python_version": "3.14",
+    }
+    python_315: dict[str, str] = default_environment() | {
+        "python_full_version": "3.15.0",
+        "python_version": "3.15",
+    }
+    assert optional_litellm[0].marker is not None
+    assert optional_litellm[0].marker.evaluate(python_314 | {"extra": "cisco"})
+    assert not optional_litellm[0].marker.evaluate(python_314 | {"extra": ""})
+    assert not optional_litellm[0].marker.evaluate(python_315 | {"extra": "cisco"})
+
+
+def test_pyproject_exposes_guard_and_scanner_commands_without_codex_alias() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    scripts = project["scripts"]
+
+    assert scripts["hol-guard"] == "codex_plugin_scanner.cli:main"
+    assert scripts["plugin-scanner"] == "codex_plugin_scanner.cli:main"
+    assert scripts["plugin-guard"] == "codex_plugin_scanner.cli:main"
+    assert scripts["plugin-ecosystem-scanner"] == "codex_plugin_scanner.cli:main"
+    assert "codex-plugin-scanner" not in scripts
+
+
+def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "pipx install hol-guard" in readme
+    assert "pipx install plugin-scanner" in readme
+    assert "baseline packages work without Cisco dependencies" in readme
+    assert "pipx install 'plugin-scanner[cisco]'" in readme
+    assert "Python 3.11 through 3.14" in readme
+    assert "published `cisco` extra provides skill scanning" in readme
+    assert "uv sync --extra dev --extra cisco --group cisco-mcp --python 3.13" in readme
+    assert "--cisco-skill-scan on --cisco-mcp-scan on" in readme
+
+
+def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
+    """Verify repo controlled surfaces prefer cisco extra where supported."""
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
+    ci_workflow = "\n".join([*jobs, *(step.get("run", "") for job in jobs.values() for step in job["steps"])])
+    publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    docker_requirements = (ROOT / "docker-requirements.txt").read_text(encoding="utf-8")
+
+    assert "cisco-full" in ci_workflow
+    assert "python3.13 -m pip install --dry-run --no-deps --require-hashes -r docker-requirements.txt" in ci_workflow
+    assert "uv sync --frozen --no-dev --group ci-test --extra cisco --group cisco-mcp --python 3.13" in ci_workflow
+    assert "uv sync --frozen --no-dev --group ci-test --python ${{ matrix.python-version }}" in ci_workflow
+    assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
+    assert "scripts/ci/generate_release_notes.py" in publish_workflow
+    release_notes_script = (ROOT / "scripts" / "ci" / "generate_release_notes.py").read_text(encoding="utf-8")
+    assert 'uv tool install "hol-guard[cisco]==' in release_notes_script
+    assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
+    assert "FROM python:3.13-slim@" in dockerfile
+    assert "FROM python:3.14-slim" not in dockerfile
+    assert "python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt" in dockerfile
+    assert "apt-get install -y --no-install-recommends gcc libc6-dev" in dockerfile
+    assert "apt-get purge -y --auto-remove gcc libc6-dev" in dockerfile
+    assert "apt-get clean" in dockerfile
+    requirements_copy_index = dockerfile.index("COPY docker-requirements.txt LICENSE README.md /app/")
+    build_deps_index = dockerfile.index("apt-get install -y --no-install-recommends gcc libc6-dev")
+    pip_install_index = dockerfile.index(
+        "python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt"
+    )
+    purge_index = dockerfile.index("apt-get purge -y --auto-remove gcc libc6-dev")
+    source_copy_index = dockerfile.index("COPY src /app/src")
+    assert requirements_copy_index < pip_install_index
+    assert requirements_copy_index < source_copy_index
+    assert build_deps_index < pip_install_index
+    assert pip_install_index < purge_index
+    assert "cryptography==50.0.0" in docker_requirements
+    assert "aiohttp==3.14.4" in docker_requirements
+    assert "cisco-ai-mcp-scanner==" in docker_requirements
+    assert "importlib-metadata==8.9.0" in docker_requirements
+    assert "litellm==1.93.2" in docker_requirements
+    assert "python-dotenv==1.2.2" in docker_requirements
+    assert "python-multipart==0.0.32" in docker_requirements
+    # The image installs these pins with --no-deps, so the patched versions
+    # have to be carried here and not only in the project manifest.
+    assert "filelock==4.2.4" in docker_requirements
+    assert "mcp==1.30.0" in docker_requirements
+    assert "multidict==6.9.1" in docker_requirements
+    assert "pyjwt==2.15.0" in docker_requirements
+    assert "starlette==1.3.1" in docker_requirements
+    assert "tokenizers==0.23.1" in docker_requirements
+    assert "--hash=sha256:" in docker_requirements
+    assert "uv sync --extra dev" in contributing
+    assert "uv sync --extra dev --extra cisco --group cisco-mcp" in contributing
+
+
+def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:
+    publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
+
+    assert "Build Guard package (hol-guard)" in publish_workflow
+    assert "Build scanner package (plugin-scanner)" in publish_workflow
+    assert "Build codex compatibility alias" not in publish_workflow
+    assert 'name = "codex-plugin-scanner"' not in publish_workflow
+    assert 'codex-plugin-scanner = "codex_plugin_scanner.cli:main"' not in publish_workflow
+    assert "uv tool install codex-plugin-scanner==" not in publish_workflow

@@ -1,0 +1,386 @@
+"""CLI tests for Codex resume retry and diagnostics."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
+from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.codex_app_server_fake import codex_app_server
+
+
+def _request(request_id: str) -> GuardApprovalRequest:
+    return GuardApprovalRequest(
+        request_id=request_id,
+        harness="codex",
+        artifact_id=f"codex:project:{request_id}",
+        artifact_name=request_id,
+        artifact_hash=f"hash-{request_id}",
+        policy_action="require-reapproval",
+        recommended_scope="artifact",
+        changed_fields=("args",),
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        workspace="/workspace",
+        launch_target="cat ~/.npmrc",
+        review_command=f"hol-guard approvals approve {request_id}",
+        approval_url=f"http://127.0.0.1/pending/{request_id}",
+    )
+
+
+def _seed_codex_operation(
+    store: GuardStore,
+    *,
+    request_id: str,
+    socket_path: Path | None,
+    workspace: str = "/workspace",
+    codex_home: str | None = None,
+    thread_id: str = "thread-1",
+) -> None:
+    session = store.upsert_guard_session(
+        session_id=f"session-{request_id}",
+        harness="codex",
+        surface="harness-adapter",
+        status="waiting_on_approval",
+        client_name="codex-hook",
+        client_title="Codex hook",
+        client_version="1.0.0",
+        workspace=workspace,
+        capabilities=["approval-resolution"],
+        now="2026-05-19T10:00:00+00:00",
+    )
+    metadata: dict[str, object] = {
+        "codex_thread_id": thread_id,
+        "codex_turn_id": "turn-1",
+        "workspace": workspace,
+    }
+    if socket_path is not None:
+        metadata["codex_app_server_socket"] = str(socket_path)
+    if codex_home is not None:
+        metadata["codex_home"] = codex_home
+    store.upsert_guard_operation(
+        operation_id=f"operation-{request_id}",
+        session_id=str(session["session_id"]),
+        harness="codex",
+        operation_type="tool_call",
+        status="waiting_on_approval",
+        approval_request_ids=[request_id],
+        resume_token=f"resume-{request_id}",
+        metadata=metadata,
+        now="2026-05-19T10:00:00+00:00",
+    )
+
+
+def test_guard_approvals_resume_retries_failed_codex_resume(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli"), "2026-05-19T10:00:00+00:00")
+    with codex_app_server() as server:
+        _seed_codex_operation(store, request_id="req-cli", socket_path=server.socket_path)
+        store.resolve_approval_request(
+            "req-cli",
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-05-19T10:01:00+00:00",
+        )
+
+        rc = main(["guard", "approvals", "resume", "req-cli", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["request_id"] == "req-cli"
+    assert output["status"] == "sent"
+    [continuation] = server.continuations()
+    assert continuation["params"]["threadId"] == "thread-1"
+    assert continuation["params"]["responsesapiClientMetadata"]["hol_guard_request_id"] == "req-cli"
+
+
+def test_guard_approvals_resume_uses_codex_home_default_socket(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-home"), "2026-05-19T10:00:00+00:00")
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-cli-home",
+            socket_path=None,
+            codex_home=str(server.codex_home),
+        )
+        store.resolve_approval_request(
+            "req-cli-home",
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-05-19T10:01:00+00:00",
+        )
+
+        rc = main(["guard", "approvals", "resume", "req-cli-home", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "sent"
+    [continuation] = server.continuations()
+    assert continuation["params"]["responsesapiClientMetadata"]["hol_guard_request_id"] == "req-cli-home"
+
+
+def test_default_codex_app_server_socket_probe_uses_codex_home(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="hg-", dir="/tmp") as root:
+        codex_home = Path(root)
+        socket_path = codex_home / "app-server-control" / "app-server-control.sock"
+        socket_path.parent.mkdir(parents=True)
+        with codex_app_server_module.socket.socket(
+            codex_app_server_module.socket.AF_UNIX,
+            codex_app_server_module.socket.SOCK_STREAM,
+        ) as listener:
+            listener.bind(str(socket_path))
+        connect_paths: list[str] = []
+
+        class _FakeSocket:
+            def __enter__(self) -> _FakeSocket:
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def settimeout(self, _timeout: float) -> None:
+                return None
+
+            def connect(self, path: str) -> None:
+                connect_paths.append(path)
+
+        monkeypatch.setattr(codex_app_server_module.socket, "socket", lambda *_args, **_kwargs: _FakeSocket())
+
+        assert (
+            codex_app_server_module.default_codex_app_server_socket_path(environ={"CODEX_HOME": str(codex_home)})
+            == socket_path
+        )
+        assert codex_app_server_module.default_codex_app_server_socket_available(
+            environ={"CODEX_HOME": str(codex_home)}
+        )
+        assert connect_paths == [str(socket_path)]
+
+
+def test_codex_app_server_rejects_regular_file_as_control_socket(tmp_path: Path) -> None:
+    fake_socket = tmp_path / "app-server.sock"
+    fake_socket.write_text("not a socket", encoding="utf-8")
+
+    assert codex_app_server_module._is_trusted_local_socket(fake_socket) is False
+
+
+def test_guard_doctor_codex_reports_resume_diagnostics(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    GuardStore(guard_home)
+
+    rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["codex_resume"]["codex_binary_found"] is False
+    assert output["codex_resume"]["app_server_support"] in {True, False}
+    assert "remote-control socket" in output["codex_resume"]["app_server_support_reason"]
+    assert output["codex_resume"]["app_server_socket_available"] in {True, False}
+    assert output["codex_resume"]["headless_resume_support"] is False
+    assert "Disabled by design" in output["codex_resume"]["headless_resume_support_reason"]
+    assert output["codex_resume"]["latest_attempt"] is None
+
+
+def test_guard_doctor_codex_reports_headless_resume_disabled(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    GuardStore(guard_home)
+
+    rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["codex_resume"]["codex_binary_found"] is False
+    assert output["codex_resume"]["app_server_support"] in {True, False}
+    assert "remote-control socket" in output["codex_resume"]["app_server_support_reason"]
+    assert output["codex_resume"]["app_server_socket_available"] in {True, False}
+    assert output["codex_resume"]["headless_resume_support"] is False
+    assert "does not continue the visible Codex App chat" in output["codex_resume"]["headless_resume_support_reason"]
+    assert "remote_control_support" not in output["codex_resume"]
+
+
+def test_guard_approvals_resume_rejects_unsafe_headless_thread_id(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-unsafe"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-unsafe",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home="/tmp/codex-home",
+        thread_id="unsafe\nthread",
+    )
+    store.resolve_approval_request(
+        "req-cli-unsafe",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-unsafe", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "skipped"
+    assert output["reason"] == "unsafe_thread_id"
+    assert output["strategy"] == "codex-app-server-thread"
+    assert "a new tool call may require fresh approval" in output["message"]
+
+
+def test_guard_approvals_resume_requires_app_server_when_socket_unavailable(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-exec"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-exec",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+    )
+    store.resolve_approval_request(
+        "req-cli-exec",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-exec", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "failed"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
+    assert "original Codex chat" in output["message"]
+
+
+def test_guard_approvals_resume_does_not_start_headless_codex_for_blocked_request(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-block"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-block",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+    )
+    store.resolve_approval_request(
+        "req-cli-block",
+        resolution_action="block",
+        resolution_scope="artifact",
+        reason="blocked",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-block", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "skipped"
+    assert output["reason"] == "blocked_not_resumed"
+    assert output["supported"] is False
+    assert "blocked this Codex request" in output["message"]
+
+
+def test_guard_approvals_resume_reports_missing_app_server_without_spawning(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-no-home"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-no-home",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home=str(tmp_path / "missing-codex-home"),
+    )
+    store.resolve_approval_request(
+        "req-cli-no-home",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-no-home", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "failed"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
+
+
+def test_guard_approvals_resume_command_reports_resident_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import approval_commands
+    from codex_plugin_scanner.guard.codex_resume import ResumeUnavailableError
+
+    def _retry(*args: object, **kwargs: object) -> dict[str, object]:
+        raise ResumeUnavailableError()
+
+    monkeypatch.setattr(approval_commands, "retry_request_resume", _retry)
+    store = GuardStore(tmp_path / "guard-home")
+    payload, code = approval_commands.run_approval_resume_command(
+        argparse.Namespace(request_id="req-unavailable", force=False),
+        store=store,
+    )
+
+    assert payload == {"error": "resume_unavailable", "request_id": "req-unavailable"}
+    assert code == 1

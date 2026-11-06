@@ -1,0 +1,8 @@
+{
+  "name": "invalid-marketplace",
+  "plugins": [
+    {
+      "source": "https://github.com/example/plugin"
+    }
+  ]
+}

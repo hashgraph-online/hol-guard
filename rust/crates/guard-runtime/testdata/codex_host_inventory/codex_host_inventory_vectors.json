@@ -1,0 +1,5754 @@
+{
+ "cases": [
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "One",
+      "tools": []
+     },
+     {
+      "app_id": "two",
+      "callable": true,
+      "enabled": false,
+      "metadata_available": false,
+      "name": "two",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-two-apps",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "One"
+      },
+      {
+       "callable": true,
+       "enabled": false,
+       "id": "two"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": []
+   },
+   "name": "installed-empty-list",
+   "request": {
+    "installed": {
+     "apps": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "installed-apps-missing",
+   "request": {
+    "installed": {}
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "installed-apps-null",
+   "request": {
+    "installed": {
+     "apps": null
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "installed-apps-object",
+   "request": {
+    "installed": {
+     "apps": {
+      "one": {
+       "callable": false,
+       "enabled": true,
+       "id": "one"
+      }
+     }
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "installed-apps-text",
+   "request": {
+    "installed": {
+     "apps": "one"
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-row-text",
+   "request": {
+    "installed": {
+     "apps": [
+      "one"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-row-null",
+   "request": {
+    "installed": {
+     "apps": [
+      null
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-duplicate-id",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one"
+      },
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "one",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-extra-fields-ignored",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "isAccessible": true,
+       "tools": [
+        {
+         "name": "x"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-0",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": " example"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-1",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "example\n"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-2",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "example tool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-3",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "\u0000example"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-4",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": ""
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-id-5",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-6",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-id-7",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-8",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-9",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "a\u0007"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "a",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-id-10",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "a"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-11",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "a　"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-12",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "a\u001f"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-13",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "a"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "a​",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a​",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-id-14",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "a​"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "café",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "café",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-id-15",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "café"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-16",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": 7
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-17",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-id-missing",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": true,
+       "enabled": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-enabled-0",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": 1,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-enabled-1",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": 0,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-enabled-2",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": "true",
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-enabled-3",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": null,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-enabled-4",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": [
+        true
+       ],
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-enabled-missing",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-callable-0",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": 1,
+       "enabled": true,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-callable-1",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": 0,
+       "enabled": true,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-callable-2",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": "true",
+       "enabled": true,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-callable-3",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": null,
+       "enabled": true,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-callable-4",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": [
+        true
+       ],
+       "enabled": true,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-callable-missing",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "enabled": true,
+       "id": "one"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "one",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-0",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "one",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-1",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": ""
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "one",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-2",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "   "
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "one",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-3",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "　"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "one",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-4",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "\u001c\u001d\u001e\u001f"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a b c",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-5",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "a\tb\n c"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a b",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-6",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "a\u001cb"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a b",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-7",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "ab"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a b",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-8",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "a b"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a​b",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-9",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "a​b"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a᠎b",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-10",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "a᠎b"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "a b c",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-11",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "a b c"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-12",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-13",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-14",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-15",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "one",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "padded",
+      "tools": []
+     }
+    ]
+   },
+   "name": "installed-runtime-name-16",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "  padded  "
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-17",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "\u0000"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-18",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": "a\u0000b"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-19",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": 5
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-20",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-21",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": [
+        "x"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-runtime-name-22",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": {
+        "x": 1
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-bad-row-after-good",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one"
+      },
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "two",
+       "runtimeName": 5
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "installed-bad-id-after-bad-name",
+   "request": {
+    "installed": {
+     "apps": [
+      {
+       "callable": false,
+       "enabled": true,
+       "id": "one",
+       "runtimeName": 5
+      },
+      {
+       "callable": false,
+       "enabled": true,
+       "id": " two"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example connector",
+      "tools": [
+       {
+        "description": "Change external content",
+        "name": "send_message",
+        "title": "Send a message"
+       },
+       {
+        "description": null,
+        "name": "delete",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-tools",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "  Example  connector ",
+       "tools": [
+        {
+         "description": "Change external content",
+         "name": "send_message",
+         "title": "Send a message"
+        },
+        {
+         "description": "",
+         "inputSchema": {},
+         "isEnabled": true,
+         "isReadOnly": true,
+         "name": "delete"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summaries-win",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "name": "a"
+        }
+       ],
+       "tools": [
+        {
+         "name": "b"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "Example",
+      "tools": []
+     }
+    ],
+    "complete": false
+   },
+   "name": "read-summaries-null",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": null,
+       "tools": [
+        {
+         "name": "b"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "Example",
+      "tools": []
+     }
+    ],
+    "complete": false
+   },
+   "name": "read-tools-missing",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example"
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "Example",
+      "tools": []
+     }
+    ],
+    "complete": false
+   },
+   "name": "read-tools-null",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": null
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-tools-text",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": "a"
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-tools-object",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": {
+        "a": {
+         "name": "a"
+        }
+       }
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-text",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        "a"
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-duplicate",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "a"
+        },
+        {
+         "name": "a"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": []
+     },
+     {
+      "app_id": "other",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "other",
+      "tools": []
+     }
+    ],
+    "complete": false
+   },
+   "name": "read-missing-other",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     },
+     {
+      "app_id": "other",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "other",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": [
+      "other"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     },
+     {
+      "app_id": "other",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "other",
+      "tools": []
+     }
+    ],
+    "complete": false
+   },
+   "name": "read-both-missing",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     },
+     {
+      "app_id": "other",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "other",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [],
+     "missingAppIds": [
+      "other",
+      "example"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-not-covered",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     },
+     {
+      "app_id": "other",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "other",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-missing-key",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-missing-null",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": null
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-missing-text",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": "other"
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-missing-unknown",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": [
+      "third"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-missing-covered",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": [
+      "example"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-missing-repeated",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     },
+     {
+      "app_id": "other",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "other",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": [
+      "other",
+      "other"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-missing-bad-id",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     },
+     {
+      "app_id": "other",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "other",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": [
+      " other"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-app-unknown",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "third",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-app-repeated",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-app-text",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      "example"
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-apps-missing",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "missingAppIds": [
+      "example"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-apps-too-many",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "a0",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a1",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a2",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a3",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a4",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a5",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a6",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a7",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a8",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a9",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a10",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a11",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a12",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a13",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a14",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a15",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a16",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a17",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a18",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a19",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a20",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a21",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a22",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a23",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a24",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a25",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a26",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a27",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a28",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a29",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a30",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a31",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a32",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a33",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a34",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a35",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a36",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a37",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a38",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a39",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a40",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a41",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a42",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a43",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a44",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a45",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a46",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a47",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a48",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a49",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a50",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a51",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a52",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a53",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a54",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a55",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a56",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a57",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a58",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a59",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a60",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a61",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a62",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a63",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a64",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a65",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a66",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a67",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a68",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a69",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a70",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a71",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a72",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a73",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a74",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a75",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a76",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a77",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a78",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a79",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a80",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a81",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a82",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a83",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a84",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a85",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a86",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a87",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a88",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a89",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a90",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a91",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a92",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a93",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a94",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a95",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a96",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a97",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a98",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a99",
+       "name": "Example",
+       "tools": []
+      },
+      {
+       "id": "a100",
+       "name": "Example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-missing-too-many",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [],
+     "missingAppIds": [
+      "a0",
+      "a1",
+      "a2",
+      "a3",
+      "a4",
+      "a5",
+      "a6",
+      "a7",
+      "a8",
+      "a9",
+      "a10",
+      "a11",
+      "a12",
+      "a13",
+      "a14",
+      "a15",
+      "a16",
+      "a17",
+      "a18",
+      "a19",
+      "a20",
+      "a21",
+      "a22",
+      "a23",
+      "a24",
+      "a25",
+      "a26",
+      "a27",
+      "a28",
+      "a29",
+      "a30",
+      "a31",
+      "a32",
+      "a33",
+      "a34",
+      "a35",
+      "a36",
+      "a37",
+      "a38",
+      "a39",
+      "a40",
+      "a41",
+      "a42",
+      "a43",
+      "a44",
+      "a45",
+      "a46",
+      "a47",
+      "a48",
+      "a49",
+      "a50",
+      "a51",
+      "a52",
+      "a53",
+      "a54",
+      "a55",
+      "a56",
+      "a57",
+      "a58",
+      "a59",
+      "a60",
+      "a61",
+      "a62",
+      "a63",
+      "a64",
+      "a65",
+      "a66",
+      "a67",
+      "a68",
+      "a69",
+      "a70",
+      "a71",
+      "a72",
+      "a73",
+      "a74",
+      "a75",
+      "a76",
+      "a77",
+      "a78",
+      "a79",
+      "a80",
+      "a81",
+      "a82",
+      "a83",
+      "a84",
+      "a85",
+      "a86",
+      "a87",
+      "a88",
+      "a89",
+      "a90",
+      "a91",
+      "a92",
+      "a93",
+      "a94",
+      "a95",
+      "a96",
+      "a97",
+      "a98",
+      "a99",
+      "a100"
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-bad-tool-before-missing-limit",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": " a"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_limit"
+   },
+   "name": "read-limit-before-later-invalid",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": "a"
+      },
+      "x"
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-missing",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-0",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": null,
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-1",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-2",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "   ",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-3",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "　",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-4",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "\u001c\u001d\u001e\u001f",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "a b c",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-5",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "a\tb\n c",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "a b",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-6",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "a\u001cb",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "a b",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-7",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "ab",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "a b",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-8",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "a b",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "a​b",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-9",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "a​b",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "a᠎b",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-10",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "a᠎b",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "a b c",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-11",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "a b c",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-12",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-13",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-14",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-15",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "padded",
+      "tools": []
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-name-16",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "  padded  ",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-17",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "\u0000",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-18",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "a\u0000b",
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-19",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": 5,
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-20",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": true,
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-21",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": [
+        "x"
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-name-22",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": {
+        "x": 1
+       },
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-0",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": " example"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-1",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "example\n"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-2",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "example tool"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-3",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "\u0000example"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-4",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": ""
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-tool-name-5",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-6",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-tool-name-7",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-8",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-9",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "a\u0007"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-tool-name-10",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "a"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-11",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "a　"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-12",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "a\u001f"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-13",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "a"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a​",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-tool-name-14",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "a​"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "café",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-tool-name-15",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": "café"
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-16",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": 7
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-tool-name-17",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "tools": [
+        {
+         "name": null
+        }
+       ]
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-0",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": null,
+         "name": "a",
+         "title": null
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-1",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "",
+         "name": "a",
+         "title": ""
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-2",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "   ",
+         "name": "a",
+         "title": "   "
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-3",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "　",
+         "name": "a",
+         "title": "　"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": null,
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-4",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "\u001c\u001d\u001e\u001f",
+         "name": "a",
+         "title": "\u001c\u001d\u001e\u001f"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "a b c",
+        "name": "a",
+        "title": "a b c"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-5",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "a\tb\n c",
+         "name": "a",
+         "title": "a\tb\n c"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "a b",
+        "name": "a",
+        "title": "a b"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-6",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "a\u001cb",
+         "name": "a",
+         "title": "a\u001cb"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "a b",
+        "name": "a",
+        "title": "a b"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-7",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "ab",
+         "name": "a",
+         "title": "ab"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "a b",
+        "name": "a",
+        "title": "a b"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-8",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "a b",
+         "name": "a",
+         "title": "a b"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "a​b",
+        "name": "a",
+        "title": "a​b"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-9",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "a​b",
+         "name": "a",
+         "title": "a​b"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "a᠎b",
+        "name": "a",
+        "title": "a᠎b"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-10",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "a᠎b",
+         "name": "a",
+         "title": "a᠎b"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "a b c",
+        "name": "a",
+        "title": "a b c"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-11",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "a b c",
+         "name": "a",
+         "title": "a b c"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "name": "a",
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-12",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+         "name": "a",
+         "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "name": "a",
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-13",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+         "name": "a",
+         "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+        "name": "a",
+        "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-14",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+         "name": "a",
+         "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+        "name": "a",
+        "title": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-15",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+         "name": "a",
+         "title": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "padded",
+        "name": "a",
+        "title": "padded"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-16",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "  padded  ",
+         "name": "a",
+         "title": "  padded  "
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-summary-17",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "\u0000",
+         "name": "a",
+         "title": "\u0000"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-summary-18",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "a\u0000b",
+         "name": "a",
+         "title": "a\u0000b"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-summary-19",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": 5,
+         "name": "a",
+         "title": 5
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-summary-20",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": true,
+         "name": "a",
+         "title": true
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-summary-21",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": [
+          "x"
+         ],
+         "name": "a",
+         "title": [
+          "x"
+         ]
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-summary-22",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": {
+          "x": 1
+         },
+         "name": "a",
+         "title": {
+          "x": 1
+         }
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+        "name": "a",
+        "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-23",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+         "name": "a",
+         "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "name": "a",
+        "title": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-24",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+         "name": "a",
+         "title": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+        "name": "a",
+        "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-25",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+         "name": "a",
+         "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "x",
+        "name": "a",
+        "title": null
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-26",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        x",
+         "name": "a",
+         "title": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        x"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+        "name": "a",
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-27",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+         "name": "a",
+         "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "apps": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": true,
+      "name": "Example",
+      "tools": [
+       {
+        "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+        "name": "a",
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+       }
+      ]
+     }
+    ],
+    "complete": true
+   },
+   "name": "read-summary-28",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx　　y",
+         "name": "a",
+         "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx　　y"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  },
+  {
+   "expect": {
+    "error": "codex_host_invalid"
+   },
+   "name": "read-summary-29",
+   "request": {
+    "page": [
+     {
+      "app_id": "example",
+      "callable": false,
+      "enabled": true,
+      "metadata_available": false,
+      "name": "example",
+      "tools": []
+     }
+    ],
+    "read": {
+     "apps": [
+      {
+       "id": "example",
+       "name": "Example",
+       "toolSummaries": [
+        {
+         "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u0000",
+         "name": "a",
+         "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u0000"
+        }
+       ],
+       "tools": []
+      }
+     ],
+     "missingAppIds": []
+    }
+   }
+  }
+ ],
+ "schema": "guard-codex-host-inventory-vectors.v1"
+}

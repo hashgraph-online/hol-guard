@@ -1,0 +1,4572 @@
+{
+ "bases": {
+  "allow": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "failed_claim": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "approval_reuse_claim_failed",
+     "message": "Saved approval claim failed."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Saved approval claim failed.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Saved approval claim failed.",
+    "next_step": null,
+    "summary": "Saved approval claim failed.",
+    "title": "Current package result"
+   }
+  },
+  "review": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  }
+ },
+ "hashes": {
+  "h0": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwiY29udGVudCI6IjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIiLCJpZGVudGl0eSI6IjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJwb2xpY3kiOiI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0Iiwic2FuZGJveCI6IjU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTUiLCJ2ZXJzaW9uIjoxfQ",
+  "h1": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwiY29udGVudCI6ImZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmYiLCJpZGVudGl0eSI6IjExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEiLCJwb2xpY3kiOiI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0Iiwic2FuZGJveCI6IjU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTUiLCJ2ZXJzaW9uIjoxfQ",
+  "h2": "sha256:abababababababababababababababababababababababababababababababab",
+  "h3": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ"
+ },
+ "results": {
+  "r0": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_identity_changed",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_identity_changed",
+     "message": "Saved approval was rejected because the current package identity or scope changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r1": {},
+  "r10": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "warn",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_current_action_not_review",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "not-applicable"
+     },
+     "code": "approval_reuse_current_action_not_review",
+     "message": "Saved package policy was not reused (approval_reuse_current_action_not_review).",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy warns about `guard-proof`.",
+     "policy_action": "warn",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy warns about `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy warns about `guard-proof`.",
+    "next_step": null,
+    "summary": "HOL Guard's current package policy warns about `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r11": {
+   "policy_action": "sandbox-required",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "sandbox-required",
+      "current_action": "sandbox-required",
+      "current_normalization_reason_code": null,
+      "original_current_action": "sandbox-required",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_sandbox_required",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_sandbox_required",
+     "message": "Saved approval was rejected because current package policy requires sandbox enforcement.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+     "policy_action": "sandbox-required",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r12": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "block",
+      "current_normalization_reason_code": null,
+      "original_current_action": "block",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_current_block",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_current_block",
+     "message": "Saved approval was rejected because current package policy blocks this request.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy blocks `guard-proof`.",
+     "policy_action": "block",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy blocks `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy blocks `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy blocks `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r13": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "allow",
+      "current_normalization_reason_code": null,
+      "original_current_action": "allow",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_current_action_not_review",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "not-applicable"
+     },
+     "code": "approval_reuse_current_action_not_review",
+     "message": "Saved package policy was not reused (approval_reuse_current_action_not_review).",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r14": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_context_changed_after_claim",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_context_changed_after_claim",
+     "message": "Saved approval was rejected because retained authority changed after it was claimed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r15": {
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_context_changed_after_claim",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_context_changed_after_claim",
+     "message": "Saved approval was rejected because retained authority changed after it was claimed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+     "policy_action": "require-reapproval",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r16": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "warn",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_context_changed_after_claim",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_context_changed_after_claim",
+     "message": "Saved approval was rejected because retained authority changed after it was claimed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy warns about `guard-proof`.",
+     "policy_action": "warn",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy warns about `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy warns about `guard-proof`.",
+    "next_step": null,
+    "summary": "HOL Guard's current package policy warns about `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r17": {
+   "policy_action": "sandbox-required",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "sandbox-required",
+      "current_action": "sandbox-required",
+      "current_normalization_reason_code": null,
+      "original_current_action": "sandbox-required",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_context_changed_after_claim",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_context_changed_after_claim",
+     "message": "Saved approval was rejected because retained authority changed after it was claimed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+     "policy_action": "sandbox-required",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r18": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "block",
+      "current_normalization_reason_code": null,
+      "original_current_action": "block",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_context_changed_after_claim",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_context_changed_after_claim",
+     "message": "Saved approval was rejected because retained authority changed after it was claimed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy blocks `guard-proof`.",
+     "policy_action": "block",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy blocks `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy blocks `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy blocks `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r19": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "allow",
+      "current_normalization_reason_code": null,
+      "original_current_action": "allow",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_context_changed_after_claim",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_context_changed_after_claim",
+     "message": "Saved approval was rejected because retained authority changed after it was claimed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r2": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy blocks `guard-proof`.",
+     "policy_action": "block",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "approval_reuse_claim_failed",
+     "message": "Saved approval claim failed."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy blocks `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy blocks `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy blocks `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r20": {
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "require-reapproval",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_identity_changed",
+      "saved_action": "require-reapproval",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_identity_changed",
+     "message": "Saved approval was rejected because the current package identity or scope changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "Saved approval was rejected because the current package identity or scope changed.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Saved approval was rejected because the current package identity or scope changed.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "Saved approval was rejected because the current package identity or scope changed.",
+    "title": "Saved approval not reusable"
+   }
+  },
+  "r21": {
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "require-reapproval",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_content_changed",
+      "saved_action": "require-reapproval",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_content_changed",
+     "message": "Saved approval was rejected because the current package content or execution context changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "Saved approval was rejected because the current package content or execution context changed.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Saved approval was rejected because the current package content or execution context changed.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "Saved approval was rejected because the current package content or execution context changed.",
+    "title": "Saved approval not reusable"
+   }
+  },
+  "r22": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "block",
+      "current_normalization_reason_code": null,
+      "original_current_action": "block",
+      "original_current_type": "str",
+      "original_saved_action": "require-reapproval",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_identity_changed",
+      "saved_action": "require-reapproval",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_identity_changed",
+     "message": "Saved approval was rejected because the current package identity or scope changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy blocks `guard-proof`.",
+     "policy_action": "block",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy blocks `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy blocks `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy blocks `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r23": {
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+     "policy_action": "require-reapproval",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r24": {
+   "policy_action": "sandbox-required",
+   "reasons": [
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+     "policy_action": "sandbox-required",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy requires sandbox enforcement for `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r25": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_content_changed",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_content_changed",
+     "message": "Saved approval was rejected because the current package content or execution context changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r26": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_content_changed",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": false,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_content_changed",
+     "message": "Saved approval was rejected because the current package content or execution context changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r27": {
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "require-reapproval",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_integrity_failure",
+      "saved_action": "require-reapproval",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_integrity_failure",
+     "message": "Saved approval was rejected because its integrity could not be verified.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "Saved approval was rejected because its integrity could not be verified.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Saved approval was rejected because its integrity could not be verified.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "Saved approval was rejected because its integrity could not be verified.",
+    "title": "Saved approval not reusable"
+   }
+  },
+  "r28": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_claim_failed",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_claim_failed",
+     "message": "Saved approval was rejected because it changed, expired, or was already consumed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r29": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "approval_claim_disposition": "retained",
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_accepted",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": true,
+      "status": "accepted"
+     },
+     "code": "saved_package_approval",
+     "message": "HOL Guard reused your saved approval for this package request.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "next_step": null,
+    "summary": "HOL Guard reused your saved approval for this package request.",
+    "title": "Allowed by saved approval"
+   }
+  },
+  "r3": {
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+     "policy_action": "require-reapproval",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "approval_reuse_claim_failed",
+     "message": "Saved approval claim failed."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r30": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "warn",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_current_action_not_review",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "not-applicable"
+     },
+     "code": "approval_reuse_current_action_not_review",
+     "message": "Saved package policy was not reused (approval_reuse_current_action_not_review).",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r31": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_claim_failed",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_claim_failed",
+     "message": "Saved approval was rejected because it changed, expired, or was already consumed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r32": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "approval_claim_disposition": "retained",
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_accepted",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": true,
+      "status": "accepted"
+     },
+     "code": "saved_package_approval",
+     "message": "HOL Guard reused your saved approval for this package request.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "next_step": null,
+    "summary": "HOL Guard reused your saved approval for this package request.",
+    "title": "Allowed by saved approval"
+   }
+  },
+  "r33": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "sandbox-required",
+      "current_action": "sandbox-required",
+      "current_normalization_reason_code": null,
+      "original_current_action": "sandbox-required",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_sandbox_required",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_sandbox_required",
+     "message": "Saved approval was rejected because current package policy requires sandbox enforcement.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r34": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "block",
+      "current_normalization_reason_code": null,
+      "original_current_action": "block",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_current_block",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_current_block",
+     "message": "Saved approval was rejected because current package policy blocks this request.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r35": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_claim_failed",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_claim_failed",
+     "message": "Saved approval was rejected because it changed, expired, or was already consumed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+     "policy_action": "require-reapproval",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r36": {
+   "reasons": [
+    {
+     "approval_claim_disposition": "retained",
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_accepted",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": true,
+      "status": "accepted"
+     },
+     "code": "saved_package_approval",
+     "message": "HOL Guard reused your saved approval for this package request.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+     "policy_action": "require-reapproval",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "next_step": null,
+    "summary": "HOL Guard reused your saved approval for this package request.",
+    "title": "Allowed by saved approval"
+   }
+  },
+  "r37": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_identity_changed",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_identity_changed",
+     "message": "Saved approval was rejected because the current package identity or scope changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r38": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_policy_changed",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_policy_changed",
+     "message": "Saved package policy was not reused (approval_reuse_policy_changed).",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r39": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_capability_changed",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_capability_changed",
+     "message": "Saved package policy was not reused (approval_reuse_capability_changed).",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r4": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy blocks `guard-proof`.",
+     "policy_action": "block",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy blocks `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy blocks `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy blocks `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r40": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "approval_claim_disposition": "consumed",
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_accepted",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": true,
+      "status": "accepted"
+     },
+     "code": "saved_package_approval",
+     "message": "HOL Guard reused your saved approval for this package request.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "next_step": null,
+    "summary": "HOL Guard reused your saved approval for this package request.",
+    "title": "Allowed by saved approval"
+   }
+  },
+  "r41": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "approval_claim_disposition": "consumed",
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_accepted",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": true,
+      "status": "accepted"
+     },
+     "code": "saved_package_approval",
+     "message": "HOL Guard reused your saved approval for this package request.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "next_step": null,
+    "summary": "HOL Guard reused your saved approval for this package request.",
+    "title": "Allowed by saved approval"
+   }
+  },
+  "r42": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_reapproval_required",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_reapproval_required",
+     "message": "Saved approval was rejected because current package policy requires fresh approval.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r43": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_content_changed",
+      "saved_action": "allow",
+      "saved_artifact_hash_is_context_token": false,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_content_changed",
+     "message": "Saved approval was rejected because the current package content or execution context changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r44": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "block",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_block",
+      "saved_action": "block",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "accepted"
+     },
+     "code": "saved_package_block",
+     "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /work/space`, then retry the install.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /work/space`, then retry the install.",
+    "next_step": "hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /work/space",
+    "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+    "title": "Blocked by saved policy"
+   }
+  },
+  "r45": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "allow",
+      "current_normalization_reason_code": null,
+      "original_current_action": "allow",
+      "original_current_type": "str",
+      "original_saved_action": "block",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_block",
+      "saved_action": "block",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "accepted"
+     },
+     "code": "saved_package_block",
+     "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /other/ws --publisher acme`, then retry the install.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /other/ws --publisher acme`, then retry the install.",
+    "next_step": "hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /other/ws --publisher acme",
+    "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+    "title": "Blocked by saved policy"
+   }
+  },
+  "r46": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "allow",
+      "current_normalization_reason_code": null,
+      "original_current_action": "allow",
+      "original_current_type": "str",
+      "original_saved_action": "block",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_block",
+      "saved_action": "block",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "accepted"
+     },
+     "code": "saved_package_block",
+     "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope harness --artifact-id command:npm-install`, then retry the install.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope harness --artifact-id command:npm-install`, then retry the install.",
+    "next_step": "hol-guard policies clear --decision-id 7 --harness codex --scope harness --artifact-id command:npm-install",
+    "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+    "title": "Blocked by saved policy"
+   }
+  },
+  "r47": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "block",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_block",
+      "saved_action": "block",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "accepted"
+     },
+     "code": "saved_package_block",
+     "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --harness codex --scope global --artifact-id command:npm-install`, then retry the install.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --harness codex --scope global --artifact-id command:npm-install`, then retry the install.",
+    "next_step": "hol-guard policies clear --harness codex --scope global --artifact-id command:npm-install",
+    "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+    "title": "Blocked by saved policy"
+   }
+  },
+  "r48": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "review",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_action_not_allow",
+      "saved_action": "review",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_saved_action_not_allow",
+     "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "title": "Saved approval not reusable"
+   }
+  },
+  "r49": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "warn",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "warn",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_action_not_allow",
+      "saved_action": "warn",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_saved_action_not_allow",
+     "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r5": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy warns about `guard-proof`.",
+     "policy_action": "warn",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy warns about `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy warns about `guard-proof`.",
+    "next_step": null,
+    "summary": "HOL Guard's current package policy warns about `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r50": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "require-reapproval",
+      "current_action": "allow",
+      "current_normalization_reason_code": null,
+      "original_current_action": "allow",
+      "original_current_type": "str",
+      "original_saved_action": "require-reapproval",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_action_not_allow",
+      "saved_action": "require-reapproval",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_saved_action_not_allow",
+     "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "title": "Saved approval not reusable"
+   }
+  },
+  "r51": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "sandbox-required",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "sandbox-required",
+      "current_action": "allow",
+      "current_normalization_reason_code": null,
+      "original_current_action": "allow",
+      "original_current_type": "str",
+      "original_saved_action": "sandbox-required",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_action_not_allow",
+      "saved_action": "sandbox-required",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_saved_action_not_allow",
+     "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "title": "Saved approval not reusable"
+   }
+  },
+  "r52": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "warn",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_current_action_not_review",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "not-applicable"
+     },
+     "code": "approval_reuse_current_action_not_review",
+     "message": "Saved package policy was not reused (approval_reuse_current_action_not_review).",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r53": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "block",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_block",
+      "saved_action": "block",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "accepted"
+     },
+     "code": "saved_package_block",
+     "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+    "next_step": "hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request",
+    "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+    "title": "Blocked by saved policy"
+   }
+  },
+  "r54": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "warn",
+      "current_normalization_reason_code": null,
+      "original_current_action": "warn",
+      "original_current_type": "str",
+      "original_saved_action": "block",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_saved_block",
+      "saved_action": "block",
+      "saved_artifact_hash_is_context_token": true,
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "accepted"
+     },
+     "code": "saved_package_block",
+     "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ`, then retry the install.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ`, then retry the install.",
+    "next_step": "hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+    "title": "Blocked by saved policy"
+   }
+  },
+  "r6": {
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "review",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_content_changed",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_content_changed",
+     "message": "Saved approval was rejected because the current package content or execution context changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ]
+  },
+  "r7": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "block",
+      "current_action": "block",
+      "current_normalization_reason_code": null,
+      "original_current_action": "block",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_identity_changed",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": false,
+      "status": "rejected"
+     },
+     "code": "approval_reuse_identity_changed",
+     "message": "Saved approval was rejected because the current package identity or scope changed.",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy blocks `guard-proof`.",
+     "policy_action": "block",
+     "severity": "high",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard's current package policy blocks `guard-proof`.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard's current package policy blocks `guard-proof`.",
+    "next_step": "Review the current package request in HOL Guard, then retry.",
+    "summary": "HOL Guard's current package policy blocks `guard-proof`.",
+    "title": "Current package policy"
+   }
+  },
+  "r8": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "review",
+      "current_normalization_reason_code": null,
+      "original_current_action": "review",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_accepted",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": true,
+      "status": "accepted"
+     },
+     "code": "saved_package_approval",
+     "message": "HOL Guard reused your saved approval for this package request.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard revalidated the repository, package manager, dependency files, settings, registry environment, and current advisory authority after atomically claiming approval.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard revalidated the repository, package manager, dependency files, settings, registry environment, and current advisory authority after atomically claiming approval.",
+    "next_step": null,
+    "summary": "HOL Guard reused your saved approval for this package request.",
+    "title": "Allowed by saved approval"
+   }
+  },
+  "r9": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "approval_reuse": {
+      "action": "allow",
+      "current_action": "require-reapproval",
+      "current_normalization_reason_code": null,
+      "original_current_action": "require-reapproval",
+      "original_current_type": "str",
+      "original_saved_action": "allow",
+      "original_saved_type": "str",
+      "reason_code": "approval_reuse_accepted",
+      "saved_action": "allow",
+      "saved_normalization_reason_code": null,
+      "should_claim": true,
+      "status": "accepted"
+     },
+     "code": "saved_package_approval",
+     "message": "HOL Guard reused your saved approval for this package request.",
+     "severity": "low",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_policy",
+     "message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+     "policy_action": "require-reapproval",
+     "severity": "medium",
+     "source": "guard-local"
+    },
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "risk_summary": "HOL Guard revalidated the repository, package manager, dependency files, settings, registry environment, and current advisory authority after atomically claiming approval.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "HOL Guard revalidated the repository, package manager, dependency files, settings, registry environment, and current advisory authority after atomically claiming approval.",
+    "next_step": null,
+    "summary": "HOL Guard reused your saved approval for this package request.",
+    "title": "Allowed by saved approval"
+   }
+  }
+ },
+ "vectors": [
+  {
+   "base": "review",
+   "name": "rebuild_found_no_intent",
+   "request": {
+    "claim_failed": false,
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r0",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "rebuild_found_no_intent_after_claim",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r0",
+   "stored_policy": false
+  },
+  {
+   "base": "failed_claim",
+   "name": "claim_failed_same_action",
+   "request": {
+    "claim_failed": true,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r1",
+   "stored_policy": false
+  },
+  {
+   "base": "failed_claim",
+   "name": "claim_failed_current_block",
+   "request": {
+    "claim_failed": true,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r2",
+   "stored_policy": false
+  },
+  {
+   "base": "failed_claim",
+   "name": "claim_failed_current_require_reapproval",
+   "request": {
+    "claim_failed": true,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r3",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "observe_same_action",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": true,
+    "saved_approval_claimed": false
+   },
+   "result": "r1",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "observe_current_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": true,
+    "saved_approval_claimed": false
+   },
+   "result": "r4",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "observe_identity_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install-other",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": true,
+    "saved_approval_claimed": false
+   },
+   "result": "r1",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "plain_unclaimed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "base": "allow",
+   "name": "plain_unclaimed_allow",
+   "request": {
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "plain_unclaimed_current_warn",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r5",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_identity_changed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-other",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r0",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_content_changed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h1",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r6",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_legacy_hash",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h2",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h2",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r6",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_identity_changed_block",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "x",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r7",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_nothing_saved_review",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r8",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_nothing_saved_require-reapproval",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r9",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_nothing_saved_warn",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r10",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_nothing_saved_sandbox-required",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "sandbox-required",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r11",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_consumed_nothing_saved_block",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r12",
+   "stored_policy": true
+  },
+  {
+   "base": "allow",
+   "name": "claimed_consumed_nothing_saved_allow",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r13",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_identity_changed",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-other",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r0",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_content_changed",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h1",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r6",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_legacy_hash",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h2",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h2",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r6",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_identity_changed_block",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "x",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r7",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_nothing_saved_review",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r14",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_nothing_saved_require-reapproval",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r15",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_nothing_saved_warn",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r16",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_nothing_saved_sandbox-required",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "sandbox-required",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r17",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_retained_nothing_saved_block",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r18",
+   "stored_policy": true
+  },
+  {
+   "base": "allow",
+   "name": "claimed_retained_nothing_saved_allow",
+   "request": {
+    "claim_disposition": "retained",
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r19",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_identity_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-other",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r0",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_content_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h1",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r6",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_legacy_hash",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h2",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h2",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r6",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_identity_changed_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "x",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r7",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_nothing_saved_review",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r14",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_nothing_saved_require-reapproval",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r15",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_nothing_saved_warn",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r16",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_nothing_saved_sandbox-required",
+   "request": {
+    "claim_failed": false,
+    "current_action": "sandbox-required",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r17",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "claimed_no_disposition_nothing_saved_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r18",
+   "stored_policy": true
+  },
+  {
+   "base": "allow",
+   "name": "claimed_no_disposition_nothing_saved_allow",
+   "request": {
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "result": "r19",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_identity_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-other",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r20",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_content_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h1",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r21",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_legacy_hash",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h2",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h2",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r21",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_identity_changed_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "x",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r22",
+   "stored_policy": false
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_nothing_saved_review",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_nothing_saved_require-reapproval",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r23",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_nothing_saved_warn",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r5",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_nothing_saved_sandbox-required",
+   "request": {
+    "claim_failed": false,
+    "current_action": "sandbox-required",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r24",
+   "stored_policy": true
+  },
+  {
+   "base": "review",
+   "name": "unclaimed_nothing_saved_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r4",
+   "stored_policy": true
+  },
+  {
+   "base": "allow",
+   "name": "unclaimed_nothing_saved_allow",
+   "request": {
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h0",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h0",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_no_facts_unchanged",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "no_facts_unchanged",
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_no_facts_unchanged",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "no_facts_unchanged",
+   "result": "r8",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_current_action_tightens_only",
+   "request": {
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "current_action_tightens_only",
+   "result": "r4",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_current_action_tightens_only",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "current_action_tightens_only",
+   "result": "r12",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_diagnosed_content_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "diagnosed_content_changed",
+   "result": "r25",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_diagnosed_content_changed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "diagnosed_content_changed",
+   "result": "r25",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_diagnosed_legacy_hash",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "diagnosed_legacy_hash",
+   "result": "r26",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_diagnosed_legacy_hash",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "diagnosed_legacy_hash",
+   "result": "r26",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_ignored_integrity_no_daemon",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "ignored_integrity_no_daemon",
+   "result": "r27",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_ignored_integrity_no_daemon",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "ignored_integrity_no_daemon",
+   "result": "r27",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_ignored_integrity_daemon_no_decision",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "ignored_integrity_daemon_no_decision",
+   "result": "r27",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_ignored_integrity_daemon_no_decision",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "ignored_integrity_daemon_no_decision",
+   "result": "r27",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_daemon_allow_claim_ok",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "daemon_allow_claim_ok",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_daemon_allow_claim_ok",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "daemon_allow_claim_ok",
+   "result": "r29",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_daemon_allow_claim_failed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "daemon_allow_claim_failed",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_daemon_allow_claim_failed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "daemon_allow_claim_failed",
+   "result": "r29",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_claim_ok",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_claim_ok",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_claim_ok",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_claim_ok",
+   "result": "r29",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_claim_failed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_claim_failed",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_claim_failed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_claim_failed",
+   "result": "r29",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_no_claim_requested",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_no_claim_requested",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_no_claim_requested",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_no_claim_requested",
+   "result": "r29",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_warn_current",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_warn_current",
+   "result": "r30",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_warn_current",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_warn_current",
+   "result": "r30",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_require_reapproval",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_require_reapproval",
+   "result": "r31",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_require_reapproval",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_require_reapproval",
+   "result": "r32",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_sandbox_required",
+   "request": {
+    "claim_failed": false,
+    "current_action": "sandbox-required",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_sandbox_required",
+   "result": "r33",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_sandbox_required",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "sandbox-required",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_sandbox_required",
+   "result": "r33",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_current_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_current_block",
+   "result": "r34",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_current_block",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "block",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_current_block",
+   "result": "r34",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_durable_allow_current_action_overlay",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "durable_allow_current_action_overlay",
+   "result": "r35",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_durable_allow_current_action_overlay",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "durable_allow_current_action_overlay",
+   "result": "r36",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_allow_content_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "allow_content_changed",
+   "result": "r25",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_allow_content_changed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "allow_content_changed",
+   "result": "r25",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_allow_identity_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "allow_identity_changed",
+   "result": "r37",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_allow_identity_changed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "allow_identity_changed",
+   "result": "r37",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_allow_policy_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "allow_policy_changed",
+   "result": "r38",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_allow_policy_changed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "allow_policy_changed",
+   "result": "r38",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_allow_capability_changed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "allow_capability_changed",
+   "result": "r39",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_allow_capability_changed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "allow_capability_changed",
+   "result": "r39",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_allow_legacy_hash",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "allow_legacy_hash",
+   "result": "r26",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_allow_legacy_hash",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "allow_legacy_hash",
+   "result": "r26",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_with_request",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_with_request",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_with_request",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_with_request",
+   "result": "r40",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_request_wrong_scope",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_request_wrong_scope",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_request_wrong_scope",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_request_wrong_scope",
+   "result": "r40",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_request_missing",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_request_missing",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_request_missing",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_request_missing",
+   "result": "r40",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_local_identity",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_local_identity",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_local_identity",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_local_identity",
+   "result": "r40",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_local_identity_require_reapproval",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_local_identity_require_reapproval",
+   "result": "r31",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_local_identity_require_reapproval",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_local_identity_require_reapproval",
+   "result": "r41",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_other_harness_require_reapproval",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "codex:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "codex:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_other_harness_require_reapproval",
+   "result": "r42",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_other_harness_require_reapproval",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "codex:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "codex:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_other_harness_require_reapproval",
+   "result": "r42",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_legacy_hash_require_reapproval",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_legacy_hash_require_reapproval",
+   "result": "r43",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_legacy_hash_require_reapproval",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_legacy_hash_require_reapproval",
+   "result": "r43",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_request_require_reapproval",
+   "request": {
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_request_require_reapproval",
+   "result": "r31",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_request_require_reapproval",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "require-reapproval",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_request_require_reapproval",
+   "result": "r41",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_fresh_expiring_claim_failed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "fresh_expiring_claim_failed",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_fresh_expiring_claim_failed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "fresh_expiring_claim_failed",
+   "result": "r40",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_legacy_local_claim_ok",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "legacy_local_claim_ok",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_legacy_local_claim_ok",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "legacy_local_claim_ok",
+   "result": "r40",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_legacy_local_claim_failed",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "legacy_local_claim_failed",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_legacy_local_claim_failed",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "legacy_local_claim_failed",
+   "result": "r40",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_legacy_local_request_mismatch",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "legacy_local_request_mismatch",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_legacy_local_request_mismatch",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "legacy_local_request_mismatch",
+   "result": "r29",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_approval_row_retained_disposition",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "approval_row_retained_disposition",
+   "result": "r28",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_approval_row_retained_disposition",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "guard-cli:project:package-request:abc",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "guard-cli:project:package-request:abc",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "approval_row_retained_disposition",
+   "result": "r29",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_block",
+   "result": "r44",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_block",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "review",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_block",
+   "result": "r44",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_block_publisher_workspace",
+   "request": {
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_block_publisher_workspace",
+   "result": "r45",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_block_publisher_workspace",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_block_publisher_workspace",
+   "result": "r45",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_block_harness_scope",
+   "request": {
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_block_harness_scope",
+   "result": "r46",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_block_harness_scope",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_block_harness_scope",
+   "result": "r46",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_block_global_scope_no_id",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_block_global_scope_no_id",
+   "result": "r47",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_block_global_scope_no_id",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_block_global_scope_no_id",
+   "result": "r47",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_review_action",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_review_action",
+   "result": "r48",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_review_action",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_review_action",
+   "result": "r48",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_warn_action",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_warn_action",
+   "result": "r49",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_warn_action",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_warn_action",
+   "result": "r49",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_require_reapproval_action",
+   "request": {
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_require_reapproval_action",
+   "result": "r50",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_require_reapproval_action",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_require_reapproval_action",
+   "result": "r50",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_saved_sandbox_required_action",
+   "request": {
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "saved_sandbox_required_action",
+   "result": "r51",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_saved_sandbox_required_action",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "allow",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "saved_sandbox_required_action",
+   "result": "r51",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_family_row_stale_no_rules",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "family_row_stale_no_rules",
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_family_row_stale_no_rules",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "family_row_stale_no_rules",
+   "result": "r52",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_family_row_stale_rule_without_family",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "family_row_stale_rule_without_family",
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_family_row_stale_rule_without_family",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "family_row_stale_rule_without_family",
+   "result": "r52",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_family_row_current_rule_keeps_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "family_row_current_rule_keeps_block",
+   "result": "r53",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_family_row_current_rule_keeps_block",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "family_row_current_rule_keeps_block",
+   "result": "r53",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_family_row_no_bundle_keeps_block",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "family_row_no_bundle_keeps_block",
+   "result": "r53",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_family_row_no_bundle_keeps_block",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "family_row_no_bundle_keeps_block",
+   "result": "r53",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_family_row_blank_owner",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "family_row_blank_owner",
+   "result": "r53",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_family_row_blank_owner",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "family_row_blank_owner",
+   "result": "r53",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_family_row_global_scope_stale",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "family_row_global_scope_stale",
+   "result": "r1",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_family_row_global_scope_stale",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "family_row_global_scope_stale",
+   "result": "r52",
+   "stored_policy": true
+  },
+  {
+   "name": "unclaimed_family_row_with_hash_not_family",
+   "request": {
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": false
+   },
+   "resolve_case": "family_row_with_hash_not_family",
+   "result": "r54",
+   "stored_policy": true
+  },
+  {
+   "name": "claimed_consumed_family_row_with_hash_not_family",
+   "request": {
+    "claim_disposition": "consumed",
+    "claim_failed": false,
+    "current_action": "warn",
+    "current_artifact_hash": "h3",
+    "current_artifact_id": "command:npm-install",
+    "initial_artifact_hash": "h3",
+    "initial_artifact_id": "command:npm-install",
+    "observe_mode": false,
+    "saved_approval_claimed": true
+   },
+   "resolve_case": "family_row_with_hash_not_family",
+   "result": "r54",
+   "stored_policy": true
+  }
+ ]
+}

@@ -1,0 +1,1 @@
+{"command":["vitest","run","-ic/path/to/evil.config.js"]}

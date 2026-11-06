@@ -1,0 +1,408 @@
+"""Local Hermes shell-hook registration and native hook responses.
+
+Hermes only intercepts tools through ``hooks.pre_tool_call`` in config.yaml.
+The managed ``pretool-hook.json`` file is unused until that entry exists.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shlex
+from collections.abc import Mapping, Sequence
+from itertools import pairwise
+from pathlib import Path
+from typing import Any, NoReturn
+
+from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
+
+from ..native_hook_render import native_hermes_bridge
+from .hermes_file_inspection import HERMES_CONFIG_MAX_BYTES, inspect_hermes_config, inspect_hermes_text_file
+
+_PRETOOL_EVENT = "pre_tool_call"
+_GUARD_HOOK_ID = "hol-guard-pretool"
+_ALLOWLIST_NAME = "shell-hooks-allowlist.json"
+_UNAVAILABLE_BLOCK: dict[str, object] = {"decision": "block", "reason": "HOL Guard blocked this action."}
+_LAUNCH_REVIEW_ONLY_LABEL = "launch-review only"
+_MALFORMED_ALLOWLIST = (
+    "Hermes shell-hooks-allowlist.json is malformed; repair the file so Guard can allowlist its pre_tool_call command."
+)
+_MISSING_HOOK_COMMAND = "Hermes Guard hook command is missing; runtime protection was not registered."
+_UNSAFE_ALLOWLIST = "Hermes shell-hooks-allowlist.json must be a regular file directly under the selected Hermes home."
+
+
+def hermes_hook_command_string(command: Sequence[str]) -> str:
+    """Return the exact command string Hermes will shlex.split."""
+
+    return shlex.join([str(part) for part in command])
+
+
+def _hook_config(request: dict[str, object]) -> dict[str, object]:
+    """Ask the native ``hermes_hook_config`` kind which entries Guard owns."""
+
+    # Imported here so the hook bridges stay off the native runtime at import time.
+    from ..native_runner_authority import native_runner_authority
+
+    answer = native_runner_authority("hermes_hook_config", request)
+    if not isinstance(answer, dict):
+        _invalid()
+    return answer
+
+
+def _invalid() -> NoReturn:
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    raise NativeRunnerAuthorityError("native_hermes_hook_config_invalid")
+
+
+_ENTRY_FIELDS = ("id", "command", "matcher", "fail_closed", "failClosed")
+_APPROVAL_FIELDS = ("event", "command")
+
+
+def _wire(items: list[object], fields: tuple[str, ...]) -> list[object]:
+    """Items as sent to the resident: only the fields ownership is decided on.
+
+    The rest of an item never reaches the resident, so it neither inflates the
+    request nor hides the item. A field holding text the resident cannot encode
+    is left out; such text can never be Guard's own id or command.
+    """
+
+    wire: list[object] = []
+    for item in items:
+        if not isinstance(item, dict):
+            wire.append(None)
+            continue
+        projected: dict[str, object] = {}
+        for field in fields:
+            value = item.get(field)
+            if isinstance(value, str):
+                try:
+                    value.encode()
+                except UnicodeEncodeError:
+                    continue
+            elif not isinstance(value, bool):
+                continue
+            projected[field] = value
+        wire.append(projected)
+    return wire
+
+
+def _kept(items: list[object], indices: object) -> list[object]:
+    if not isinstance(indices, list) or not all(type(index) is int and 0 <= index < len(items) for index in indices):
+        _invalid()
+    if any(left >= right for left, right in pairwise(indices)):
+        _invalid()
+    return [items[index] for index in indices]
+
+
+def _install_cwd() -> str | None:
+    """The directory a relative hook script resolves from; ``None`` when it is gone."""
+
+    try:
+        return os.getcwd()
+    except OSError:
+        return None
+
+
+def _pretool_plan(entries: list[object], *, expected_command: str | None) -> tuple[list[object], list[str]]:
+    """Entries to keep and the commands of the Guard entries dropped."""
+
+    # Only an install compares script paths, so only an install needs a cwd.
+    cwd = _install_cwd() if expected_command is not None else None
+    answer = _hook_config(
+        {
+            "op": "pretool_plan",
+            "entries": _wire(entries, _ENTRY_FIELDS),
+            "expected_command": expected_command,
+            "cwd": cwd,
+        }
+    )
+    removed = answer.get("removed")
+    if not isinstance(removed, list) or not all(isinstance(item, str) for item in removed):
+        _invalid()
+    return _kept(entries, answer.get("keep")), removed
+
+
+def _allowlist_plan(payload: Mapping[str, object], *, command: str, retire: list[str], mode: str) -> list[object]:
+    """Approvals kept after dropping Guard's retired or removed ones, plus Guard's own when merging."""
+
+    approvals = payload.get("approvals", [])
+    items = list(approvals) if isinstance(approvals, list) else []
+    answer = _hook_config(
+        {
+            "op": "allowlist_plan",
+            "approvals": _wire(items, _APPROVAL_FIELDS),
+            "command": command,
+            "retire": retire,
+            "mode": mode,
+        }
+    )
+    append = answer.get("append")
+    if not isinstance(append, bool):
+        _invalid()
+    kept = _kept(items, answer.get("keep"))
+    if append:
+        kept.append({"event": _PRETOOL_EVENT, "command": command})
+    return kept
+
+
+def guard_pretool_hook_entry(*, command: Sequence[str], timeout_seconds: int) -> dict[str, object]:
+    return {
+        "id": _GUARD_HOOK_ID,
+        "matcher": ".*",
+        "command": hermes_hook_command_string(command),
+        "timeout": timeout_seconds,
+        "fail_closed": True,
+    }
+
+
+def _pretool_entries(hooks: Mapping[str, object]) -> list[object]:
+    entries = hooks.get(_PRETOOL_EVENT)
+    if isinstance(entries, list):
+        return list(entries)
+    return []
+
+
+def guard_pretool_hook_registered(
+    config: Mapping[str, object] | None,
+    *,
+    expected_command: str | None = None,
+    allowlist_path: Path | None = None,
+) -> bool:
+    if not isinstance(config, Mapping):
+        return False
+    hooks = config.get("hooks")
+    if not isinstance(hooks, Mapping):
+        return False
+    entries = _pretool_entries(hooks)
+    if not entries:
+        return False
+    from ..native_runner_authority import NativeRunnerAuthorityError
+
+    approvals: object = None
+    if allowlist_path is not None:
+        payload = _read_allowlist(allowlist_path)
+        approvals = False if payload is None else _wire(list(payload.get("approvals", [])), _APPROVAL_FIELDS)
+    request: dict[str, object] = {
+        "op": "registered",
+        "entries": _wire(entries, _ENTRY_FIELDS),
+        "expected_command": expected_command,
+        "approvals": approvals,
+    }
+    # A read-only probe: a resident that cannot answer leaves the hook unproven.
+    try:
+        registered = _hook_config(request).get("registered")
+    except NativeRunnerAuthorityError:
+        return False
+    return registered if isinstance(registered, bool) else False
+
+
+def merge_guard_pretool_hook(
+    config: dict[str, Any],
+    *,
+    command: Sequence[str],
+    timeout_seconds: int,
+) -> tuple[bool, list[str]]:
+    """Insert or replace Guard's pre_tool_call entry. Preserve user hooks.
+
+    Returns ``(False, [])`` when an existing ``hooks`` value is not a mapping,
+    so the caller can leave the file unchanged rather than destroy user config.
+    """
+
+    hooks = config.get("hooks")
+    if hooks is None:
+        hooks = {}
+        config["hooks"] = hooks
+    if not isinstance(hooks, dict):
+        return False, []
+    expected = hermes_hook_command_string(command)
+    preserved, removed = _pretool_plan(_pretool_entries(hooks), expected_command=expected)
+    preserved.append(guard_pretool_hook_entry(command=command, timeout_seconds=timeout_seconds))
+    hooks[_PRETOOL_EVENT] = preserved
+    return True, removed
+
+
+def remove_guard_pretool_hooks(config: dict[str, Any]) -> list[str]:
+    hooks = config.get("hooks")
+    if not isinstance(hooks, dict):
+        return []
+    preserved, removed = _pretool_plan(_pretool_entries(hooks), expected_command=None)
+    if preserved:
+        hooks[_PRETOOL_EVENT] = preserved
+    else:
+        hooks.pop(_PRETOOL_EVENT, None)
+        if not hooks:
+            config.pop("hooks", None)
+    return removed
+
+
+def merge_guard_hook_allowlist(
+    hermes_home: Path,
+    *,
+    command: Sequence[str],
+    retire_commands: Sequence[str] = (),
+) -> None:
+    """Approve only Guard's (event, command) pair without auto-accepting other hooks."""
+
+    allowlist_path = _allowlist_destination(hermes_home)
+    command_string = hermes_hook_command_string(command)
+    payload = _read_allowlist(allowlist_path)
+    if payload is None:
+        raise ValueError(_MALFORMED_ALLOWLIST)
+    approvals = _allowlist_plan(payload, command=command_string, retire=list(retire_commands), mode="merge")
+    _atomic_write_allowlist(
+        allowlist_path,
+        json.dumps({**payload, "approvals": approvals}, indent=2) + "\n",
+    )
+
+
+def remove_guard_hook_allowlist(hermes_home: Path, *, command_string: str) -> None:
+    allowlist_path = _allowlist_destination(hermes_home)
+    if not allowlist_path.is_file():
+        return
+    payload = _read_allowlist(allowlist_path)
+    if payload is None:
+        return
+    approvals = _allowlist_plan(payload, command=command_string, retire=[], mode="remove")
+    _atomic_write_allowlist(
+        allowlist_path,
+        json.dumps({**payload, "approvals": approvals}, indent=2) + "\n",
+    )
+
+
+def hermes_allowlist_path(hermes_home: Path) -> Path:
+    """Return the fixed allowlist slot under the selected Hermes authority root.
+
+    Resolving the root itself deliberately preserves custom and symlinked
+    ``HERMES_HOME`` values while ensuring no caller-controlled suffix reaches a
+    filesystem write.
+    """
+
+    return hermes_home.expanduser().resolve(strict=False) / _ALLOWLIST_NAME
+
+
+def hermes_bridge_response(
+    daemon_response: Mapping[str, object],
+    *,
+    event_name: str,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> tuple[str, str, int]:
+    """Turn a daemon or CLI payload into Hermes stdout JSON plus exit code.
+
+    The resident reads the reply and names both the decision and the exit
+    status. When it cannot answer, this forwards the constant block document
+    and the blocking status rather than reading the reply here.
+    """
+
+    del event_name
+    rendered = native_hermes_bridge(daemon_response, guard_home=guard_home, deadline=deadline)
+    payload, exit_code = rendered if rendered is not None else (_UNAVAILABLE_BLOCK, 2)
+    stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return stdout, "", exit_code
+
+
+def apply_hermes_doctor_protection_label(payload: dict[str, object]) -> None:
+    probe = payload.get("runtime_probe")
+    if not isinstance(probe, dict):
+        return
+    present = probe.get("managed_install_present") is True
+    registered = probe.get("runtime_hook_registered") is True
+    if present and not registered:
+        payload["runtime_protection_label"] = _LAUNCH_REVIEW_ONLY_LABEL
+
+
+def hermes_runtime_hook_registered(config_yaml_path: Path) -> bool:
+    if not config_yaml_path.is_file():
+        return False
+    inspection = inspect_hermes_config(config_yaml_path, syntax="yaml")
+    if not inspection.complete or inspection.payload is None:
+        return False
+    return guard_pretool_hook_registered(
+        inspection.payload,
+        allowlist_path=hermes_allowlist_path(config_yaml_path.parent),
+    )
+
+
+def hermes_runtime_hook_warning(runtime_probe: dict[str, object] | None) -> str | None:
+    if runtime_probe is None:
+        return None
+    present = runtime_probe.get("managed_install_present") is True
+    registered = runtime_probe.get("runtime_hook_registered") is True
+    if present and not registered:
+        return (
+            "Hermes runtime hook is not registered. Shell and tool calls are launch-review only. "
+            "Run `hol-guard install hermes` to write a fail-closed hooks.pre_tool_call entry."
+        )
+    return None
+
+
+def sync_guard_runtime_hooks(
+    config: dict[str, Any],
+    *,
+    command: object,
+    timeout_seconds: int,
+    hermes_home: Path,
+) -> None:
+    if not isinstance(command, list):
+        raise ValueError(_MISSING_HOOK_COMMAND)
+    hook_command = [str(part) for part in command if isinstance(part, str)]
+    if not hook_command:
+        raise ValueError(_MISSING_HOOK_COMMAND)
+    merged, removed = merge_guard_pretool_hook(config, command=hook_command, timeout_seconds=timeout_seconds)
+    if not merged:
+        raise ValueError("Hermes hooks config is not a mapping; runtime protection was not registered.")
+    merge_guard_hook_allowlist(
+        hermes_home,
+        command=hook_command,
+        retire_commands=removed,
+    )
+
+
+def unsync_guard_runtime_hooks(config: dict[str, Any], *, hermes_home: Path) -> None:
+    for command_string in remove_guard_pretool_hooks(config):
+        remove_guard_hook_allowlist(hermes_home, command_string=command_string)
+
+
+def _read_allowlist(path: Path) -> dict[str, Any] | None:
+    if path.is_symlink():
+        return None
+    if not path.exists():
+        return {"approvals": []}
+    inspection = inspect_hermes_text_file(
+        path,
+        scope_root=path.parent,
+        content_limit_bytes=HERMES_CONFIG_MAX_BYTES,
+    )
+    if not inspection.complete or inspection.content is None:
+        return None
+    try:
+        raw = json.loads(inspection.content)
+    except (json.JSONDecodeError, UnicodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    approvals = raw.get("approvals")
+    if approvals is None:
+        raw["approvals"] = []
+        return raw
+    if not isinstance(approvals, list):
+        return None
+    return raw
+
+
+def _allowlist_destination(hermes_home: Path) -> Path:
+    path = hermes_allowlist_path(hermes_home)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError(_UNSAFE_ALLOWLIST)
+    return path
+
+
+def _atomic_write_allowlist(path: Path, content: str) -> None:
+    """Atomically replace the allowlist through the shared no-follow writer."""
+
+    if path.name != _ALLOWLIST_NAME or path.parent != path.parent.resolve(strict=False):
+        raise ValueError(_UNSAFE_ALLOWLIST)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError(_UNSAFE_ALLOWLIST)
+    write_text_atomic_no_follow(path, content)  # NOSONAR - fixed name under the selected Hermes authority root

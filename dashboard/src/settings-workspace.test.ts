@@ -1,0 +1,199 @@
+import {
+  buildClearPolicyPayload,
+  buildClearReviewQueuePayload,
+  buildApprovalGateWriteProof,
+  formatTotpEnrollmentExpiry,
+  buildTotpQrImageOptions,
+  formatTotpManualKey,
+  resolveSecurityLevelDescription,
+  resolveFineTuningSectionDescription,
+  isFineTuningEditable,
+  resolveTotpSetupStep,
+  hasApprovalGateSettingsChanged,
+  resolveTotpSetupModalTitle,
+  resolveInitialSettingsTab,
+  resolveRepairApprovalCenterMessage,
+} from "./settings-workspace";
+import { resolveApprovalPasswordSectionCopy } from "./settings/approval-password-copy";
+import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+function assert(condition: boolean, message: string): void {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+const balancedDesc = resolveSecurityLevelDescription("balanced");
+assert(balancedDesc.length > 0, "T529: balanced description should not be empty");
+assert(balancedDesc.includes("secrets") || balancedDesc.includes("destructive"), "T529: balanced description should mention secrets or destructive");
+
+const strictDesc = resolveSecurityLevelDescription("strict");
+assert(strictDesc.length > 0, "T529: strict description should not be empty");
+assert(strictDesc.includes("network") || strictDesc.includes("more"), "T529: strict description should mention network or more");
+assert(strictDesc !== balancedDesc, "T529: strict and balanced descriptions should differ");
+
+const customDesc = resolveSecurityLevelDescription("custom");
+assert(customDesc.length > 0, "T529: custom description should not be empty");
+assert(customDesc.includes("Custom") || customDesc.includes("custom") || customDesc.includes("rules"), "T529: custom description should mention custom rules");
+
+const clearAllPayload = buildClearPolicyPayload(true);
+assert(clearAllPayload.all === true, "T530: clearPolicy payload should have all=true");
+assert(!("harness" in clearAllPayload) || clearAllPayload.harness === undefined, "T530: clearPolicy payload should not have harness when clearing all");
+
+const clearNonePayload = buildClearPolicyPayload(false);
+assert(clearNonePayload.all === false, "T530: clearPolicy payload with all=false should have all=false");
+
+const clearQueuePayload = buildClearReviewQueuePayload({
+  approvalPassword: "local-password",
+  approvalTotpCode: "123456",
+});
+assert(clearQueuePayload.status === "pending", "T744: clearReviewQueue payload should target pending reviews");
+assert(clearQueuePayload.approval_password === "local-password", "T744: clearReviewQueue payload should include approval password");
+assert(clearQueuePayload.approval_totp_code === "123456", "T744: clearReviewQueue payload should include authenticator code");
+
+const writeProof = buildApprovalGateWriteProof({
+  currentPassword: "local-password",
+  totpCode: "123456",
+});
+assert(writeProof.approval_password === "local-password", "settings-write-proof: should map approval password");
+assert(writeProof.approval_totp_code === "123456", "settings-write-proof: should map authenticator code");
+assert(
+  Object.keys(buildApprovalGateWriteProof()).length === 0,
+  "settings-write-proof: empty credentials should omit proof fields",
+);
+
+assert(typeof repairApprovalCenter === "function", "T739: repairApprovalCenter should be exported as a function");
+assert(typeof setupDesktopNotifications === "function", "T740: setupDesktopNotifications should be exported as a function");
+
+const qrOptions = buildTotpQrImageOptions();
+assert(qrOptions.level === "M", "T741: TOTP QR should use medium error correction for authenticator scanning");
+assert(qrOptions.size === 160, "T741: TOTP QR should render at scanner-friendly size");
+assert(qrOptions.fgColor === "#121a3a", "T741: TOTP QR should use brand dark color");
+assert(qrOptions.bgColor === "#ffffff", "T741: TOTP QR should use white background");
+
+assert(
+  formatTotpManualKey("abcd efgh-ijklmnop") === "abcd efgh ijkl mnop",
+  "T742: manual TOTP key should be grouped for fallback entry"
+);
+assert(formatTotpManualKey(null) === "", "T742: manual TOTP key formatter should tolerate null");
+assert(
+  formatTotpEnrollmentExpiry("not-a-date") === "Enrollment expiration unknown.",
+  "T743: invalid TOTP expiry should not render Invalid Date"
+);
+
+const strictFineTuningDescription = resolveFineTuningSectionDescription("strict");
+assert(
+  strictFineTuningDescription.includes("Extra careful"),
+  "fine-tuning: strict maps to Extra careful copy"
+);
+assert(
+  !strictFineTuningDescription.includes("Strict"),
+  "fine-tuning: strict description should not use the legacy level name"
+);
+assert(
+  strictFineTuningDescription.includes("Custom"),
+  "fine-tuning: strict description should mention Custom mode"
+);
+
+assert(isFineTuningEditable("custom") === true, "fine-tuning: custom level is editable");
+assert(isFineTuningEditable("strict") === false, "fine-tuning: strict level is locked until custom");
+assert(isFineTuningEditable("balanced") === false, "fine-tuning: balanced level is locked until custom");
+assert(isFineTuningEditable("relaxed") === false, "fine-tuning: relaxed level is locked until custom");
+
+assert(resolveInitialSettingsTab("?section=rules") === "rules", "settings routing: canonical rules deep link");
+assert(resolveInitialSettingsTab("?section=risk") === "protection", "settings routing: retired fine-tuning link falls back safely");
+assert(resolveInitialSettingsTab("?section=defaults") === "protection", "settings routing: retired fallback link falls back safely");
+assert(resolveInitialSettingsTab("?section=unknown") === "protection", "settings routing: unknown sections fall back safely");
+
+const settingsWorkspaceSource = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, ".tsx"), "utf8");
+const approvalPasswordCopySource = readFileSync(new URL("./settings/approval-password-copy.tsx", import.meta.url), "utf8");
+assert(!settingsWorkspaceSource.includes("Ask first"), "settings: Ask first is not a first-class label");
+assert(!settingsWorkspaceSource.includes("Block until approved"), "settings: Block until approved is not a first-class label");
+assert(!settingsWorkspaceSource.includes("Watch only"), "settings: Watch only is not a first-class label");
+assert(settingsWorkspaceSource.includes('window.addEventListener("popstate", handlePopState)'), "settings routing: browser history resyncs the visible section");
+assert(settingsWorkspaceSource.includes('window.removeEventListener("popstate", handlePopState)'), "settings routing: history listener is cleaned up");
+assert(settingsWorkspaceSource.includes('label="Cloud receipt privacy"'), "receipt privacy: redaction control is visible in settings");
+assert(settingsWorkspaceSource.includes("<SettingsSelectRow"), "receipt privacy: redaction control uses the accessible select primitive");
+assert(settingsWorkspaceSource.includes('handleStringChange("receipt_redaction_level")'), "receipt privacy: redaction changes persist through settings save");
+assert(settingsWorkspaceSource.includes('label="Presentation mode"'), "presentation: mode control is visible in settings");
+assert(settingsWorkspaceSource.includes("handlePresentationModeChange"), "presentation: mode changes use the dedicated save handler");
+assert(settingsWorkspaceSource.includes("resolveSettingsPresentation"), "presentation: settings use the authoritative resolved mode");
+assert(settingsWorkspaceSource.includes("disabled={totpEnabled}"), "approval-gate: cooldown selector is disabled while authenticator MFA is enabled");
+assert(settingsWorkspaceSource.includes("effectiveApprovalGateCooldownSeconds"), "approval-gate: settings render the effective cooldown when MFA is enabled");
+assert(settingsWorkspaceSource.includes("Authenticator approvals do not use the password cooldown"), "approval-gate: settings explain why MFA disables password cooldown");
+
+assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
+assert(
+  resolveTotpSetupStep({ otpauth_uri: "otpauth://totp/test", manual_key: "abcd", expires_at: "2026-01-01T00:00:00Z" }) === "scan",
+  "totp-setup: pending enrollment resumes at QR scan step",
+);
+
+assert(
+  hasApprovalGateSettingsChanged(
+    { enabled: true, configured: true, cooldown_seconds: 0, strict_all_decisions: false, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: false, totp_enabled: false, totp_pending: false },
+    true,
+    900,
+    false,
+  ) === true,
+  "approval-password: cooldown edits count as gate setting changes",
+);
+
+assert(
+  resolveApprovalPasswordSectionCopy(true).includes("Save settings"),
+  "approval-password: configured copy points to save flow",
+);
+assert(
+  resolveApprovalPasswordSectionCopy(true, false).includes("Choose a password to enable it again"),
+  "approval-password: disabled configured gate points to password setup",
+);
+assert(
+  resolveApprovalPasswordSectionCopy(false).includes("setup action"),
+  "approval-password: first-time copy points to the explicit setup action",
+);
+assert(
+  resolveApprovalPasswordSectionCopy(false, false).includes("turns on password checks"),
+  "approval-password: disabled first-time copy explains setup turns the gate on",
+);
+assert(
+  approvalPasswordCopySource.includes("Set up approval password"),
+  "approval-password: first-time setup has an explicit action",
+);
+assert(
+  !approvalPasswordCopySource.includes("!props.wasConfigured && props.enabled"),
+  "approval-password: setup action is reachable while the gate is off",
+);
+assert(
+  settingsWorkspaceSource.includes("gateActiveOnDevice"),
+  "approval-gate: credential actions follow the saved on-device gate state",
+);
+assert(
+  !settingsWorkspaceSource.includes("showGateDetails"),
+  "approval-gate: password and authenticator sections stay visible while the gate is off",
+);
+assert(
+  settingsWorkspaceSource.includes('"setup-gate"'),
+  "approval-password: explicit setup reuses the setup-gate proof flow",
+);
+assert(
+  resolveTotpSetupModalTitle(true) === "Confirm your approval password",
+  "totp-modal: confirm step title",
+);
+assert(
+  resolveRepairApprovalCenterMessage([]) === "Nothing needed repair. The approval center is already reachable from this dashboard.",
+  "repair: empty cleared list reports nothing needed repair",
+);
+assert(
+  resolveRepairApprovalCenterMessage(["locator"]).includes("stale approval link"),
+  "repair: single code maps to a human label",
+);
+const repairListMessage = resolveRepairApprovalCenterMessage(["locator", "daemon_state", "daemon_discovery_key"]);
+assert(
+  repairListMessage.includes("stale approval link, stale service record, and invalid discovery key"),
+  "repair: multiple codes join with commas and 'and'",
+);
+assert(
+  repairListMessage.startsWith("Approval center repaired:"),
+  "repair: cleared list reports a repaired approval center",
+);

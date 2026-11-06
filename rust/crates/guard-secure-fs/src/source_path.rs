@@ -1,0 +1,641 @@
+#[path = "scannable_source_path.rs"]
+mod scannable;
+pub use scannable::classify_scannable_source_path;
+
+use std::fs;
+use std::path::{Component, Path, PathBuf};
+
+use super::{contains_symlink_component, resolve_candidate, SourcePathDecision};
+
+#[path = "source_path_names.rs"]
+mod names;
+pub use names::EXTERNAL_SENSITIVE_PARTS;
+use names::{
+    BENIGN_PROJECT_DOTFILES, BENIGN_PROJECT_DOTFILE_STEMS, BENIGN_PROJECT_READ_DOTFILES,
+    BENIGN_SOURCE_DOTFILES, KNOWN_AGENT_DOC_ROOTS, KNOWN_SKILL_DOC_ROOTS,
+    PROJECT_CONFIG_EXTENSIONS, PROJECT_DOCUMENT_EXTENSIONS, SENSITIVE_SEARCH_BASENAMES,
+    SOURCE_EXTENSIONS, SOURCE_INSPECTION_PARTS, TOOL_LOGIN_FILE_WORDS, TOOL_LOGIN_WORDS,
+};
+
+fn lowered_parts(path: &Path) -> Vec<String> {
+    path.components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => Some(value.to_string_lossy().to_ascii_lowercase()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn hidden_parts_allowed(parts: &[String]) -> bool {
+    match parts.split_last() {
+        Some((name, parents)) if project_config_file_name(name) => {
+            hidden_dir_parts_allowed(parents)
+        }
+        _ => hidden_dir_parts_allowed(parts),
+    }
+}
+
+/// Every hidden component is a benign dotfile or the `.github/workflows`
+/// prefix. Project dotfiles get no exception here, so parent components
+/// never admit a directory spelled `.gitignore/`.
+fn hidden_dir_parts_allowed(parts: &[String]) -> bool {
+    let hidden: Vec<&str> = parts
+        .iter()
+        .map(String::as_str)
+        .filter(|part| part.starts_with('.'))
+        .collect();
+    if hidden.is_empty()
+        || hidden
+            .iter()
+            .all(|part| BENIGN_SOURCE_DOTFILES.contains(part))
+    {
+        return true;
+    }
+    let workflow_prefix = parts
+        .windows(2)
+        .any(|window| window[0] == ".github" && window[1] == "workflows");
+    workflow_prefix && hidden == [".github"]
+}
+
+/// True when the basename or stem matches a sensitive filename family
+/// (`credentials`, `secrets`, `token`, `password`, `id_rsa`, `.env`, …).
+/// Unlike `sensitive_path_family`, this also catches plain filenames such
+/// as `credentials.txt` that carry no well-known parent directory.
+pub fn sensitive_external_filename(path: &Path) -> bool {
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if EXTERNAL_SENSITIVE_PARTS.contains(&filename.as_str())
+        || EXTERNAL_SENSITIVE_PARTS.contains(&stem.as_str())
+    {
+        return true;
+    }
+    stem.replace(['-', '.'], "_")
+        .split('_')
+        .any(|token| !token.is_empty() && EXTERNAL_SENSITIVE_PARTS.contains(&token))
+}
+
+/// Code syntax eligible for source inspection. Data formats such as JSON,
+/// TOML, YAML, and Markdown still require credential-name and glob checks.
+pub fn is_source_code_extension(extension: &str) -> bool {
+    matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "c" | "cc"
+            | "cpp"
+            | "css"
+            | "go"
+            | "h"
+            | "hpp"
+            | "html"
+            | "java"
+            | "js"
+            | "jsx"
+            | "mjs"
+            | "py"
+            | "rs"
+            | "sh"
+            | "ts"
+            | "tsx"
+    )
+}
+
+pub fn credential_path_markers() -> &'static [&'static str] {
+    EXTERNAL_SENSITIVE_PARTS
+}
+
+fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
+    parts
+        .iter()
+        .any(|part| SOURCE_INSPECTION_PARTS.contains(&part.as_str()))
+        || path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|name| {
+                let lowered = name.to_ascii_lowercase();
+                BENIGN_SOURCE_DOTFILES.contains(&lowered.as_str())
+            })
+        || path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(source_extension)
+}
+
+/// Whether `path`'s own name ends in one of the extensions a project's
+/// documents carry. Data formats belong here: a plugin manifest, a workflow
+/// definition and a README are as much a repository's own content as its
+/// code. `is_source_code_extension` is the narrower list, for code syntax
+/// alone.
+pub fn source_document_extension(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(source_extension)
+}
+
+/// Whether a file name carries an extension this crate reads as source text.
+///
+/// A name with no extension at all, or one this list does not hold, is bytes
+/// of some other kind: a compiled program, an archive, an image.
+pub(crate) fn source_extension(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|suffix| SOURCE_EXTENSIONS.contains(&suffix.as_str()))
+}
+
+fn canonical_dir(path: &Path) -> Option<PathBuf> {
+    fs::canonicalize(path)
+        .ok()
+        .and_then(|canonical| canonical.is_dir().then_some(canonical))
+}
+
+fn immediate_sibling_git_checkout(path: &Path, workspace: &Path) -> bool {
+    let parent = match workspace.parent() {
+        Some(parent) => parent,
+        None => return false,
+    };
+    let relative = match path.strip_prefix(parent) {
+        Ok(relative) => relative,
+        Err(_) => return false,
+    };
+    let Some(first) = relative.components().next() else {
+        return false;
+    };
+    let Component::Normal(first) = first else {
+        return false;
+    };
+    let checkout = parent.join(first);
+    if checkout == workspace {
+        return false;
+    }
+    fs::symlink_metadata(checkout.join(".git")).is_ok_and(|metadata| {
+        !metadata.file_type().is_symlink() && (metadata.is_file() || metadata.is_dir())
+    })
+}
+
+fn known_skill_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
+    if target
+        .chars()
+        .any(|character| matches!(character, '$' | '`' | '<' | '>' | '|' | ';' | '&'))
+    {
+        return None;
+    }
+    if let Some(skill_name) = target.strip_prefix("skill://") {
+        let skill_name = skill_name.trim().trim_matches(['\'', '"']);
+        let candidate = Path::new(skill_name);
+        if skill_name.is_empty()
+            || candidate.is_absolute()
+            || candidate
+                .components()
+                .any(|component| matches!(component, Component::ParentDir))
+        {
+            return None;
+        }
+        for root in KNOWN_SKILL_DOC_ROOTS {
+            let skill_dir = home.join(root).join(candidate);
+            let skill_file = skill_dir.join("SKILL.md");
+            let Ok(real_dir) = fs::canonicalize(&skill_dir) else {
+                continue;
+            };
+            let Ok(real_file) = fs::canonicalize(&skill_file) else {
+                continue;
+            };
+            if real_file.is_file() && real_file.starts_with(&real_dir) {
+                return Some(real_file);
+            }
+        }
+        return None;
+    }
+
+    let lexical = resolve_candidate(target, None, home).ok()?;
+    for root in KNOWN_SKILL_DOC_ROOTS {
+        let lexical_root = home.join(root);
+        if !lexical.starts_with(&lexical_root) || contains_symlink_component(&lexical) {
+            continue;
+        }
+        if let Ok(real) = fs::canonicalize(&lexical) {
+            return Some(real);
+        }
+    }
+    None
+}
+
+fn known_artifact_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
+    let lexical = resolve_candidate(target, None, home).ok()?;
+    let relative = KNOWN_AGENT_DOC_ROOTS
+        .iter()
+        .find_map(|root| lexical.strip_prefix(home.join(root)).ok())?;
+    if contains_symlink_component(&lexical)
+        || lexical
+            .extension()
+            .is_none_or(|extension| extension != "md")
+        || relative.components().any(|component| match component {
+            Component::Normal(value) => {
+                value.to_string_lossy().starts_with('.')
+                    || sensitive_external_filename(Path::new(value))
+            }
+            _ => true,
+        })
+    {
+        return None;
+    }
+    let real = fs::canonicalize(lexical).ok()?;
+    real.is_file().then_some(real)
+}
+
+/// Whether any component below the workspace root is a link.
+///
+/// The root's own ancestry belongs to the host, not to the tree under
+/// review: macOS resolves `/tmp` to `/private/tmp`, and a linked home,
+/// `/var` or `/Volumes` behaves the same way, so refusing on those denied
+/// every read in an ordinary checkout. Everything below the root is still
+/// refused, because a link planted in the tree is how a benign-looking name
+/// reaches a file the in-workspace screens would otherwise never see.
+///
+/// The root is the shortest ancestor that resolves to the workspace, so a
+/// link inside the tree that points back at the root cannot stand in for it
+/// and hide the components below itself.
+fn link_below_workspace(lexical: &Path, workspace: &Path) -> bool {
+    let mut ancestors: Vec<&Path> = lexical.ancestors().collect();
+    ancestors.reverse();
+    let Some(root) = ancestors
+        .into_iter()
+        .find(|ancestor| fs::canonicalize(ancestor).is_ok_and(|resolved| resolved == workspace))
+    else {
+        return contains_symlink_component(lexical);
+    };
+    let Ok(relative) = lexical.strip_prefix(root) else {
+        return contains_symlink_component(lexical);
+    };
+    let mut probe = root.to_path_buf();
+    for component in relative.components() {
+        probe.push(component);
+        if fs::symlink_metadata(&probe).is_ok_and(|meta| meta.file_type().is_symlink()) {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn classify_source_path(
+    target: &str,
+    cwd: &Path,
+    home: Option<&Path>,
+    allow_external: bool,
+) -> SourcePathDecision {
+    let stripped = target.trim().trim_matches(['\'', '"']);
+    if stripped.is_empty() {
+        return SourcePathDecision::deny("empty_path");
+    }
+    let lexical_path = Path::new(stripped);
+    if lexical_path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        return SourcePathDecision::deny("path_traversal");
+    }
+    if stripped
+        .chars()
+        .any(|character| matches!(character, '*' | '?' | '{' | '}'))
+    {
+        return SourcePathDecision::deny("glob_pattern");
+    }
+    let lexical_parts = lowered_parts(lexical_path);
+    if sensitive_path_family(lexical_path).is_some()
+        || lexical_parts
+            .iter()
+            .any(|part| SENSITIVE_SEARCH_BASENAMES.contains(&part.as_str()))
+    {
+        return SourcePathDecision::deny("sensitive_basename");
+    }
+    if let Some(home) = home {
+        if let Some(artifact_path) = known_artifact_doc_path(stripped, home) {
+            return SourcePathDecision::allow("known_artifact_doc_path", artifact_path);
+        }
+        if let Some(skill_path) = known_skill_doc_path(stripped, home) {
+            return SourcePathDecision::allow("known_skill_doc_path", skill_path);
+        }
+        let safety = home.join(".hol-support").join("SAFETY.md");
+        if (stripped == "~/.hol-support/SAFETY.md" || Path::new(stripped) == safety)
+            && fs::symlink_metadata(&safety)
+                .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+        {
+            if let Ok(real) = fs::canonicalize(safety) {
+                return SourcePathDecision::allow("guard_safety_doc_path", real);
+            }
+        }
+    }
+    let Ok(workspace) = fs::canonicalize(cwd) else {
+        return SourcePathDecision::deny("unresolved_path");
+    };
+    let external_requested = Path::new(stripped).is_absolute() || stripped.starts_with("~/");
+    let home_for_resolution = home.unwrap_or_else(|| Path::new(""));
+    let Ok(lexical) = resolve_candidate(stripped, Some(&workspace), home_for_resolution) else {
+        return SourcePathDecision::deny("unresolved_path");
+    };
+
+    let Ok(candidate) = fs::canonicalize(&lexical) else {
+        return SourcePathDecision::deny("external_target_not_readable");
+    };
+
+    let inside_workspace = candidate.starts_with(&workspace);
+    let traversed_link = if inside_workspace {
+        link_below_workspace(&lexical, &workspace)
+    } else {
+        contains_symlink_component(&lexical)
+    };
+    if traversed_link {
+        return SourcePathDecision::deny("symlink_in_path");
+    }
+
+    if !inside_workspace {
+        if !allow_external || !external_requested {
+            return SourcePathDecision::deny("absolute_path_outside_workspace");
+        }
+        let Some(home) = home.and_then(canonical_dir) else {
+            return SourcePathDecision::deny("external_home_unavailable");
+        };
+        if !candidate.starts_with(&home) {
+            return SourcePathDecision::deny("external_target_outside_home");
+        }
+        if !immediate_sibling_git_checkout(&candidate, &workspace) {
+            return SourcePathDecision::deny("external_target_not_sibling_git_checkout");
+        }
+        let parts = lowered_parts(&candidate);
+        if parts
+            .iter()
+            .any(|part| EXTERNAL_SENSITIVE_PARTS.contains(&part.as_str()))
+            || sensitive_external_filename(&candidate)
+        {
+            return SourcePathDecision::deny("sensitive_basename");
+        }
+        if !hidden_parts_allowed(&parts) {
+            return SourcePathDecision::deny("unsafe_hidden_dir");
+        }
+        if !source_shape_allowed(Path::new(stripped), &parts) {
+            return SourcePathDecision::deny("not_source_like");
+        }
+        return SourcePathDecision::allow("external_source_path", candidate);
+    }
+
+    let relative = match candidate.strip_prefix(&workspace) {
+        Ok(relative) => relative,
+        Err(_) => return SourcePathDecision::deny("resolved_outside_workspace"),
+    };
+    let parts = lowered_parts(relative);
+    if parts.is_empty() {
+        return SourcePathDecision::deny("empty_resolved_path");
+    }
+    if parts
+        .iter()
+        .any(|part| SENSITIVE_SEARCH_BASENAMES.contains(&part.as_str()))
+    {
+        return SourcePathDecision::deny("sensitive_basename");
+    }
+    if !hidden_parts_allowed(&parts) {
+        return SourcePathDecision::deny("unsafe_hidden_dir");
+    }
+    if !source_shape_allowed(relative, &parts) {
+        return SourcePathDecision::deny("not_source_like");
+    }
+    let reason = if parts
+        .first()
+        .is_some_and(|part| SOURCE_INSPECTION_PARTS.contains(&part.as_str()))
+    {
+        "source_prefix"
+    } else if parts
+        .iter()
+        .any(|part| SOURCE_INSPECTION_PARTS.contains(&part.as_str()))
+    {
+        "source_inspection_part"
+    } else if relative
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|name| {
+            let lowered = name.to_ascii_lowercase();
+            BENIGN_SOURCE_DOTFILES.contains(&lowered.as_str())
+        })
+    {
+        "benign_source_dotfile"
+    } else {
+        "source_extension"
+    };
+    SourcePathDecision::allow(reason, candidate)
+}
+
+#[path = "sensitive_path_family.rs"]
+mod sensitive;
+pub use sensitive::{sensitive_path_family, win32_name};
+
+/// True when every hidden (`.`-prefixed) path component is on the benign
+/// dotfile list or the `.github/workflows` prefix, or is a project config
+/// file such as `.gitignore` in the final position. Used by the native
+/// PreToolUse floor so absolute/home-relative reads cannot silently enter
+/// dot-directories such as `.hol-guard`, `.git`, or `.config`.
+pub fn hidden_read_parts_allowed(path: &Path) -> bool {
+    hidden_parts_allowed(&lowered_parts(path))
+}
+
+/// The same screen for a write target. A write admits only
+/// [`BENIGN_PROJECT_DOTFILES`], never the read-only half, because reading a
+/// pinned toolchain version or an attribute table discloses a setting the
+/// checkout already states while writing one changes what later commands do.
+pub fn hidden_write_parts_allowed(path: &Path) -> bool {
+    let parts = lowered_parts(path);
+    match parts.split_last() {
+        Some((name, parents)) if BENIGN_PROJECT_DOTFILES.contains(&name.as_str()) => {
+            hidden_dir_parts_allowed(parents)
+        }
+        _ => hidden_dir_parts_allowed(&parts),
+    }
+}
+
+/// An existing, empty, regular hidden file (a marker such as a deploy
+/// sentinel) inside a git work tree. Only the final component may be hidden;
+/// every other hidden component must be on the benign list. Size zero bounds
+/// the boundary: a non-empty hidden file could hold credentials or state, so
+/// it keeps the normal review. Sensitive names and families stay refused.
+pub fn hidden_empty_work_tree_file(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() != 0 {
+        return false;
+    }
+    let parts = lowered_parts(path);
+    let Some((name, parents)) = parts.split_last() else {
+        return false;
+    };
+    if !name.starts_with('.')
+        || name.starts_with(".env")
+        || SENSITIVE_SEARCH_BASENAMES.contains(&name.as_str())
+        || EXTERNAL_SENSITIVE_PARTS.contains(&name.as_str())
+        || sensitive_external_filename(path)
+        || !hidden_dir_parts_allowed(parents)
+    {
+        return false;
+    }
+    path.ancestors()
+        .skip(1)
+        .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
+}
+
+/// Whether `name` is the whole name of a tool's login file: `.netrc`,
+/// `mcp.json`, `.npmrc`. This is [`tool_login_name`] narrowed to
+/// [`TOOL_LOGIN_FILE_WORDS`], for a caller holding a file rather than a path
+/// component that may be a tool's own directory.
+pub fn tool_login_file_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    let bare = name.trim_start_matches('.');
+    let stem = Path::new(bare)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    [bare, stem]
+        .iter()
+        .any(|part| TOOL_LOGIN_FILE_WORDS.contains(part))
+}
+
+/// Whether `name` is exactly the name a tool keeps its own tree or login
+/// under: `.cursor`, `.vscode`, `.mcp.json`, `.npmrc`.
+///
+/// This is the whole-name reading of [`TOOL_LOGIN_WORDS`], for a caller that
+/// walks a path and has to tell a tool's own directory from a project's.
+/// `.codex-plugin` and `.claude-plugin` hold a repository's published
+/// manifest, not a login, so only the exact spelling counts: splitting the
+/// name into words would read every such manifest as the tool's own.
+pub fn tool_login_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    let bare = name.trim_start_matches('.');
+    let stem = Path::new(bare)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    [bare, stem]
+        .iter()
+        .any(|part| TOOL_LOGIN_WORDS.contains(part))
+}
+
+/// Whether `name` is one of the ordinary project config files
+/// [`BENIGN_PROJECT_DOTFILES`] holds. A caller that walks a path uses it to
+/// keep the list's own rule: these names are benign as a file, so a directory
+/// spelled `.gitignore/` opens no hidden tree.
+pub fn project_config_file_name(name: &str) -> bool {
+    let lowered = name.to_ascii_lowercase();
+    BENIGN_PROJECT_DOTFILES.contains(&lowered.as_str())
+        || BENIGN_PROJECT_READ_DOTFILES.contains(&lowered.as_str())
+        || project_config_rc_name(&lowered)
+}
+
+/// A formatter, linter or test-runner rc file: either the bare stem
+/// (`.prettierrc`) or the stem carrying one config extension
+/// (`.prettierrc.json`). `lowered` is already lowercased.
+fn project_config_rc_name(lowered: &str) -> bool {
+    if BENIGN_PROJECT_DOTFILE_STEMS.contains(&lowered) {
+        return true;
+    }
+    lowered.rsplit_once('.').is_some_and(|(stem, extension)| {
+        BENIGN_PROJECT_DOTFILE_STEMS.contains(&stem)
+            && PROJECT_CONFIG_EXTENSIONS.contains(&extension)
+    })
+}
+
+/// A hidden file at the leaf of a git work tree that a project keeps its own
+/// configuration or prose in: `.tsconfig-lb-check.json`, `.release-notes.md`,
+/// `.local-ledger.md`.
+///
+/// A hidden name used to read only from a fixed list, so every project that
+/// spells its own dotfile differently collected an approval nobody could
+/// answer, while the file itself is part of the checkout the agent is already
+/// working in. What stands in for that list is the shape such a file has: an
+/// ordinary document extension, a name carrying no credential marker and none
+/// of the words a tool keeps its own login under, every parent component
+/// visible, and a work tree of the home directory's own above it. That work
+/// tree is never the home directory itself, where a dotfiles repository would
+/// otherwise turn `~/.claude.json` into a project document, and never a
+/// checkout above home, which would read every dotfile in the home directory
+/// as that checkout's document.
+pub fn hidden_project_document(path: &Path, home: Option<&Path>) -> bool {
+    if !fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file()) {
+        return false;
+    }
+    let parts = lowered_parts(path);
+    let Some((name, parents)) = parts.split_last() else {
+        return false;
+    };
+    // Every name screen reads the spelling without the leading dot as well as
+    // with it. A credential name does not stop being one when a project hides
+    // it: `.private-key.txt` has the stem `.private-key`, which no list holds,
+    // and `.id_rsa.txt` splits into `id` and `rsa`, so the dot alone used to
+    // carry such a name past screens that already know it.
+    let bare_name = name.trim_start_matches('.');
+    let bare = Path::new(bare_name);
+    let extension = bare
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let stem = bare
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let tool_login = stem
+        .replace(['-', '.'], "_")
+        .split('_')
+        .any(|word| TOOL_LOGIN_WORDS.contains(&word));
+    if !name.starts_with('.')
+        || name.starts_with(".env")
+        || !PROJECT_DOCUMENT_EXTENSIONS.contains(&extension.as_str())
+        || tool_login
+        || SENSITIVE_SEARCH_BASENAMES.contains(&name.as_str())
+        || SENSITIVE_SEARCH_BASENAMES.contains(&bare_name)
+        || EXTERNAL_SENSITIVE_PARTS.contains(&name.as_str())
+        || EXTERNAL_SENSITIVE_PARTS.contains(&bare_name)
+        || sensitive_external_filename(path)
+        || sensitive_external_filename(bare)
+        || crate::credential_store_names::secret_bearing_file_name(bare_name)
+        // The rule is the project's own document in a checkout an agent is
+        // working in, so every directory above it is one an ordinary listing
+        // shows. A hidden parent is some tool's tree, whatever the leaf is
+        // called.
+        || parents.iter().any(|parent| parent.starts_with('.'))
+    {
+        return false;
+    }
+    let Some(home) = home else {
+        return false;
+    };
+    // The work tree has to be one of the home directory's own: a walk that
+    // keeps climbing finds whatever repository happens to sit above it, and a
+    // home directory nested in a checkout would turn every dotfile it holds
+    // into that checkout's document. The home directory is never the work
+    // tree either, so a dotfiles repository cannot admit `~/.claude.json`.
+    path.ancestors()
+        .skip(1)
+        .take_while(|ancestor| {
+            ancestor
+                .strip_prefix(home)
+                .is_ok_and(|below| below != Path::new(""))
+        })
+        .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
+}
+
+pub fn source_like(path: &Path) -> bool {
+    let parts = lowered_parts(path);
+    if parts
+        .iter()
+        .any(|part| SENSITIVE_SEARCH_BASENAMES.contains(&part.as_str()))
+        || !hidden_parts_allowed(&parts)
+    {
+        return false;
+    }
+    source_shape_allowed(path, &parts)
+}

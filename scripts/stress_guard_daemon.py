@@ -1,0 +1,409 @@
+#!/usr/bin/env python3
+"""Exercise a fresh Guard daemon against a populated local store."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import cast
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.append(str(_REPO_ROOT))
+
+from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state  # noqa: E402
+from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events  # noqa: E402
+from codex_plugin_scanner.guard.daemon.manager import (  # noqa: E402
+    ensure_guard_daemon,
+    guard_daemon_retirement_is_complete,
+    load_guard_daemon_auth_token,
+    retire_all_guard_daemons_for_home,
+)
+from codex_plugin_scanner.guard.native_runtime import native_runtime_status  # noqa: E402
+from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS  # noqa: E402
+from scripts.native_slo_contract import clear_proof_environment, proof_environment_violations  # noqa: E402
+from scripts.stress_guard_daemon_runtime import StressExecution as _StressExecution  # noqa: E402
+from scripts.stress_guard_daemon_runtime import finalize_stress_runtime as _finalize_stress_runtime  # noqa: E402
+from scripts.stress_guard_daemon_runtime import pid_is_running as _pid_is_running  # noqa: E402
+from scripts.stress_guard_daemon_runtime import run_stress_batches as _run_stress_batches  # noqa: E402
+from scripts.stress_guard_daemon_runtime import sample_stress_runtime as _sample_stress_runtime  # noqa: E402
+from scripts.stress_guard_daemon_runtime import settle_stress_runtime as _settle_stress_runtime  # noqa: E402
+from scripts.stress_guard_daemon_runtime import stabilized_process_resources as _stabilized_resources  # noqa: E402
+from scripts.stress_guard_daemon_runtime import stress_warmup as _stress_warmup  # noqa: E402
+from scripts.stress_guard_daemon_runtime import wait_until_health_ready as _wait_until_health_ready  # noqa: E402
+
+_SOAK_MIN_REQUESTS = 100_000
+_SOAK_MIN_RECEIPTS = 250_000
+_SOAK_MAX_THREADS = 128
+_SOAK_MAX_FILE_DESCRIPTORS = 512
+# Growth is measured from the tree's ceiling over the first tenth of the soak,
+# after the worker pool has filled. SQLite page cache keeps growing slowly
+# after that; this ceiling leaves room for it while still catching a leak.
+_SOAK_MAX_RSS_GROWTH = 0.50
+# Long soak runs probe /healthz about 20k times beside 32 in-flight hooks.
+# Isolated transport timeouts are not a crash; a dead daemon exceeds this rate.
+_SOAK_HEALTH_FAILURE_RATE_MIN_CHECKS = 1_000
+_SOAK_MAX_HEALTH_FAILURE_RATE = 0.005
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_WARMUP_CONCURRENCY = 64
+_DAEMON_READY_TIMEOUT_SECONDS = 90.0
+_DAEMON_SHUTDOWN_TIMEOUT_SECONDS = 20.0
+
+
+@dataclass(frozen=True, slots=True)
+class StressResult:
+    requests: int
+    receipts: int
+    responses: int
+    errors: int
+    p95_ms: float
+    max_ms: float
+    health_checks: int
+    health_failures: int
+    pid_stable: bool
+    daemon_process_count: int | None
+    max_hook_latency_ms: float
+    database_bytes: int
+    lifecycle_events: tuple[str, ...]
+    max_threads: int
+    max_file_descriptors: int
+    rss_baseline_bytes: int
+    rss_peak_bytes: int
+    rss_growth: float
+    transient_health_failures: int
+
+    def _health_contract_passed(self) -> bool:
+        if self.health_checks <= 0 or self.health_failures > 0:
+            return False
+        if self.transient_health_failures == 0:
+            return True
+        return (
+            self.health_checks >= _SOAK_HEALTH_FAILURE_RATE_MIN_CHECKS
+            and self.transient_health_failures / self.health_checks <= _SOAK_MAX_HEALTH_FAILURE_RATE
+        )
+
+    @property
+    def passed(self) -> bool:
+        return (
+            self.responses == self.requests
+            and self.errors == 0
+            and self._health_contract_passed()
+            and self.pid_stable
+            and self.daemon_process_count == 1
+            and self.max_ms < self.max_hook_latency_ms
+        )
+
+    @property
+    def soak_failures(self) -> tuple[str, ...]:
+        """Name each bounded 100k soak criterion a completed run missed."""
+
+        checks = {
+            "run": self.passed,
+            "requests": self.requests >= _SOAK_MIN_REQUESTS,
+            "receipts": self.receipts >= _SOAK_MIN_RECEIPTS,
+            "rss_baseline": self.rss_baseline_bytes > 0,
+            "rss_growth": self.rss_growth <= _SOAK_MAX_RSS_GROWTH,
+            "threads": 0 < self.max_threads <= _SOAK_MAX_THREADS,
+            "file_descriptors": 0 < self.max_file_descriptors <= _SOAK_MAX_FILE_DESCRIPTORS,
+        }
+        return tuple(name for name, met in checks.items() if not met)
+
+    @property
+    def soak_passed(self) -> bool:
+        """Apply the bounded 100k soak contract to a completed run."""
+
+        return not self.soak_failures
+
+
+def _count_fixture_receipts(store: GuardStore) -> int:
+    """Return the committed fixture count; never trust the requested count alone."""
+
+    connection = sqlite3.connect(store.path, timeout=30)
+    try:
+        row = connection.execute("select count(*) from runtime_receipts where receipt_id like 'stress-%'").fetchone()
+    finally:
+        connection.close()
+    if not row or not isinstance(row[0], int):
+        raise RuntimeError("Could not verify the stress receipt fixture.")
+    return row[0]
+
+
+def _stop_native_runtime(guard_home: Path) -> None:
+    """Stop the exact package-bound resident before its temporary state is removed."""
+
+    status = native_runtime_status()
+    identity = status.identity
+    if identity is None:
+        return
+    try:
+        _ = subprocess.run(
+            (
+                str(identity.path),
+                "resident-stop",
+                "--state-dir",
+                str(guard_home / "native-runtime"),
+            ),
+            check=False,
+            capture_output=True,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        # The stress result is still evaluated from the daemon's observed
+        # state. Never allow cleanup diagnostics to mask that result.
+        return
+
+
+def _request_graceful_daemon_stop(guard_home: Path) -> None:
+    """Let the daemon close worker-owned streams before retirement fallback."""
+
+    if os.name == "nt":
+        return
+    state = load_authenticated_daemon_state(guard_home)
+    pid = state.get("pid") if isinstance(state, Mapping) else None
+    if not isinstance(pid, int) or pid <= 0 or not _pid_is_running(pid):
+        return
+    try:
+        os.kill(pid, signal.SIGINT)
+    except OSError:
+        return
+    deadline = time.monotonic() + _DAEMON_SHUTDOWN_TIMEOUT_SECONDS
+    while _pid_is_running(pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+
+def _cleanup_stress_runtime(guard_home: Path) -> bool:
+    """Stop resident streams first, then contain the daemon and its workers."""
+
+    _stop_native_runtime(guard_home)
+    _request_graceful_daemon_stop(guard_home)
+    _ = retire_all_guard_daemons_for_home(guard_home)
+    return guard_daemon_retirement_is_complete(guard_home)
+
+
+def seed_receipts(store: GuardStore, *, count: int) -> None:
+    """Populate the high-volume receipt table in one bounded fixture transaction."""
+
+    if count <= 0:
+        return
+    connection = sqlite3.connect(store.path, timeout=30)
+    try:
+        _ = connection.execute(
+            """
+            with recursive fixture(value) as (
+              select 1
+              union all
+              select value + 1 from fixture where value < ?
+            )
+            insert into runtime_receipts (
+              receipt_id,
+              harness,
+              artifact_id,
+              artifact_hash,
+              policy_decision,
+              changed_capabilities_json,
+              provenance_summary,
+              timestamp
+            )
+            select
+              printf('stress-%09d', value),
+              'stress',
+              'stress-artifact',
+              printf('%064d', value),
+              'allow',
+              '[]',
+              'stress-fixture',
+              '2026-07-25T00:00:00+00:00'
+            from fixture
+            """,
+            (count,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _daemon_lifecycle_is_ready(guard_home: Path) -> bool:
+    """Return true after the daemon records the post-listen ready lifecycle event."""
+
+    return any(event.get("event") == "ready" for event in load_daemon_lifecycle_events(guard_home))
+
+
+def _wait_until_daemon_lifecycle_ready(
+    guard_home: Path, *, timeout_seconds: float = _DAEMON_READY_TIMEOUT_SECONDS
+) -> None:
+    """Block until cold-home work has finished, not merely until HTTP is listening."""
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if _daemon_lifecycle_is_ready(guard_home):
+            return
+        time.sleep(0.05)
+    raise RuntimeError("Stress daemon did not record ready before warmup.")
+
+
+def _initialize_stress_resources(execution: _StressExecution) -> None:
+    resources = _stabilized_resources(execution.initial_pid)
+    if resources is None:
+        return
+    execution.rss_baseline_bytes = resources[0]
+    execution.rss_peak_bytes = resources[0]
+    execution.max_threads = resources[1]
+    execution.max_file_descriptors = resources[2]
+
+
+def _prepare_stress_execution(root: Path, receipt_count: int) -> tuple[GuardStore, _StressExecution, Path]:
+    guard_home = root / "guard-home"
+    home = root / "home"
+    workspace = root / "workspace"
+    home.mkdir()
+    workspace.mkdir()
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    seed_receipts(store, count=receipt_count)
+    committed_receipts = _count_fixture_receipts(store)
+    if committed_receipts != receipt_count:
+        raise RuntimeError(f"Stress fixture count mismatch: requested={receipt_count} committed={committed_receipts}.")
+    daemon_url = ensure_guard_daemon(guard_home, home_dir=home)
+    state = load_authenticated_daemon_state(guard_home)
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    if state is None or auth_token is None:
+        raise RuntimeError("Fresh daemon did not publish authenticated state.")
+    query = urllib.parse.urlencode({"guard-home": guard_home, "home": home, "workspace": workspace})
+    execution = _StressExecution(
+        daemon_url=daemon_url,
+        endpoint=f"{daemon_url}/v1/hooks/pi?{query}",
+        auth_token=auth_token,
+        initial_pid=cast(int, state["pid"]),
+        guard_home=guard_home,
+    )
+    return store, execution, guard_home
+
+
+def _stress_result(
+    execution: _StressExecution,
+    store: GuardStore,
+    guard_home: Path,
+    *,
+    request_count: int,
+    receipt_count: int,
+    max_hook_latency_ms: float,
+) -> StressResult:
+    latencies = sorted(execution.latencies_ms)
+    p95_index = min(len(latencies) - 1, int(len(latencies) * 0.95))
+    events = load_daemon_lifecycle_events(guard_home)
+    return StressResult(
+        requests=request_count,
+        receipts=receipt_count,
+        responses=len(latencies),
+        errors=len(execution.errors),
+        p95_ms=round(latencies[p95_index], 2) if latencies else 0.0,
+        max_ms=round(max(latencies), 2) if latencies else 0.0,
+        health_checks=execution.health_checks,
+        health_failures=execution.health_failures,
+        pid_stable=execution.pid_stable,
+        daemon_process_count=execution.process_count,
+        max_hook_latency_ms=max_hook_latency_ms,
+        database_bytes=store.path.stat().st_size,
+        lifecycle_events=tuple(str(event["event"]) for event in events),
+        max_threads=execution.max_threads,
+        max_file_descriptors=execution.max_file_descriptors,
+        rss_baseline_bytes=execution.rss_baseline_bytes,
+        rss_peak_bytes=execution.rss_peak_bytes,
+        rss_growth=(
+            round(max(0, execution.rss_peak_bytes - execution.rss_baseline_bytes) / execution.rss_baseline_bytes, 6)
+            if execution.rss_baseline_bytes
+            else 0.0
+        ),
+        transient_health_failures=execution.transient_health_failures,
+    )
+
+
+def run_stress(
+    *,
+    request_count: int,
+    receipt_count: int,
+    settle_seconds: float,
+    max_hook_latency_ms: float = 4_500.0,
+) -> StressResult:
+    if request_count <= 0:
+        raise ValueError("request_count must be positive")
+    if receipt_count < 0:
+        raise ValueError("receipt_count must be non-negative")
+    if settle_seconds < 0:
+        raise ValueError("settle_seconds must be non-negative")
+    if max_hook_latency_ms <= 0:
+        raise ValueError("max_hook_latency_ms must be positive")
+
+    with tempfile.TemporaryDirectory(prefix="hol-guard-daemon-stress-") as temporary:
+        root = Path(temporary)
+        store, execution, guard_home = _prepare_stress_execution(root, receipt_count)
+        try:
+            _sample_stress_runtime(execution)
+            _wait_until_health_ready(execution.daemon_url)
+            _wait_until_daemon_lifecycle_ready(guard_home)
+            warmup_count = min(_WARMUP_CONCURRENCY, max(4, request_count))
+            _stress_warmup(execution.endpoint, execution.auth_token, warmup_count)
+            _initialize_stress_resources(execution)
+            _run_stress_batches(execution, request_count)
+            _settle_stress_runtime(execution, guard_home, settle_seconds)
+            _finalize_stress_runtime(execution, guard_home)
+        finally:
+            _ = _cleanup_stress_runtime(guard_home)
+        return _stress_result(
+            execution,
+            store,
+            guard_home,
+            request_count=request_count,
+            receipt_count=receipt_count,
+            max_hook_latency_ms=max_hook_latency_ms,
+        )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    _ = parser.add_argument("--requests", type=int, default=50)
+    _ = parser.add_argument("--receipts", type=int, default=250_000)
+    _ = parser.add_argument("--settle-seconds", type=float, default=60.0)
+    _ = parser.add_argument("--max-hook-latency-ms", type=float, default=4_500.0)
+    _ = parser.add_argument("--enforce-soak", action="store_true")
+    _ = parser.add_argument("--json", type=Path)
+    args = parser.parse_args()
+    if args.enforce_soak:
+        if args.requests < _SOAK_MIN_REQUESTS or args.receipts < _SOAK_MIN_RECEIPTS:
+            parser.error("--enforce-soak requires at least 100000 requests and 250000 receipts")
+        _ = clear_proof_environment()
+        violations = proof_environment_violations()
+        if violations:
+            parser.error(f"native proof environment is not clean: {', '.join(violations)}")
+    result = run_stress(
+        request_count=cast(int, args.requests),
+        receipt_count=cast(int, args.receipts),
+        settle_seconds=cast(float, args.settle_seconds),
+        max_hook_latency_ms=cast(float, args.max_hook_latency_ms),
+    )
+    payload = {
+        **asdict(result),
+        "passed": result.passed,
+        "soak_passed": result.soak_passed,
+        "soak_failures": list(result.soak_failures),
+    }
+    rendered = json.dumps(payload, sort_keys=True)
+    print(rendered)
+    if args.json is not None:
+        args.json.write_text(rendered + "\n", encoding="utf-8")
+    return 0 if (result.soak_passed if args.enforce_soak else result.passed) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

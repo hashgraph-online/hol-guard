@@ -1,0 +1,220 @@
+"""Tests for Rust PostToolUse authority fail-closed daemon behavior."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.cli.commands_hook_native_authority import try_native_hook_authority
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
+from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _post_tool_payload() -> dict[str, object]:
+    return {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "src/foo.ts"},
+        "tool_response": [{"type": "text", "text": "export const value = 1;\n"}],
+    }
+
+
+def test_hook_worker_fails_closed_when_forced_posttool_native_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    result = worker.review_http_payload(
+        payload=_post_tool_payload(),
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["decision"] == "allow"
+    assert result["reason_code"] == "native_post_tool_unavailable"
+
+
+def test_hook_worker_fails_closed_when_available_native_posttool_returns_none(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto",
+            available=True,
+            compatible=True,
+            reason="ok",
+        ),
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    result = worker.review_http_payload(
+        payload=_post_tool_payload(),
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["decision"] == "allow"
+    assert result["reason_code"] == "native_post_tool_unavailable"
+
+
+def test_hook_worker_fails_closed_when_auto_native_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"native": 0}
+
+    def _missing_native(*_args: object, **_kwargs: object) -> None:
+        called["native"] += 1
+        return None
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        _missing_native,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto",
+            available=False,
+            compatible=False,
+            reason="missing",
+        ),
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    result = worker.review_http_payload(
+        payload=_post_tool_payload(),
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert called["native"] == 1
+    assert result["decision"] == "allow"
+    assert result["reason_code"] == "native_post_tool_unavailable"
+
+
+class _ActivityWriter:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def submit_command_activity(
+        self,
+        *,
+        harness: str,
+        event: str,
+        payload: object,
+        succeeded: bool,
+    ) -> bool:
+        self.calls.append({"harness": harness, "event": event, "payload": payload, "succeeded": succeeded})
+        return True
+
+
+def test_hook_worker_records_activity_when_auto_native_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HOL_GUARD_TEST_MODE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    writer = _ActivityWriter()
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"), activity_writer=writer)
+    result = worker.review_http_payload(
+        payload=_post_tool_payload(),
+        params={},
+        default_harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+    )
+    assert result["reason_code"] == "native_post_tool_unavailable"
+    assert len(writer.calls) == 1
+    assert writer.calls[0]["event"] == "PostToolUse"
+    assert writer.calls[0]["harness"] == "pi"
+
+
+def test_cli_auto_posttool_uses_native_worker_not_python_engine(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        lambda *_args, **_kwargs: None,
+    )
+    result = try_native_hook_authority(
+        payload=_post_tool_payload(),
+        harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        store=GuardStore(tmp_path / "guard-home"),
+    )
+    assert result is not None
+    assert result["reason_code"] == "native_post_tool_unavailable"
+
+
+def test_cli_native_authority_leaves_the_resident_writer_running(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stops: list[float] = []
+
+    class _Writer:
+        def __init__(self, *, store: GuardStore) -> None:
+            del store
+
+        def stop(self, *, timeout_seconds: float) -> bool:
+            stops.append(timeout_seconds)
+            return True
+
+    class _Worker:
+        def __init__(self, *, store: GuardStore, activity_writer: object, **_kwargs: object) -> None:
+            del store, activity_writer, _kwargs
+
+        def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
+            return {"decision": "deny", "reason_code": "test_native_decision"}
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.NativeHookEvidenceWriter",
+        _Writer,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.HookWorker",
+        _Worker,
+    )
+
+    result = try_native_hook_authority(
+        payload=_post_tool_payload(),
+        harness="pi",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        store=GuardStore(tmp_path / "guard-home"),
+    )
+
+    assert result == {"decision": "deny", "reason_code": "test_native_decision"}
+    # The writer lives in the resident, which outlives this one-shot hook.
+    # Stopping it here would drain and drop a queue the next hook needs.
+    assert stops == []

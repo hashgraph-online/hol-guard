@@ -1,0 +1,14 @@
+{
+  // OpenCode fixture config
+  "name": "opencode-example",
+  "version": "0.5.0",
+  "plugins": [
+    "./.opencode/plugins/example.ts"
+  ],
+  "mcp": {
+    "server": {
+      "command": "node",
+      "args": ["mcp.js"]
+    }
+  }
+}

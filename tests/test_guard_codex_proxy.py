@@ -1,0 +1,1986 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+from io import StringIO
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
+from codex_plugin_scanner.guard import native_mcp_tool_policy
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, build_tool_call_artifact, build_tool_call_hash
+from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
+from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
+from codex_plugin_scanner.guard.proxy import stdio as stdio_module
+from codex_plugin_scanner.guard.proxy.stdio import ProxyIoTimeoutError, _readline_with_timeout
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
+def _child_command(marker_path: Path, tool_name: str = "dangerous_delete") -> list[str]:
+    return [
+        sys.executable,
+        "-u",
+        "-c",
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "from pathlib import Path",
+                f"marker_path = Path({str(marker_path)!r})",
+                "for line in sys.stdin:",
+                "    message = json.loads(line)",
+                "    message_id = message.get('id')",
+                "    method = message.get('method')",
+                "    if method is None:",
+                "        continue",
+                "    if message_id is None:",
+                "        continue",
+                "    if method == 'initialize':",
+                "        result = {",
+                "            'protocolVersion': '2025-06-18',",
+                "            'capabilities': {'tools': {}},",
+                "            'serverInfo': {'name': 'fixture', 'version': '1.0.0'},",
+                "        }",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    if method == 'tools/list':",
+                "        safe_tool = {",
+                "            'name': 'safe_echo',",
+                "            'description': 'Safe echo',",
+                "            'inputSchema': {'type': 'object', 'properties': {}},",
+                "        }",
+                "        dangerous_tool = {",
+                f"            'name': {tool_name!r},",
+                "            'description': 'Dangerous delete',",
+                "            'inputSchema': {'type': 'object', 'properties': {'target': {'type': 'string'}}},",
+                "        }",
+                "        understated_tool = {",
+                "            'name': 'summarize',",
+                "            'description': 'Summarize a workspace task.',",
+                "            'inputSchema': {'type': 'object', 'properties': {'command': {'type': 'string'}}},",
+                "        }",
+                "        result = {'tools': [safe_tool, dangerous_tool, understated_tool]}",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    if method == 'tools/call':",
+                "        params = message.get('params', {})",
+                f"        if params.get('name') == {tool_name!r}:",
+                "            marker_path.write_text(json.dumps(params), encoding='utf-8')",
+                "        result = {'content': [{'type': 'text', 'text': params.get('name', 'unknown')}]}",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': {}}))",
+                "    sys.stdout.flush()",
+            ]
+        ),
+    ]
+
+
+def _nested_request_child_command() -> list[str]:
+    return [
+        sys.executable,
+        "-u",
+        "-c",
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "for line in sys.stdin:",
+                "    message = json.loads(line)",
+                "    message_id = message.get('id')",
+                "    method = message.get('method')",
+                "    if method is None or message_id is None:",
+                "        continue",
+                "    if method == 'initialize':",
+                "        result = {",
+                "            'protocolVersion': '2025-06-18',",
+                "            'capabilities': {'tools': {}, 'sampling': {}},",
+                "            'serverInfo': {'name': 'fixture', 'version': '1.0.0'},",
+                "        }",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    if method == 'tools/list':",
+                "        child_request_id = 'child-sampling-1'",
+                "        print(json.dumps({",
+                "            'jsonrpc': '2.0',",
+                "            'id': child_request_id,",
+                "            'method': 'sampling/createMessage',",
+                "            'params': {",
+                "                'messages': [",
+                "                    {'role': 'user', 'content': {'type': 'text', 'text': 'guard nested request'}}",
+                "                ]",
+                "            },",
+                "        }))",
+                "        sys.stdout.flush()",
+                "        while True:",
+                "            nested_line = sys.stdin.readline()",
+                "            if not nested_line:",
+                "                sys.exit(1)",
+                "            nested_message = json.loads(nested_line)",
+                "            if nested_message.get('id') == child_request_id and 'result' in nested_message:",
+                "                break",
+                "        result = {",
+                "            'tools': [",
+                "                {",
+                "                    'name': 'safe_echo',",
+                "                    'description': 'Safe echo',",
+                "                    'inputSchema': {'type': 'object', 'properties': {}},",
+                "                }",
+                "            ]",
+                "        }",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': {}}))",
+                "    sys.stdout.flush()",
+            ]
+        ),
+    ]
+
+
+def _nested_request_child_command_with_risky_tool(marker_path: Path) -> list[str]:
+    return [
+        sys.executable,
+        "-u",
+        "-c",
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "from pathlib import Path",
+                f"marker_path = Path({str(marker_path)!r})",
+                "for line in sys.stdin:",
+                "    message = json.loads(line)",
+                "    message_id = message.get('id')",
+                "    method = message.get('method')",
+                "    if method is None or message_id is None:",
+                "        continue",
+                "    if method == 'initialize':",
+                "        result = {",
+                "            'protocolVersion': '2025-06-18',",
+                "            'capabilities': {'tools': {}, 'sampling': {}},",
+                "            'serverInfo': {'name': 'fixture', 'version': '1.0.0'},",
+                "        }",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    if method == 'tools/list':",
+                "        child_request_id = 'child-sampling-1'",
+                "        print(json.dumps({",
+                "            'jsonrpc': '2.0',",
+                "            'id': child_request_id,",
+                "            'method': 'sampling/createMessage',",
+                "            'params': {",
+                "                'messages': [",
+                "                    {'role': 'user', 'content': {'type': 'text', 'text': 'guard nested request'}}",
+                "                ]",
+                "            },",
+                "        }))",
+                "        sys.stdout.flush()",
+                "        while True:",
+                "            nested_line = sys.stdin.readline()",
+                "            if not nested_line:",
+                "                sys.exit(1)",
+                "            nested_message = json.loads(nested_line)",
+                "            if nested_message.get('id') == child_request_id and 'result' in nested_message:",
+                "                break",
+                "        result = {",
+                "            'tools': [",
+                "                {",
+                "                    'name': 'safe_echo',",
+                "                    'description': 'Safe echo',",
+                "                    'inputSchema': {'type': 'object', 'properties': {}},",
+                "                }",
+                "            ]",
+                "        }",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    if method == 'tools/call':",
+                "        params = message.get('params', {})",
+                "        if params.get('name') == 'dangerous_delete':",
+                "            marker_path.write_text(json.dumps(params), encoding='utf-8')",
+                "        result = {'content': [{'type': 'text', 'text': params.get('name', 'unknown')}]}",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': {}}))",
+                "    sys.stdout.flush()",
+            ]
+        ),
+    ]
+
+
+def _hung_response_child_command() -> list[str]:
+    return [
+        sys.executable,
+        "-u",
+        "-c",
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "import time",
+                "for line in sys.stdin:",
+                "    message = json.loads(line)",
+                "    if message.get('id') is None:",
+                "        continue",
+                "    time.sleep(60)",
+            ]
+        ),
+    ]
+
+
+class _BlockingPipeInput:
+    def __init__(self) -> None:
+        read_fd, write_fd = os.pipe()
+        self._reader = os.fdopen(read_fd, "r", encoding="utf-8")
+        self._writer_fd = write_fd
+
+    def fileno(self) -> int:
+        return self._reader.fileno()
+
+    def readline(self) -> str:
+        return self._reader.readline()
+
+    def close(self) -> None:
+        self._reader.close()
+        os.close(self._writer_fd)
+
+
+class _NoFilenoBlockingInput:
+    def readline(self) -> str:
+        raise AssertionError("shared stream should fail closed before blocking readline()")
+
+
+def _context(tmp_path: Path) -> HarnessContext:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    home_dir.mkdir(parents=True, exist_ok=True)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    guard_home.mkdir(parents=True, exist_ok=True)
+    return HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+
+
+def test_codex_guard_proxy_allows_safe_tool_calls_without_prompt(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"capabilities": {"elicitation": {}}},
+            },
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        ]
+    )
+
+    assert result["responses"][2]["result"]["content"][0]["text"] == "safe_echo"
+    assert marker_path.exists() is False
+    assert store.count_approval_requests() == 0
+
+
+def test_codex_guard_proxy_uses_tools_list_schema_for_risk(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "summarize", "arguments": {"value": "hello"}},
+            },
+        ]
+    )
+    pending = store.list_approval_requests()
+
+    assert result["responses"][2]["error"]["code"] == -32001
+    assert len(pending) == 1
+    assert "tool name understates dangerous schema capabilities" in pending[0]["risk_signals"]
+
+
+def test_codex_guard_proxy_requires_inline_approval_for_risky_tool_calls(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"capabilities": {"elicitation": {}}},
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ],
+        inline_approval_callback=lambda request: {"action": "accept", "content": {"decision": "approve"}},
+    )
+
+    assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+    assert store.count_approval_requests() == 0
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+
+
+def test_composio_inline_approval_is_single_use_without_ending_proxy_session(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "composio-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="composio",
+        command=_child_command(marker_path, "COMPOSIO_MULTI_EXECUTE_TOOL"),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    approvals = []
+
+    def approve(request):
+        approvals.append(request)
+        return {"action": "accept", "content": {"decision": "approve"}}
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {"elicitation": {}}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "COMPOSIO_MULTI_EXECUTE_TOOL",
+                    "arguments": {"tools": []},
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "COMPOSIO_MULTI_EXECUTE_TOOL",
+                    "arguments": {"tools": []},
+                },
+            },
+        ],
+        inline_approval_callback=approve,
+    )
+    assert len(result["responses"]) == 4
+    assert len(approvals) == 2
+    assert "error" not in result["responses"][3]
+    assert marker_path.exists()
+
+
+def test_codex_guard_proxy_falls_back_to_approval_center_when_client_cannot_elicit(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+    pending = store.list_approval_requests()
+
+    assert result["responses"][1]["error"]["code"] == -32001
+    assert "retry" in result["responses"][1]["error"]["message"].lower()
+    assert marker_path.exists() is False
+    assert len(pending) == 1
+    assert pending[0]["artifact_type"] == "tool_call"
+
+
+def test_codex_guard_proxy_observe_mode_allows_risky_tool_calls_without_approval_request(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir, mode="observe")
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+    pending = store.list_approval_requests()
+
+    assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+    assert pending == []
+    event = result["events"][1]
+    assert event["decision"] == "allow"
+    assert event["policy_action"] == "allow"
+    assert event["observed_policy_action"] == "require-reapproval"
+    receipt = store.list_receipts(limit=1)[0]
+    assert receipt["policy_decision"] == "allow"
+    assert receipt["scanner_evidence"][-1] == {
+        "source": "observe_mode",
+        "observed_policy_action": "require-reapproval",
+        "authoritative_action": "allow",
+    }
+
+
+def test_codex_guard_proxy_queues_approval_when_inline_prompt_gets_no_response(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"capabilities": {"elicitation": {}}},
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ],
+        inline_approval_callback=lambda request: {"action": "cancel"},
+    )
+    pending = store.list_approval_requests()
+
+    assert result["responses"][1]["error"]["code"] == -32001
+    assert "approve request" in result["responses"][1]["error"]["message"].lower()
+    assert marker_path.exists() is False
+    assert len(pending) == 1
+
+
+def test_codex_guard_proxy_parser_keeps_guard_subcommand_dispatch_intact():
+    parser = _build_parser("cli.py", program_mode="combined")
+    args = parser.parse_args(
+        _resolve_legacy_args(
+            [
+                "guard",
+                "codex-mcp-proxy",
+                "--guard-home",
+                "/tmp/guard",
+                "--server-name",
+                "danger_lab",
+                "--config-path",
+                "/tmp/config.toml",
+                "--command",
+                "python3",
+                "--arg=/tmp/server.py",
+            ],
+            program_mode="combined",
+        )
+    )
+
+    assert args.command == "guard"
+    assert args.guard_command == "codex-mcp-proxy"
+    assert args.server_command == "python3"
+
+
+def test_codex_guard_proxy_does_not_emit_responses_for_notifications(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"elicitation": {}}},
+                    }
+                ),
+                json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}),
+                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert [response["id"] for response in responses] == [1, 2]
+
+
+def test_codex_guard_proxy_ignores_client_responses_without_hanging(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"elicitation": {}}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+                    }
+                ),
+                json.dumps({"jsonrpc": "2.0", "id": 999, "result": {"status": "unrelated"}}),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-1",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[0]["id"] == 1
+    assert responses[1]["id"] == "guard-elicitation-1"
+    assert responses[1]["method"] == "elicitation/create"
+    assert responses[2]["id"] == 2
+    assert responses[2]["result"]["content"][0]["text"] == "dangerous_delete"
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+
+
+def test_codex_guard_proxy_treats_elicitation_error_as_approval_center_fallback(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"elicitation": {}}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-1",
+                        "error": {"code": 4001, "message": "client dismissed prompt"},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[1]["method"] == "elicitation/create"
+    assert responses[2]["id"] == 2
+    assert responses[2]["error"]["code"] == -32001
+    assert marker_path.exists() is False
+    assert store.count_approval_requests() == 1
+
+
+def test_codex_guard_proxy_rechecks_interleaved_requests_during_inline_approval(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"elicitation": {}}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": "first.txt"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": "second.txt"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-2",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-1",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[1]["id"] == "guard-elicitation-1"
+    assert responses[1]["method"] == "elicitation/create"
+    assert responses[2]["id"] == "guard-elicitation-2"
+    assert responses[2]["method"] == "elicitation/create"
+    assert responses[3]["id"] == 3
+    assert responses[4]["id"] == 2
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["arguments"]["target"] == "first.txt"
+
+
+def test_codex_guard_proxy_services_nested_child_requests_without_deadlock(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"sampling": {}}},
+                    }
+                ),
+                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "child-sampling-1",
+                        "result": {
+                            "role": "assistant",
+                            "content": {"type": "text", "text": "Nested approval satisfied"},
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[0]["id"] == 1
+    assert responses[1]["id"] == "child-sampling-1"
+    assert responses[1]["method"] == "sampling/createMessage"
+    assert responses[2]["id"] == 2
+    assert responses[2]["result"]["tools"][0]["name"] == "safe_echo"
+
+
+def test_codex_guard_proxy_guards_interleaved_requests_during_child_request_wait(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    handled_messages: list[dict[str, object]] = []
+
+    def _fake_handle_message(
+        *,
+        message: dict[str, object],
+        child_stdin: StringIO,
+        child_stdout: StringIO,
+        client_input: StringIO,
+        server_output: StringIO,
+        approval_callback,
+    ):
+        del child_stdin, child_stdout, client_input, server_output, approval_callback
+        handled_messages.append(message)
+        return (
+            {
+                "jsonrpc": "2.0",
+                "id": message["id"],
+                "result": {"content": [{"type": "text", "text": "guarded"}]},
+            },
+            {"decision": "guarded"},
+        )
+
+    monkeypatch.setattr(proxy, "_handle_message", _fake_handle_message)
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": "nested.txt"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "child-sampling-1",
+                        "result": {
+                            "role": "assistant",
+                            "content": {"type": "text", "text": "Nested approval satisfied"},
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+    child_stdin = StringIO()
+    child_stdout = StringIO()
+
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-1", "method": "sampling/createMessage", "params": {}},
+        child_stdin=child_stdin,
+        child_stdout=child_stdout,
+        client_input=input_stream,
+        server_output=output_stream,
+    )
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+    child_messages = [json.loads(line) for line in child_stdin.getvalue().splitlines()]
+
+    assert responses[0]["id"] == "child-sampling-1"
+    assert responses[0]["method"] == "sampling/createMessage"
+    assert responses[1]["id"] == 3
+    assert responses[1]["result"]["content"][0]["text"] == "guarded"
+    assert handled_messages == [
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "dangerous_delete", "arguments": {"target": "nested.txt"}},
+        }
+    ]
+    assert child_messages == [
+        {
+            "jsonrpc": "2.0",
+            "id": "child-sampling-1",
+            "result": {
+                "role": "assistant",
+                "content": {"type": "text", "text": "Nested approval satisfied"},
+            },
+        }
+    ]
+
+
+def test_codex_guard_proxy_buffers_out_of_order_child_responses(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    child_stdin = StringIO()
+    child_stdout = StringIO(
+        "\n".join(
+            [
+                json.dumps({"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "second"}]}}),
+                json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "first"}]}}),
+            ]
+        )
+        + "\n"
+    )
+    server_output = StringIO()
+
+    first_response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        child_stdin,
+        child_stdout,
+        client_input=None,
+        server_output=server_output,
+    )
+    second_response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        child_stdin,
+        child_stdout,
+        client_input=None,
+        server_output=server_output,
+    )
+
+    assert first_response["id"] == 1
+    assert second_response["id"] == 2
+    assert server_output.getvalue() == ""
+
+
+def test_codex_guard_proxy_rechecks_buffer_after_nested_child_request(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    child_stdin = StringIO()
+
+    def _fake_proxy_child_request(**kwargs):
+        del kwargs
+        proxy._buffer_child_response(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": "outer"}]},
+            }
+        )
+
+    monkeypatch.setattr(proxy, "_proxy_child_request", _fake_proxy_child_request)
+    response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+        child_stdin,
+        StringIO('{"jsonrpc":"2.0","id":"child-sampling-1","method":"sampling/createMessage","params":{}}\n'),
+        client_input=StringIO(),
+        server_output=StringIO(),
+    )
+
+    assert response["id"] == 1
+    assert response["result"]["content"][0]["text"] == "outer"
+
+
+def test_codex_guard_proxy_rechecks_buffered_client_reply_for_child_request(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    child_stdin = StringIO()
+    server_output = StringIO()
+    buffered_reply = {
+        "jsonrpc": "2.0",
+        "id": "child-sampling-1",
+        "result": {
+            "role": "assistant",
+            "content": {"type": "text", "text": "Nested approval satisfied"},
+        },
+    }
+
+    proxy._buffer_client_response(buffered_reply)
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-1", "method": "sampling/createMessage", "params": {}},
+        child_stdin=child_stdin,
+        child_stdout=StringIO(),
+        client_input=StringIO(),
+        server_output=server_output,
+    )
+
+    assert json.loads(server_output.getvalue().splitlines()[0])["id"] == "child-sampling-1"
+    assert [json.loads(line) for line in child_stdin.getvalue().splitlines()] == [buffered_reply]
+
+
+def test_codex_guard_proxy_buffers_non_matching_child_request_replies(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    inner_child_stdin = StringIO()
+    inner_server_output = StringIO()
+    outer_reply = {
+        "jsonrpc": "2.0",
+        "id": "child-sampling-outer",
+        "result": {
+            "role": "assistant",
+            "content": {"type": "text", "text": "Outer reply"},
+        },
+    }
+    inner_reply = {
+        "jsonrpc": "2.0",
+        "id": "child-sampling-inner",
+        "result": {
+            "role": "assistant",
+            "content": {"type": "text", "text": "Inner reply"},
+        },
+    }
+
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-inner", "method": "sampling/createMessage", "params": {}},
+        child_stdin=inner_child_stdin,
+        child_stdout=StringIO(),
+        client_input=StringIO("\n".join([json.dumps(outer_reply), json.dumps(inner_reply)]) + "\n"),
+        server_output=inner_server_output,
+    )
+
+    outer_child_stdin = StringIO()
+    outer_server_output = StringIO()
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-outer", "method": "sampling/createMessage", "params": {}},
+        child_stdin=outer_child_stdin,
+        child_stdout=StringIO(),
+        client_input=StringIO(),
+        server_output=outer_server_output,
+    )
+
+    assert [json.loads(line) for line in inner_child_stdin.getvalue().splitlines()] == [inner_reply]
+    assert [json.loads(line) for line in outer_child_stdin.getvalue().splitlines()] == [outer_reply]
+
+
+def test_tool_call_hash_changes_when_server_identity_changes():
+    artifact_a = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace-a/.codex/config.toml",
+        transport="stdio",
+        server_fingerprint={"command": ["python3", "server-a.py"], "transport": "stdio"},
+    )
+    artifact_b = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace-b/.codex/config.toml",
+        transport="stdio",
+        server_fingerprint={"command": ["python3", "server-b.py"], "transport": "stdio"},
+    )
+
+    assert build_tool_call_hash(artifact_a, {"target": "canary.txt"}) != build_tool_call_hash(
+        artifact_b,
+        {"target": "canary.txt"},
+    )
+
+
+def test_tool_call_hash_changes_when_tool_schema_identity_changes():
+    artifact_a = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        transport="stdio",
+        server_id="mcp_server:codex:project:danger_lab:1234",
+        tool_schema={"type": "object", "properties": {"target": {"type": "string"}}},
+        tool_description="Delete a file target.",
+    )
+    artifact_b = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        transport="stdio",
+        server_id="mcp_server:codex:project:danger_lab:1234",
+        tool_schema={"type": "object", "properties": {"target": {"type": "string"}, "force": {"type": "boolean"}}},
+        tool_description="Delete files and directories.",
+    )
+
+    assert build_tool_call_hash(artifact_a, {"target": "canary.txt"}) != build_tool_call_hash(
+        artifact_b,
+        {"target": "canary.txt"},
+    )
+
+
+def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(tmp_path / "dangerous-call.json"),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-1",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-2",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+
+    nested_result = proxy._request_inline_approval(
+        {"jsonrpc": "2.0", "id": "guard-elicitation-2", "method": "elicitation/create", "params": {}},
+        input_stream=input_stream,
+        output_stream=StringIO(),
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+    )
+    outer_result = proxy._request_inline_approval(
+        {"jsonrpc": "2.0", "id": "guard-elicitation-1", "method": "elicitation/create", "params": {}},
+        input_stream=input_stream,
+        output_stream=StringIO(),
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+    )
+
+    assert nested_result == {"action": "accept", "content": {"decision": "approve"}}
+    assert outer_result == {"action": "accept", "content": {"decision": "approve"}}
+
+
+@pytest.mark.parametrize(
+    ("action", "forwards", "receipt_action"),
+    (("warn", True, "warn"), ("review", False, "review")),
+)
+def test_codex_guard_proxy_only_passes_through_policy_actions_that_permit_execution(
+    monkeypatch,
+    tmp_path,
+    action,
+    forwards,
+    receipt_action,
+):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "evaluate_tool_call",
+        lambda **_: ToolCallDecision(
+            action=action,
+            policy_action=action,
+            source="policy",
+            signals=("tool name implies destructive file or system changes",),
+            summary="Policy override matched this tool call.",
+        ),
+    )
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(proxy, "_maybe_open_approval_center", lambda **_kwargs: None)
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+
+    if forwards:
+        assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
+        assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+        assert store.count_approval_requests() == 0
+    else:
+        assert result["responses"][1]["error"]["data"]["guardPolicyAction"] == "review"
+        assert marker_path.exists() is False
+        assert store.count_approval_requests() == 1
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == receipt_action
+
+
+def test_codex_guard_proxy_never_forwards_unknown_stored_policy_action(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(native_mcp_tool_policy, "_lookup_input", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        store,
+        "resolve_policy_decision_lookup_with_memory_pattern",
+        lambda *_args, **_kwargs: {
+            "decision": {"action": "future-action"},
+            "ignored_local_integrity": None,
+            "trust_status": {},
+        },
+    )
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+
+    assert result["responses"][1]["error"]["code"] == -32001
+    assert marker_path.exists() is False
+    assert store.count_approval_requests() == 1
+    approval = store.list_approval_requests(limit=1)[0]
+    assert approval["policy_action"] == "require-reapproval"
+    assert approval["scanner_evidence"][-2] == {
+        "source": "guard_action_normalizer",
+        "input_source": "stored_tool_policy",
+        "reason_code": "guard_action_unknown",
+        "original_action": "future-action",
+        "normalized_action": "require-reapproval",
+    }
+    assert approval["scanner_evidence"][-1] == {
+        "source": "approval_reuse",
+        "status": "rejected",
+        "reason_code": "approval_reuse_saved_action_unknown",
+        "current_action": "review",
+        "saved_action": "require-reapproval",
+        "effective_action": "require-reapproval",
+    }
+
+
+def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+        server_env_keys=("TOKEN",),
+    )
+    captured: dict[str, object] = {}
+
+    def _fake_evaluate_tool_call(**kwargs):
+        captured["artifact"] = kwargs["artifact"]
+        return ToolCallDecision(
+            action="allow",
+            policy_action="allow",
+            source="heuristic",
+            signals=(),
+            summary="No high-risk signal was detected in this tool call.",
+        )
+
+    monkeypatch.setattr(runtime_mcp_module, "evaluate_tool_call", _fake_evaluate_tool_call)
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        ]
+    )
+    artifact = captured["artifact"]
+    tool_identity = artifact.metadata["mcp_tool_identity"]
+    expected = build_mcp_tool_identity(
+        server_hash=tool_identity["server_hash"],
+        tool_name="safe_echo",
+        schema={"type": "object", "properties": {}},
+        description="Safe echo",
+    )
+
+    assert result["responses"][2]["result"]["content"][0]["text"] == "safe_echo"
+    assert hasattr(artifact, "metadata")
+    assert artifact.metadata["mcp_server_identity"]["env_keys"] == ["TOKEN"]
+    assert tool_identity["schema_hash"] == expected.schema_hash
+    assert tool_identity["description_hash"] == expected.description_hash
+
+
+def _catalog_test_proxy(tmp_path: Path) -> CodexMcpGuardProxy:
+    context = _context(tmp_path)
+    return CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(tmp_path / "catalog-tool-call.json"),
+        context=context,
+        store=GuardStore(context.guard_home),
+        config=GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir),
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+
+def _advertised_tool(
+    name: str,
+    *,
+    description: str | None = None,
+    schema_type: str = "object",
+) -> dict[str, object]:
+    tool: dict[str, object] = {
+        "name": name,
+        "inputSchema": {"type": schema_type, "properties": {}},
+    }
+    if description is not None:
+        tool["description"] = description
+    return tool
+
+
+def _capture_catalog_page(
+    proxy: CodexMcpGuardProxy,
+    tools: list[dict[str, object]],
+    *,
+    request_cursor: str | None = None,
+    next_cursor: str | None = None,
+) -> None:
+    generation = proxy._begin_tools_catalog_request(request_cursor)
+    result: dict[str, object] = {"tools": tools}
+    if next_cursor is not None:
+        result["nextCursor"] = next_cursor
+    proxy._capture_tools_catalog(
+        {"jsonrpc": "2.0", "id": 1, "result": result},
+        request_cursor=request_cursor,
+        request_generation=generation,
+    )
+
+
+def test_codex_guard_proxy_publishes_only_terminal_paginated_tools_catalog(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ],
+                "nextCursor": "page-2",
+            }
+        }
+    )
+    assert proxy._tool_catalog_state == "pending"
+    assert proxy._tool_catalog == {}
+    assert set(proxy._tool_catalog_pending or {}) == {"safe_echo"}
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "dangerous_delete",
+                        "description": "Dangerous delete",
+                        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+                    }
+                ]
+            }
+        },
+        request_cursor="page-2",
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
+    assert proxy._tool_catalog_pending is None
+
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo only",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        }
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert set(proxy._tool_catalog) == {"safe_echo"}
+
+    proxy._capture_tools_catalog({"result": {"tools": []}})
+
+    assert proxy._tool_catalog_state == "complete"
+    assert proxy._tool_catalog == {}
+
+
+def test_runtime_mcp_catalog_fingerprint_distinguishes_lifecycle_states() -> None:
+    catalog = {
+        "safe_echo": {
+            "description": "Safe echo",
+            "inputSchema": {"type": "object", "properties": {}},
+        }
+    }
+
+    assert runtime_mcp_module._tool_catalog_fingerprint(
+        catalog,
+        state="complete",
+    ) != runtime_mcp_module._tool_catalog_fingerprint(catalog, state="pending")
+    assert runtime_mcp_module._tool_catalog_fingerprint(
+        {},
+        state="unobserved",
+    ) != runtime_mcp_module._tool_catalog_fingerprint({}, state="complete")
+
+
+def test_runtime_mcp_catalog_page_two_addition_and_full_metadata_change_are_bound(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("safe_echo", description="Safe echo")],
+        next_cursor="page-2",
+    )
+    page_two_v1 = _advertised_tool("dangerous_delete", description="Dangerous delete")
+    page_two_v1["annotations"] = {"destructiveHint": True}
+    _capture_catalog_page(proxy, [page_two_v1], request_cursor="page-2")
+    first_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
+
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("safe_echo", description="Safe echo")],
+        next_cursor="page-2-refresh",
+    )
+    page_two_v2 = _advertised_tool("dangerous_delete", description="Dangerous delete")
+    page_two_v2["annotations"] = {"destructiveHint": False}
+    _capture_catalog_page(proxy, [page_two_v2], request_cursor="page-2-refresh")
+    second_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert first_fingerprint != second_fingerprint
+
+
+def test_runtime_mcp_catalog_rejects_continuation_without_root_and_wrong_cursor(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    proxy._capture_tools_catalog(
+        {"result": {"tools": [_advertised_tool("orphan")]}},
+        request_cursor="page-2",
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("safe_echo")],
+        next_cursor="expected-page-2",
+    )
+    wrong_generation = proxy._begin_tools_catalog_request("wrong-page-2")
+    proxy._capture_tools_catalog(
+        {"result": {"tools": [_advertised_tool("must-not-publish")]}},
+        request_cursor="wrong-page-2",
+        request_generation=wrong_generation,
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+@pytest.mark.parametrize(
+    "failure_response",
+    [
+        {"jsonrpc": "2.0", "id": 2, "error": {"code": -32000, "message": "list failed"}},
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "error": {
+                "code": -32800,
+                "message": "timed out",
+                "data": {"guard_timeout": True},
+            },
+        },
+        {"jsonrpc": "2.0", "id": 2, "result": {"tools": "not-a-list"}},
+    ],
+    ids=("jsonrpc-error", "timeout", "malformed"),
+)
+def test_runtime_mcp_failed_root_refresh_poisons_old_complete_catalog(
+    tmp_path: Path,
+    failure_response: dict[str, object],
+) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    _capture_catalog_page(proxy, [_advertised_tool("stale_tool")])
+    generation = proxy._begin_tools_catalog_request(None)
+    proxy._capture_tools_catalog(
+        failure_response,
+        request_cursor=None,
+        request_generation=generation,
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_runtime_mcp_catalog_error_mid_pagination_discards_all_partial_pages(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    _capture_catalog_page(
+        proxy,
+        [_advertised_tool("page_one_tool")],
+        next_cursor="page-2",
+    )
+    generation = proxy._begin_tools_catalog_request("page-2")
+    proxy._capture_tools_catalog(
+        {"jsonrpc": "2.0", "id": 2, "error": {"code": -32000, "message": "page failed"}},
+        request_cursor="page-2",
+        request_generation=generation,
+    )
+
+    assert proxy._tool_catalog_state == "error"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_runtime_mcp_identical_complete_catalog_refresh_is_order_independent(tmp_path: Path) -> None:
+    proxy = _catalog_test_proxy(tmp_path)
+    first_tools = [
+        {
+            "name": "safe_echo",
+            "description": "Safe echo",
+            "inputSchema": {"type": "object", "properties": {"value": {"type": "string"}}},
+        },
+        {
+            "name": "dangerous_delete",
+            "annotations": {"destructiveHint": True, "readOnlyHint": False},
+            "inputSchema": {"properties": {"target": {"type": "string"}}, "type": "object"},
+        },
+    ]
+    _capture_catalog_page(proxy, first_tools)
+    first_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+    reordered_tools = [
+        {
+            "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+            "annotations": {"readOnlyHint": False, "destructiveHint": True},
+            "name": "dangerous_delete",
+        },
+        {
+            "inputSchema": {"properties": {"value": {"type": "string"}}, "type": "object"},
+            "description": "Safe echo",
+            "name": "safe_echo",
+        },
+    ]
+    _capture_catalog_page(proxy, reordered_tools)
+    second_fingerprint = runtime_mcp_module._tool_catalog_fingerprint(
+        proxy._tool_catalog,
+        state=proxy._tool_catalog_state,
+    )
+
+    assert proxy._tool_catalog_state == "complete"
+    assert first_fingerprint == second_fingerprint
+
+
+def test_codex_guard_proxy_invalidates_catalog_on_list_changed_notification(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ],
+                "nextCursor": "cursor-2",
+            }
+        }
+    )
+
+    response, event = proxy._handle_message(
+        message={"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}},
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+        client_input=None,
+        server_output=None,
+        approval_callback=None,
+    )
+
+    assert response is None
+    assert event["decision"] == "forward-notification"
+    assert proxy._tool_catalog_state == "invalidated"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_ignores_stale_tools_list_after_catalog_invalidation(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        },
+        request_generation=proxy._tool_catalog_generation,
+    )
+    stale_generation = proxy._tool_catalog_generation
+
+    proxy._invalidate_tools_catalog()
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "dangerous_delete",
+                        "description": "Dangerous delete",
+                        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+                    }
+                ]
+            }
+        },
+        request_generation=stale_generation,
+    )
+
+    assert proxy._tool_catalog_generation == stale_generation + 1
+    assert proxy._tool_catalog_state == "invalidated"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_invalidates_catalog_on_server_list_changed_notification(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        }
+    )
+
+    child_stdout = StringIO(
+        "\n".join(
+            [
+                json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}}),
+                json.dumps({"jsonrpc": "2.0", "id": 7, "result": {"tools": []}}),
+            ]
+        )
+        + "\n"
+    )
+    response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {}},
+        child_stdin=StringIO(),
+        child_stdout=child_stdout,
+        client_input=None,
+        server_output=StringIO(),
+    )
+
+    assert response["id"] == 7
+    assert proxy._tool_catalog_state == "invalidated"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_returns_timeout_error_when_child_server_hangs(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_hung_response_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_child_response_timeout_seconds", lambda: 0.05)
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+        ]
+    )
+
+    assert result["responses"][0]["error"]["code"] == -32800
+    assert result["responses"][0]["error"]["data"]["guard_timeout"] is True
+    assert result["events"][0]["decision"] == "timeout"
+    assert result["responses"][0]["error"]["data"]["source"] == "child_response"
+
+
+def test_codex_guard_proxy_returns_timeout_error_to_child_for_nested_request_timeout(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_nested_request_timeout_seconds", lambda: 0.05)
+    child_stdin = StringIO()
+    server_output = StringIO()
+    blocking_input = _BlockingPipeInput()
+
+    try:
+        proxy._proxy_child_request(
+            payload={
+                "jsonrpc": "2.0",
+                "id": "child-sampling-timeout",
+                "method": "sampling/createMessage",
+                "params": {},
+            },
+            child_stdin=child_stdin,
+            child_stdout=StringIO(),
+            client_input=blocking_input,
+            server_output=server_output,
+        )
+    finally:
+        blocking_input.close()
+
+    child_reply = json.loads(child_stdin.getvalue().splitlines()[0])
+    assert json.loads(server_output.getvalue().splitlines()[0])["id"] == "child-sampling-timeout"
+    assert child_reply["id"] == "child-sampling-timeout"
+    assert child_reply["error"]["code"] == -32800
+    assert child_reply["error"]["data"]["guard_timeout"] is True
+    assert child_reply["error"]["data"]["source"] == "nested_client_response"
+
+
+def test_codex_guard_proxy_cancels_inline_approval_after_timeout(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(tmp_path / "dangerous-call.json"),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_inline_approval_timeout_seconds", lambda: 0.05)
+
+    blocking_input = _BlockingPipeInput()
+    try:
+        result = proxy._request_inline_approval(
+            {"jsonrpc": "2.0", "id": "guard-elicitation-timeout", "method": "elicitation/create", "params": {}},
+            input_stream=blocking_input,
+            output_stream=StringIO(),
+            child_stdin=StringIO(),
+            child_stdout=StringIO(),
+        )
+    finally:
+        blocking_input.close()
+
+    assert result == {"action": "cancel", "reason": "timeout"}
+
+
+def test_readline_with_timeout_rejects_shared_stream_without_fileno() -> None:
+    with pytest.raises(ProxyIoTimeoutError):
+        _readline_with_timeout(
+            _NoFilenoBlockingInput(),
+            0.05,
+            source="inline_approval",
+            allow_background_wait=False,
+        )
+
+
+def test_readline_with_timeout_rejects_shared_stream_when_select_fails(monkeypatch) -> None:
+    blocking_input = _BlockingPipeInput()
+    try:
+        monkeypatch.setattr(
+            stdio_module.select,
+            "select",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("select unavailable")),
+        )
+        with pytest.raises(ProxyIoTimeoutError):
+            _readline_with_timeout(
+                blocking_input,
+                0.05,
+                source="nested_client_response",
+                allow_background_wait=False,
+            )
+    finally:
+        blocking_input.close()

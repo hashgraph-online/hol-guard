@@ -1,0 +1,849 @@
+"""Cisco MCP scanner integration."""
+
+from __future__ import annotations
+
+import asyncio
+import importlib.util
+import json
+import os
+import sys
+import tempfile
+from collections.abc import Awaitable, Iterable
+from dataclasses import dataclass
+from importlib import metadata as importlib_metadata
+from importlib.machinery import ModuleSpec
+from importlib.metadata import Distribution
+from pathlib import Path
+from threading import Thread
+from types import ModuleType
+from typing import Protocol, TypeGuard, TypeVar
+
+from ..models import Finding, Severity, severity_from_value
+from ..path_support import read_text_file_within_root
+from .cisco_skill_scanner import CiscoIntegrationStatus, _is_safe_sys_path_entry
+from .scanner_subprocess import (
+    MAX_SCANNER_OUTPUT_BYTES,
+    run_bounded_scanner_process,
+    scrubbed_scanner_env,
+)
+
+_EXCLUDED_DIRS = {
+    ".codex-plugin",
+    ".git",
+    ".next",
+    ".turbo",
+    ".venv",
+    "__pycache__",
+    "coverage",
+    "node_modules",
+    "venv",
+}
+_SOURCE_SUFFIXES = {".cjs", ".js", ".json", ".jsx", ".mjs", ".py", ".ts", ".tsx"}
+_MAX_TARGET_SIZE_BYTES = 1_000_000
+_MAX_STATIC_TARGETS = 512
+DEFAULT_CISCO_MCP_TIMEOUT_SECONDS = 30.0
+_CISCO_MCP_SECRET_ENV_NAMES = frozenset({"MCP_SCANNER_API_KEY", "MCP_SCANNER_LLM_API_KEY"})
+T = TypeVar("T")
+
+
+class _CiscoAnalyzer(Protocol):
+    async def analyze(self, content: str, metadata: dict[str, str]) -> list[object] | tuple[object, ...]: ...
+
+
+class _CiscoAnalyzerFactory(Protocol):
+    def __call__(self) -> _CiscoAnalyzer: ...
+
+
+def _is_analyzer_factory(value: object) -> TypeGuard[_CiscoAnalyzerFactory]:
+    return callable(value)
+
+
+async def _await_result(awaitable: Awaitable[T]) -> T:
+    return await awaitable
+
+
+@dataclass(frozen=True, slots=True)
+class CiscoMcpScanSummary:
+    """Normalized summary from a Cisco MCP scan run."""
+
+    status: CiscoIntegrationStatus
+    message: str
+    findings: tuple[Finding, ...]
+    targets_scanned: int
+    analyzers_used: tuple[str, ...]
+    total_findings: int
+    findings_by_severity: dict[str, int]
+    scan_mode: str = "static"
+
+
+def cisco_runtime_unavailable_message() -> str | None:
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class _StaticScanTarget:
+    read_path: Path
+    tool_name: str
+    content_type: str
+
+
+def _empty_counts() -> dict[str, int]:
+    return {severity.value: 0 for severity in Severity}
+
+
+def _build_summary(
+    *,
+    status: CiscoIntegrationStatus,
+    message: str,
+    findings: tuple[Finding, ...] = (),
+    targets_scanned: int = 0,
+    analyzers_used: tuple[str, ...] = (),
+) -> CiscoMcpScanSummary:
+    counts = _empty_counts()
+    for finding in findings:
+        counts[finding.severity.value] += 1
+    return CiscoMcpScanSummary(
+        status=status,
+        message=message,
+        findings=findings,
+        targets_scanned=targets_scanned,
+        analyzers_used=analyzers_used,
+        total_findings=len(findings),
+        findings_by_severity=counts,
+    )
+
+
+def _summary_payload(summary: CiscoMcpScanSummary) -> dict[str, object]:
+    return {
+        "status": summary.status.value,
+        "message": summary.message,
+        "targets_scanned": summary.targets_scanned,
+        "analyzers_used": list(summary.analyzers_used),
+        "findings": [
+            {
+                "rule_id": finding.rule_id,
+                "severity": finding.severity.value,
+                "category": finding.category,
+                "title": finding.title,
+                "description": finding.description,
+                "remediation": finding.remediation,
+                "file_path": finding.file_path,
+                "line_number": finding.line_number,
+                "source": finding.source,
+            }
+            for finding in summary.findings
+        ],
+    }
+
+
+def _summary_from_payload(payload: object) -> CiscoMcpScanSummary:
+    if not isinstance(payload, dict):
+        raise ValueError("Cisco MCP scanner returned an invalid result")
+    raw_findings = payload.get("findings")
+    if not isinstance(raw_findings, list):
+        raise ValueError("Cisco MCP scanner result omitted findings")
+    findings: list[Finding] = []
+    for item in raw_findings:
+        if not isinstance(item, dict):
+            raise ValueError("Cisco MCP scanner returned an invalid finding")
+        line_number = item.get("line_number")
+        findings.append(
+            Finding(
+                rule_id=str(item.get("rule_id") or "CISCO-MCP-SCANNER"),
+                severity=severity_from_value(str(item.get("severity") or "info")),
+                category=str(item.get("category") or "mcp-security"),
+                title=str(item.get("title") or "Cisco MCP scanner finding"),
+                description=str(item.get("description") or "Cisco MCP scanner reported a potential issue."),
+                remediation=str(item["remediation"]) if item.get("remediation") is not None else None,
+                file_path=str(item["file_path"]) if item.get("file_path") is not None else None,
+                line_number=line_number if isinstance(line_number, int) else None,
+                source=str(item.get("source") or "cisco-mcp-scanner"),
+            )
+        )
+    status = CiscoIntegrationStatus(str(payload.get("status") or CiscoIntegrationStatus.FAILED.value))
+    analyzers = payload.get("analyzers_used")
+    return _build_summary(
+        status=status,
+        message=str(payload.get("message") or "Cisco MCP scanner completed without a message."),
+        findings=tuple(findings),
+        targets_scanned=int(payload.get("targets_scanned") or 0),
+        analyzers_used=tuple(str(item) for item in analyzers) if isinstance(analyzers, list) else (),
+    )
+
+
+_CISCO_MCP_SUBPROCESS_SNIPPET = """
+from pathlib import Path
+import json
+import sys
+from codex_plugin_scanner.integrations.cisco_mcp_scanner import _run_cisco_mcp_scan_in_process, _summary_payload
+
+config_path = Path(sys.argv[3]) if sys.argv[3] else None
+summary = _run_cisco_mcp_scan_in_process(
+    Path(sys.argv[1]), mode=sys.argv[2], timeout_seconds=None, config_path=config_path
+)
+Path(sys.argv[4]).write_text(json.dumps(_summary_payload(summary)), encoding="utf-8")
+""".strip()
+
+
+def _run_cisco_mcp_scan_isolated(
+    plugin_dir: Path,
+    *,
+    mode: str,
+    timeout_seconds: float,
+    config_path: Path | None,
+) -> CiscoMcpScanSummary:
+    descriptor, output_name = tempfile.mkstemp(prefix="cisco-mcp-scan-", suffix=".json")
+    os.close(descriptor)
+    output_path = Path(output_name)
+    safe_path_entries = [str(path) for path in sys.path if isinstance(path, str) and _is_safe_sys_path_entry(path)]
+    env = scrubbed_scanner_env(
+        explicit={
+            "PYTHONPATH": os.pathsep.join(safe_path_entries),
+            "PYTHONSAFEPATH": "1",
+        },
+        allowed_secret_names=_CISCO_MCP_SECRET_ENV_NAMES,
+    )
+    try:
+        result = run_bounded_scanner_process(
+            [
+                sys.executable,
+                "-P",
+                "-c",
+                _CISCO_MCP_SUBPROCESS_SNIPPET,
+                str(plugin_dir),
+                mode,
+                str(config_path) if config_path is not None else "",
+                str(output_path),
+            ],
+            env=env,
+            timeout_seconds=timeout_seconds,
+        )
+        if result.timed_out:
+            return _build_summary(
+                status=CiscoIntegrationStatus.TIMED_OUT,
+                message="Cisco MCP scanner timed out before it could finish.",
+            )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+            return _build_summary(
+                status=CiscoIntegrationStatus.FAILED,
+                message=f"Cisco MCP scanner failed in its isolated process: {detail[:512]}",
+            )
+        payload = json.loads(
+            read_text_file_within_root(
+                output_path.parent,
+                output_path,
+                max_bytes=MAX_SCANNER_OUTPUT_BYTES,
+            )
+        )
+        return _summary_from_payload(payload)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        return _build_summary(
+            status=CiscoIntegrationStatus.FAILED,
+            message=f"Cisco MCP scanner isolation failed: {exc}",
+        )
+    finally:
+        output_path.unlink(missing_ok=True)
+
+
+def _load_mcp_scanner_components(*, blocked_root: Path | None = None) -> dict[str, _CiscoAnalyzerFactory]:
+    module = _load_distribution_module("cisco-ai-mcp-scanner", "mcpscanner", blocked_root=blocked_root)
+    components: dict[str, _CiscoAnalyzerFactory] = {}
+
+    yara_analyzer = getattr(module, "YaraAnalyzer", None)
+    if _is_analyzer_factory(yara_analyzer):
+        components["YaraAnalyzer"] = yara_analyzer
+
+    # LLM analyzer: available when MCP_SCANNER_LLM_API_KEY is set
+    if os.environ.get("MCP_SCANNER_LLM_API_KEY"):
+        llm_analyzer = getattr(module, "LLMAnalyzer", None)
+        if _is_analyzer_factory(llm_analyzer):
+            components["LLMAnalyzer"] = llm_analyzer
+
+    # Cisco AI Defense API analyzer: available when MCP_SCANNER_API_KEY is set
+    if os.environ.get("MCP_SCANNER_API_KEY"):
+        api_analyzer = getattr(module, "APIAnalyzer", None)
+        if _is_analyzer_factory(api_analyzer):
+            components["APIAnalyzer"] = api_analyzer
+
+    if not components:
+        raise ImportError("cisco-ai-mcp-scanner does not expose any analyzer factories")
+    return components
+
+
+def _load_distribution_module(
+    distribution_name: str,
+    module_name: str,
+    *,
+    blocked_root: Path | None = None,
+) -> ModuleType:
+    try:
+        distribution = importlib_metadata.distribution(distribution_name)
+    except importlib_metadata.PackageNotFoundError as exc:
+        raise ImportError(f"{distribution_name} is not installed") from exc
+    spec = _distribution_module_spec(distribution, module_name)
+    if spec is not None and blocked_root is not None and not _spec_outside_blocked_root(spec, blocked_root):
+        spec = None
+    if spec is None:
+        spec = _editable_distribution_spec(module_name, blocked_root=blocked_root)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to resolve {module_name} from {distribution_name}")
+    module = importlib.util.module_from_spec(spec)
+    previous_module = sys.modules.get(module_name)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        if previous_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous_module
+        raise
+    return module
+
+
+def _coerce_path(value: object) -> Path | None:
+    if isinstance(value, str):
+        return Path(value)
+    if isinstance(value, os.PathLike):
+        path_value = os.fspath(value)
+        if isinstance(path_value, str):
+            return Path(path_value)
+    return None
+
+
+def _distribution_module_spec(distribution: Distribution, module_name: str) -> ModuleSpec | None:
+    files = distribution.files or ()
+    package_init_relative = f"{module_name}/__init__.py"
+    module_relative = f"{module_name}.py"
+    for package_file in files:
+        if str(package_file).replace("\\", "/") != package_init_relative:
+            continue
+        package_init = Path(package_file.locate())
+        if package_init.is_file():
+            return importlib.util.spec_from_file_location(
+                module_name,
+                package_init,
+                submodule_search_locations=[str(package_init.parent)],
+            )
+    for package_file in files:
+        if str(package_file).replace("\\", "/") != module_relative:
+            continue
+        module_file = Path(package_file.locate())
+        if module_file.is_file():
+            return importlib.util.spec_from_file_location(module_name, module_file)
+    locate_file = getattr(distribution, "locate_file", None)
+    if not callable(locate_file):
+        return None
+    package_dir = _coerce_path(locate_file(module_name))
+    if package_dir is not None and package_dir.is_dir():
+        package_init = package_dir / "__init__.py"
+        if package_init.is_file():
+            return importlib.util.spec_from_file_location(
+                module_name,
+                package_init,
+                submodule_search_locations=[str(package_dir)],
+            )
+    module_file = _coerce_path(locate_file(module_relative))
+    if module_file is not None and module_file.is_file():
+        return importlib.util.spec_from_file_location(module_name, module_file)
+    return None
+
+
+def _editable_distribution_spec(module_name: str, *, blocked_root: Path | None) -> ModuleSpec | None:
+    spec = importlib.util.find_spec(module_name)
+    if spec is None or spec.loader is None:
+        return None
+    if blocked_root is not None and not _spec_outside_blocked_root(spec, blocked_root):
+        return None
+    return spec
+
+
+def _spec_outside_blocked_root(spec: ModuleSpec, blocked_root: Path) -> bool:
+    blocked_root_resolved = blocked_root.resolve()
+    candidate_paths: list[Path] = []
+    spec_origin = getattr(spec, "origin", None)
+    if isinstance(spec_origin, str) and spec_origin not in {"built-in", "frozen"}:
+        candidate_paths.append(Path(spec_origin).resolve())
+    search_locations = getattr(spec, "submodule_search_locations", None)
+    if search_locations is not None:
+        candidate_paths.extend(Path(location).resolve() for location in search_locations)
+    return all(not _path_within_root(candidate_path, blocked_root_resolved) for candidate_path in candidate_paths)
+
+
+def _path_within_root(candidate_path: Path, root: Path) -> bool:
+    try:
+        candidate_path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _relative_path(plugin_dir: Path, file_path: Path) -> str:
+    try:
+        return file_path.resolve().relative_to(plugin_dir.resolve()).as_posix()
+    except ValueError:
+        return file_path.as_posix()
+
+
+def _normalize_rule_fragment(value: str) -> str:
+    normalized = []
+    for character in value.upper():
+        normalized.append(character if character.isalnum() else "-")
+    return "".join(normalized).strip("-") or "FINDING"
+
+
+def _extract_rule_id(details: object, threat_category: str) -> str:
+    if isinstance(details, dict):
+        raw_response = details.get("raw_response")
+        if isinstance(raw_response, dict):
+            candidate = raw_response.get("rule")
+            if isinstance(candidate, str) and candidate.strip():
+                return f"CISCO-MCP-{_normalize_rule_fragment(candidate)}"
+        candidate = details.get("threat_type")
+        if isinstance(candidate, str) and candidate.strip():
+            return f"CISCO-MCP-{_normalize_rule_fragment(candidate)}"
+    return f"CISCO-MCP-{_normalize_rule_fragment(threat_category)}"
+
+
+def _extract_description(summary: str, details: object) -> str:
+    if isinstance(details, dict):
+        evidence = details.get("evidence")
+        if isinstance(evidence, str) and evidence.strip():
+            return evidence.strip()
+    return summary or "Cisco MCP scanner reported a potential issue."
+
+
+def _extract_title(summary: str, threat_category: str) -> str:
+    if summary:
+        return summary
+    return threat_category.replace("_", " ").title() or "Cisco MCP scanner finding"
+
+
+def _normalize_finding(plugin_dir: Path, file_path: Path, finding: object) -> Finding:
+    summary = str(getattr(finding, "summary", "") or "")
+    details = getattr(finding, "details", {})
+    threat_category = str(getattr(finding, "threat_category", "") or "mcp-security")
+    return Finding(
+        rule_id=_extract_rule_id(details, threat_category),
+        severity=severity_from_value(str(getattr(finding, "severity", "info") or "info")),
+        category="security",
+        title=_extract_title(summary, threat_category),
+        description=_extract_description(summary, details),
+        file_path=_relative_path(plugin_dir, file_path),
+        source="cisco-mcp-scanner",
+    )
+
+
+def _collect_static_targets(plugin_dir: Path, config_path: Path | None = None) -> tuple[_StaticScanTarget, ...]:
+    effective_config_path = config_path or plugin_dir / ".mcp.json"
+    resolved_config_path = _safe_resolved_static_target(plugin_dir, effective_config_path)
+    if resolved_config_path is None:
+        return ()
+
+    targets: list[_StaticScanTarget] = []
+    seen_targets: set[Path] = set()
+    try:
+        if resolved_config_path.stat().st_size <= _MAX_TARGET_SIZE_BYTES:
+            targets.append(
+                _StaticScanTarget(
+                    read_path=resolved_config_path,
+                    tool_name=effective_config_path.name,
+                    content_type="mcp-config",
+                )
+            )
+            seen_targets.add(resolved_config_path)
+    except OSError:
+        pass
+
+    default_config_path = plugin_dir / ".mcp.json"
+    is_default_config = _same_resolved_path(effective_config_path, default_config_path)
+    scan_roots = (plugin_dir,) if is_default_config else (resolved_config_path.parent,)
+    for scan_root in scan_roots:
+        _append_static_source_targets_from_tree(
+            plugin_dir=plugin_dir,
+            scan_root=scan_root,
+            config_path=resolved_config_path,
+            targets=targets,
+            seen_targets=seen_targets,
+        )
+
+    if not is_default_config:
+        _append_static_source_targets(
+            plugin_dir=plugin_dir,
+            candidates=_mcp_config_referenced_source_paths(
+                plugin_dir=plugin_dir,
+                config_path=resolved_config_path,
+            ),
+            targets=targets,
+            seen_targets=seen_targets,
+        )
+    return tuple(targets)
+
+
+def _append_static_source_targets_from_tree(
+    *,
+    plugin_dir: Path,
+    scan_root: Path,
+    config_path: Path,
+    targets: list[_StaticScanTarget],
+    seen_targets: set[Path],
+) -> None:
+    try:
+        scan_root.resolve(strict=True).relative_to(plugin_dir.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return
+    for root, dirs, files in os.walk(scan_root, topdown=True):
+        dirs[:] = sorted(dir_name for dir_name in dirs if dir_name not in _EXCLUDED_DIRS)
+        current_dir = Path(root)
+        candidates = (
+            current_dir / file_name
+            for file_name in sorted(files)
+            if (current_dir / file_name).suffix.lower() in _SOURCE_SUFFIXES and current_dir / file_name != config_path
+        )
+        _append_static_source_targets(
+            plugin_dir=plugin_dir,
+            candidates=candidates,
+            targets=targets,
+            seen_targets=seen_targets,
+        )
+        if len(targets) >= _MAX_STATIC_TARGETS:
+            return
+
+
+def _append_static_source_targets(
+    *,
+    plugin_dir: Path,
+    candidates: Iterable[Path],
+    targets: list[_StaticScanTarget],
+    seen_targets: set[Path],
+) -> None:
+    for candidate in candidates:
+        if len(targets) >= _MAX_STATIC_TARGETS:
+            return
+        if not isinstance(candidate, Path):
+            continue
+        if candidate.suffix.lower() not in _SOURCE_SUFFIXES:
+            continue
+        resolved_file_path = _safe_resolved_static_target(plugin_dir, candidate)
+        if resolved_file_path is None or resolved_file_path in seen_targets:
+            continue
+        try:
+            if resolved_file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
+                continue
+        except OSError:
+            continue
+        targets.append(
+            _StaticScanTarget(
+                read_path=resolved_file_path,
+                tool_name=resolved_file_path.name,
+                content_type="mcp-source",
+            )
+        )
+        seen_targets.add(resolved_file_path)
+
+
+def _mcp_config_referenced_source_paths(*, plugin_dir: Path, config_path: Path) -> tuple[Path, ...]:
+    try:
+        if config_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
+            return ()
+        config = json.loads(config_path.read_text(encoding="utf-8", errors="ignore"))
+    except (OSError, json.JSONDecodeError):
+        return ()
+
+    candidates: list[Path] = []
+    for value in _mcp_config_command_values(config):
+        raw_path = Path(value)
+        if raw_path.suffix.lower() not in _SOURCE_SUFFIXES:
+            continue
+        if raw_path.is_absolute():
+            candidates.append(raw_path)
+            continue
+        candidates.append(config_path.parent / raw_path)
+        candidates.append(plugin_dir / raw_path)
+    return tuple(candidates)
+
+
+def _mcp_config_command_values(config: object) -> tuple[str, ...]:
+    servers: list[object] = []
+    if isinstance(config, dict):
+        servers.append(config)
+        for key in ("mcpServers", "servers"):
+            collection = config.get(key)
+            if isinstance(collection, dict):
+                servers.extend(collection.values())
+            elif isinstance(collection, list):
+                servers.extend(collection)
+
+    values: list[str] = []
+    for server in servers:
+        if not isinstance(server, dict):
+            continue
+        command = server.get("command")
+        if isinstance(command, str) and command.strip():
+            values.append(command.strip())
+        args = server.get("args")
+        if isinstance(args, list):
+            values.extend(arg.strip() for arg in args if isinstance(arg, str) and arg.strip())
+    return tuple(values)
+
+
+def _same_resolved_path(left: Path, right: Path) -> bool:
+    try:
+        return left.resolve(strict=False) == right.resolve(strict=False)
+    except OSError:
+        return left == right
+
+
+def _safe_resolved_static_target(plugin_dir: Path, target: Path) -> Path | None:
+    try:
+        resolved_root = plugin_dir.resolve(strict=True)
+        resolved_target = target.resolve(strict=True)
+        if not resolved_target.is_file():
+            return None
+    except (OSError, RuntimeError):
+        return None
+    try:
+        resolved_target.relative_to(resolved_root)
+    except ValueError:
+        return None
+    return resolved_target
+
+
+def _run_awaitable(awaitable: Awaitable[T], *, timeout_seconds: float | None = None) -> T:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_await_result(awaitable))
+
+    result: list[T] = []
+    errors: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            result.append(asyncio.run(_await_result(awaitable)))
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    if thread.is_alive():
+        raise TimeoutError("Cisco MCP scanner timed out")
+    if errors:
+        raise errors[0]
+    if result:
+        return result[0]
+    raise RuntimeError("Cisco MCP scanner completed without a result.")
+
+
+async def _scan_targets_multi(
+    plugin_dir: Path,
+    targets: tuple[_StaticScanTarget, ...],
+    analyzers: tuple[tuple[str, _CiscoAnalyzer], ...],
+) -> tuple[tuple[Finding, ...], int, tuple[str, ...], dict[str, str]]:
+    findings: list[Finding] = []
+    targets_scanned = 0
+    successful_analyzers: set[str] = set()
+    analyzer_errors: dict[str, str] = {}
+    for target in targets:
+        try:
+            content = target.read_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        targets_scanned += 1
+        for analyzer_name, analyzer in analyzers:
+            try:
+                external_findings = await analyzer.analyze(
+                    content,
+                    {
+                        "tool_name": target.tool_name,
+                        "content_type": target.content_type,
+                        "file_path": str(target.read_path),
+                    },
+                )
+            except Exception as exc:
+                if analyzer_name not in analyzer_errors:
+                    analyzer_errors[analyzer_name] = str(exc)
+                continue
+            successful_analyzers.add(analyzer_name)
+            for finding in external_findings:
+                normalized = _normalize_finding(plugin_dir, target.read_path, finding)
+                findings.append(normalized)
+    # Preserve configured order for deterministic output
+    ordered_successful = tuple(name for name, _ in analyzers if name in successful_analyzers)
+    # Only report errors for analyzers that never succeeded
+    failed_only = {n: e for n, e in analyzer_errors.items() if n not in successful_analyzers}
+    return tuple(findings), targets_scanned, ordered_successful, failed_only
+
+
+def _not_installed_summary(mode: str) -> CiscoMcpScanSummary:
+    if mode == "on":
+        return _build_summary(
+            status=CiscoIntegrationStatus.UNAVAILABLE,
+            message="Cisco MCP scanner is required but not installed. Ensure package dependencies are installed.",
+        )
+    return _build_summary(
+        status=CiscoIntegrationStatus.UNAVAILABLE,
+        message="Cisco MCP scanner not installed; deep MCP scan skipped.",
+    )
+
+
+def _cisco_mcp_scanner_runnable() -> bool:
+    """Whether the isolated child could load the Cisco MCP scanner at all.
+
+    A packaged Guard cannot run ``-c`` code, and the child refuses a scanner
+    without installed distribution metadata, so either one means the scan
+    cannot happen.
+    """
+
+    if getattr(sys, "frozen", False):
+        return False
+    try:
+        importlib_metadata.distribution("cisco-ai-mcp-scanner")
+    except importlib_metadata.PackageNotFoundError:
+        return False
+    except Exception:
+        # Any other lookup failure is the child's to report as a failed scan.
+        return True
+    return True
+
+
+def _run_cisco_mcp_scan_in_process(
+    plugin_dir: Path,
+    mode: str = "auto",
+    timeout_seconds: float | None = DEFAULT_CISCO_MCP_TIMEOUT_SECONDS,
+    config_path: Path | None = None,
+) -> CiscoMcpScanSummary:
+    """Run Cisco MCP scanner static analysis when available."""
+
+    effective_config_path = config_path or plugin_dir / ".mcp.json"
+
+    if mode == "off":
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="Cisco MCP scanning disabled by configuration.",
+        )
+
+    if _safe_resolved_static_target(plugin_dir, effective_config_path) is None:
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="No MCP configuration found; Cisco MCP scan skipped.",
+        )
+    runtime_message = cisco_runtime_unavailable_message()
+    if runtime_message is not None:
+        return _build_summary(
+            status=CiscoIntegrationStatus.UNAVAILABLE,
+            message=runtime_message,
+        )
+    try:
+        try:
+            components = _load_mcp_scanner_components(blocked_root=plugin_dir)
+        except TypeError as exc:
+            if "blocked_root" not in str(exc):
+                raise
+            components = _load_mcp_scanner_components()
+    except ImportError:
+        return _not_installed_summary(mode)
+    except Exception as exc:
+        return _build_summary(
+            status=CiscoIntegrationStatus.FAILED,
+            message=f"Cisco MCP scanner failed to load: {exc}",
+        )
+
+    try:
+        analyzers: list[tuple[str, _CiscoAnalyzer]] = []
+        for name, factory in components.items():
+            analyzer_name = name.replace("Analyzer", "").lower()
+            analyzers.append((analyzer_name, factory()))
+        targets = _collect_static_targets(plugin_dir, effective_config_path)
+        scan_awaitable = _scan_targets_multi(plugin_dir, targets, tuple(analyzers))
+        if timeout_seconds is not None:
+            scan_awaitable = asyncio.wait_for(scan_awaitable, timeout=timeout_seconds)
+        findings, targets_scanned, successful_analyzers, analyzer_errors = _run_awaitable(
+            scan_awaitable,
+            timeout_seconds=timeout_seconds,
+        )
+    except (TimeoutError, asyncio.TimeoutError):
+        return _build_summary(
+            status=CiscoIntegrationStatus.TIMED_OUT,
+            message="Cisco MCP scanner timed out before it could finish.",
+        )
+    except Exception as exc:
+        return _build_summary(
+            status=CiscoIntegrationStatus.FAILED,
+            message=f"Cisco MCP scanner failed: {exc}",
+        )
+
+    # When all configured analyzers failed, report as failed
+    if not successful_analyzers and analyzer_errors:
+        error_details = "; ".join(f"{n}: {e}" for n, e in analyzer_errors.items())
+        return _build_summary(
+            status=CiscoIntegrationStatus.FAILED,
+            message=f"All configured analyzers failed: {error_details}",
+        )
+    # When no targets were scanned, no analyzer actually ran
+    if targets_scanned == 0:
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="No scannable MCP targets found; scan skipped.",
+        )
+    # Only report analyzers that actually ran successfully
+    analyzer_names = successful_analyzers if successful_analyzers else tuple(name for name, _ in analyzers)
+    error_suffix = (
+        f" (skipped: {', '.join(f'{n} ({e})' for n, e in analyzer_errors.items())})" if analyzer_errors else ""
+    )
+    if findings:
+        message = (
+            f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "
+            f"using {', '.join(analyzer_names)} analyzer(s) "
+            f"and reported {len(findings)} finding(s).{error_suffix}"
+        )
+    else:
+        message = (
+            f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "
+            f"using {', '.join(analyzer_names)} analyzer(s) with no findings.{error_suffix}"
+        )
+    return _build_summary(
+        status=CiscoIntegrationStatus.ENABLED,
+        message=message,
+        findings=findings,
+        targets_scanned=targets_scanned,
+        analyzers_used=analyzer_names,
+    )
+
+
+def run_cisco_mcp_scan(
+    plugin_dir: Path,
+    mode: str = "auto",
+    timeout_seconds: float | None = DEFAULT_CISCO_MCP_TIMEOUT_SECONDS,
+    config_path: Path | None = None,
+) -> CiscoMcpScanSummary:
+    """Run Cisco MCP analysis in a resource-bounded child process."""
+    if mode == "off":
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="Cisco MCP scanning disabled by configuration.",
+        )
+    resolved_plugin_dir = plugin_dir.resolve()
+    resolved_config_path = config_path.resolve() if config_path is not None else None
+    # The isolated child starts a whole interpreter (in a packaged Guard, the
+    # onefile runtime extracts itself again), so settle the outcomes it would
+    # reach before loading Cisco code here, where they cost nothing.
+    if (
+        _safe_resolved_static_target(resolved_plugin_dir, resolved_config_path or resolved_plugin_dir / ".mcp.json")
+        is None
+    ):
+        return _build_summary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="No MCP configuration found; Cisco MCP scan skipped.",
+        )
+    if not _cisco_mcp_scanner_runnable():
+        return _not_installed_summary(mode)
+    effective_timeout = DEFAULT_CISCO_MCP_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
+    return _run_cisco_mcp_scan_isolated(
+        resolved_plugin_dir,
+        mode=mode,
+        timeout_seconds=effective_timeout,
+        config_path=resolved_config_path,
+    )

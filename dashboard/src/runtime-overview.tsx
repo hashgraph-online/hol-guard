@@ -1,0 +1,625 @@
+import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
+import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
+import type { GuardCloudCommandCapability, GuardCloudSyncHealth, GuardInventoryItem, GuardOperatorHealth, GuardOperatorHealthState, GuardProofStatus, GuardProtectionState, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import { protectionHealthFor } from "./protection-health";
+import { guardActionPresentation } from "./guard-action";
+import type { GuardActionPresentation } from "./guard-action";
+
+const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw", "kimi", "grok", "devin"] as const;
+
+type WatchedHarnessName = (typeof WATCHED_HARNESSES)[number];
+
+type RuntimeOverviewProps = {
+  snapshot: GuardRuntimeSnapshot;
+  inventory?: GuardInventoryItem[];
+};
+
+type RuntimeProofTone = "blue" | "green" | "purple" | "slate" | "attention";
+
+const countFormatter = new Intl.NumberFormat();
+
+export function formatOperatorCount(value: number): string {
+  return countFormatter.format(value);
+}
+
+export function formatOldestWait(milliseconds: number): string {
+  if (milliseconds < 1_000) return `${formatOperatorCount(Math.round(milliseconds))} ms`;
+  return `${(milliseconds / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })} s`;
+}
+
+function operatorHealthLabel(state: GuardOperatorHealthState): string {
+  if (state === "store-contended") return "Store contended";
+  return state[0].toUpperCase() + state.slice(1);
+}
+
+function operatorHealthTone(state: GuardOperatorHealthState): RuntimeProofTone {
+  if (state === "healthy") return "green";
+  if (state === "backlogged") return "blue";
+  return "attention";
+}
+
+export function OperatorHealthCard(props: { health: GuardOperatorHealth }) {
+  const health = props.health;
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4" data-operator-health={health.state}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Local processing</p>
+        <Tag tone={operatorHealthTone(health.state)}>{operatorHealthLabel(health.state)}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{health.cause}</p>
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+        <div>
+          <dt className="text-xs text-slate-500">Queue</dt>
+          <dd className="text-sm font-semibold text-brand-dark">{formatOperatorCount(health.queue_depth)} / {formatOperatorCount(health.queue_limit)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Oldest wait</dt>
+          <dd className="text-sm font-semibold text-brand-dark">{formatOldestWait(health.oldest_wait_ms)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Workers busy</dt>
+          <dd className="text-sm font-semibold text-brand-dark">{formatOperatorCount(health.workers_busy)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-slate-500">Workers ready</dt>
+          <dd className="text-sm font-semibold text-brand-dark">{formatOperatorCount(health.workers_ready)}</dd>
+        </div>
+      </dl>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="text-xs leading-relaxed text-slate-600">
+          <span className="font-semibold text-brand-dark">Automatic recovery:</span> {health.automatic_recovery}
+        </p>
+        {health.repairable ? (
+          <ActionButton href="/settings?section=maintenance#approval-center-repair" variant="secondary">
+            Repair local processing
+          </ActionButton>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function protectionProofTone(state: GuardProtectionState): RuntimeProofTone {
+  if (state === "protected") return "green";
+  if (state === "partial") return "blue";
+  return "slate";
+}
+
+function protectionTagTone(state: GuardProtectionState): RuntimeProofTone {
+  if (state === "protected") return "green";
+  if (state === "partial") return "blue";
+  return "attention";
+}
+
+function recentDecisionTone(action: GuardActionPresentation | null): RuntimeProofTone {
+  if (action === null) return "slate";
+  if (action.disposition === "allowed") return "green";
+  if (action.disposition === "blocked") return "attention";
+  return "blue";
+}
+
+function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "attention" {
+  if (state === "blocked" || state === "degraded") {
+    return "attention";
+  }
+  if (state === "connected" || state === "local_only") {
+    return "info";
+  }
+  if (state === "protected") {
+    return "success";
+  }
+  return "info";
+}
+
+export function remediationLine(snapshot: GuardRuntimeSnapshot): string {
+  if (snapshot.runtime_state === null) {
+    return "Start Guard with hol-guard bootstrap so the approval center can receive live requests again.";
+  }
+  if (snapshot.pending_count > 0) {
+    return "Open the review queue, choose what to do with the waiting action, then retry in the same chat.";
+  }
+  if (snapshot.cloud_state === "paired_waiting") {
+    return "Keep Local Guard running while it finishes the first cloud sync automatically, or run hol-guard sync now.";
+  }
+  if (snapshot.cloud_state === "local_only") {
+    return "Stay local for now or connect this machine when you want shared queue memory and cross-device proof.";
+  }
+  return "Open Guard Cloud for shared decisions, Apps for local coverage, or the review queue when something needs your choice.";
+}
+
+export type ApprovalCenterHealthState = "ready" | "starting" | "stale" | "repair_needed";
+
+export type ApprovalCenterHealthCopy = {
+  state: ApprovalCenterHealthState;
+  label: string;
+  detail: string;
+};
+
+export function resolveApprovalCenterHealth(snapshot: GuardRuntimeSnapshot): ApprovalCenterHealthCopy {
+  if (snapshot.runtime_state === null) {
+    if (snapshot.headline_state === "setup") {
+      return {
+        state: "starting",
+        label: "Approval center starting",
+        detail: "Guard is setting up the local approval center. This takes a few seconds.",
+      };
+    }
+    return {
+      state: "stale",
+      label: "Approval center offline",
+      detail: "The local approval center is not running. Start Guard to restore the approval link.",
+    };
+  }
+  if (snapshot.approval_center_url === null) {
+    return {
+      state: "repair_needed",
+      label: "Approval center unreachable",
+      detail: "The approval center URL is missing. Use the repair action in Settings to restore it.",
+    };
+  }
+  return {
+    state: "ready",
+    label: "Approval center ready",
+    detail: `The approval center is running and accepting requests at ${snapshot.approval_center_url}.`,
+  };
+}
+
+
+export function resolveCloudSyncHealthCopy(health: GuardCloudSyncHealth): { label: string; detail: string } {
+  return {
+    label: health.label,
+    detail: health.detail
+  };
+}
+
+export function resolveProtectionLevelCopy(level: "balanced" | "strict" | "custom" | "gentle" | "paranoid"): string {
+  if (level === "gentle") {
+    return "Monitors quietly, asks only for high-risk actions";
+  }
+  if (level === "balanced") {
+    return "Asks before secrets and destructive commands";
+  }
+  if (level === "strict") {
+    return "Asks more often, including new network";
+  }
+  if (level === "paranoid") {
+    return "Asks before nearly every action";
+  }
+  return "Custom rules active";
+}
+
+export function resolveCloudIntelCopy(state: "local_only" | "paired_waiting" | "paired_active"): { label: string; detail: string } {
+  if (state === "local_only") {
+    return { label: "Offline, free", detail: "Running locally with no cloud sync. Your choices stay on this machine." };
+  }
+  if (state === "paired_waiting") {
+    return { label: "First sync in progress", detail: "Connected to Guard Cloud. Local Guard is sending the first shared proof now." };
+  }
+  return { label: "Synced, pro", detail: "Guard Cloud is active and syncing choices across your devices." };
+}
+
+export type ProofStatusCopy = {
+  label: string;
+  detail: string;
+  tone: "green" | "blue" | "slate" | "attention";
+};
+
+export function resolveProofStatusCopy(proofStatus: GuardProofStatus): ProofStatusCopy {
+  if (proofStatus.state === "synced") {
+    return { label: proofStatus.label, detail: proofStatus.detail, tone: "green" };
+  }
+  if (proofStatus.state === "pending" || proofStatus.state === "waiting") {
+    return { label: proofStatus.label, detail: proofStatus.detail, tone: "blue" };
+  }
+  if (proofStatus.state === "sync_unavailable") {
+    return {
+      label: "Cloud proof not available",
+      detail: "Connect to Guard Cloud to unlock cross-device proof and shared history.",
+      tone: "slate",
+    };
+  }
+  if (proofStatus.state === "failed" || proofStatus.state === "expired") {
+    return { label: proofStatus.label, detail: proofStatus.detail, tone: "attention" };
+  }
+  return {
+    label: "Local only",
+    detail: "Local Guard is available. Protection health is reported separately; cloud proof is optional.",
+    tone: "slate",
+  };
+}
+
+function cloudSyncHealthTone(state: GuardCloudSyncHealth["state"]): "blue" | "slate" {
+  if (state === "disabled" || state === "failed" || state === "stale") {
+    return "slate";
+  }
+  return "blue";
+}
+
+function humanizeCloudSyncHealthLabel(label: string): string {
+  const labels: Record<string, string> = {
+    "Cloud sync stale": "Cloud backup is out of date",
+    "Cloud sync healthy": "Cloud backup up to date",
+    "First shared proof": "First cloud backup",
+  };
+  return labels[label] ?? label;
+}
+
+function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
+  const copy = resolveCloudSyncHealthCopy(props.health);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Guard cloud backup
+        </p>
+        <Tag tone={cloudSyncHealthTone(props.health.state)}>{humanizeCloudSyncHealthLabel(copy.label)}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+    </div>
+  );
+}
+
+export function resolveCloudCommandCapabilityCopy(capability: GuardCloudCommandCapability | undefined): {
+  label: string;
+  detail: string;
+  tone: "green" | "slate" | "attention";
+} {
+  if (capability?.reason === "command_queue_environment_disabled") {
+    return {
+      label: "Commands paused",
+      detail: "A local emergency environment setting is pausing Cloud commands. Read-only Cloud sync continues.",
+      tone: "slate",
+    };
+  }
+  if (capability === undefined || !capability.enabled) {
+    return {
+      label: "Commands off",
+      detail: "Guard Cloud commands are disabled on this device. Read-only Cloud sync continues independently.",
+      tone: "slate",
+    };
+  }
+  if (capability.pending_commands.length > 0) {
+    return {
+      label: `${capability.pending_commands.length} awaiting local approval`,
+      detail: "A state-changing Cloud command is paused until you approve that exact job locally.",
+      tone: "attention",
+    };
+  }
+  return {
+    label: "Commands enabled",
+    detail: `${capability.operations.length} exact operation${capability.operations.length === 1 ? " is" : "s are"} granted. State-changing jobs still require one-job local approval.`,
+    tone: "green",
+  };
+}
+
+function CloudCommandCapabilityCard(props: { capability: GuardCloudCommandCapability | undefined }) {
+  const capability = props.capability;
+  const copy = resolveCloudCommandCapabilityCopy(capability);
+  const capabilityValid = capability?.capability_valid ?? capability?.enabled ?? false;
+  const command = capabilityValid
+    ? capability.revoke_command
+    : capability?.enable_command ?? "hol-guard commands enable --operations read-only";
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Guard Cloud command access
+        </p>
+        <Tag tone={copy.tone}>{copy.label}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+      {capabilityValid && capability ? (
+        <>
+          <p className="mt-2 text-xs text-slate-500">
+            Issuer: {capability.issuer ?? "local device"}
+            {capability.expires_at ? ` · Expires ${formatRelativeTime(capability.expires_at)}` : ""}
+          </p>
+          <details className="mt-2 text-xs text-slate-600">
+            <summary className="cursor-pointer font-medium">
+              Granted operations ({capability.operations.length})
+            </summary>
+            <ul className="mt-2 space-y-1 pl-4 font-mono">
+              {capability.operations.map((operation) => <li key={operation}>{operation}</li>)}
+            </ul>
+          </details>
+          {capability.pending_commands.slice(0, 3).map((pending) => (
+            <div key={pending.id} className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-xs font-medium text-amber-900">{pending.operation} · {pending.issuer}</p>
+              <p className="mt-1 break-all font-mono text-xs text-amber-800">{pending.approveCommand}</p>
+            </div>
+          ))}
+          {capability.pending_commands.length > 3 ? (
+            <p className="mt-2 text-xs text-slate-500">
+              {capability.pending_commands.length - 3} more pending commands are available with hol-guard commands status.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+      <p className="mt-3 break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-600">
+        {command}
+      </p>
+    </div>
+  );
+}
+
+function approvalHealthTone(state: ApprovalCenterHealthState): "green" | "blue" | "slate" | "attention" {
+  if (state === "ready") return "green";
+  if (state === "starting") return "blue";
+  if (state === "repair_needed") return "attention";
+  return "slate";
+}
+
+function ApprovalCenterHealthCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const copy = resolveApprovalCenterHealth(props.snapshot);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Approval center health
+        </p>
+        <Tag tone={approvalHealthTone(copy.state)}>{copy.label}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+    </div>
+  );
+}
+
+function WatchedAppsList(props: { inventory: GuardInventoryItem[] | undefined }) {
+  const inventory = props.inventory ?? [];
+  const foundHarnesses = WATCHED_HARNESSES.filter((h) => inventory.some((item) => item.harness === h));
+  return (
+    <div className="flex flex-wrap gap-2">
+      {WATCHED_HARNESSES.map((harness) => {
+        const found = inventory.some((item) => item.harness === harness);
+        return (
+          <span
+            key={harness}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+              found ? "border-brand-green/25 bg-brand-green-bg/50 text-brand-green-text" : "border-slate-200 bg-slate-50 text-slate-400"
+            }`}
+          >
+            {harnessDisplayName(harness)}
+            {found && <span className="h-1.5 w-1.5 rounded-full bg-brand-green" />}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+type DeviceProofCardProps = {
+  device: GuardRuntimeDevice;
+  proofStatus: GuardProofStatus;
+};
+
+function formatDeviceInstallationId(installationId: string | null | undefined): string {
+  const trimmed = installationId?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return "local";
+  }
+  return trimmed.slice(0, 8);
+}
+
+export function DeviceProofCard(props: DeviceProofCardProps) {
+  const copy = resolveProofStatusCopy(props.proofStatus);
+  const shortId = formatDeviceInstallationId(props.device.installation_id);
+  const timeValue = props.proofStatus.first_synced_at ?? props.proofStatus.runtime_session_synced_at;
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Device &amp; proof
+        </p>
+        <Tag tone={copy.tone}>{copy.label}</Tag>
+      </div>
+      <div className="mt-2 min-w-0 space-y-0.5">
+        <p className="truncate text-sm font-medium text-brand-dark" title={props.device.device_label}>
+          {props.device.device_label}
+        </p>
+        <p className="font-mono text-xs text-slate-400">{shortId}…</p>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+      {timeValue !== null ? (
+        <p className="mt-1 text-xs text-slate-400">{formatRelativeTime(timeValue)}</p>
+      ) : null}
+    </div>
+  );
+}
+
+
+
+export type PackageManagerProtectionCopy = {
+  pathLabel: string;
+  pathDetail: string;
+  pathTone: "green" | "attention" | "blue" | "slate";
+  protectedList: string[];
+  unprotectedList: string[];
+};
+
+export function resolvePackageManagerProtectionCopy(
+  protection: PackageManagerProtection | undefined,
+): PackageManagerProtectionCopy {
+  if (protection === undefined) {
+    return {
+      pathLabel: "Status unknown",
+      pathDetail: "Supply-chain protection data is not available for this session.",
+      pathTone: "slate",
+      protectedList: [],
+      unprotectedList: [],
+    };
+  }
+  if (protection.path_status === "restart_required") {
+    return {
+      pathLabel: "Finish activation in Guard",
+      pathDetail: protection.shell_profile_configured
+        ? `Guard saved the shell setup for ${protection.shim_dir}. Finish activation in the package firewall, then run a protection check.`
+        : `Guard installed shims in ${protection.shim_dir}, but activation is still waiting in this Guard session.`,
+      pathTone: "blue",
+      protectedList: protection.protected_managers,
+      unprotectedList: protection.unprotected_managers,
+    };
+  }
+  const pathInPath = protection.path_status === "in_path";
+  const installedButInactive = protection.installed_managers.length > 0;
+  return {
+    pathLabel: pathInPath ? "Guard shim directory is in PATH" : "Guard shim directory missing from PATH",
+    pathDetail: pathInPath
+      ? `Package manager commands are intercepted via ${protection.shim_dir}.`
+      : installedButInactive
+      ? `The shim directory (${protection.shim_dir}) is not on PATH yet. Use Fix PATH on an installed manager and Guard will update your shell profile automatically.`
+      : `The shim directory (${protection.shim_dir}) is not on PATH. Install bypass is possible for package managers that are not otherwise protected.`,
+    pathTone: pathInPath ? "green" : "attention",
+    protectedList: protection.protected_managers,
+    unprotectedList: protection.unprotected_managers,
+  };
+}
+
+function PackageManagerProtectionCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const protection = props.snapshot.supply_chain?.package_manager_protection;
+  const copy = resolvePackageManagerProtectionCopy(protection);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Package manager protection
+        </p>
+        <Tag tone={copy.pathTone}>{copy.pathLabel}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.pathDetail}</p>
+      {copy.protectedList.length > 0 || copy.unprotectedList.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {copy.protectedList.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-slate-500">Protected:</span>
+              {copy.protectedList.map((mgr) => (
+                <span
+                  key={mgr}
+                  className="inline-flex items-center rounded-full border border-brand-green/25 bg-brand-green-bg/50 px-2.5 py-0.5 text-xs font-medium text-brand-green-text"
+                >
+                  {mgr}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {copy.unprotectedList.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-slate-500">Unprotected:</span>
+              {copy.unprotectedList.map((mgr) => (
+                <span
+                  key={mgr}
+                  className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                >
+                  {mgr}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function RuntimeOverview(props: RuntimeOverviewProps) {
+  const { snapshot, inventory } = props;
+  const securityLevel = snapshot.security_level;
+  const latestReceipt = snapshot.latest_receipts[0];
+  const latestAction = latestReceipt ? guardActionPresentation(latestReceipt.policy_decision) : null;
+  const daemonHealthLabel = snapshot.runtime_state !== null ? "running" : "offline";
+  const resolvedInventory = inventory ?? snapshot.inventory ?? [];
+  const protectionHealth = protectionHealthFor(snapshot);
+
+  return (
+    <Surface className="mb-6" tone="accent">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <SectionLabel>Local status</SectionLabel>
+              <Badge tone={headlineTone(snapshot.headline_state)}>{snapshot.headline_label}</Badge>
+              <Tag tone={snapshot.cloud_state === "local_only" ? "slate" : "blue"}>
+                {snapshot.cloud_state_label}
+              </Tag>
+              <Tag tone={snapshot.runtime_state !== null ? "green" : "slate"}>
+                daemon {daemonHealthLabel}
+              </Tag>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold tracking-tight text-brand-dark">
+                HOL Guard is running locally.
+              </h2>
+              <p className="max-w-3xl text-sm leading-relaxed text-brand-dark/75">
+                {snapshot.headline_detail}
+              </p>
+              <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                {snapshot.cloud_state_detail}
+              </p>
+            </div>
+          </div>
+          <KeyValueGrid
+            columns={2}
+            items={[
+              ["Review queue", snapshot.pending_count + " waiting"],
+              ["Saved choices", snapshot.receipt_count + " stored"],
+              ["Watched apps", resolvedInventory.length + " seen"],
+              ["Session", snapshot.runtime_state?.session_id.slice(0, 8) ?? "offline"],
+            ]}
+          />
+        </div>
+
+        <ProofStrip
+          items={[
+            { label: "Protection health", value: protectionHealth.label, tone: protectionProofTone(protectionHealth.state) },
+            { label: "Protection level", value: securityLevel ?? "balanced", tone: securityLevel === "strict" ? "purple" : "blue" },
+            {
+              label: "Recent decision",
+              value: latestAction?.label ?? "None",
+              tone: recentDecisionTone(latestAction),
+            },
+            { label: "Cloud state", value: snapshot.cloud_state === "local_only" ? "Local only" : "Syncing", tone: snapshot.cloud_state === "local_only" ? "slate" : "green" },
+          ]}
+        />
+
+        <div className="rounded-xl border border-border bg-white px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Protection health</p>
+            <Tag tone={protectionTagTone(protectionHealth.state)}>
+              {protectionHealth.label}
+            </Tag>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{protectionHealth.detail}</p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+          <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
+          <ApprovalCenterHealthCard snapshot={snapshot} />
+          <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
+          <PackageManagerProtectionCard snapshot={snapshot} />
+        </div>
+
+        <CloudCommandCapabilityCard capability={snapshot.cloud_command_capability} />
+
+        <div className="rounded-xl border border-border bg-white px-5 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+            Recommended next step
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{remediationLine(snapshot)}</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <ActionButton href={snapshot.dashboard_url}>Open Home</ActionButton>
+            <ActionButton href={snapshot.inbox_url} variant="outline">
+              Review Queue
+            </ActionButton>
+            <ActionButton href={snapshot.fleet_url} variant="outline">
+              Apps
+            </ActionButton>
+            {snapshot.cloud_state === "local_only" ? (
+              <ActionButton href={snapshot.connect_url} variant="secondary">
+                Connect this machine
+              </ActionButton>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </Surface>
+  );
+}

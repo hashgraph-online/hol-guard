@@ -1,0 +1,340 @@
+//! In-process this-device grant and catalog-contribution decision for a live
+//! MCP `tools/call`.
+//!
+//! The caller supplies the non-authoritative inputs recorded on the artifact
+//! (see `McpExtensionInputV1`); the store is read here, so the policy flow no
+//! longer asks Python for an `extension_decision` observation. A refusal to
+//! answer is never an allow: an otherwise allowed or reviewed call is held in
+//! review while the device holds any grant rows.
+
+use guard_contracts::{
+    ContributedMcpDecisionRequestV1, LocalMcpGrantRequestV1, McpExtensionInputV1,
+    CONTRIBUTED_MCP_DECISION_REQUEST_SCHEMA, LOCAL_MCP_GRANT_REQUEST_SCHEMA,
+};
+use serde_json::{json, Value};
+
+use crate::local_mcp_grant_identity::{normalized_hash, observed_mcp_tool};
+use crate::local_store_read;
+
+type Decided = (String, String, String);
+/// A static reason code, never request text.
+type Code = &'static str;
+
+/// Name why a decision went unanswered. Only static codes are written, so the
+/// resident's stderr never carries request content.
+fn unanswered(stage: &str, code: Code) {
+    eprintln!("mcp_extension_unanswered stage={stage} code={code}");
+}
+
+fn store_code(error: local_store_read::StoreReadError) -> Code {
+    match error {
+        local_store_read::StoreReadError::PathInvalid => "store_path_invalid",
+        local_store_read::StoreReadError::StoreUnavailable => "store_unavailable",
+        local_store_read::StoreReadError::SchemaInvalid => "store_schema_invalid",
+    }
+}
+
+const GRANT_REFINABLE: [&str; 4] = ["allow", "review", "require-reapproval", "warn"];
+const HOLDABLE: [&str; 3] = ["allow", "warn", "review"];
+
+/// `Value::Null` when no extension applies, else `{action, source, summary}`.
+#[cfg(test)]
+pub(crate) fn extension_decision(ext: &McpExtensionInputV1, action: &str) -> Value {
+    extension_decision_with_catalog(ext, action, None)
+}
+
+pub(crate) fn extension_decision_with_catalog(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Value {
+    // A device grant cannot bypass a captured catalog block, disabled
+    // permission, or authenticated quarantine.
+    if catalog.is_some() && GRANT_REFINABLE.contains(&action) {
+        match contributed_once(ext, "allow", catalog) {
+            Ok(Some(found)) if found.0 == "block" => {
+                return json!({"action": found.0, "source": found.1, "summary": found.2});
+            }
+            Err(code) => {
+                unanswered("captured_catalog", code);
+                let held = if HOLDABLE.contains(&action) {
+                    "review"
+                } else {
+                    action
+                };
+                return json!({"action":held, "source":"catalog-mcp-extension",
+                    "summary":"This device's catalog MCP defaults could not be verified. Review this tool call before execution."});
+            }
+            _ => {}
+        }
+    }
+    let decided = match local_grant(ext, action) {
+        Ok(Some(found)) => Some(found),
+        Ok(None) => contributed_or_hold(ext, action, catalog),
+        Err(code) => {
+            unanswered("local_grant", code);
+            hold_unverified(ext, action, catalog)
+        }
+    };
+    match decided {
+        Some((action, source, summary)) => {
+            json!({"action": action, "source": source, "summary": summary})
+        }
+        None => Value::Null,
+    }
+}
+
+fn decided(action: &str, source: &str, summary: &str) -> Option<Decided> {
+    Some((action.to_owned(), source.to_owned(), summary.to_owned()))
+}
+
+fn grant_request(ext: &McpExtensionInputV1, action: &str) -> LocalMcpGrantRequestV1 {
+    LocalMcpGrantRequestV1 {
+        schema: LOCAL_MCP_GRANT_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        store_path: ext.store_path.clone(),
+        guard_home: ext.guard_home.clone(),
+        current_action: action.to_owned(),
+        harness: ext.harness.clone(),
+        tool_name: ext.tool_name.clone(),
+        server: ext.server.clone(),
+        connection_identity_hash: ext.connection_identity_hash.clone(),
+        tool_authority_hash: ext.tool_authority_hash.clone(),
+        launcher_path: ext.launcher_path.clone(),
+        launcher_home: ext.launcher_home.clone(),
+    }
+}
+
+/// `Err` means the resident has no answer for the grant state, and says why.
+fn local_grant(ext: &McpExtensionInputV1, action: &str) -> Result<Option<Decided>, Code> {
+    if !GRANT_REFINABLE.contains(&action) {
+        return Ok(None);
+    }
+    if ext.local_unavailable {
+        return Err("local_unavailable");
+    }
+    let payload = crate::local_mcp_grant_op::decide(&grant_request(ext, action))?;
+    Ok(match payload.get("state").and_then(Value::as_str) {
+        Some("blocked") => decided(
+            "block",
+            "local-mcp-extension",
+            "This MCP tool is blocked by a custom extension on this device.",
+        ),
+        Some("allowed") => decided(
+            "allow",
+            "local-mcp-extension",
+            "This MCP tool is allowed by a custom extension on this device.",
+        ),
+        Some("review") => decided(
+            "review",
+            "local-mcp-extension",
+            "This tool is not in the reviewed catalog. Review its authority before execution.",
+        ),
+        _ => None,
+    })
+}
+
+fn contributed_once(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Result<Option<Decided>, Code> {
+    if ext.layers_unavailable && catalog.is_none() {
+        return Err("layers_unavailable");
+    }
+    let request = ContributedMcpDecisionRequestV1 {
+        schema: CONTRIBUTED_MCP_DECISION_REQUEST_SCHEMA.to_owned(),
+        request_id: String::new(),
+        store_path: ext.store_path.clone(),
+        guard_home: ext.guard_home.clone(),
+        current_action: action.to_owned(),
+        server_identity: ext.server_identity.clone(),
+        artifact_transport: ext.artifact_transport.clone(),
+        server_name: ext.server_name.clone(),
+        tool_name: ext.contributed_tool_name.clone(),
+        layers: ext.layers.clone(),
+    };
+    let payload = crate::contributed_mcp_decision_op::decide_with_catalog(&request, catalog)?;
+    if payload.get("state").and_then(Value::as_str) != Some("decided") {
+        return Ok(None);
+    }
+    let text = |key| payload.get(key).and_then(Value::as_str).map(str::to_owned);
+    match (text("action"), text("source"), text("reason")) {
+        (Some(action), Some(source), Some(reason)) => Ok(Some((action, source, reason))),
+        _ => Err("contributed_payload_invalid"),
+    }
+}
+
+/// The contributed decision. With no answer, an allowed or reviewed call is
+/// held in review rather than guessed at or allowed.
+fn contributed_or_hold(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Option<Decided> {
+    let held = |code: Code| {
+        unanswered("contributed", code);
+        if !HOLDABLE.contains(&action) {
+            return None;
+        }
+        // A review is held too: with no decisive answer, a time-bounded
+        // approval could upgrade it to allow past a catalog block that was not
+        // checked. Stricter actions are left alone.
+        decided(
+            "review",
+            "catalog-mcp-extension",
+            "This device's catalog MCP defaults could not be verified. Review this tool call before execution.",
+        )
+    };
+    match contributed_once(ext, action, catalog) {
+        Err(code) => held(code),
+        Ok(Some(found)) => Some(found),
+        Ok(None) if action == "review" => match contributed_once(ext, "allow", catalog) {
+            Err(code) => held(code),
+            Ok(Some(found)) if found.0 == "review" => Some(found),
+            Ok(_) => None,
+        },
+        Ok(None) => None,
+    }
+}
+
+/// The resident gave no grant answer: hold an allow for review while grants
+/// exist. MCP grants also produce review-only outcomes, and each needs a grant
+/// row, so any row holds an otherwise allowed call, and a call already under
+/// review stays decisively in review so a temporary approval cannot upgrade it
+/// past a stored block.
+fn hold_unverified(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Option<Decided> {
+    let contributed = contributed_or_hold(ext, action, catalog);
+    if let Some(found) = &contributed {
+        if found.0 == "block" || found.0 == "review" {
+            return contributed;
+        }
+    }
+    let effective = contributed
+        .as_ref()
+        .map_or(action, |found| found.0.as_str());
+    if HOLDABLE.contains(&effective) && may_hold_mcp_grants(ext) {
+        return decided(
+            "review",
+            "local-mcp-extension",
+            "This device's MCP grants could not be verified. Review this tool call before execution.",
+        );
+    }
+    contributed
+}
+
+/// Whether any device grant row exists. An unreadable store counts as one, and
+/// so does a schema marker that is damaged or newer than this build reads: its
+/// rows cannot be trusted to be absent.
+fn may_hold_mcp_grants(ext: &McpExtensionInputV1) -> bool {
+    let probe = || -> Result<bool, Code> {
+        let path = local_store_read::require_store_path(&ext.store_path, &ext.guard_home)
+            .map_err(store_code)?;
+        let Some(connection) = local_store_read::open_read_only(&path).map_err(store_code)? else {
+            return Ok(false);
+        };
+        match local_store_read::schema_version(&connection).map_err(store_code)? {
+            Some(version) if version > local_store_read::SUPPORTED_SCHEMA_VERSION => {
+                return Ok(true);
+            }
+            _ => {}
+        }
+        for table in ["local_cli_grant", "local_cli_command_grant"] {
+            if !local_store_read::table_exists(&connection, table).map_err(store_code)? {
+                continue;
+            }
+            let found: bool = connection
+                .query_row(
+                    &format!("select exists(select 1 from {table})"),
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|_| "grant_probe_failed")?;
+            if found {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    };
+    probe().unwrap_or_else(|code| {
+        unanswered("grant_probe", code);
+        true
+    })
+}
+
+/// The tool name as the harness qualifies it (`mcp__<server>__<tool>`). A
+/// proxied call carries the bare tool name, so the configured server name
+/// restores the qualified form an observed identity is derived from.
+fn qualified_tool_name(ext: &McpExtensionInputV1) -> String {
+    if ext.tool_name.starts_with("mcp__") {
+        return ext.tool_name.clone();
+    }
+    match ext.server_name.as_ref().and_then(Value::as_str) {
+        Some(server) if !server.is_empty() => format!("mcp__{server}__{}", ext.tool_name),
+        _ => ext.tool_name.clone(),
+    }
+}
+
+/// Whether the device has no grant row at all for the target `request` resolves.
+/// An unreadable store is an answer, so it is not "none".
+fn no_grant_row(request: &LocalMcpGrantRequestV1) -> bool {
+    crate::local_mcp_grant_op::decide(request).is_ok_and(|grant| {
+        grant.get("state").and_then(Value::as_str) == Some("none") && grant["cli_id"].is_null()
+    })
+}
+
+/// The connector a call waits on when this device has no answer for it at all:
+/// no grant row (allowed or blocked) for the server, no catalog contribution
+/// deciding the tool, and nothing left unverified. `None` keeps the generic
+/// review. A stdio server keeps its launch identity (executable + arguments);
+/// a remote or observed server is named by harness and namespace, so no URL,
+/// query or credential ever enters the identity. A remote server is checked
+/// for a grant under that observed identity and under its configured identity,
+/// the one the resident's own grant lookup uses: a row under either is an answer.
+pub(crate) fn unset_connector(
+    ext: &McpExtensionInputV1,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Option<String> {
+    if ext.local_unavailable || (ext.layers_unavailable && catalog.is_none()) {
+        return None;
+    }
+    let unbound = ext
+        .server
+        .env_values_hash
+        .as_deref()
+        .is_some_and(|hash| hash.starts_with("guard-context-unbound:"));
+    if unbound {
+        return None;
+    }
+    let mut lookups = vec![grant_request(ext, "review")];
+    let identity = if ext.server.transport.as_deref() == Some("stdio") {
+        normalized_hash(ext.server.identity_hash.as_deref())?
+    } else {
+        let qualified = qualified_tool_name(ext);
+        let identity = observed_mcp_tool(&ext.harness, &qualified)?.identity_hash;
+        let mut observed = grant_request(ext, "review");
+        observed.tool_name = qualified;
+        observed.server.transport = Some("observed".to_owned());
+        lookups.push(observed);
+        identity
+    };
+    // A grant row in any state (or an unreadable store) is an answer: only
+    // "no row at all" is a setup decision.
+    if !lookups.iter().all(no_grant_row) {
+        return None;
+    }
+    for action in ["review", "allow"] {
+        if !matches!(contributed_once(ext, action, catalog), Ok(None)) {
+            return None;
+        }
+    }
+    Some(identity)
+}
+
+#[cfg(test)]
+#[path = "mcp_tool_policy_extension_tests.rs"]
+mod tests;

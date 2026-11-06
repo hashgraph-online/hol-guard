@@ -1,0 +1,361 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { HiMiniArrowPath, HiMiniExclamationTriangle, HiMiniInformationCircle, HiMiniMagnifyingGlass, HiMiniShieldCheck, HiMiniXMark } from "react-icons/hi2";
+
+import {
+  catalogRowSecondLine,
+  extensionDisplayName,
+  extensionStateLabel,
+  managedPermissionState,
+} from "../../extension-control-center-model";
+import type { CatalogReadModel } from "../../extension-catalog-v2";
+import type { EffectiveExtensionControls, ExtensionCatalogSummary, ExtensionPermission } from "../../extension-controls-api";
+import { type ExtensionPolicyRebaseConflict } from "../../extension-policy-rebase";
+import {
+  PermissionPolicyRow,
+  PolicyReviewSheet,
+} from "../../extension-policy-panel";
+import { AppliedPolicyToast } from "../../extension-policy-applied-toast";
+import { useResolvedApprovalGate } from "../../use-resolved-approval-gate";
+import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
+import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns, wordMatch } from "../model/protection-landing";
+import { useCatalogPermissionSearch } from "../use-catalog-permission-search";
+import { ProtectionModuleRow } from "./protection-primitives";
+import { ExtensionBrandMark } from "./extension-brand-mark";
+import { QuickApplyToolbar } from "./quick-apply-toolbar";
+import { PolicyEditingLocks } from "./policy-editing-locks";
+
+function CatalogSearchRow(props: {
+  extension: ExtensionCatalogSummary;
+  effective: EffectiveExtensionControls;
+  onOpen: (extension: ExtensionCatalogSummary) => void;
+}) {
+  const handleOpen = useCallback(() => {
+    props.onOpen(props.extension);
+  }, [props]);
+  return (
+    <ProtectionModuleRow
+      extensionId={props.extension.extension_id}
+      name={extensionDisplayName(props.extension.name)}
+      description={props.extension.description}
+      behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
+      required={props.extension.required}
+      mcp={props.extension.surface === "mcp"}
+      external={props.extension.trust_class === "external"}
+      executables={props.extension.executables}
+      ecosystemIds={props.extension.ecosystem_ids}
+      onOpen={handleOpen}
+    />
+  );
+}
+
+/**
+ * Search-first command-pattern console for the Extensions landing page.
+ *
+ * One query searches every tool's patterns by label, example command, flag,
+ * or ID; matched rows render with the same inline Recommended / Allow / Block
+ * control used on the tool page, and the same review + proof flow commits the
+ * change without leaving the page. Tools whose names match the query render
+ * as a final group so a query like "kubernetes" finds both patterns and tools.
+ * While a query is active the parent hides the full catalogs: the results are
+ * the page.
+ */
+export function PatternSearchConsole(props: {
+  /** Extensions currently visible under the active filters. */
+  catalog: readonly ExtensionCatalogSummary[];
+  readModel: CatalogReadModel;
+  effective: EffectiveExtensionControls;
+  onRefresh: () => Promise<void> | void;
+  onOpenExtension: (extension: ExtensionCatalogSummary) => void;
+  active?: boolean;
+  query?: string;
+  onQueryChange?: (query: string) => void;
+  /** Rendered under the input while the parent hides its own header actions. */
+  actionSlot?: ReactNode;
+  /** Rendered beside the search input on wide viewports (e.g. the Filters trigger). */
+  toolbarSlot?: ReactNode;
+  /** Rendered directly under the search row (filter tokens and the popover panel anchor). */
+  subtoolbarSlot?: ReactNode;
+}) {
+  const [internalQuery, setInternalQuery] = useState("");
+  const query = props.query ?? internalQuery;
+  const setQuery = props.onQueryChange ?? setInternalQuery;
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const searchActive = props.active ?? true;
+  const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const {
+    baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
+    error, stale, pendingRebase, refreshRequired, lastApplied, undoLastApplied,
+    changedPermissionCount, setReviewOpen, setPermissionState, setPermissionStates,
+    resetDraft, runPreview, apply, permissionState, rebaseDraft, keepConflicts, useCurrent,
+  } = draft;
+  // Rebasing reads one detail record per extension the draft touched, so the
+  // console remembers which tools the edits came from rather than re-reading
+  // the whole catalog when the committed policy moves under an open draft.
+  const touchedExtensionIds = useRef(new Set<string>());
+  const rememberTouched = useCallback((extensionIds: readonly string[]) => {
+    for (const extensionId of extensionIds) touchedExtensionIds.current.add(extensionId);
+  }, []);
+
+  useEffect(() => {
+    if (!searchActive) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [searchActive]);
+
+  const totalPermissionCount = useMemo(
+    () => props.catalog.reduce((total, extension) => total + extension.permission_count, 0),
+    [props.catalog],
+  );
+  const search = useCatalogPermissionSearch(props.readModel, query);
+  const allMatches = useMemo(() => {
+    const visible = new Set(props.catalog.map((extension) => extension.extension_id));
+    const candidates = search.hits.filter((hit) => visible.has(hit.extension.extension_id));
+    return searchCommandPatterns(candidates, query, totalPermissionCount);
+  }, [props.catalog, search.hits, query, totalPermissionCount]);
+  const matches = useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
+  const toolMatches = useMemo(() => {
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    return props.catalog.filter((extension) => {
+      const text = [extension.name, extension.extension_id, ...extension.executables, ...extension.aliases].join(" ");
+      return terms.every((term) => wordMatch(text, term) !== null);
+    });
+  }, [props.catalog, query]);
+  const grouped = useMemo(() => {
+    const groups = new Map<string, { extension: ExtensionCatalogSummary; permissions: ExtensionPermission[] }>();
+    for (const match of matches) {
+      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissions: [] };
+      group.permissions.push(match.permission);
+      groups.set(match.extension.extension_id, group);
+    }
+    return [...groups.values()];
+  }, [matches]);
+  const involvedPermissions = useMemo(() => allMatches.map((match) => match.permission), [allMatches]);
+  const handleRebase = useCallback(async () => {
+    const extensionIds = touchedExtensionIds.current.size
+      ? [...touchedExtensionIds.current]
+      : grouped.map((group) => group.extension.extension_id);
+    // Every touched tool has to resolve. Dropping the ones whose detail read
+    // failed would rebase the rest onto the latest authority and quietly take
+    // the missing tool's unsaved edits with it, so let the failure reach the
+    // hook, which reports it and leaves the draft alone.
+    await rebaseDraft(() => Promise.all(extensionIds.map((extensionId) => props.readModel.detail(extensionId))));
+  }, [grouped, props.readModel, rebaseDraft]);
+  const changeCount = changedPermissionCount;
+  const showResults = query.trim().length > 0;
+
+  useEffect(() => {
+    if (!reviewOpen) return;
+    void resolveApprovalGate({ failClosed: true }).catch(() => {
+      /* the review sheet renders the gate resolution failure inline */
+    });
+  }, [reviewOpen, resolveApprovalGate]);
+
+  const managedCount = involvedPermissions.filter((permission) =>
+    managedPermissionState(baseEffective, permission.permission_id) !== null,
+  ).length;
+
+  return <section aria-labelledby="pattern-search-heading" className="mt-6">
+    <h2 id="pattern-search-heading" className="sr-only">Search command patterns</h2>
+    <div className="relative">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <label className="relative block min-w-0 flex-1 sm:min-w-60">
+      <span className="sr-only">Search command patterns</span>
+      <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
+      <input
+        ref={inputRef}
+        type="text"
+        role="searchbox"
+        enterKeyHint="search"
+        value={query}
+        onFocus={() => setFocused(true)}
+        onChange={(event) => setQuery(event.target.value.slice(0, 160))}
+        placeholder='Search any command Guard watches — "squash", "git push --force", "kubectl"…'
+        aria-describedby="pattern-search-hint"
+        className="min-h-11 w-full rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+      />
+      {showResults ? (
+        <button
+          type="button"
+          onClick={() => { setQuery(""); inputRef.current?.focus(); }}
+          aria-label="Clear search"
+          className="absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-brand-dark/55 hover:bg-[rgba(63,65,116,0.06)] hover:text-brand-dark"
+        >
+          <HiMiniXMark className="size-4" aria-hidden="true" />
+        </button>
+      ) : null}
+        </label>
+        {props.toolbarSlot ? <div className="flex shrink-0 flex-wrap items-center gap-2">{props.toolbarSlot}</div> : null}
+      </div>
+      {props.subtoolbarSlot}
+    </div>
+
+    <p id="pattern-search-hint" className={`mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`}>
+      Matches patterns across every tool. Press / to focus search from anywhere on this page.
+    </p>
+
+    {props.actionSlot ? <div className="mt-3">{props.actionSlot}</div> : null}
+
+    {showResults ? (
+      <PolicyEditingLocks
+        health={baseEffective.health}
+        globalLockdown={baseEffective.global_lockdown}
+        refreshRequired={refreshRequired}
+      />
+    ) : null}
+
+    {showResults && search.error ? (
+      <p role="alert" className="mt-3 text-sm font-medium text-rose-800">{search.error}</p>
+    ) : null}
+
+    {showResults ? (
+      matches.length || toolMatches.length ? (
+        <div className="mt-3">
+          {matches.length ? (
+            <>
+              <QuickApplyToolbar
+                permissions={involvedPermissions}
+                effective={baseEffective}
+                disabled={refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected"}
+                permissionState={permissionState}
+                onApply={(permissionIds, state) => {
+                  rememberTouched(allMatches.map((match) => match.extension.extension_id));
+                  setPermissionStates(permissionIds, state);
+                }}
+              />
+              {allMatches.length > matches.length ? (
+                <p role="status" className="mt-3 text-xs text-brand-dark/65">
+                  Showing {matches.length} of {allMatches.length} matching capabilities. Quick actions apply to all {allMatches.length}.
+                </p>
+              ) : null}
+            </>
+          ) : null}
+          {grouped.map((group) => (
+            <section key={group.extension.extension_id} aria-label={`${group.extension.name} patterns`} className="guard-pattern-family">
+              <h3 className="guard-pattern-family-heading">
+                <ExtensionBrandMark
+                  extension_id={group.extension.extension_id}
+                  name={group.extension.name}
+                  executables={group.extension.executables}
+                  ecosystem_ids={group.extension.ecosystem_ids}
+                  size="sm"
+                />
+                {group.extension.executables.length ? <code>{group.extension.executables[0]}</code> : null}
+                <span>{extensionDisplayName(group.extension.name)}</span>
+              </h3>
+              {group.permissions.map((permission) => {
+                return <PermissionPolicyRow
+                  key={permission.permission_id}
+                  permission={permission}
+                  extension={group.extension}
+                  effective={baseEffective}
+                  draftState={permissionState(permission.permission_id)}
+                  disabled={refreshRequired}
+                  onChange={(state) => {
+                    rememberTouched([group.extension.extension_id]);
+                    setPermissionState(permission.permission_id, state);
+                  }}
+                />;
+              })}
+            </section>
+          ))}
+          {toolMatches.length ? (
+            <section aria-label="Matching tools" className="guard-pattern-family">
+              <h3 className="guard-pattern-family-heading"><span>Tools</span></h3>
+              {toolMatches.map((extension) => (
+                <CatalogSearchRow
+                  key={extension.extension_id}
+                  extension={extension}
+                  effective={props.effective}
+                  onOpen={props.onOpenExtension}
+                />
+              ))}
+            </section>
+          ) : null}
+          {managedCount ? (
+            <p className="mt-3 text-xs text-indigo-950">{managedCount} matched setting{managedCount === 1 ? "" : "s are"} managed by your organization and cannot be weakened on this device.</p>
+          ) : null}
+        </div>
+      ) : (
+        <p role="status" className="mt-3 text-sm text-brand-dark/75">
+          {search.pending ? "Searching command patterns…" : "No command patterns or tools match this search."}
+        </p>
+      )
+    ) : null}
+
+    {dirty ? (
+      <div className="guard-review-bar">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-brand-dark">{changeCount} unsaved setting change{changeCount === 1 ? "" : "s"}.</div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={previewBusy || applyBusy} onClick={resetDraft} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Reset changes</button>
+            <button type="button" disabled={previewBusy || applyBusy || baseEffective.health !== "protected" || stale} onClick={() => { void runPreview(); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
+              {previewBusy ? <HiMiniArrowPath className="size-4 animate-spin motion-reduce:animate-none" /> : <HiMiniShieldCheck className="size-4" />}
+              Review {changeCount} change{changeCount === 1 ? "" : "s"}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    {lastApplied ? (
+      <AppliedPolicyToast
+        revision={lastApplied.revision}
+        onUndo={() => { undoLastApplied(); }}
+        onViewHistory={() => { document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+      />
+    ) : null}
+    {error ? (
+      <div role="alert" className="mt-4 text-sm text-red-950">
+        <div className="flex items-start gap-2">
+          <HiMiniExclamationTriangle className="mt-0.5 size-5 shrink-0" />
+          <span>{error}</span>
+        </div>
+        {stale && !pendingRebase ? (
+          <button type="button" disabled={previewBusy} onClick={() => { void handleRebase(); }} className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">Update draft with latest protection</button>
+        ) : null}
+        {pendingRebase ? (
+          <div className="mt-4">
+            <ul className="space-y-2">
+              {pendingRebase.result.conflicts.map((conflict: ExtensionPolicyRebaseConflict) => (
+                <li key={conflict.original_permission_id} className="text-xs text-brand-dark">
+                  <code className="break-all">{conflict.original_permission_id}</code>
+                  <div className="mt-1">{conflict.kind === "removed" ? "Target removed from the current catalog." : `Current ${conflict.latest_state}; your draft requests ${conflict.requested_state}.`}</div>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={keepConflicts} className="min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb]">Keep my compatible changes</button>
+              <button type="button" onClick={useCurrent} className="min-h-11 rounded-xl border border-red-300 px-4 text-sm font-semibold text-red-950">Use current protection</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    ) : dirty && !preview ? (
+      <div className="mt-4 flex items-start gap-3 text-sm text-brand-dark">
+        <HiMiniInformationCircle className="mt-0.5 size-5 shrink-0" />
+        <p>Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change.</p>
+      </div>
+    ) : null}
+
+    {reviewOpen && preview ? (
+      <PolicyReviewSheet
+        preview={preview}
+        approvalGate={resolvedApprovalGate}
+        busy={applyBusy}
+        error={error}
+        onClose={() => { if (!applyBusy) setReviewOpen(false); }}
+        onApply={(credentials) => { void apply(credentials); }}
+      />
+    ) : null}
+  </section>;
+}

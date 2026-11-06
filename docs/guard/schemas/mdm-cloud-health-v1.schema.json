@@ -1,0 +1,92 @@
+{
+  "$id": "https://hol.org/schemas/guard/mdm-cloud-health-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "properties": {
+          "appliedPolicyHash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "appliedRevision": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "appliedPolicyHash": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "appliedPolicyHash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "appliedRevision": {
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "deviceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "installationGeneration": {
+      "pattern": "^[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "observedAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
+    "requestId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "hol-guard-mdm-cloud-health.v1"
+    },
+    "sequence": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "status": {
+      "maxProperties": 64,
+      "type": "object"
+    },
+    "workspaceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "workspaceId",
+    "deviceId",
+    "installationGeneration",
+    "sequence",
+    "appliedRevision",
+    "appliedPolicyHash",
+    "observedAt",
+    "requestId",
+    "status"
+  ],
+  "title": "HOL Guard bounded MDM health report v1",
+  "type": "object"
+}

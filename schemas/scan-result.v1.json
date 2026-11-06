@@ -1,0 +1,510 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScanResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tool_version",
+    "profile",
+    "policy_pass",
+    "verify_pass",
+    "scope",
+    "score",
+    "raw_score",
+    "effective_score",
+    "grade",
+    "summary",
+    "trust",
+    "categories",
+    "findings",
+    "timestamp",
+    "pluginDir"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scan-result.v1"
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_pass": {
+      "type": "boolean"
+    },
+    "verify_pass": {
+      "type": "boolean"
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["plugin", "repository"]
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "raw_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "effective_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "grade": {
+      "type": "string",
+      "enum": ["A", "B", "C", "D", "F"]
+    },
+    "ecosystems": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/detectedPackage"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gradeLabel", "findings", "integrations"],
+      "properties": {
+        "gradeLabel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "findings": {
+          "$ref": "#/$defs/severityCounts"
+        },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/integration"
+          }
+        }
+      }
+    },
+    "trust": {
+      "$ref": "#/$defs/trustReport"
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pluginDir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marketplaceFile", "localPluginCount"],
+      "properties": {
+        "marketplaceFile": {
+          "type": ["string", "null"]
+        },
+        "localPluginCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pluginSummary"
+      }
+    },
+    "skippedTargets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/skippedTarget"
+      }
+    },
+    "contributorReview": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "purpose",
+        "automaticApproval",
+        "sourceBoundAttestation",
+        "scannerVersion",
+        "findingCount",
+        "distinctEvidenceCount",
+        "groups",
+        "steps"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "contributor-review.v1"
+        },
+        "purpose": {
+          "const": "report-only"
+        },
+        "automaticApproval": {
+          "const": false
+        },
+        "sourceBoundAttestation": {
+          "const": false
+        },
+        "scannerVersion": {
+          "type": "string"
+        },
+        "findingCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distinctEvidenceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reportGroup",
+              "ruleId",
+              "severity",
+              "filePath",
+              "lineNumber",
+              "source",
+              "occurrences",
+              "disposition",
+              "category",
+              "title",
+              "description",
+              "remediation"
+            ],
+            "properties": {
+              "reportGroup": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "ruleId": {
+                "type": "string"
+              },
+              "severity": {
+                "$ref": "#/$defs/severity"
+              },
+              "filePath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lineNumber": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "source": {
+                "type": "string"
+              },
+              "occurrences": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "disposition": {
+                "const": "not-adjudicated"
+              },
+              "category": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "remediation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "info"]
+    },
+    "severityCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical", "high", "medium", "low", "info"],
+      "properties": {
+        "critical": {"type": "integer", "minimum": 0},
+        "high": {"type": "integer", "minimum": 0},
+        "medium": {"type": "integer", "minimum": 0},
+        "low": {"type": "integer", "minimum": 0},
+        "info": {"type": "integer", "minimum": 0}
+      }
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "message", "findingsCount", "metadata"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "minLength": 1},
+        "message": {"type": "string"},
+        "findingsCount": {"type": "integer", "minimum": 0},
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "findingRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "severity", "title", "description", "source"],
+      "properties": {
+        "ruleId": {"type": "string", "minLength": 1},
+        "severity": {"$ref": "#/$defs/severity"},
+        "title": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "remediation": {"type": ["string", "null"]},
+        "filePath": {"type": ["string", "null"]},
+        "lineNumber": {"type": ["integer", "null"], "minimum": 1},
+        "source": {"type": "string", "minLength": 1}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "severity", "title", "description", "source", "category"],
+      "properties": {
+        "ruleId": {"type": "string", "minLength": 1},
+        "severity": {"$ref": "#/$defs/severity"},
+        "title": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "remediation": {"type": ["string", "null"]},
+        "filePath": {"type": ["string", "null"]},
+        "lineNumber": {"type": ["integer", "null"], "minimum": 1},
+        "source": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed", "points", "maxPoints", "message", "findings"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "passed": {"type": "boolean"},
+        "points": {"type": "integer", "minimum": 0},
+        "maxPoints": {"type": "integer", "minimum": 0},
+        "message": {"type": "string"},
+        "findings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/findingRef"}
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "score", "max", "checks"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "score": {"type": "integer", "minimum": 0},
+        "max": {"type": "integer", "minimum": 0},
+        "checks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/check"}
+        }
+      }
+    },
+    "pluginSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "pluginDir", "score", "grade", "trust", "summary"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "pluginDir": {"type": "string", "minLength": 1},
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "grade": {"type": "string", "enum": ["A", "B", "C", "D", "F"]},
+        "trust": {"$ref": "#/$defs/trustReport"},
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["findings", "integrations"],
+          "properties": {
+            "findings": {"$ref": "#/$defs/severityCounts"},
+            "integrations": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/integration"}
+            }
+          }
+        }
+      }
+    },
+    "detectedPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ecosystem", "packageKind", "rootPath"],
+      "properties": {
+        "ecosystem": {"type": "string", "minLength": 1},
+        "packageKind": {"type": "string", "minLength": 1},
+        "rootPath": {"type": "string", "minLength": 1},
+        "manifestPath": {"type": ["string", "null"]},
+        "name": {"type": ["string", "null"]},
+        "version": {"type": ["string", "null"]}
+      }
+    },
+    "trustComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "score", "rationale", "evidence"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "score": {"type": "number", "minimum": 0, "maximum": 100},
+        "rationale": {"type": "string", "minLength": 1},
+        "evidence": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "trustAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "weight",
+        "contributionMode",
+        "applicable",
+        "emitted",
+        "includedInDenominator",
+        "score",
+        "components"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "weight": {"type": "number", "minimum": 0},
+        "contributionMode": {
+          "type": "string",
+          "enum": ["conditional", "universal", "scoped"]
+        },
+        "applicable": {"type": "boolean"},
+        "emitted": {"type": "boolean"},
+        "includedInDenominator": {"type": "boolean"},
+        "score": {"type": "number", "minimum": 0, "maximum": 100},
+        "components": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/trustComponent"}
+        }
+      }
+    },
+    "trustDomain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "label", "score", "spec", "profile", "adapters"],
+      "properties": {
+        "domain": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "score": {"type": "number", "minimum": 0, "maximum": 100},
+        "spec": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version", "path", "derivedFrom"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1},
+            "path": {"type": "string", "minLength": 1},
+            "derivedFrom": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1}
+          }
+        },
+        "adapters": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/trustAdapter"}
+        }
+      }
+    },
+    "trustReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "execution", "domains"],
+      "properties": {
+        "total": {"type": "number", "minimum": 0, "maximum": 100},
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["includeExternal", "computedAt"],
+          "properties": {
+            "includeExternal": {"type": "boolean"},
+            "computedAt": {"type": "string", "minLength": 1}
+          }
+        },
+        "domains": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/trustDomain"}
+        }
+      }
+    },
+    "skippedTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reason", "sourcePath"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "sourcePath": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

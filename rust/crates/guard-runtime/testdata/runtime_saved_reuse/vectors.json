@@ -1,0 +1,3551 @@
+{
+ "schema": "guard-runtime-saved-reuse-vectors.v1",
+ "vectors": [
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-000",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-001",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-002",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-003",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-004",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-005",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-current",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-current",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-006",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-current",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-current",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-007",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ],
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-current",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-current",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-008",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ],
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-current",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-current",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-009",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-current",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-current",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-010",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-current",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-current",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-011",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-policy-changed",
+     "scope": "workspace"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-policy-changed",
+      "scope": "workspace"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-policy-changed",
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_policy_changed"
+   },
+   "name": "case-012",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": [
+    [
+     "token-policy-changed",
+     "token-current",
+     "approval_reuse_policy_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-policy-changed",
+     "scope": "workspace"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-policy-changed",
+      "scope": "workspace"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-policy-changed",
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_policy_changed"
+   },
+   "name": "case-013",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-policy-changed",
+     "token-current",
+     "approval_reuse_policy_changed"
+    ],
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-policy-changed",
+     "scope": "workspace"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-policy-changed",
+      "scope": "workspace"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-policy-changed",
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_policy_changed"
+   },
+   "name": "case-014",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-policy-changed",
+     "token-current",
+     "approval_reuse_policy_changed"
+    ],
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-policy-changed",
+     "scope": "workspace"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-policy-changed",
+      "scope": "workspace"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-policy-changed",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-015",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-policy-changed",
+     "scope": "workspace"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-policy-changed",
+      "scope": "workspace"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-policy-changed",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-016",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "token-policy-changed",
+     "scope": "workspace"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "token-policy-changed",
+      "scope": "workspace"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "token-policy-changed",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-017",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": " allow ",
+     "artifact_hash": "  token-current ",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": " allow ",
+      "artifact_hash": "  token-current ",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "  token-current ",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-018",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": " allow ",
+     "artifact_hash": "  token-current ",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": " allow ",
+      "artifact_hash": "  token-current ",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "  token-current ",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-019",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ],
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": " allow ",
+     "artifact_hash": "  token-current ",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": " allow ",
+      "artifact_hash": "  token-current ",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "  token-current ",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-020",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ],
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": " allow ",
+     "artifact_hash": "  token-current ",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": " allow ",
+      "artifact_hash": "  token-current ",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "  token-current ",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-021",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": " allow ",
+     "artifact_hash": "  token-current ",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": " allow ",
+      "artifact_hash": "  token-current ",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "  token-current ",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-022",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": " allow ",
+     "artifact_hash": "  token-current ",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": " allow ",
+      "artifact_hash": "  token-current ",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "  token-current ",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-023",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "runtime-exact:abc",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "runtime-exact:abc",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "runtime-exact:abc",
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-024",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": [
+    [
+     "runtime-exact:abc",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "runtime-exact:abc",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "runtime-exact:abc",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "runtime-exact:abc",
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-025",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "runtime-exact:abc",
+     "token-current",
+     "approval_reuse_content_changed"
+    ],
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "runtime-exact:abc",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "runtime-exact:abc",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": "runtime-exact:abc",
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-026",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "runtime-exact:abc",
+     "token-current",
+     "approval_reuse_content_changed"
+    ],
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "runtime-exact:abc",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "runtime-exact:abc",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "runtime-exact:abc",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-027",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "runtime-exact:abc",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "runtime-exact:abc",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "runtime-exact:abc",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-028",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": "runtime-exact:abc",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": "runtime-exact:abc",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": "runtime-exact:abc",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-029",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": null,
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": null,
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-030",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": [
+    [
+     null,
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": null,
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": null,
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-031",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     null,
+     "token-current",
+     "approval_reuse_content_changed"
+    ],
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": null,
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": null,
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-032",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     null,
+     "token-current",
+     "approval_reuse_content_changed"
+    ],
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": null,
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": null,
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-033",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": null,
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": null,
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-034",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "artifact_hash": null,
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "artifact_hash": null,
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-035",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-036",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": [
+    [
+     null,
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-037",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     null,
+     "token-current",
+     "approval_reuse_content_changed"
+    ],
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": "approval_reuse_content_changed"
+   },
+   "name": "case-038",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     null,
+     "token-current",
+     "approval_reuse_content_changed"
+    ],
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-039",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-040",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "allow",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "allow",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "allow",
+    "stored_artifact_hash": null,
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-041",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "legacy-hash",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "block",
+      "artifact_hash": "legacy-hash",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "block",
+    "stored_artifact_hash": "legacy-hash",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-042",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "legacy-hash",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "block",
+      "artifact_hash": "legacy-hash",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "block",
+    "stored_artifact_hash": "legacy-hash",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-043",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "legacy-hash",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "block",
+      "artifact_hash": "legacy-hash",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "block",
+    "stored_artifact_hash": "legacy-hash",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-044",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "legacy-hash",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "block",
+      "artifact_hash": "legacy-hash",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "block",
+    "stored_artifact_hash": "legacy-hash",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-045",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "legacy-hash",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "block",
+      "artifact_hash": "legacy-hash",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "block",
+    "stored_artifact_hash": "legacy-hash",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-046",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "block",
+     "artifact_hash": "legacy-hash",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "block",
+      "artifact_hash": "legacy-hash",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "block",
+    "stored_artifact_hash": "legacy-hash",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-047",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "review",
+     "artifact_hash": "token-current",
+     "scope": "harness"
+    },
+    "lookup": {
+     "decision": {
+      "action": "review",
+      "artifact_hash": "token-current",
+      "scope": "harness"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "review",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-048",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "review",
+     "artifact_hash": "token-current",
+     "scope": "harness"
+    },
+    "lookup": {
+     "decision": {
+      "action": "review",
+      "artifact_hash": "token-current",
+      "scope": "harness"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "review",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-049",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "review",
+     "artifact_hash": "token-current",
+     "scope": "harness"
+    },
+    "lookup": {
+     "decision": {
+      "action": "review",
+      "artifact_hash": "token-current",
+      "scope": "harness"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "review",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-050",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "review",
+     "artifact_hash": "token-current",
+     "scope": "harness"
+    },
+    "lookup": {
+     "decision": {
+      "action": "review",
+      "artifact_hash": "token-current",
+      "scope": "harness"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "review",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-051",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "review",
+     "artifact_hash": "token-current",
+     "scope": "harness"
+    },
+    "lookup": {
+     "decision": {
+      "action": "review",
+      "artifact_hash": "token-current",
+      "scope": "harness"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "review",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-052",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "review",
+     "artifact_hash": "token-current",
+     "scope": "harness"
+    },
+    "lookup": {
+     "decision": {
+      "action": "review",
+      "artifact_hash": "token-current",
+      "scope": "harness"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "review",
+    "stored_artifact_hash": "token-current",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-053",
+   "reuse": {
+    "current_action": "review",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "warn",
+     "artifact_hash": "token-stale",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "warn",
+      "artifact_hash": "token-stale",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "warn",
+    "stored_artifact_hash": "token-stale",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-054",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "warn",
+     "artifact_hash": "token-stale",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "warn",
+      "artifact_hash": "token-stale",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "warn",
+    "stored_artifact_hash": "token-stale",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-055",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "warn",
+     "artifact_hash": "token-stale",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "warn",
+      "artifact_hash": "token-stale",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": "warn",
+    "stored_artifact_hash": "token-stale",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-056",
+   "reuse": {
+    "current_action": "allow",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "warn",
+     "artifact_hash": "token-stale",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "warn",
+      "artifact_hash": "token-stale",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "warn",
+    "stored_artifact_hash": "token-stale",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-057",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "warn",
+     "artifact_hash": "token-stale",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "warn",
+      "artifact_hash": "token-stale",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": true,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "warn",
+    "stored_artifact_hash": "token-stale",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-058",
+   "reuse": {
+    "current_action": "require-reapproval",
+    "cursor_native_token": "token-current"
+   },
+   "validations": [
+    [
+     "token-current",
+     "token-current",
+     null
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": {
+     "action": "warn",
+     "artifact_hash": "token-stale",
+     "scope": "artifact"
+    },
+    "lookup": {
+     "decision": {
+      "action": "warn",
+      "artifact_hash": "token-stale",
+      "scope": "artifact"
+     },
+     "ignored_local_integrity": {
+      "artifact_id": "codex:x",
+      "reason": "approval_reuse_integrity_failure"
+     },
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": false,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": true,
+    "cursor_validation_reason": "approval_reuse_content_changed",
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": true,
+    "stored_action": "warn",
+    "stored_artifact_hash": "token-stale",
+    "stored_present": true,
+    "stored_validation_reason": null
+   },
+   "name": "case-059",
+   "reuse": {
+    "current_action": "block",
+    "cursor_native_token": "token-stale"
+   },
+   "validations": [
+    [
+     "token-stale",
+     "token-current",
+     "approval_reuse_content_changed"
+    ]
+   ]
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-060",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_content_changed",
+    "diagnostic_stored_hash": "token-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-061",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": "legacy-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-062",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "allow",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_integrity_failure",
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-063",
+   "reuse": {
+    "current_action": "allow"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-064",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_content_changed",
+    "diagnostic_stored_hash": "token-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-065",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": "legacy-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-066",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "review",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_integrity_failure",
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-067",
+   "reuse": {
+    "current_action": "review"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-068",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_content_changed",
+    "diagnostic_stored_hash": "token-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-069",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": "legacy-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-070",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "require-reapproval",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_integrity_failure",
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-071",
+   "reuse": {
+    "current_action": "require-reapproval"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-072",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_content_changed",
+    "token-stored"
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_content_changed",
+    "diagnostic_stored_hash": "token-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-073",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    null,
+    "legacy-stored"
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": null,
+    "diagnostic_stored_hash": "legacy-stored",
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-074",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  },
+  {
+   "composed": {
+    "decision": null,
+    "lookup": {
+     "decision": null,
+     "ignored_local_integrity": null,
+     "trust_status": {
+      "trusted": true
+     }
+    }
+   },
+   "current_hash": "token-current",
+   "diagnosed": true,
+   "diagnosis": [
+    "approval_reuse_integrity_failure",
+    null
+   ],
+   "expected": {
+    "current_action": "block",
+    "cursor_native_present": false,
+    "cursor_validation_reason": null,
+    "diagnostic_reason": "approval_reuse_integrity_failure",
+    "diagnostic_stored_hash": null,
+    "integrity_failure": false,
+    "stored_action": null,
+    "stored_artifact_hash": null,
+    "stored_present": false,
+    "stored_validation_reason": null
+   },
+   "name": "case-075",
+   "reuse": {
+    "current_action": "block"
+   },
+   "validations": []
+  }
+ ]
+}

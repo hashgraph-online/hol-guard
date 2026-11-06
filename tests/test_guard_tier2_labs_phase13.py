@@ -1,0 +1,148 @@
+"""Phase 13 tier2 fixture-lab coverage."""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
+from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
+
+from .guard_tier2_phase13_support import (
+    WORKSPACE_ID,
+    artifact_from_command_fixture,
+    bundle_response_fixture,
+    package_fixture,
+)
+
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
+FIXTURES = Path(__file__).parent / "fixtures" / "tier2"
+
+
+def _materialize_fixture_workspace(fixture_name: str, workspace_dir: Path) -> None:
+    """Restore inert manifest samples only inside a temporary test workspace."""
+    shutil.copytree(FIXTURES / fixture_name, workspace_dir)
+    for fixture_path in workspace_dir.glob("*.fixture"):
+        fixture_path.rename(fixture_path.with_suffix(""))
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "command", "ecosystem", "package_name", "blocked_version", "expected_decision"),
+    [
+        ("cargo-vulnerable", "cargo add clap@^4.5", "cargo", "clap", "4.5.7", "block"),
+        ("cargo-safe", "cargo add clap@^4.5", "cargo", "clap", "4.5.7", "ask"),
+        (
+            "go-vulnerable",
+            "go get github.com/gin-gonic/gin",
+            "go",
+            "github.com/gin-gonic/gin",
+            "v1.10.0",
+            "block",
+        ),
+        (
+            "go-safe",
+            "go get github.com/gin-gonic/gin",
+            "go",
+            "github.com/gin-gonic/gin",
+            "v1.10.0",
+            "ask",
+        ),
+        (
+            "maven-vulnerable",
+            "mvn dependency:get -Dartifact=org.example:demo",
+            "maven",
+            "org.example:demo",
+            "1.2.3",
+            "block",
+        ),
+        (
+            "maven-safe",
+            "mvn dependency:get -Dartifact=org.example:demo",
+            "maven",
+            "org.example:demo",
+            "1.2.3",
+            "ask",
+        ),
+        (
+            "gradle-vulnerable",
+            "./gradlew addDependency --dependency org.example:demo",
+            "maven",
+            "org.example:demo",
+            "1.2.3",
+            "block",
+        ),
+        (
+            "gradle-safe",
+            "./gradlew addDependency --dependency org.example:demo",
+            "maven",
+            "org.example:demo",
+            "1.2.3",
+            "ask",
+        ),
+        (
+            "composer-vulnerable",
+            "composer require laravel/framework",
+            "packagist",
+            "laravel/framework",
+            "11.1.0",
+            "block",
+        ),
+        (
+            "composer-safe",
+            "composer require laravel/framework",
+            "packagist",
+            "laravel/framework",
+            "11.1.0",
+            "ask",
+        ),
+        ("rubygems-vulnerable", "bundle add rspec", "rubygems", "rspec", "3.13.0", "block"),
+        ("rubygems-safe", "bundle add rspec", "rubygems", "rspec", "3.13.0", "ask"),
+    ],
+)
+def test_tier2_fixture_labs_cover_safe_and_vulnerable_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fixture_name: str,
+    command: str,
+    ecosystem: str,
+    package_name: str,
+    blocked_version: str,
+    expected_decision: str,
+) -> None:
+    """Verify blocked versions are denied and safe fixture versions require approval."""
+    _force_unpaid_entitlement(monkeypatch)
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _materialize_fixture_workspace(fixture_name, workspace_dir)
+    store = GuardStore(home_dir)
+    review_package_signals(home_dir)
+    bind_workspace(store, WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(
+            packages=[
+                package_fixture(
+                    ecosystem=ecosystem,
+                    name=package_name,
+                    version=blocked_version,
+                    default_action="block",
+                    recommended_fix_version=None,
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = artifact_from_command_fixture(command, workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == expected_decision
+    assert result.packages[0]["supportLevel"] == "beta"
+    if expected_decision == "ask":
+        assert result.policy_action == "require-reapproval"

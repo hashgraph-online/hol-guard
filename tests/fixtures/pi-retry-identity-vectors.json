@@ -1,0 +1,177 @@
+[
+  {
+    "name": "session-bound pi retry", "harness": "pi", "same_identity": true,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "session-bound omp retry", "harness": "omp", "same_identity": true,
+    "before": {"tool_name": "read", "session_id": "session-a", "tool_call_id": "first", "tool_input": {"path": "example.py"}},
+    "after": {"tool_name": "read", "session_id": "session-a", "tool_call_id": "retry", "tool_input": {"path": "example.py"}}
+  },
+  {
+    "name": "missing session", "harness": "pi", "same_identity": false,
+    "before": {"tool_name": "eval", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "empty session", "harness": "omp", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "changed session", "harness": "pi", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "first", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "session-b", "tool_call_id": "retry", "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "changed code", "harness": "omp", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"code": "2 + 2"}}
+  },
+  {
+    "name": "nested call id is input", "harness": "pi", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"tool_call_id": "argument-a"}},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_input": {"tool_call_id": "argument-b"}}
+  },
+  {
+    "name": "other harness retains call id", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "first"},
+    "after": {"tool_name": "eval", "session_id": "session-a", "tool_call_id": "retry"}
+  },
+  {
+    "name": "root timestamp is transport", "harness": "omp", "same_identity": true,
+    "before": {"tool_name": "eval", "timestamp": 1, "tool_input": {"code": "1 + 1"}},
+    "after": {"tool_name": "eval", "timestamp": 2, "tool_input": {"code": "1 + 1"}}
+  },
+  {
+    "name": "nested timestamp is input", "harness": "omp", "same_identity": false,
+    "before": {"tool_name": "eval", "tool_input": {"timestamp": 1}},
+    "after": {"tool_name": "eval", "tool_input": {"timestamp": 2}}
+  },
+  {
+    "name": "session-bound claude-code retry", "harness": "claude-code", "same_identity": true,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "claude-code retry without a session", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "claude-code retry in another session", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-b", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "claude-code retry with another command", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -l"}}
+  },
+  {
+    "name": "claude-code nested tool use id is input", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "a"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "b"}}
+  },
+  {
+    "name": "session-bound codex retry", "harness": "codex", "same_identity": true,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex retry without a session", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex retry in another session", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-b", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex retry with another command", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -l"}}
+  },
+  {
+    "name": "codex nested tool use id is input", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "a"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "b"}}
+  },
+  {
+    "name": "other harness retains tool use id", "harness": "gemini", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "session-bound cursor retry", "harness": "cursor", "same_identity": true,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry without a session", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry in another session", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-b", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor nested generation id is input", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "generation_id": "gen-first", "tool_input": {"command": "ls -la", "generation_id": "a"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "generation_id": "gen-first", "tool_input": {"command": "ls -la", "generation_id": "b"}}
+  },
+  {
+    "name": "cursor retry bound by conversation id", "harness": "cursor", "same_identity": true,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry bound by camelCase conversation id", "harness": "cursor", "same_identity": true,
+    "before": {"tool_name": "Bash", "conversationId": "conv-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversationId": "conv-a", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry in another conversation", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-b", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry with another command in the same conversation", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-retry", "tool_input": {"command": "rm -rf build"}}
+  },
+  {
+    "name": "cursor retry with an empty conversation id", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "other harness ignores conversation id", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "session-bound zcode retry", "harness": "zcode", "same_identity": true,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "toolCallId": "first", "turnId": "turn-first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "toolCallId": "retry", "turnId": "turn-retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "zcode retry without a session", "harness": "zcode", "same_identity": false,
+    "before": {"tool_name": "Bash", "tool_use_id": "first", "toolCallId": "first", "turnId": "turn-first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "tool_use_id": "retry", "toolCallId": "retry", "turnId": "turn-retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "zcode retry with another command", "harness": "zcode", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "toolCallId": "first", "turnId": "turn-first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "toolCallId": "retry", "turnId": "turn-retry", "tool_input": {"command": "ls -la /etc"}}
+  },
+  {
+    "name": "zcode nested turn id is input", "harness": "zcode", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "turnId": "turn-first", "tool_input": {"command": "ls -la", "turnId": "a"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "turnId": "turn-first", "tool_input": {"command": "ls -la", "turnId": "b"}}
+  }
+]

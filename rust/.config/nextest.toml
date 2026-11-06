@@ -1,0 +1,5 @@
+# Start the measured one-minute tests before short tests so their latency
+# overlaps other work. Do not skip, retry, or shorten any test.
+[[profile.ci.overrides]]
+filter = 'test(=every_portable_command_source_fixture_passes) | test(=managed_resident::containment::tests::abort_reaps_child_and_reports_state_discovery_failure_after_deadline)'
+priority = 100

@@ -1,0 +1,51 @@
+# undici 8.10.2 and zod 3.25.76 via ci/pi-exact-continuation/package-lock.json.
+# That lock pins the Oh My Pi SDK the Gauntlet lane runs; it is CI-only tooling
+# and ships in no release artifact. Both advisories are denial of service
+# reached through attacker-chosen input, and the lane feeds the SDK only our own
+# catalog and fixtures. Neither has a fix that keeps the pinned major: zod's is
+# 4.x against a ^3 requirement, and undici's 8.12.2 arrives with the next SDK
+# refresh. Revisit when that pin moves.
+CVE-2026-109869 exp:2027-01-01
+CVE-2023-54404 exp:2027-01-01
+
+# filelock 3.25.2 via huggingface-hub in the evaluation dependency group.
+# Nothing in the published wheel depends on it, so the insecure temporary file
+# is only reachable on a developer or CI machine that already runs our own
+# evaluation code. The fixed 4.2.1 cannot be locked for every supported
+# interpreter: filelock 4.2.x requires Python 3.11, and the lock still resolves
+# 4.1.0 for 3.10. Revisit when the floor rises to 3.11.
+CVE-2026-112940 exp:2027-01-01
+
+# litellm 1.93.2, reached only through the optional `cisco` extra and the Cisco
+# scanner's action runtime, and dnspython 2.8.0, which outlives that extra: see
+# its own paragraph below.
+#
+# The litellm advisories are both against the LiteLLM proxy server: a
+# privilege escalation to proxy admin through a cookie reused across domains,
+# and an arbitrary local file read through the proxy's `internal_user_viewer`
+# role. Nothing here imports litellm directly or starts a proxy; it arrives as
+# a dependency of cisco-ai-skill-scanner, so neither surface exists. The fixed
+# releases start at 1.95.0, and the pin is an override that holds the resolve
+# together for cisco-ai-skill-scanner 2.0.12; moving it is a dependency change
+# of its own.
+#
+# dnspython's denial of service needs an attacker-chosen DNS response, and the
+# only consumer is email-validator's deliverability check, which nothing in
+# this project calls.
+#
+# A Trivy ignore matches a CVE everywhere in the repository, so this one has to
+# account for every copy rather than the first one found. The action's
+# `pypi-attestations` lock carried its own 2.8.0 pin, installed by
+# `action/action.yml` and `plugin-release/action.yml` on every run regardless
+# of `install_cisco`; both pin Python 3.12, so that copy is bumped to 2.9.0
+# here rather than silenced.
+#
+# What is left is `uv.lock`'s Python 3.10 resolve: 2.9.0 requires 3.11, so for
+# that interpreter alone there is no fixed release to pin. The lock already
+# takes 2.9.0 on 3.11 and above.
+#
+# Revisit when the cisco pins move or the Python floor rises to 3.11, which
+# retires the dnspython entry outright.
+CVE-2026-114605 exp:2027-01-01
+CVE-2026-114612 exp:2027-01-01
+GHSA-g5ff-637f-6q2m exp:2027-01-01

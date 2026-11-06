@@ -1,0 +1,1222 @@
+{
+ "cases": [
+  {
+   "expect": "1.10.0",
+   "name": "npm caret",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": "2.0.0",
+   "name": "npm latest",
+   "range": "latest",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": "1.2.3",
+   "name": "npm default ecosystem",
+   "range": "~1.2.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": "2.0.0",
+   "name": "npm scoped namespace",
+   "range": "latest",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/%40openai%2Fcodex",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": "codex",
+    "namespace": "@openai"
+   }
+  },
+  {
+   "expect": "2.0.0",
+   "name": "npm name stripped",
+   "range": "^2.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": "  left-pad  "
+   }
+  },
+  {
+   "expect": "1.10.0",
+   "name": "npm special characters",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/%40sc%20ope%2Fa%20b%2Bc",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": "a b+c",
+    "namespace": "@sc ope"
+   }
+  },
+  {
+   "expect": null,
+   "name": "npm no matching version",
+   "range": "^9.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": null,
+   "name": "npm versions not an object",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": [
+      "1.0.0"
+     ]
+    }
+   },
+   "target": {
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": null,
+   "name": "npm versions empty",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {}
+    }
+   },
+   "target": {
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": null,
+   "name": "npm versions absent",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {}
+   },
+   "target": {
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": null,
+   "name": "npm os error",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "error": "os_error",
+    "kind": "error"
+   },
+   "target": {
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": null,
+   "name": "npm value error",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "error": "value_error",
+    "kind": "error"
+   },
+   "target": {
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": null,
+   "name": "npm runtime error",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "error": "runtime_error",
+    "kind": "error"
+   },
+   "target": {
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": null,
+   "name": "source url skips registry",
+   "range": "^1.0.0",
+   "requests": [],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "name": "left-pad",
+    "source_url": "https://example.com/x.tgz"
+   }
+  },
+  {
+   "expect": "1.10.0",
+   "name": "blank source url is ignored",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "name": "left-pad",
+    "source_url": "   "
+   }
+  },
+  {
+   "expect": null,
+   "name": "missing name",
+   "range": "^1.0.0",
+   "requests": [],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm"
+   }
+  },
+  {
+   "expect": null,
+   "name": "blank name",
+   "range": "^1.0.0",
+   "requests": [],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": "  "
+   }
+  },
+  {
+   "expect": null,
+   "name": "non string name",
+   "range": "^1.0.0",
+   "requests": [],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "npm",
+    "name": 7
+   }
+  },
+  {
+   "expect": null,
+   "name": "unsupported ecosystem",
+   "range": "^1.0.0",
+   "requests": [],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "cargo",
+    "name": "serde"
+   }
+  },
+  {
+   "expect": null,
+   "name": "ecosystem is case sensitive",
+   "range": "^1.0.0",
+   "requests": [],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "NPM",
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": "1.10.0",
+   "name": "non string ecosystem defaults to npm",
+   "range": "^1.0.0",
+   "requests": [
+    {
+     "accept": "application/vnd.npm.install-v1+json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://registry.npmjs.org/left-pad",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "versions": {
+      "1.0.0": {},
+      "1.10.0": {},
+      "1.2.3": {},
+      "2.0.0": {},
+      "2.1.0-beta.1": {}
+     }
+    }
+   },
+   "target": {
+    "ecosystem": 5,
+    "name": "left-pad"
+   }
+  },
+  {
+   "expect": "1.9.9",
+   "name": "pypi range",
+   "range": ">=1.0,<2",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "1.9.9",
+   "name": "pypi name normalized",
+   "range": ">=1.0,<2",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/foo-bar-baz/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "Foo_Bar.Baz"
+   }
+  },
+  {
+   "expect": "1.9.9",
+   "name": "pypi caret major",
+   "range": "^1.2.3",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "0.2.5",
+   "name": "pypi caret zero minor",
+   "range": "^0.2.3",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "0.0.3",
+   "name": "pypi caret zero patch",
+   "range": "^0.0.3",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "1.9.9",
+   "name": "pypi caret single segment",
+   "range": "^1",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "1.2.3",
+   "name": "pypi tilde minor",
+   "range": "~1.2.3",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "1.9.9",
+   "name": "pypi tilde single segment",
+   "range": "~1",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "1.9.9",
+   "name": "pypi compatible release",
+   "range": "~=1.4",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi caret invalid base",
+   "range": "^abc",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi caret empty base",
+   "range": "^",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "1.2.3",
+   "name": "pypi tilde padded base",
+   "range": "~ 1.2.3",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi invalid specifier",
+   "range": "garbage",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi blank range",
+   "range": "   ",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "2.0.0",
+   "name": "pypi exact match",
+   "range": "==2.0.0",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi no matching release",
+   "range": ">=3",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "2.1.0rc1",
+   "name": "pypi prerelease allowed when pinned",
+   "range": ">=2.1.0rc1",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi releases not an object",
+   "range": ">=1",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": []
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi releases absent",
+   "range": ">=1",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {}
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": null,
+   "name": "pypi os error",
+   "range": ">=1",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/requests/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "error": "os_error",
+    "kind": "error"
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "requests"
+   }
+  },
+  {
+   "expect": "2.1.0rc1",
+   "name": "pypi namespace joined",
+   "range": ">=1",
+   "requests": [
+    {
+     "accept": "application/json",
+     "retry_timeout_seconds": 1,
+     "timeout_seconds": 1,
+     "url": "https://pypi.org/pypi/org%2Fpkg/json",
+     "user_agent": "hol-guard-local"
+    }
+   ],
+   "response": {
+    "kind": "payload",
+    "payload": {
+     "releases": {
+      "0.0.3": [],
+      "0.2.5": [],
+      "1.0.0": [],
+      "1.2.3": [],
+      "1.4.0": [],
+      "1.9.9": [],
+      "2.0.0": [],
+      "2.1.0rc1": [],
+      "not-a-version": []
+     }
+    }
+   },
+   "target": {
+    "ecosystem": "pypi",
+    "name": "pkg",
+    "namespace": "org"
+   }
+  }
+ ],
+ "description": "Registry range-resolution vectors recorded from the Python resolver at commit 7a712222b1 by record_registry_vectors.py. requests is what the resolver asked the registry for; expect is the version it resolved (null is unresolved).",
+ "recorded_from_commit": "7a712222b1",
+ "schema": "guard-supply-chain-registry-vectors.v1"
+}

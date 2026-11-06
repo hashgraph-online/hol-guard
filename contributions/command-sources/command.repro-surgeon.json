@@ -1,0 +1,643 @@
+{
+  "extension": {
+    "action_classes": [
+      "Repro Surgeon project-command execution command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews installed Repro Surgeon 0.2.1 execution commands. Doctor, init, and report are outside this rule; npm/npx launchers remain under Package Firewall. Direct node scripts are not covered. Review does not guarantee configuration integrity.",
+    "ecosystem_ids": [
+      "repro-surgeon"
+    ],
+    "executables": [
+      "repro-surgeon",
+      "repro-surgeon.cmd",
+      "repro-surgeon.exe"
+    ],
+    "extension_id": "command.repro-surgeon",
+    "homepage": "https://github.com/pavangupta352/repro-surgeon",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "Repro Surgeon command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Repro Surgeon project-command execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews reduce, resume, verify, and demo, which execute project commands in temporary copies with normal host and network permissions. This review is not a sandbox or a source audit.",
+        "example_command": "repro-surgeon reduce ./app --out ./app-repro",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Repro Surgeon project-command execution",
+        "permission_id": "command.repro-surgeon.permission.execute",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the selected configuration and source; use doctor for input checks.",
+          "Run untrusted project commands in an independently configured container or VM."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.repro-surgeon",
+      "url": "https://github.com/pavangupta352/repro-surgeon"
+    },
+    "reference_urls": [
+      "https://github.com/pavangupta352/repro-surgeon/blob/v0.2.1/src/cli.ts",
+      "https://github.com/pavangupta352/repro-surgeon/blob/v0.2.1/SECURITY.md#execution-boundary",
+      "https://github.com/pavangupta352/repro-surgeon/blob/v0.2.1/docs/execution-container.md"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Repro Surgeon project-command execution command"
+        ],
+        "default_mode": "review",
+        "description": "Reviews reduce, resume, verify, and demo, which execute project commands in temporary copies with normal host and network permissions. This review is not a sandbox or a source audit.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "repro-surgeon",
+                  "repro-surgeon.cmd",
+                  "repro-surgeon.exe"
+                ],
+                "options_with_values": [
+                  "--config",
+                  "--exit",
+                  "--forbid",
+                  "--match",
+                  "--max-evaluations",
+                  "--max-seconds",
+                  "--out"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "reduce"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "repro-surgeon",
+                  "repro-surgeon.cmd",
+                  "repro-surgeon.exe"
+                ],
+                "options_with_values": [
+                  "--config",
+                  "--exit",
+                  "--forbid",
+                  "--match",
+                  "--max-evaluations",
+                  "--max-seconds",
+                  "--out"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "resume"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "repro-surgeon",
+                  "repro-surgeon.cmd",
+                  "repro-surgeon.exe"
+                ],
+                "options_with_values": [
+                  "--config",
+                  "--exit",
+                  "--forbid",
+                  "--match",
+                  "--max-evaluations",
+                  "--max-seconds",
+                  "--out"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "verify"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            },
+            {
+              "config": {
+                "executables": [
+                  "repro-surgeon",
+                  "repro-surgeon.cmd",
+                  "repro-surgeon.exe"
+                ],
+                "options_with_values": [
+                  "--config",
+                  "--exit",
+                  "--forbid",
+                  "--match",
+                  "--max-evaluations",
+                  "--max-seconds",
+                  "--out"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "demo"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.repro-surgeon.permission.execute",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.repro-surgeon.execute",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "reduce"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "resume"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "verify"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--help"
+                    ],
+                    "subcommands": [
+                      "demo"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "reduce"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "resume"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "verify"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-h"
+                    ],
+                    "subcommands": [
+                      "demo"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "h"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--version"
+                    ],
+                    "subcommands": [
+                      "reduce"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--version"
+                    ],
+                    "subcommands": [
+                      "resume"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--version"
+                    ],
+                    "subcommands": [
+                      "verify"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "--version"
+                    ],
+                    "subcommands": [
+                      "demo"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Tool version",
+            "variant_id": "version"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-v"
+                    ],
+                    "subcommands": [
+                      "reduce"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-v"
+                    ],
+                    "subcommands": [
+                      "resume"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-v"
+                    ],
+                    "subcommands": [
+                      "verify"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                },
+                {
+                  "config": {
+                    "executables": [
+                      "repro-surgeon",
+                      "repro-surgeon.cmd",
+                      "repro-surgeon.exe"
+                    ],
+                    "options_with_values": [
+                      "--config",
+                      "--exit",
+                      "--forbid",
+                      "--match",
+                      "--max-evaluations",
+                      "--max-seconds",
+                      "--out"
+                    ],
+                    "required_flags_anywhere": [
+                      "-v"
+                    ],
+                    "subcommands": [
+                      "demo"
+                    ]
+                  },
+                  "op": "leading-subcommand.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Tool version",
+            "variant_id": "v"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the selected configuration and source; use doctor for input checks.",
+          "Run untrusted project commands in an independently configured container or VM."
+        ],
+        "severity": "high",
+        "title": "Repro Surgeon project-command execution"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect the selected configuration and source; use doctor for input checks.",
+      "Run untrusted project commands in an independently configured container or VM."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import time
+from pathlib import Path
+
+from ci.native_runtime.native_process_test_support import process_is_executing
+from ci.native_runtime.test_native_hook_client import (
+    _request,
+    _state_files,
+)
+
+pytest_plugins = ("ci.native_runtime.test_native_hook_client",)
+
+
+def test_native_hook_client_start_timeout_contains_new_managed_processes(
+    native_runtime: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    runtime, state_dir = native_runtime
+    request = _request(runtime, state_dir.parent, deadline_budget_ms=20)
+    process = subprocess.Popen(
+        (str(runtime), "hook-client", "--stdin", str(state_dir)),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert process.stdin is not None
+    process.stdin.write(request)
+    process.stdin.close()
+    observed_process_ids: set[int] = set()
+    deadline = time.monotonic() + 3
+    while process.poll() is None and time.monotonic() < deadline:
+        for path in _state_files(state_dir):
+            try:
+                state = json.loads(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
+            for key in ("process_id", "owner_process_id"):
+                process_id = state.get(key)
+                if isinstance(process_id, int) and process_id > 0:
+                    observed_process_ids.add(process_id)
+        time.sleep(0.01)
+    if process.poll() is None:
+        process.kill()
+    stdout = process.stdout.read() if process.stdout is not None else b""
+    stderr = process.stderr.read() if process.stderr is not None else b""
+    process.wait(timeout=1)
+    result = subprocess.CompletedProcess(
+        process.args,
+        process.returncode,
+        stdout,
+        stderr,
+    )
+    assert result.returncode is not None
+    if result.returncode == 0:
+        assert json.loads(result.stdout) == {
+            "error": "native_policy_snapshot_missing",
+            "retryable": False,
+        }
+        # Successful startup retains the shared resident until its one-second
+        # idle lease expires. Only a startup timeout promises immediate cleanup.
+        idle_deadline = time.monotonic() + 3
+        while time.monotonic() < idle_deadline and (
+            _state_files(state_dir) or any(process_is_executing(pid) for pid in observed_process_ids)
+        ):
+            time.sleep(0.01)
+    else:
+        assert result.stderr in {
+            b"native_client_deadline_exceeded\n",
+            b"native_resident_start_timeout\n",
+            b"native_resident_lease_busy\n",
+        }
+    for _ in range(20):
+        if not any(process_is_executing(process_id) for process_id in observed_process_ids):
+            break
+        time.sleep(0.05)
+    assert not any(process_is_executing(process_id) for process_id in observed_process_ids), (
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        observed_process_ids,
+    )
+    assert not _state_files(state_dir), (result.returncode, result.stdout, result.stderr)

@@ -1,0 +1,915 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guard.hashgraphonline.com/schema/policy/v1alpha1",
+  "title": "GuardPolicy v1alpha1",
+  "description": "Canonical, portable HOL Guard policy document.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "guard.hashgraphonline.com/v1alpha1"
+    },
+    "kind": {
+      "const": "GuardPolicy"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/spec"
+    }
+  },
+  "patternProperties": {
+    "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+      "$ref": "#/$defs/extensionValue"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "boundedString": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "labels": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "defaults",
+        "rules"
+      ],
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/defaults"
+        },
+        "rolloutState": {
+          "enum": [
+            "draft",
+            "simulated",
+            "pending_approval",
+            "enforcing",
+            "enforced",
+            "rollback_available"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        },
+        "budgets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/businessBudget"
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "defaults": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "observe",
+            "prompt",
+            "enforce"
+          ]
+        },
+        "defaultAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "block"
+          ]
+        },
+        "unknownPublisherAction": {
+          "enum": [
+            "allow",
+            "review",
+            "block"
+          ]
+        },
+        "changedHashAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "require-reapproval",
+            "block"
+          ]
+        },
+        "newNetworkDomainAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "block"
+          ]
+        },
+        "subprocessAction": {
+          "enum": [
+            "allow",
+            "warn",
+            "block"
+          ]
+        },
+        "telemetryEnabled": {
+          "type": "boolean"
+        },
+        "syncEnabled": {
+          "type": "boolean"
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "stringSet": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "commandCondition": {
+      "type": "object",
+      "required": [
+        "field",
+        "operator",
+        "value"
+      ],
+      "properties": {
+        "field": {
+          "const": "command"
+        },
+        "operator": {
+          "enum": [
+            "exact",
+            "startsWith",
+            "contains",
+            "endsWith",
+            "glob",
+            "regex"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "caseSensitive": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "commandExpression": {
+      "type": "object",
+      "required": [
+        "combinator",
+        "conditions"
+      ],
+      "properties": {
+        "combinator": {
+          "enum": [
+            "all",
+            "any"
+          ]
+        },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/commandCondition"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "businessMatch": {
+      "type": "object",
+      "description": "Versioned business selectors for drafts. Publication requires an authenticated native consumer; parsing alone never authorizes business operations.",
+      "required": [
+        "schema",
+        "version",
+        "services",
+        "operations"
+      ],
+      "properties": {
+        "schema": {
+          "const": "guard.business-policy-match.v1"
+        },
+        "version": {
+          "const": 1
+        },
+        "services": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "google_gmail",
+              "google_drive",
+              "google_calendar"
+            ]
+          }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "mail_read",
+              "mail_draft",
+              "mail_send",
+              "mail_label",
+              "mail_permanent_delete",
+              "mail_settings",
+              "drive_read",
+              "drive_edit",
+              "drive_share",
+              "drive_export",
+              "calendar_read",
+              "calendar_invite"
+            ]
+          }
+        },
+        "accountBindings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "description": "Opaque tenant-scoped account bindings established by the trusted account resolver. Raw identities and unsalted account hashes are not valid bindings.",
+          "items": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "recipientDomains": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "description": "Exact canonical ASCII DNS-name syntax, including single-label names that never match fully qualified recipient domains. Native enforcement requires a nonempty named audience and every resolved recipient domain to match, including Cc/Bcc and expanded groups. This selector is not identity or organization membership evidence.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$",
+            "not": {
+              "pattern": "[^a-z0-9.-]"
+            },
+            "$comment": "ECMAScript $ also matches before a final line terminator; the independent character check rejects trailing LF, U+2028 and other non-domain characters."
+          }
+        },
+        "audienceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "private",
+              "named",
+              "public"
+            ]
+          }
+        },
+        "sensitivityLabels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "public",
+              "personal",
+              "confidential",
+              "secret"
+            ]
+          }
+        },
+        "minRecipientCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "minRecordCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "minByteCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operations": {
+                "contains": {
+                  "enum": [
+                    "mail_read",
+                    "mail_draft",
+                    "mail_send",
+                    "mail_label",
+                    "mail_permanent_delete",
+                    "mail_settings"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "services": {
+                "contains": {
+                  "const": "google_gmail"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operations": {
+                "contains": {
+                  "enum": [
+                    "drive_read",
+                    "drive_edit",
+                    "drive_share",
+                    "drive_export"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "services": {
+                "contains": {
+                  "const": "google_drive"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operations": {
+                "contains": {
+                  "enum": [
+                    "calendar_read",
+                    "calendar_invite"
+                  ]
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "services": {
+                "contains": {
+                  "const": "google_calendar"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "match": {
+      "type": "object",
+      "properties": {
+        "business": {
+          "$ref": "#/$defs/businessMatch"
+        },
+        "operations": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "actors": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "agents": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "commands": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/stringSet"
+            },
+            {
+              "$ref": "#/$defs/commandExpression"
+            }
+          ]
+        },
+        "devices": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "domains": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "ecosystems": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "environments": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "harnesses": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "locations": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "mcps": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "packages": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "paths": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "publishers": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "repositories": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "secretTypes": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "skills": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "tools": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "workspaces": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "browserIntents": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "browser.navigation",
+              "browser.inspect",
+              "browser.interact",
+              "browser.transfer",
+              "browser.privileged"
+            ]
+          }
+        },
+        "browserOperations": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "browserProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "isolated",
+              "dedicated",
+              "shared",
+              "remote-debugging",
+              "unknown"
+            ]
+          }
+        },
+        "origins": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "pathPrefixes": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "sensitiveSurfaces": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "cookies",
+              "storage",
+              "auth-headers",
+              "raw-cdp",
+              "script-eval",
+              "network-intercept",
+              "upload",
+              "download",
+              "clipboard",
+              "password-fields"
+            ]
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "lifetime": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "once",
+            "session",
+            "project",
+            "machine",
+            "workspace",
+            "team",
+            "permanent",
+            "until"
+          ]
+        },
+        "expiresAt": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/utcTimestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "until"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "expiresAt"
+            ],
+            "properties": {
+              "expiresAt": {
+                "$ref": "#/$defs/utcTimestamp"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "expiresAt": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source",
+        "createdAt"
+      ],
+      "properties": {
+        "source": {
+          "enum": [
+            "suggested-memory",
+            "review-decision",
+            "builder",
+            "import",
+            "legacy",
+            "cloud",
+            "local",
+            "policy-bundle"
+          ]
+        },
+        "receiptIds": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "suggestionId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "importSourceDigest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "previousRuleRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rule": {
+      "type": "object",
+      "required": [
+        "id",
+        "enabled",
+        "effect",
+        "match",
+        "lifetime",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "$ref": "#/$defs/boundedString"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "effect": {
+          "enum": [
+            "allow",
+            "block",
+            "review",
+            "ignore"
+          ]
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
+        "lifetime": {
+          "$ref": "#/$defs/lifetime"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "patternProperties": {
+        "^x-[a-z0-9][a-z0-9.-]{0,62}$": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensionValue": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "string",
+          "maxLength": 4096
+        },
+        {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/extensionValue"
+          }
+        },
+        {
+          "type": "object",
+          "maxProperties": 256,
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/extensionValue"
+          }
+        }
+      ]
+    },
+    "businessBudget": {
+      "type": "object",
+      "required": [
+        "schema",
+        "version",
+        "id",
+        "scope",
+        "match",
+        "windowMs",
+        "maximumActions",
+        "maximumRecipients",
+        "maximumRecords",
+        "maximumBytes"
+      ],
+      "properties": {
+        "schema": {
+          "const": "guard.business-budget.v1"
+        },
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "scope": {
+          "enum": [
+            "workflow",
+            "account",
+            "user"
+          ]
+        },
+        "match": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/businessMatch"
+            },
+            {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "minRecipientCount"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "minRecordCount"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "minByteCount"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "windowMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "maximumActions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumRecipients": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumRecords": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maximumBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

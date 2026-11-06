@@ -1,0 +1,16 @@
+{
+  "batch": 8,
+  "evidence": [
+    "tests/managed_controls/acknowledgement.py",
+    "tests/managed_controls/drift.py",
+    "tests/managed_controls/test_acknowledgement_drift.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 120,
+    "start": 106
+  },
+  "theme": "Monotonic acknowledgement, rollout drift, and compatibility evidence"
+}

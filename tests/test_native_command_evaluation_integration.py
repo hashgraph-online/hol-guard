@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
+from codex_plugin_scanner.guard.runtime import native_command_evaluation
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+from tests.native_command_test_support import real_native_review_fixture
+
+
+def test_real_native_payload_rejects_stale_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = real_native_review_fixture(
+        "ollama push model",
+        force_rule_ids=("command.ollama.push",),
+        controls=(("extension", "command.ollama", "enabled"),),
+    )
+    monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
+    snapshot = fixture.snapshot
+    stale = ExtensionControlRuntimeSnapshot(
+        snapshot.health,
+        snapshot.revision + 1,
+        snapshot.catalog_digest,
+        snapshot.effective_digest,
+        snapshot.layers,
+        snapshot.managed_revision,
+    )
+    assert (
+        native_command_evaluation.review_command_native(
+            fixture.command, guard_home=tmp_path, extension_control_snapshot=stale
+        )
+        is None
+    )
+
+
+def test_real_native_transparent_wrapper_preserves_uncertain_envelope() -> None:
+    fixture = real_native_review_fixture("zsh -lc 'git stash list'")
+    model = fixture.payload.get("command_model")
+    assert isinstance(model, dict)
+    canonical = _canonical_command_from_native(fixture.command, model)
+    assert canonical is not None
+    assert canonical.confidence == "uncertain"
+    assert canonical.segments == ()
+    assert canonical.wrapper_chain == ()
+    assert canonical.uncertainty_reason == "transparent_wrapper_not_yet_supported"
+
+
+def test_real_native_review_classification_accepts_explicit_stash_permission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A stash write, not `git stash list`: a printing stash form now clears
+    # only through the Git helper probe, and an explicit Allow never settles
+    # that helper floor.
+    fixture = real_native_review_fixture(
+        "git stash push -m wip",
+        force_rule_ids=("command.git.stash",),
+        controls=(("permission", "command.git.permission.stash", "enabled"),),
+    )
+    assert fixture.payload["minimum_action"] == "allow"
+    monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
+    reviewed = native_command_evaluation.review_command_native(
+        fixture.command,
+        guard_home=tmp_path,
+        extension_control_snapshot=fixture.snapshot,
+    )
+    assert reviewed is not None
+    assert reviewed.payload["minimum_action"] == "allow"
+    assert reviewed.evaluation.minimum_action == "allow"
+    assert reviewed.evaluation.control_resolution.explicitly_enabled_permission_ids == ("command.git.permission.stash",)
+
+
+def test_native_privileged_wrapper_floor_survives_explicit_command_permission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = real_native_review_fixture(
+        "sudo -n git push --force origin feature",
+        controls=(("permission", "command.git.permission.force-push", "enabled"),),
+    )
+    assert fixture.payload["minimum_action"] == "require-reapproval"
+    assert fixture.payload["reason_code"] == "native_privileged_wrapper_reapproval"
+    monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
+
+    reviewed = native_command_evaluation.review_command_native(
+        fixture.command, guard_home=tmp_path, extension_control_snapshot=fixture.snapshot
+    )
+
+    assert reviewed is not None
+    assert reviewed.evaluation.decision_plane.action == "require-reapproval"
+    assert any(
+        reason.reason_code == "native.privileged-wrapper-reapproval"
+        for reason in reviewed.evaluation.decision_plane.controlling_reasons
+    )
+
+
+def test_native_unsupported_heredoc_with_a_non_root_removal_stays_under_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = real_native_review_fixture("cat <<'EOF'\n$(sh -c 'rm -rf /tmp/example')\nEOF")
+    model = fixture.payload.get("command_model")
+    assert isinstance(model, dict)
+    assert model["confidence"] == "uncertain"
+    assert model["segments"] == []
+    assert model["uncertainty_reason"] == "command_redirect_not_yet_supported"
+    evidence = fixture.payload.get("command_extensions")
+    assert isinstance(evidence, dict)
+    assert evidence["evaluation_error"] is None
+    assert evidence["observations"] == []
+    binding = evidence["binding"]
+    assert isinstance(binding, dict)
+    assert binding["observation_count"] == 0
+    assert binding["uncertainty_count"] == 0
+    # The heredoc names `rm -rf` on a non-root path, so the root-removal floor
+    # does not apply; the unmodeled shape still requires review.
+    assert fixture.payload["minimum_action"] == "review"
+
+    monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
+    reviewed = native_command_evaluation.review_command_native(
+        fixture.command,
+        guard_home=tmp_path,
+        extension_control_snapshot=fixture.snapshot,
+    )
+    assert reviewed is not None
+    assert reviewed.payload is fixture.payload
+    assert reviewed.snapshot is fixture.snapshot
+    assert reviewed.evaluation.minimum_action == "review"
+    assert reviewed.evaluation.decision_plane.action == "review"
+    assert reviewed.evaluation.matches == ()
+    assert reviewed.evaluation.decision_plane.proof_routes == frozenset()

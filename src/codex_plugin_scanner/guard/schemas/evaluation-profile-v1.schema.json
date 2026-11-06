@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/evaluation-profile.v1.json",
+  "title": "HOL Guard evaluation profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profileId",
+    "buildIdentity",
+    "hostIdentity",
+    "installedArtifacts",
+    "policyIdentity",
+    "network",
+    "fixture",
+    "targetScope",
+    "resourceLimits",
+    "expectedCapabilities"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "guard.evaluation-profile.v1"},
+    "profileId": {"$ref": "#/$defs/id"},
+    "buildIdentity": {"$ref": "#/$defs/buildIdentity"},
+    "hostIdentity": {"$ref": "#/$defs/hostIdentity"},
+    "installedArtifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"$ref": "#/$defs/artifactIdentity"}
+    },
+    "policyIdentity": {"$ref": "#/$defs/policyIdentity"},
+    "network": {"$ref": "#/$defs/network"},
+    "fixture": {"$ref": "#/$defs/fixtureIdentity"},
+    "targetScope": {"$ref": "#/$defs/targetScope"},
+    "resourceLimits": {"$ref": "#/$defs/resourceLimits"},
+    "expectedCapabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {"$ref": "#/$defs/expectedCapability"}
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$"
+    },
+    "localPath": {
+      "type": "string",
+      "pattern": "^(?:/(?:tmp|private/tmp|var/tmp|private/var/tmp|var/folders|private/var/folders)(?:/[^\\u0000]*)?|[A-Za-z]:[\\\\/](?:Windows[\\\\/]Temp|Users[\\\\/][^\\\\/]+[\\\\/]AppData[\\\\/]Local[\\\\/]Temp)(?:[\\\\/][^\\u0000]*)?)$"
+    },
+    "localEndpoint": {
+      "type": "string",
+      "pattern": "^https?://(?:(?:127(?:\\.[0-9]{1,3}){3})|(?:\\[::1\\]))(?::[0-9]{1,5})?(?:/[^\\s#]*)?$",
+      "minLength": 10,
+      "maxLength": 2048
+    },
+    "buildIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "version", "commit", "artifactDigest"],
+      "properties": {
+        "product": {"type": "string", "minLength": 1, "maxLength": 128},
+        "version": {"$ref": "#/$defs/version"},
+        "commit": {"$ref": "#/$defs/commit"},
+        "artifactDigest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "hostIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "version", "os", "architecture", "runtimeLocation", "requiredPrivilege"],
+      "properties": {
+        "product": {"type": "string", "minLength": 1, "maxLength": 128},
+        "version": {"$ref": "#/$defs/version"},
+        "os": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,31}$"},
+        "architecture": {"type": "string", "pattern": "^[a-zA-Z0-9_.-]{1,32}$"},
+        "runtimeLocation": {"enum": ["local", "hosted"]},
+        "requiredPrivilege": {"enum": ["standard_user", "administrator"]},
+        "executable": {"type": "string", "minLength": 1, "maxLength": 4096}
+      }
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "kind", "version", "digest"],
+      "properties": {
+        "artifactId": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["core", "adapter", "desktop", "profile", "fixture", "other"]},
+        "version": {"$ref": "#/$defs/version"},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "policyIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyId", "version", "digest"],
+      "properties": {
+        "policyId": {"$ref": "#/$defs/id"},
+        "version": {"$ref": "#/$defs/version"},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "fixtureIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixtureId", "version", "digest"],
+      "properties": {
+        "fixtureId": {"$ref": "#/$defs/id"},
+        "version": {"$ref": "#/$defs/version"},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "allowedEndpoints"],
+      "properties": {
+        "mode": {"enum": ["offline", "local_only", "system", "explicit"]},
+        "allowedEndpoints": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/localEndpoint"}
+        },
+        "proxyUrl": {
+          "anyOf": [{"$ref": "#/$defs/localEndpoint"}, {"type": "null"}]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"mode": {"const": "explicit"}}
+          },
+          "then": {
+            "required": ["proxyUrl"],
+            "properties": {"proxyUrl": {"type": "string"}}
+          }
+        },
+        {
+          "if": {
+            "properties": {"mode": {"enum": ["offline", "local_only", "system"]}}
+          },
+          "then": {
+            "properties": {"proxyUrl": {"type": "null"}}
+          }
+        }
+      ]
+    },
+    "targetScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rootPath", "allowedPaths", "allowedEndpoints"],
+      "properties": {
+        "rootPath": {"$ref": "#/$defs/localPath"},
+        "allowedPaths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/localPath"}
+        },
+        "allowedEndpoints": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/localEndpoint"}
+        }
+      }
+    },
+    "resourceLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxDurationSeconds", "maxOutputBytes", "maxMemoryBytes", "maxConcurrency"],
+      "properties": {
+        "maxDurationSeconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "maxOutputBytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+        "maxMemoryBytes": {"type": "integer", "minimum": 1, "maximum": 4294967296},
+        "maxConcurrency": {"type": "integer", "minimum": 1, "maximum": 256}
+      }
+    },
+    "expectedCapabilityAction": {
+      "enum": [
+        "allow",
+        "inspect",
+        "observe",
+        "block",
+        "approval",
+        "suggest",
+        "rewrite",
+        "redact-before-forward",
+        "inventory"
+      ]
+    },
+    "expectedCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "expectedAction"],
+      "properties": {
+        "capabilityId": {"$ref": "#/$defs/id"},
+        "expectedAction": {"$ref": "#/$defs/expectedCapabilityAction"}
+      }
+    }
+  }
+}

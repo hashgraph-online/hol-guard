@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "document": {
+    "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+    "kind": "GuardPolicy",
+    "metadata": {
+      "id": "managed-git-safety",
+      "name": "Managed Git safety",
+      "revision": 7
+    },
+    "spec": {
+      "defaults": {
+        "mode": "enforce",
+        "defaultAction": "block"
+      },
+      "rolloutState": "enforcing",
+      "rules": [
+        {
+          "id": "force-push-review",
+          "description": "Review force pushes",
+          "enabled": true,
+          "effect": "review",
+          "match": {
+            "tools": [
+              "git"
+            ]
+          },
+          "lifetime": {
+            "mode": "workspace",
+            "expiresAt": null
+          },
+          "provenance": {
+            "source": "builder",
+            "createdAt": "2026-08-21T12:00:00.000Z",
+            "createdBy": "fixture"
+          },
+          "x-hol-extension-targets": {
+            "schemaVersion": "guard.policy-extension-targets.v1",
+            "extensionIds": [
+              "command.git"
+            ],
+            "permissionIds": [
+              "command.git.permission.force-push"
+            ]
+          }
+        }
+      ]
+    },
+    "x-hol-extension-controls": {
+      "schemaVersion": "guard.extension-controls.v1",
+      "authorityMode": "managed-restrictive",
+      "controls": [
+        {
+          "targetKind": "permission",
+          "targetId": "command.git.permission.force-push",
+          "state": "disabled"
+        }
+      ]
+    }
+  },
+  "sharedEnabled": {
+    "schemaVersion": "guard.extension-controls.v1",
+    "authorityMode": "workspace-shared",
+    "controls": [
+      {
+        "targetKind": "permission",
+        "targetId": "command.git.permission.force-push",
+        "state": "enabled"
+      }
+    ]
+  },
+  "globalLockdown": {
+    "schemaVersion": "guard.extension-controls.v1",
+    "authorityMode": "managed-restrictive",
+    "globalLockdown": true,
+    "controls": []
+  },
+  "requiredCapabilities": [
+    "extension-control-layer.v1",
+    "policy-extension-targets.v1",
+    "managed-controls-atomic-apply.v1"
+  ],
+  "legacyCapabilityAliases": [
+    "guard.managed-extension-controls.v1",
+    "guard.policy-extension-targets.v1",
+    "guard.managed-controls-atomic-apply.v1"
+  ]
+}

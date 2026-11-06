@@ -1,0 +1,15 @@
+{
+  "batch": 13,
+  "evidence": [
+    "dashboard/src/managed-controls/custom-extension-continuity.ts",
+    "dashboard/src/managed-controls/custom-extension-continuity.test.ts"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 195,
+    "start": 181
+  },
+  "theme": "Truthful custom Extension continuity and privacy-safe UI states"
+}

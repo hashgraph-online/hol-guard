@@ -1,0 +1,7 @@
+{
+  "hookEventName": "user_prompt_submit",
+  "sessionId": "session-redacted-004",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "prompt": "Summarize the README without reading secrets."
+}

@@ -1,0 +1,387 @@
+import {
+  approvalDecisionContractKey,
+  approvalDecisionSubjectKey,
+  ADVANCED_SCOPE_VALUES,
+  DEFAULT_SCOPE_CHOICES,
+  advancedScopeChoicesForRequest,
+  buildDecisionPayload,
+  isAdvancedScope,
+  normalizeDecisionScope,
+  recommendedScopeForAction,
+  requestSupportsScope,
+  scopeChoicesForRequest,
+  standardScopeChoicesForRequest,
+  onceOnlyReasonCopy,
+  taskCapabilityExplanation,
+  willPersistExactAction,
+} from "./approval-scopes";
+import type { GuardApprovalRequest } from "./guard-types";
+import { ReviewScopeControls, allowButtonLabel } from "./review-scope-controls";
+
+function assert(condition: boolean, message: string): void {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function assertThrows(callback: () => void, expected: string, message: string): void {
+  try {
+    callback();
+  } catch (error) {
+    assert(error instanceof Error && error.message.includes(expected), message);
+    return;
+  }
+  throw new Error(message);
+}
+
+const BASE_REQUEST: GuardApprovalRequest = {
+  request_id: "request-scope-test",
+  harness: "codex",
+  artifact_id: "codex:project:bash",
+  artifact_name: "bash",
+  artifact_type: "tool_action_request",
+  artifact_hash: "sha256-scope",
+  publisher: "codex-local",
+  policy_action: "require-reapproval",
+  recommended_scope: "artifact",
+  allowed_scopes: ["artifact", "workspace", "harness", "global"],
+  scope_contract_version: "guard.approval-scopes.v6",
+  scope_contract_digest: "scope-digest",
+  allowed_scopes_by_action: {
+    allow: ["artifact", "workspace", "harness", "global"],
+    block: ["artifact", "workspace", "publisher", "harness", "global"],
+  },
+  recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+  scope_restrictions: ["reusable_allow_is_action_bound", "task_capability_not_enabled"],
+  task_capability_eligibility: {
+    eligible: false,
+    reason_codes: ["task_capability_not_enabled"],
+  },
+  exact_action_persistence_eligible: true,
+  changed_fields: ["first_seen"],
+  source_scope: "project",
+  config_path: "./config.toml",
+  workspace: "/workspace/project",
+  launch_target: "git status",
+  transport: "stdio",
+  review_command: "hol-guard approvals approve request-scope-test",
+  approval_url: "http://127.0.0.1:4781/approvals/request-scope-test",
+  status: "pending",
+  resolution_action: null,
+  resolution_scope: null,
+  reason: null,
+  created_at: "2026-04-11T12:00:00Z",
+  resolved_at: null,
+  action_envelope_json: null,
+  decision_v2_json: null,
+};
+
+const allowPayload = buildDecisionPayload({
+  item: BASE_REQUEST,
+  action: "allow",
+  scope: "global",
+  reason: "approved in review",
+});
+
+assert(allowPayload.scope === "global", "T-AS-01: eligible Everywhere selection is preserved");
+assert(allowPayload.workspace === undefined, "T-AS-02: artifact allow does not send a workspace");
+assert(
+    allowPayload.scope_contract_version === "guard.approval-scopes.v6" &&
+    allowPayload.scope_contract_digest === "scope-digest",
+  "T-AS-03: resolution payload binds the displayed scope contract",
+);
+
+const rememberedExactPayload = buildDecisionPayload({
+  item: BASE_REQUEST,
+  action: "allow",
+  scope: "artifact",
+  reason: "approved in review",
+  persistExactAction: true,
+});
+assert(rememberedExactPayload.persist_policy === true, "T-AS-03a: exact-action persistence is explicit");
+const unprovenRememberedPayload = buildDecisionPayload({
+  item: { ...BASE_REQUEST, exact_action_persistence_eligible: false },
+  action: "allow",
+  scope: "artifact",
+  reason: "approved in review",
+  persistExactAction: true,
+});
+assert(unprovenRememberedPayload.persist_policy === undefined, "T-AS-03b: unproven actions cannot be remembered");
+assert(
+  willPersistExactAction(BASE_REQUEST, "block", "artifact", true),
+  "T-AS-03c: eligible exact Watch-only blocks can be persisted",
+);
+assert(
+  !willPersistExactAction({ ...BASE_REQUEST, exact_action_persistence_eligible: false }, "block", "artifact", true),
+  "T-AS-03d: ineligible Watch-only blocks cannot promise persistence",
+);
+
+function ignoreScopeChange(): void {}
+
+function renderExactActionControl(eligible: boolean): string {
+  return renderToStaticMarkup(
+    createElement(ReviewScopeControls, {
+      commonScopeOptions: standardScopeChoicesForRequest(BASE_REQUEST, "allow"),
+      broaderScopeOptions: [],
+      advancedScopeOptions: [],
+      blockScopeOptions: [],
+      hasAllowScope: true,
+      taskCapabilityCopy: null,
+      exactActionPersistenceEligible: eligible,
+      rememberExactAction: false,
+      allowScope: "artifact",
+      blockScope: "artifact",
+      onAllowScopeChange: ignoreScopeChange,
+      onBlockScopeChange: ignoreScopeChange,
+      onRememberExactActionChange: ignoreScopeChange,
+    }),
+  );
+}
+
+function renderExactActionControlWithTimedScopesHidden(): string {
+  return renderToStaticMarkup(
+    createElement(ReviewScopeControls, {
+      commonScopeOptions: standardScopeChoicesForRequest(BASE_REQUEST, "allow"),
+      broaderScopeOptions: [],
+      advancedScopeOptions: [],
+      blockScopeOptions: [],
+      hasAllowScope: true,
+      taskCapabilityCopy: null,
+      exactActionPersistenceEligible: true,
+      rememberExactAction: false,
+      allowScope: "artifact",
+      blockScope: "artifact",
+      showAllowScopes: false,
+      onAllowScopeChange: ignoreScopeChange,
+      onBlockScopeChange: ignoreScopeChange,
+      onRememberExactActionChange: ignoreScopeChange,
+    }),
+  );
+}
+
+assert(
+  renderExactActionControl(true).includes("Always allow exact action") &&
+    renderExactActionControl(true).includes("Retry within 15 minutes") &&
+    renderExactActionControl(true).match(/type="radio"/g)?.length === 2,
+  "T-AS-03c: eligible requests render the exact-action permission",
+);
+assert(
+  !renderExactActionControl(false).includes("Always allow exact action"),
+  "T-AS-03d: unproven requests do not render a durable permission",
+);
+assert(
+  renderExactActionControlWithTimedScopesHidden().includes("Always allow exact action"),
+  "T-AS-03e: exact-action permission remains available beside bounded MCP choices",
+);
+
+const blockPayload = buildDecisionPayload({
+  item: BASE_REQUEST,
+  action: "block",
+  scope: "workspace",
+  reason: "blocked in review",
+});
+assert(blockPayload.workspace === "/workspace/project", "T-AS-04: workspace block sends the request workspace");
+const rememberedExactBlockPayload = buildDecisionPayload({
+  item: BASE_REQUEST,
+  action: "block",
+  scope: "artifact",
+  reason: "blocked after Watch-only review",
+  persistExactAction: true,
+});
+assert(
+  rememberedExactBlockPayload.persist_policy === true,
+  "T-AS-04a: exact-action blocks can be persisted explicitly",
+);
+
+const allowScopes = scopeChoicesForRequest(BASE_REQUEST, "allow").map((choice) => choice.value);
+const blockScopes = scopeChoicesForRequest(BASE_REQUEST, "block").map((choice) => choice.value);
+assert(
+  allowScopes.join(",") === "artifact,workspace,harness,global",
+  "T-AS-05: UI shows every server-provided action-bound allow scope",
+);
+assert(
+  blockScopes.join(",") === "artifact,workspace,publisher,harness,global",
+  "T-AS-06: UI preserves every server-provided block scope",
+);
+assert(requestSupportsScope(BASE_REQUEST, "allow", "global"), "T-AS-07: Everywhere is available when eligible");
+assert(requestSupportsScope(BASE_REQUEST, "block", "global"), "T-AS-08: Everywhere remains available for block");
+
+const legacyRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "legacy-request",
+  allowed_scopes: undefined,
+  allowed_scopes_by_action: undefined,
+  recommended_scope_by_action: undefined,
+  scope_contract_version: undefined,
+  scope_contract_digest: undefined,
+  scope_restrictions: undefined,
+  task_capability_eligibility: undefined,
+};
+assert(
+  scopeChoicesForRequest(legacyRequest, "allow").map((choice) => choice.value).join(",") === "artifact",
+  "T-AS-09: missing metadata fails closed to artifact-only allow",
+);
+assert(
+  scopeChoicesForRequest(legacyRequest, "block").map((choice) => choice.value).join(",") === "artifact",
+  "T-AS-10: missing metadata fails closed to artifact-only block",
+);
+
+const incompleteContractRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "incomplete-contract-request",
+  scope_contract_digest: null,
+};
+assert(
+  scopeChoicesForRequest(incompleteContractRequest, "allow").length === 0 &&
+    scopeChoicesForRequest(incompleteContractRequest, "block").length === 0,
+  "T-AS-10a: incomplete contract bindings expose no decision scopes",
+);
+assertThrows(
+  () =>
+    buildDecisionPayload({
+      item: incompleteContractRequest,
+      action: "allow",
+      scope: "artifact",
+      reason: "no",
+    }),
+  "scope contract is incomplete",
+  "T-AS-10b: incomplete contract bindings cannot downgrade to legacy resolution",
+);
+
+const nonOverridableRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "blocked-request",
+  policy_action: "block",
+  recommended_scope: null,
+  allowed_scopes: [],
+  allowed_scopes_by_action: { allow: [], block: ["artifact", "global"] },
+  recommended_scope_by_action: { allow: null, block: "artifact" },
+  scope_restrictions: ["current_action_not_overridable"],
+};
+assert(
+  normalizeDecisionScope(nonOverridableRequest, "allow", "artifact") === null,
+  "T-AS-11: an action with no allow scope stays unapprovable",
+);
+assert(
+  recommendedScopeForAction(nonOverridableRequest, "block") === "artifact",
+  "T-AS-12: block uses its independent recommendation",
+);
+assertThrows(
+  () => buildDecisionPayload({ item: nonOverridableRequest, action: "allow", scope: "artifact", reason: "no" }),
+  "No eligible allow scope",
+  "T-AS-13: payload construction rejects an unavailable action",
+);
+assert(
+  taskCapabilityExplanation(nonOverridableRequest)?.includes("cannot override") === true,
+  "T-AS-14: task access copy explains protected actions",
+);
+assert(
+  taskCapabilityExplanation(BASE_REQUEST) === null,
+  "T-AS-15: no task-access note when exact-action Always is available",
+);
+const onceOnlyRequest = (reason: string | null): GuardApprovalRequest => ({
+  ...BASE_REQUEST,
+  exact_action_persistence_eligible: false,
+  once_only_reason: reason,
+});
+for (const [reason, fragment] of [
+  ["no_command_identity", "no stable command or file"],
+  ["mutable_launcher", "run other code or config"],
+  ["node_package_manifest_unproven", "resolution settings"],
+  ["node_package_entrypoint_unproven", "package entry point"],
+  ["node_package_exports_unproven", "export conditions or path patterns"],
+  ["node_package_native_addon_unproven", "compiled dependency"],
+  ["node_runtime_package_mutation_unproven", "later package loads"],
+  ["runner_code_closure_unproven", "package runner and its command"],
+  ["python_runtime_module_unproven", "installed Python implementation"],
+  ["python_runtime_bootstrap_unproven", "startup code and native libraries"],
+  ["script_execution_binding_unavailable", "verified snapshot"],
+  ["compound_command", "chains steps"],
+  ["guard_control", "Changes to Guard itself"],
+  ["package_action", "Package installs and updates"],
+  ["non_overridable", "does not let this action be remembered"],
+  ["unproven_launch", "could not verify exactly what this command launches"],
+  ["sensitive_path", "may hold secrets"],
+  ["broad_scope", "covers too much"],
+  ["git_helper_config", "configures git helpers"],
+  ["destructive_command", "delete, move or send data"],
+  ["provider_unverified", "provider account is verified"],
+] as const) {
+  const copy = taskCapabilityExplanation(onceOnlyRequest(reason));
+  assert(copy?.includes(fragment) === true, `T-AS-15a: once-only copy for ${reason}`);
+  assert(copy?.includes("Task access") === false, `T-AS-15b: ${reason} copy never mentions task access`);
+}
+assert(
+  taskCapabilityExplanation(onceOnlyRequest(null)) === onceOnlyReasonCopy("unknown_future_code"),
+  "T-AS-15c: missing or unknown reasons use the generic once-only copy",
+);
+assert(
+  taskCapabilityExplanation({
+    ...onceOnlyRequest("compound_command"),
+    extension_recommendation: { permissions: [{ permission_id: "p" }] },
+  } as unknown as GuardApprovalRequest) === null,
+  "T-AS-15e: an available extension permission route suppresses the unavailable note",
+);
+assert(
+  taskCapabilityExplanation(onceOnlyRequest(null))?.includes("Task access") === false,
+  "T-AS-15d: the generic copy is not the task-access note",
+);
+
+assert(ADVANCED_SCOPE_VALUES.has("global"), "T-AS-16: global remains the only advanced scope");
+assert(isAdvancedScope("global") && !isAdvancedScope("workspace"), "T-AS-17: advanced scope classification is stable");
+assert(
+  advancedScopeChoicesForRequest(BASE_REQUEST, "allow").map((choice) => choice.value).join(",") === "global",
+  "T-AS-18: advanced allow includes eligible Everywhere",
+);
+assert(
+  advancedScopeChoicesForRequest(BASE_REQUEST, "block").map((choice) => choice.value).join(",") === "global",
+  "T-AS-19: advanced block renders only eligible global scope",
+);
+assert(
+  standardScopeChoicesForRequest(BASE_REQUEST, "block").map((choice) => choice.value).join(",") ===
+    "artifact,workspace,publisher,harness",
+  "T-AS-20: standard block scopes exclude the advanced choice",
+);
+assert(
+  standardScopeChoicesForRequest(BASE_REQUEST, "allow").map((choice) => choice.value).join(",") ===
+    "artifact,workspace,harness",
+  "T-AS-21: standard allow scopes expose project and app when eligible",
+);
+assert(
+  recommendedScopeForAction(
+    {
+      ...BASE_REQUEST,
+      recommended_scope_by_action: { allow: "workspace", block: "artifact" },
+    },
+    "allow",
+  ) === "workspace",
+  "T-AS-22: recommended allow prefers project scope when the contract offers it",
+);
+assert(
+  recommendedScopeForAction(
+    {
+      ...BASE_REQUEST,
+      allowed_scopes: ["artifact"],
+      allowed_scopes_by_action: { allow: ["artifact"], block: ["artifact"] },
+      recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+    },
+    "allow",
+  ) === "artifact",
+  "T-AS-23: recommended allow stays once-only when project scope is unavailable",
+);
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+assert(
+  allowButtonLabel("workspace") === "Allow and remember for this project",
+  "T-AS-24: primary allow copy remembers the project",
+);
+assert(
+  allowButtonLabel("artifact") === "Allow just this once",
+  "T-AS-25: secondary allow copy stays once-only",
+);
+assert(
+  DEFAULT_SCOPE_CHOICES.find((choice) => choice.value === "workspace")?.label ===
+    "Allow and remember for this project",
+  "T-AS-26: workspace choice copy matches the primary allow button",
+);

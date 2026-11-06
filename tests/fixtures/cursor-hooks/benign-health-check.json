@@ -1,0 +1,4 @@
+{
+  "hook_event_name": "beforeShellExecution",
+  "command": "python3 -c \"print('health')\""
+}

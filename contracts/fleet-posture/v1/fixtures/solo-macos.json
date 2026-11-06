@@ -1,0 +1,145 @@
+{
+  "schemaVersion": "fleet-posture/v1",
+  "collectedAt": "2026-10-16T12:00:00Z",
+  "client": {
+    "version": "3.48.0",
+    "channel": "stable",
+    "runtime": "python",
+    "autoUpdate": {
+      "enabled": true,
+      "lastCheckedAt": "2026-10-16T06:00:00Z",
+      "lastResult": "up_to_date"
+    }
+  },
+  "machine": {
+    "osName": "macos",
+    "osVersion": "15.6",
+    "arch": "arm64",
+    "hostnameHash": "sha256:f570de045b41b8b02b1bed6470a8ff159e40940c3a22e2d3b80070ffa117235e"
+  },
+  "aiTools": [
+    {
+      "harness": "claude-code",
+      "toolVersion": "2.1.0",
+      "setupStatus": "active",
+      "protectionState": "protected",
+      "hooks": {
+        "nativeHooks": true,
+        "browserFallback": false,
+        "mcpProxy": false,
+        "promptHooks": true
+      },
+      "blindSpots": [],
+      "postureOverride": "default",
+      "artifactCount": 3,
+      "lastActivityAt": "2026-10-16T12:00:00Z",
+      "inventoryDigest": "sha256:fcb89083690de3b0c84e448e213fce76b97a69f8f216fe0e4f603c27e442b9c8"
+    },
+    {
+      "harness": "cursor",
+      "toolVersion": "1.7.2",
+      "setupStatus": "not_found",
+      "protectionState": "needs_setup",
+      "hooks": {
+        "nativeHooks": false,
+        "browserFallback": false,
+        "mcpProxy": true,
+        "promptHooks": false
+      },
+      "blindSpots": [],
+      "postureOverride": null,
+      "artifactCount": 1,
+      "lastActivityAt": null,
+      "inventoryDigest": "sha256:a2c96006bc099b67c2fe468ac06f6731acb29d80780a69436937d841e231086d"
+    },
+    {
+      "harness": "codex",
+      "toolVersion": "0.48.0",
+      "setupStatus": "partial",
+      "protectionState": "broken",
+      "hooks": {
+        "nativeHooks": false,
+        "browserFallback": false,
+        "mcpProxy": false,
+        "promptHooks": false
+      },
+      "blindSpots": [
+        "Shell commands run outside hooks"
+      ],
+      "postureOverride": "default",
+      "artifactCount": 1,
+      "lastActivityAt": "2026-10-16T12:00:00Z",
+      "inventoryDigest": "sha256:df470eea52a6099c3f41ebded9b3949438944820017c92a43ba56de8aa666748"
+    }
+  ],
+  "inventory": {
+    "digest": "sha256:a0dc4e34befa696d3b15c85c69a578a6c7ef7009739193ce168e6ad257e38605",
+    "mode": "full",
+    "items": [
+      {
+        "kind": "skill",
+        "name": "pdf-tools",
+        "version": "1.0.0",
+        "hash": "sha256:158d7fe9bcc34f99174a4498115e64029f9fc39c3f134325ba6ff3e0021e9cdc",
+        "harness": "claude-code",
+        "source": "user",
+        "pathHash": "sha256:7a47da94f9d4155a32c7b4a1ff3d09ef131d560e74d6dfbb6cea6599f4e4a314",
+        "firstSeenAt": "2026-10-01T09:00:00Z",
+        "lastSeenAt": "2026-10-16T12:00:00Z"
+      },
+      {
+        "kind": "mcp_server",
+        "name": "github",
+        "version": "0.6.2",
+        "hash": "sha256:8ee08cde563395a27a6a584718d7109606ec69709b9ad91bd406501941607114",
+        "harness": "cursor",
+        "source": "config",
+        "pathHash": "sha256:4ec945ebbe3881f92039806af3e874ca89f16a5d727507b1cb3f45b4f0a21f2a",
+        "firstSeenAt": "2026-10-01T09:00:00Z",
+        "lastSeenAt": "2026-10-16T12:00:00Z"
+      },
+      {
+        "kind": "plugin",
+        "name": "prettier-plugin",
+        "version": "3.1.0",
+        "hash": "sha256:d40761c4471360b0a5ada659352a82b5fc364cadecb3a8348a548f0435b6dd9e",
+        "harness": "codex",
+        "source": "marketplace",
+        "pathHash": "sha256:77a7c40547dacc0e2c2447c04270dd6600ce63d8f5904ba2084be48397d0ffe6",
+        "firstSeenAt": "2026-10-01T09:00:00Z",
+        "lastSeenAt": "2026-10-16T12:00:00Z"
+      },
+      {
+        "kind": "package",
+        "name": "left-pad",
+        "version": "1.3.0",
+        "hash": "sha256:0f72ef9657ad7176809cb66850ca8c7a988f1ba91b36291d690c59df11cc3b42",
+        "harness": "*",
+        "source": "lockfile",
+        "pathHash": "sha256:51e486ee4cddecb3d3e33a894620fe06fbc0e0ded86ae02e48779300d1dc3119",
+        "firstSeenAt": "2026-10-01T09:00:00Z",
+        "lastSeenAt": "2026-10-16T12:00:00Z"
+      },
+      {
+        "kind": "hook",
+        "name": "pre-tool-use",
+        "version": null,
+        "hash": "sha256:c164be3104c2bcd45de5431f4761b9fb84294174e61e1dea538697f7e18c437c",
+        "harness": "claude-code",
+        "source": "config",
+        "pathHash": "sha256:a7072b3e9cbf07f8f72aad83735b01ef09bd6905a3f6bd9db99fe52dec7e8881",
+        "firstSeenAt": "2026-10-01T09:00:00Z",
+        "lastSeenAt": "2026-10-16T12:00:00Z"
+      }
+    ],
+    "removed": []
+  },
+  "policy": {
+    "appliedBundleVersion": 12,
+    "appliedBundleHash": "sha256:afbbb59a98d7c40795039caa8141e3fe0e61568d4c1480b7ebe048449aae92f7",
+    "appliedPolicyVersionNumber": 4,
+    "status": "applied",
+    "errorCode": null,
+    "appliedAt": "2026-10-16T11:59:30Z"
+  }
+}

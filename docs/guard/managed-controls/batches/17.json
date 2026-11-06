@@ -1,0 +1,16 @@
+{
+  "batch": 17,
+  "evidence": [
+    "scripts/ci/managed_controls_release_gate.py",
+    "docs/guard/managed-controls-release-runbook.md",
+    "tests/managed_controls/test_release_gate.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 255,
+    "start": 241
+  },
+  "theme": "Local release gate, runbook, and complete task-range evidence"
+}

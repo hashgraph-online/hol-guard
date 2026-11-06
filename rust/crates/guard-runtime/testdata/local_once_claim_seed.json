@@ -1,0 +1,61 @@
+{
+ "key": "4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b",
+ "key_id": "kid-1",
+ "now": "2026-10-02T00:00:00.000000+00:00",
+ "seeded": [
+  {
+   "approval_id": "a-1",
+   "request_id": "req-a-1",
+   "harness": "codex",
+   "artifact_id": "pkg:tool",
+   "artifact_hash": "h-a-1",
+   "workspace": "/tmp/ws",
+   "publisher": "pub",
+   "action": "allow",
+   "created_at": "2026-10-01T00:00:00.000000+00:00",
+   "expires_at": "2026-10-03T00:00:00.000000+00:00",
+   "claimed_at": null,
+   "integrity_version": 1,
+   "payload_hash": "f409c69cce9572584de3109b02f1d0feefdc20b9a4420289edcb087934cad42a",
+   "payload_mac": "f2cb3dd2decdb85dbac1e2e80f270e7eae5a90b281cf5ab11de42a26286a49a1",
+   "integrity_key_id": "kid-1",
+   "signed_at": "2026-10-01T00:00:00.000000+00:00"
+  },
+  {
+   "approval_id": "a-2",
+   "request_id": "req-a-2",
+   "harness": "codex",
+   "artifact_id": "pkg:tool",
+   "artifact_hash": "h-a-2",
+   "workspace": "/tmp/ws",
+   "publisher": "pub",
+   "action": "allow",
+   "created_at": "2026-10-01T00:00:00.000000+00:00",
+   "expires_at": "2026-10-01T00:00:00.000000+00:00",
+   "claimed_at": null,
+   "integrity_version": 1,
+   "payload_hash": "cee652de97a2d3b825b31b5ab3432abfd1a2537255887f53f836dcb57f757164",
+   "payload_mac": "93917463c79e2523afde1d6907e1dd2b472dbd9277231706a5380b978dfc14be",
+   "integrity_key_id": "kid-1",
+   "signed_at": "2026-10-01T00:00:00.000000+00:00"
+  },
+  {
+   "approval_id": "a-3",
+   "request_id": "req-a-3",
+   "harness": "codex",
+   "artifact_id": "pkg:tool",
+   "artifact_hash": "h-a-3",
+   "workspace": "/tmp/ws",
+   "publisher": "pub",
+   "action": "allow",
+   "created_at": "2026-10-01T00:00:00.000000+00:00",
+   "expires_at": "2026-10-03T00:00:00.000000+00:00",
+   "claimed_at": "2026-10-01T12:00:00.000000+00:00",
+   "integrity_version": 1,
+   "payload_hash": "63214d9ae9f218b1bdf1ca7d27c92a26f490252401e6e4488e54be811511bff6",
+   "payload_mac": "d78b473c3ce2f15e7967795e18818e2cce58207cad0a2265a7e8ffef919abca5",
+   "integrity_key_id": "kid-1",
+   "signed_at": "2026-10-01T00:00:00.000000+00:00"
+  }
+ ]
+}

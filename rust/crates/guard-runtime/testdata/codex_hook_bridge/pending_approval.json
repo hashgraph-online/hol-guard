@@ -1,0 +1,425 @@
+[
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Approve at http://127.0.0.1:4781/requests/req_12345678 then retry\"}}",
+  "python": [
+   "req_12345678",
+   "http://127.0.0.1:4781/requests/req_12345678"
+  ],
+  "native": [
+   "req_12345678",
+   "http://127.0.0.1:4781/requests/req_12345678"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Approve at http://127.0.0.1:4781/requests/req_12345678.\"}}",
+  "python": [
+   "req_12345678",
+   "http://127.0.0.1:4781/requests/req_12345678"
+  ],
+  "native": [
+   "req_12345678",
+   "http://127.0.0.1:4781/requests/req_12345678"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"(http://127.0.0.1:4781/requests/req_12345678)\"}}",
+  "python": [
+   "req_12345678",
+   "http://127.0.0.1:4781/requests/req_12345678"
+  ],
+  "native": [
+   "req_12345678",
+   "http://127.0.0.1:4781/requests/req_12345678"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HTTP://h/REQUE\\u017fTS/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   null
+  ],
+  "native": [
+   "abcdefgh",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http\\u017f://h/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   null
+  ],
+  "native": [
+   "abcdefgh",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"hTTpS://h/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   null
+  ],
+  "native": [
+   "abcdefgh",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"https://h/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   "https://h/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "https://h/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/abcdefg\"}}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http:///requests/abcdefgh\"}}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://x/requests/abcdefgh/requests/zzzzzzzz\"}}",
+  "python": [
+   "zzzzzzzz",
+   "http://x/requests/abcdefgh/requests/zzzzzzzz"
+  ],
+  "native": [
+   "zzzzzzzz",
+   "http://x/requests/abcdefgh/requests/zzzzzzzz"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://x/requests/abcdefgh/requests/zzz\"}}",
+  "python": [
+   "abcdefgh",
+   "http://x/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://x/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://x/requests/abcdefgh /requests/zzzzzzzzz\"}}",
+  "python": [
+   "abcdefgh",
+   "http://x/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://x/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"xhttp://a http://b/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://a\\u3000http://b/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://a\\u001chttp://b/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"httphttp://b/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://b/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://ahttp://b/requests/abcdefgh\"}}",
+  "python": [
+   "abcdefgh",
+   "http://ahttp://b/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://ahttp://b/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+  "python": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "http://h/requests/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "native": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "http://h/requests/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!\"}}",
+  "python": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "http://h/requests/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "native": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "http://h/requests/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/abcdefgh!more\"}}",
+  "python": [
+   "abcdefgh",
+   "http://h/requests/abcdefgh"
+  ],
+  "native": [
+   "abcdefgh",
+   "http://h/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/abc\\u212adefgh\"}}",
+  "python": [
+   "abc\u212adefgh",
+   "http://h/requests/abc\u212adefgh"
+  ],
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/\\u0130\\u0131\\u017f\\u212aabcd\"}}",
+  "python": [
+   "\u0130\u0131\u017f\u212aabcd",
+   "http://h/requests/\u0130\u0131\u017f\u212aabcd"
+  ],
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/abcdefgh\\u0130\"}}",
+  "python": [
+   "abcdefgh\u0130",
+   "http://h/requests/abcdefgh\u0130"
+  ],
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/ab-cd_efgh\"}}",
+  "python": [
+   "ab-cd_efgh",
+   "http://h/requests/ab-cd_efgh"
+  ],
+  "native": [
+   "ab-cd_efgh",
+   "http://h/requests/ab-cd_efgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"see /request/abcdefgh\"}}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/abcdefgh\"},\"guardApprovalRequestId\":\"  req_abcdefgh  \"}",
+  "python": [
+   "req_abcdefgh",
+   "http://h/requests/abcdefgh"
+  ],
+  "native": [
+   "req_abcdefgh",
+   "http://h/requests/abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"nothing\"},\"guardApprovalRequestId\":\"req_abcdefgh\"}",
+  "python": [
+   "req_abcdefgh",
+   null
+  ],
+  "native": [
+   "req_abcdefgh",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"nothing\"},\"guardApprovalRequestId\":\"req_abcdefgh\",\"guardApprovalUrl\":\" http://127.0.0.1:1/requests/req_abcdefgh \"}",
+  "python": [
+   "req_abcdefgh",
+   "http://127.0.0.1:1/requests/req_abcdefgh"
+  ],
+  "native": [
+   "req_abcdefgh",
+   "http://127.0.0.1:1/requests/req_abcdefgh"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"guardApprovalRequestId\":\"req_abcdefgh\",\"guardApprovalUrl\":\"HTTP://h/x\"}",
+  "python": [
+   "req_abcdefgh",
+   null
+  ],
+  "native": [
+   "req_abcdefgh",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"guardApprovalRequestId\":\"req_abcdefgh\",\"guardApprovalUrl\":\"http://h/a b\"}",
+  "python": [
+   "req_abcdefgh",
+   null
+  ],
+  "native": [
+   "req_abcdefgh",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"guardApprovalRequestId\":\"short\"}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"guardApprovalRequestId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"guardApprovalRequestId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+  "python": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   null
+  ],
+  "native": [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"guardApprovalRequestId\":\"req.abcdefgh\"}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/fallback1\"},\"guardApprovalRequestId\":\"req.abcdefgh\"}",
+  "python": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ],
+  "native": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/fallback1\"},\"guardApprovalRequestId\":7}",
+  "python": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ],
+  "native": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/fallback1\"},\"guardApprovalRequestId\":null}",
+  "python": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ],
+  "native": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/fallback1\"},\"guardApprovalUrl\":\"ftp://x\"}",
+  "python": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ],
+  "native": [
+   "fallback1",
+   "http://h/requests/fallback1"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"http://h/requests/fallback1\"},\"guardApprovalUrl\":\"https://other/requests/x\"}",
+  "python": [
+   "fallback1",
+   "https://other/requests/x"
+  ],
+  "native": [
+   "fallback1",
+   "https://other/requests/x"
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"guardApprovalRequestId\":\"req_abcd\\u00e9fgh\"}",
+  "python": [
+   "req_abcd\u00e9fgh",
+   null
+  ],
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":7},\"guardApprovalRequestId\":\"req_abcdefgh\"}",
+  "python": [
+   "req_abcdefgh",
+   null
+  ],
+  "native": [
+   "req_abcdefgh",
+   null
+  ]
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"Deny\",\"permissionDecisionReason\":\"http://h/requests/abcdefgh\"}}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"http://h/requests/abcdefgh\"}}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"hookSpecificOutput\":[1],\"guardApprovalRequestId\":\"req_abcdefgh\"}",
+  "python": null,
+  "native": null
+ },
+ {
+  "response": "{\"guardApprovalRequestId\":\"req_abcdefgh\"}",
+  "python": null,
+  "native": null
+ }
+]

@@ -1,0 +1,1 @@
+{"versions":{"2.0.0":{"dependencies":{"evil":"git+ssh://git@example.test/evil.git"}}}}

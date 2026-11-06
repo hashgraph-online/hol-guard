@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.pr-ui-compare",
+  "version": "1.0.0",
+  "name": "PR UI Compare MCP",
+  "description": "Reviews PR UI Compare tools that run project install and start commands, write artifacts outside the repository, and download Chromium or FFmpeg. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.bouzidanas",
+    "displayName": "Anas Bouzid",
+    "url": "https://github.com/bouzidanas/playwright-comparison-gif-maker"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0D1117" },
+  "homepage": "https://github.com/bouzidanas/playwright-comparison-gif-maker#readme",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "pr-ui-compare"
+  },
+  "riskClasses": ["external-command-execution", "external-filesystem-write", "package-or-source-installation"],
+  "tools": [
+    { "name": "create_comparison", "state": "review" },
+    { "name": "install_browser", "state": "review" },
+    { "name": "install_ffmpeg", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/bouzidanas/playwright-comparison-gif-maker",
+    "https://www.npmjs.com/package/pr-ui-compare"
+  ],
+  "saferAlternatives": [
+    "Check the install command, start command, and ready URL in a create_comparison call before approving it; they run as shell commands in the project.",
+    "Install Chromium and FFmpeg yourself instead of approving install_browser or install_ffmpeg."
+  ]
+}

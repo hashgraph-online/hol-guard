@@ -1,0 +1,1619 @@
+{
+  "extension": {
+    "action_classes": [
+      "Google storage destructive command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Google CLI storage commands including copy, list, sync, and deletion.",
+    "ecosystem_ids": [],
+    "executables": [],
+    "extension_id": "command.storage.google-cloud",
+    "homepage": null,
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "Google Cloud Storage command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies google cloud storage bucket create operations.",
+        "example_command": "gcloud storage buckets create",
+        "family": "google-cloud-storage",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Google Cloud Storage bucket create",
+        "permission_id": "command.storage.google-cloud.permission.buckets-create",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies google cloud storage cat operations.",
+        "example_command": "gcloud storage cat",
+        "family": "google-cloud-storage",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Google Cloud Storage cat",
+        "permission_id": "command.storage.google-cloud.permission.cat",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies google cloud storage copy operations.",
+        "example_command": "gcloud storage cp",
+        "family": "google-cloud-storage",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Google Cloud Storage copy",
+        "permission_id": "command.storage.google-cloud.permission.cp",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies google cloud storage deletion operations.",
+        "example_command": "gcloud storage rm",
+        "family": "google-cloud-storage",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Google Cloud Storage deletion",
+        "permission_id": "command.storage.google-cloud.permission.deletion",
+        "replacement_permission_id": null,
+        "risk_tier": "critical",
+        "safer_guidance": [
+          "List the exact objects and confirm retention or recovery controls before deletion."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies google cloud storage list operations.",
+        "example_command": "gcloud storage ls",
+        "family": "google-cloud-storage",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Google Cloud Storage list",
+        "permission_id": "command.storage.google-cloud.permission.ls",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies google cloud storage move operations.",
+        "example_command": "gcloud storage mv",
+        "family": "google-cloud-storage",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Google Cloud Storage move",
+        "permission_id": "command.storage.google-cloud.permission.mv",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies google cloud storage sync operations.",
+        "example_command": "gcloud storage rsync",
+        "family": "google-cloud-storage",
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Google Cloud Storage sync",
+        "permission_id": "command.storage.google-cloud.permission.rsync",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": null,
+    "reference_urls": [
+      "https://cloud.google.com/sdk/gcloud/reference/storage",
+      "https://cloud.google.com/sdk/gcloud/reference/storage/rm",
+      "https://cloud.google.com/sdk/gcloud/reference/storage/rsync"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies google cloud storage deletion operations.",
+        "family": "google-cloud-storage",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "buckets",
+                  "delete"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--delete-unmatched-destination-objects"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "rsync"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gsutil",
+                  "gsutil.cmd",
+                  "gsutil.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-o"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rm"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "gsutil",
+                  "gsutil.cmd",
+                  "gsutil.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-o"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "-d"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "rsync"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.google-cloud.permission.deletion",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.google-cloud.deletion",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "buckets",
+                      "delete"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--delete-unmatched-destination-objects",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "rsync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gsutil",
+                      "gsutil.cmd",
+                      "gsutil.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-o"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rm"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gsutil",
+                      "gsutil.cmd",
+                      "gsutil.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-o"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help",
+                      "-d"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rsync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google Cloud Storage deletion help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--delete-unmatched-destination-objects",
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "rsync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google storage sync dry run",
+            "variant_id": "dry-run"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "gsutil",
+                      "gsutil.cmd",
+                      "gsutil.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "-o"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-d",
+                      "-n"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "rsync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "gsutil sync no-act",
+            "variant_id": "no-act"
+          }
+        ],
+        "safer_alternatives": [
+          "List the exact objects and confirm retention or recovery controls before deletion."
+        ],
+        "severity": "critical",
+        "title": "Google Cloud Storage deletion"
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies google cloud storage copy operations.",
+        "family": "google-cloud-storage",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "cp"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.google-cloud.permission.cp",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.google-cloud.cp",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "cp"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google Cloud Storage copy help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Google Cloud Storage copy"
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies google cloud storage list operations.",
+        "family": "google-cloud-storage",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "ls"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.google-cloud.permission.ls",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.storage.google-cloud.ls",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "ls"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google Cloud Storage list help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "severity": "low",
+        "title": "Google Cloud Storage list"
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies google cloud storage move operations.",
+        "family": "google-cloud-storage",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "mv"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.google-cloud.permission.mv",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.google-cloud.mv",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "mv"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google Cloud Storage move help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Google Cloud Storage move"
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "default_mode": "disabled",
+        "description": "Identifies google cloud storage cat operations.",
+        "family": "google-cloud-storage",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "cat"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.google-cloud.permission.cat",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.storage.google-cloud.cat",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "cat"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google Cloud Storage cat help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Listing or reading objects does not change stored data."
+        ],
+        "severity": "low",
+        "title": "Google Cloud Storage cat"
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies google cloud storage sync operations.",
+        "family": "google-cloud-storage",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [
+                  "--delete-unmatched-destination-objects"
+                ],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "rsync"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.google-cloud.permission.rsync",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.google-cloud.rsync",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [
+                      "--delete-unmatched-destination-objects"
+                    ],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "rsync"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google Cloud Storage sync help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Google Cloud Storage sync"
+      },
+      {
+        "action_classes": [
+          "Google storage destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies google cloud storage bucket create operations.",
+        "family": "google-cloud-storage",
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "gcloud",
+                  "gcloud.cmd",
+                  "gcloud.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--help",
+                  "--log-http",
+                  "--no-log-http",
+                  "--no-user-output-enabled",
+                  "--quiet",
+                  "--user-output-enabled",
+                  "-q"
+                ],
+                "interspersed_options_with_values": [
+                  "--access-token-file",
+                  "--account",
+                  "--billing-project",
+                  "--configuration",
+                  "--filter",
+                  "--flags-file",
+                  "--flatten",
+                  "--format",
+                  "--impersonate-service-account",
+                  "--limit",
+                  "--page-size",
+                  "--project",
+                  "--sort-by",
+                  "--trace-token",
+                  "--verbosity"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "storage",
+                  "buckets",
+                  "create"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.storage.google-cloud.permission.buckets-create",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.storage.google-cloud.buckets-create",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "gcloud",
+                      "gcloud.cmd",
+                      "gcloud.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--help",
+                      "--log-http",
+                      "--no-log-http",
+                      "--no-user-output-enabled",
+                      "--quiet",
+                      "--user-output-enabled",
+                      "-q"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--access-token-file",
+                      "--account",
+                      "--billing-project",
+                      "--configuration",
+                      "--filter",
+                      "--flags-file",
+                      "--flatten",
+                      "--format",
+                      "--impersonate-service-account",
+                      "--limit",
+                      "--page-size",
+                      "--project",
+                      "--sort-by",
+                      "--trace-token",
+                      "--verbosity"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "storage",
+                      "buckets",
+                      "create"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Google Cloud Storage bucket create help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the destination and confirm overwrite or versioning controls first."
+        ],
+        "severity": "high",
+        "title": "Google Cloud Storage bucket create"
+      }
+    ],
+    "safer_alternatives": [
+      "List matching objects and inspect retention controls before deletion."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

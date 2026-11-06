@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/policy-extension-fields.v1.json",
+  "title": "HOL Guard Extension policy fields v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "x-hol-extension-controls": {
+      "$ref": "#/$defs/extensionControls"
+    },
+    "x-hol-extension-targets": {
+      "$ref": "#/$defs/extensionTargets"
+    }
+  },
+  "$defs": {
+    "authorityMode": {
+      "enum": [
+        "personal-shared",
+        "workspace-shared",
+        "managed-restrictive"
+      ]
+    },
+    "extensionId": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(?!.*\\.permission\\.)command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "permissionId": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^command\\.[a-z0-9]+(?:[.-][a-z0-9]+)*\\.permission\\.[a-z0-9]+(?:[.-][a-z0-9]+)*$"
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetKind",
+        "targetId",
+        "state"
+      ],
+      "properties": {
+        "targetKind": {
+          "enum": [
+            "extension",
+            "permission"
+          ]
+        },
+        "targetId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "state": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "targetKind": {
+                "const": "extension"
+              }
+            },
+            "required": [
+              "targetKind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "targetId": {
+                "$ref": "#/$defs/extensionId"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "targetKind": {
+                "const": "permission"
+              }
+            },
+            "required": [
+              "targetKind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "targetId": {
+                "$ref": "#/$defs/permissionId"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "extensionControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "authorityMode",
+        "controls"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "guard.extension-controls.v1"
+        },
+        "authorityMode": {
+          "$ref": "#/$defs/authorityMode"
+        },
+        "globalLockdown": {
+          "const": true
+        },
+        "controls": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/control"
+          }
+        }
+      }
+    },
+    "extensionTargets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Each collection is bounded independently and the combined extensionIds plus permissionIds count must not exceed 1024. The aggregate invariant is enforced by both Local and Cloud contract parsers.",
+      "x-hol-maxCombinedItems": 1024,
+      "required": [
+        "schemaVersion",
+        "extensionIds",
+        "permissionIds"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "guard.policy-extension-targets.v1"
+        },
+        "extensionIds": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/extensionId"
+          }
+        },
+        "permissionIds": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/permissionId"
+          }
+        }
+      }
+    }
+  }
+}

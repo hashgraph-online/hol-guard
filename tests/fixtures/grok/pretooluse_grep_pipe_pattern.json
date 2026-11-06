@@ -1,0 +1,11 @@
+{
+  "hookEventName": "pre_tool_use",
+  "sessionId": "session-redacted-013",
+  "cwd": "<workspace>",
+  "workspaceRoot": "<workspace>",
+  "toolName": "grep",
+  "toolInput": {
+    "pattern": "prepare_grok_hook_payload|spawn_subagent|UserPromptSubmit",
+    "path": "<workspace>/src"
+  }
+}

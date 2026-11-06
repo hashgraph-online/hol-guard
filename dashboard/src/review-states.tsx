@@ -1,0 +1,295 @@
+import {
+  HiMiniArrowPath,
+  HiMiniCheckCircle,
+  HiMiniExclamationTriangle,
+  HiMiniFolder,
+  HiMiniInformationCircle,
+  HiMiniShieldCheck,
+} from "react-icons/hi2";
+import { resolveAgentStatedIntent } from "./agent-stated-intent";
+import { ActionButton, GuardHero, ProofStrip, SectionLabel } from "./approval-center-primitives";
+import {
+  buildCodexResumeUx,
+  buildPrimaryReviewAction,
+  harnessDisplayName,
+  isWatchOnlyObservation,
+  resolveRequestWorkingDirectory,
+  watchProtectedOutcome,
+} from "./approval-center-utils";
+import type {
+  GuardApprovalRequest,
+  GuardCodexResumeResult,
+  GuardProtectionState,
+  GuardRuntimeSnapshot,
+} from "./guard-types";
+import { normalizeGuardAction } from "./guard-action";
+import { LoggedActionPanel } from "./logged-action-panel";
+import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
+
+const PROTECTION_APPEARANCE = {
+  protected: {
+    Icon: HiMiniShieldCheck,
+    cardClass: "border-emerald-200/60 bg-emerald-50/30",
+    iconClass: "bg-brand-green/10 text-brand-green",
+  },
+  partial: {
+    Icon: HiMiniInformationCircle,
+    cardClass: "border-brand-blue/20 bg-brand-blue/[0.04]",
+    iconClass: "bg-brand-blue/10 text-brand-blue",
+  },
+  degraded: {
+    Icon: HiMiniExclamationTriangle,
+    cardClass: "border-brand-attention/20 bg-brand-attention/[0.04]",
+    iconClass: "bg-brand-attention/10 text-brand-attention",
+  },
+} satisfies Record<GuardProtectionState, {
+  Icon: typeof HiMiniShieldCheck;
+  cardClass: string;
+  iconClass: string;
+}>;
+
+type ReviewCodexResumePanelProps = {
+  resume: GuardCodexResumeResult;
+  onRetry?: () => void;
+};
+
+function ReviewCodexResumePanel({ resume, onRetry }: ReviewCodexResumePanelProps) {
+  const ux = buildCodexResumeUx(resume);
+  const isPending = resume.status === "pending" || resume.status === "in_progress";
+  const isSuccess = resume.status === "sent" || resume.status === "already_sent";
+  const isFailed = resume.status === "failed";
+
+  const borderClass = isFailed
+    ? "border-brand-purple/25 bg-brand-purple/[0.05]"
+    : isSuccess
+    ? "border-brand-green/25 bg-brand-green-bg/30"
+    : isPending
+    ? "border-brand-blue/25 bg-brand-blue/[0.04]"
+    : "border-slate-200/60 bg-slate-50/40";
+
+  const iconClass = isFailed
+    ? "text-brand-purple"
+    : isSuccess
+    ? "text-brand-green"
+    : "text-brand-blue";
+
+  return (
+    <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3 ${borderClass}`}>
+      {isPending && (
+        <HiMiniArrowPath className={`mt-0.5 h-4 w-4 shrink-0 animate-spin ${iconClass}`} aria-hidden="true" />
+      )}
+      {isSuccess && (
+        <HiMiniCheckCircle className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
+      )}
+      {isFailed && (
+        <HiMiniExclamationTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
+      )}
+      {!isPending && !isSuccess && !isFailed && (
+        <HiMiniInformationCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+      )}
+      <div className="flex-1 space-y-1">
+        <p className="text-sm font-medium text-brand-dark">{ux.headline}</p>
+        {ux.body !== null && (
+          <p className="text-xs text-muted-foreground">{ux.body}</p>
+        )}
+        {isFailed && onRetry !== undefined && (
+          <div className="mt-2">
+            <ActionButton variant="outline" onClick={onRetry}>
+              Retry resume
+            </ActionButton>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume, queueReadIncomplete = false }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void; queueReadIncomplete?: boolean }) {
+  const protectionHealth = runtime === null ? unavailableProtectionHealth() : protectionHealthFor(runtime);
+  const presentation = useProtectionPresentationState(protectionHealth);
+  if (runtime === null) {
+    return (
+      <div className="space-y-4" aria-busy="true" aria-live="polite">
+        <div className="guard-skeleton h-36 w-full" />
+        <div className="guard-skeleton h-16 w-full" />
+        <div className="guard-skeleton h-48 w-full" />
+      </div>
+    );
+  }
+
+  const protectedAppsCount = protectionHealth.apps.filter((app) => app.state === "protected").length;
+  const heroStatus = presentation === "protected" ? "clear" : presentation;
+  const appearanceState = presentation === "checking" ? "partial" : protectionHealth.state;
+  const {
+    Icon: ProtectionIcon,
+    cardClass: healthCardClass,
+    iconClass: healthIconClass,
+  } = PROTECTION_APPEARANCE[appearanceState];
+  const protectionLabel = presentation === "checking" ? "Checking" : protectionHealth.label;
+  const protectionDetail =
+    presentation === "checking"
+      ? "Guard is confirming local protection. This takes a moment."
+      : protectionHealth.detail;
+
+  return (
+    <div className="space-y-6">
+      {!queueReadIncomplete && <GuardHero
+        status={heroStatus}
+        headline={presentation === "checking" ? "Checking protection" : "Nothing to review"}
+        subheadline={
+          presentation === "checking"
+            ? protectionDetail
+            : `No actions need your decision right now. ${protectionDetail}`
+        }
+      />}
+
+      <ProofStrip
+        items={[
+          { label: "Queue", value: queueReadIncomplete ? "Incomplete" : "All clear", tone: queueReadIncomplete ? "slate" : "green" },
+          { label: "Protection", value: protectionLabel, tone: protectionHealth.state === "protected" ? "green" : "slate" },
+          { label: "Apps protected", value: protectedAppsCount, tone: protectedAppsCount > 0 ? "green" : "slate" },
+        ]}
+      />
+
+      {codexResume !== null && (
+        <ReviewCodexResumePanel resume={codexResume} onRetry={onRetryResume} />
+      )}
+
+      {codexResume === null && resolutionMessage && (
+        <div className="flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
+          <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+          <p className="text-sm font-medium text-brand-green-text">{resolutionMessage}</p>
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className={`rounded-xl border p-4 sm:p-5 ${healthCardClass}`}>
+          <div className="flex items-start gap-3">
+            <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${healthIconClass}`}>
+              <ProtectionIcon className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <SectionLabel>{protectionLabel}</SectionLabel>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {protectionDetail} When something needs review, it will appear here.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
+          <SectionLabel>What Guard does</SectionLabel>
+          <ul className="mt-3 space-y-2">
+            {[
+              "Pauses risky file reads and writes",
+              "Blocks commands that could delete data",
+              "Warns about new network connections",
+              "Stops credential sharing",
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-2 text-sm text-brand-dark">
+                <HiMiniCheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green" aria-hidden="true" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
+  const action = buildPrimaryReviewAction(item);
+  const workingDirectory = resolveRequestWorkingDirectory(item);
+  const agentIntent = resolveAgentStatedIntent(item);
+  const watchOnlyObservation = isWatchOnlyObservation(item);
+  const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
+
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <SectionLabel>{watchOnlyObservation ? "What Watch observed" : "What was stopped"}</SectionLabel>
+          {action.detail !== null && (
+            <p className="mt-1 text-sm text-brand-dark/70">
+              {action.detail}
+            </p>
+          )}
+        </div>
+        <span className="rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue">
+          {actionLabel}
+        </span>
+      </div>
+      <div className="mt-3">
+        <LoggedActionPanel
+          key={item.request_id}
+          label={actionLabel}
+          text={action.text}
+          copyAriaLabel={`Copy full ${actionDescription} to clipboard`}
+          expandAriaLabel={`Expand full ${actionDescription}`}
+          collapseAriaLabel={`Collapse full ${actionDescription}`}
+        />
+        {workingDirectory !== null && (
+          <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
+            <HiMiniFolder className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+            <span className="shrink-0 font-medium text-brand-dark/70">Working directory</span>
+            <code className="min-w-0 break-all font-mono text-brand-dark" title={workingDirectory}>
+              {workingDirectory}
+            </code>
+          </div>
+        )}
+        {agentIntent !== null && (
+          <figure className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2">
+            <figcaption className="text-xs font-medium text-brand-dark/70">
+              What the agent said it is doing
+            </figcaption>
+            <blockquote className="mt-1 break-words text-sm text-brand-dark">
+              “{agentIntent.text}”
+            </blockquote>
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+              In the agent's own words. Guard has not checked this, so decide from the command above.
+            </p>
+          </figure>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function buildWhatWouldHappen(item: GuardApprovalRequest): string | null {
+  if (isWatchOnlyObservation(item)) {
+    return `Watch allowed this action to continue. ${watchProtectedOutcome(item)}`;
+  }
+  const type = item.artifact_type;
+  if (type?.includes("file_write") || type?.includes("file_read")) {
+    return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
+  }
+  if (type?.includes("shell") || type?.includes("command")) {
+    return `Without Guard, this shell command would run immediately. Guard paused it so you can review what it does first.`;
+  }
+  if (type?.includes("network") || type?.includes("request")) {
+    return `Without Guard, this request would go to the network immediately. Guard paused it so you can review the destination first.`;
+  }
+  if (type?.includes("mcp") || type?.includes("tool")) {
+    return `Without Guard, this tool would execute immediately. Guard paused it so you can review what data it accesses.`;
+  }
+  return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
+}
+
+export function pastDecisionVerb(decision: string): string {
+  switch (normalizeGuardAction(decision)) {
+    case "allow":
+      return "allowed";
+    case "warn":
+      return "allowed with a warning";
+    case "review":
+      return "sent for review";
+    case "require-reapproval":
+      return "required fresh approval for";
+    case "sandbox-required":
+      return "required sandboxing for";
+    case "block":
+      return "blocked";
+  }
+}

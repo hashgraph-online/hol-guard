@@ -1,0 +1,312 @@
+"""Focused runtime contract tests for the generated Pi/OMP hook extension."""
+
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool
+from tests.pi_extension_response_callback_support import (
+    _run_generated_callback_payload,
+    _run_generated_source_ref_fixture,
+)
+from tests.pi_extension_response_runtime_support import (
+    _run_generated_fixture,
+    _run_generated_tool_result_fixture,
+)
+from tests.pi_extension_response_source_support import _generated_source
+
+UNAVAILABLE = {
+    "decision": "deny",
+    "reason": "HOL Guard could not reach its local review service before the deadline. Retry the action.",
+    "reason_code": "daemon_unavailable",
+}
+
+
+def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
+    allow = render_pre_tool(
+        "omp",
+        {"decision": "allow", "minimum_action": "allow", "reason_code": "fixture_allow"},
+    )
+    deny = render_pre_tool(
+        "omp",
+        {
+            "decision": "deny",
+            "minimum_action": "block",
+            "reason": "fixture block",
+            "reason_code": "fixture_block",
+        },
+    )
+
+    assert allow["decision"] == "allow"
+    assert deny["decision"] == "deny"
+
+
+def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(tmp_path: Path) -> None:
+    result = _run_generated_fixture(_generated_source(tmp_path))
+
+    assert result["daemon_allow"] == {"decision": "allow"}
+    assert result["daemon_lifecycle_allow"] == {
+        "decision": "allow",
+        "policy_action": "allow",
+        "reason_code": "fixture_lifecycle",
+    }
+    assert result["daemon_deny"] == {"decision": "deny", "reason": "fixture block"}
+    assert result["daemon_empty"] == {"response": None, "recoveryKind": "transport-failure"}
+    assert result["daemon_whitespace"] == {"response": None, "recoveryKind": "transport-failure"}
+    assert result["daemon_malformed"] == {
+        "decision": "deny",
+        "reason": "HOL Guard received an invalid response from the authenticated local daemon.",
+        "reason_code": "daemon_invalid_response",
+    }
+    assert result["daemon_malformed_reason"] == {"response": None, "recoveryKind": "transport-failure"}
+    assert result["daemon_null_reason"] == {"decision": "deny", "reason": None}
+    assert result["daemon_omitted_reason"] == {"decision": "deny"}
+    assert result["daemon_shape"] == {"response": None, "recoveryKind": "transport-failure"}
+    assert result["daemon_array"] == {"response": None, "recoveryKind": "transport-failure"}
+    assert result["daemon_unknown"] == {"response": None, "recoveryKind": "transport-failure"}
+    assert result["daemon_block"] == {"decision": "deny", "reason": "fixture block"}
+    assert result["daemon_oversized_body"] == {
+        "response": None,
+        "recoveryKind": "transport-failure",
+    }
+
+    # A daemon that still answers with an unusable shape after recovery denies
+    # the hook. No Python CLI reviews it instead.
+    assert result["retry_still_malformed"] == UNAVAILABLE
+    assert result["retry_still_malformed_daemon_calls"] == 2
+    assert result["retry_still_malformed_recovery_calls"] == 1
+    assert result["retry_still_malformed_cli_calls"] == 0
+
+    assert result["retry_malformed_reason"] == UNAVAILABLE
+    assert result["retry_malformed_reason_daemon_calls"] == 2
+    assert result["retry_malformed_reason_recovery_calls"] == 1
+    assert result["retry_malformed_reason_cli_calls"] == 0
+
+    assert result["retry_valid"] == {"decision": "allow"}
+    assert result["retry_valid_daemon_calls"] == 2
+    assert result["retry_valid_recovery_calls"] == 1
+    assert result["retry_valid_cli_calls"] == 0
+    assert result["posttool_daemon_allow"] == {
+        "decision": "allow",
+        "reason_code": "native_policy_not_ready",
+    }
+    assert result["posttool_daemon_allow_daemon_calls"] == 1
+    assert result["posttool_daemon_allow_recovery_calls"] == 0
+    assert result["posttool_daemon_allow_cli_calls"] == 0
+    assert result["stale_daemon_success"] == {"decision": "allow"}
+    assert result["stale_daemon_daemon_calls"] == 1
+    assert result["stale_daemon_recovery_calls"] == 0
+    assert result["stale_daemon_cli_calls"] == 0
+
+    assert result["unreachable_pre"] == UNAVAILABLE
+    assert result["unreachable_prompt"] == UNAVAILABLE
+    assert result["unreachable_post"] == UNAVAILABLE
+    assert result["unreachable_recovery_calls"] == 3
+    assert result["unreachable_cli_calls"] == 0
+
+
+def test_generated_omp_reads_native_bridge_replies_as_daemon_responses(tmp_path: Path) -> None:
+    result = _run_generated_fixture(_generated_source(tmp_path))
+
+    assert result["native_allow"] == {"decision": "allow"}
+    assert result["native_deny"] == {"decision": "deny", "reason": "block"}
+    assert result["native_refused"] == {
+        "response": None,
+        "recoveryKind": "authenticated-control-plane-failure",
+    }
+    assert result["native_malformed"] == {
+        "decision": "deny",
+        "reason": "HOL Guard received an invalid response from the authenticated local daemon.",
+        "reason_code": "daemon_invalid_response",
+    }
+    for case in ("native_no_reply", "native_failed", "native_missing_body"):
+        assert result[case] == {"response": None, "recoveryKind": "transport-failure"}, case
+    # Every native reply, including no reply, stands in for the daemon request.
+    assert result["native_fetch_calls"] == 0
+    assert result["native_query_has_workspace"] is True
+
+
+def test_generated_omp_tool_result_preserves_daemon_allow_without_hash(tmp_path: Path) -> None:
+    result = _run_generated_tool_result_fixture(_generated_source(tmp_path))
+
+    assert result["valid"] is True
+    assert result["missing_directive"] is True
+    assert result["contradictory_directive"]["content"][0]["text"] == "reviewed-safe"
+    assert result["contradictory_directive"].get("isError") is not True
+    assert result["missing_excerpt"]["isError"] is True
+    assert result["missing_digest"]["isError"] is True
+    assert result["mismatched_digest"]["isError"] is True
+    assert result["reviewed_excerpt"]["content"][0]["text"] == "reviewed-long"
+    assert result["reviewed_excerpt"].get("isError") is not True
+    assert result["observe_mode"] is True
+
+
+def test_generated_omp_directory_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content_text = "workspace/\n.env\n"
+    content = [{"type": "text", "text": content_text}]
+    digest = hashlib.sha256(content_text.encode()).hexdigest()
+
+    regular = _run_generated_source_ref_fixture(source, content, tmp_path / "example.py")
+    directory = _run_generated_source_ref_fixture(
+        source,
+        content,
+        tmp_path / "workspace",
+        details={"isDirectory": True, "resolvedPath": str(tmp_path / "workspace")},
+    )
+
+    assert regular["sourceRef"] is not None
+    assert directory["sourceRef"] is None
+
+    directory_handler = _run_generated_callback_payload(
+        source,
+        content,
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": digest,
+        },
+        tool_name="read",
+        tool_input={"path": str(tmp_path / "workspace")},
+        details={
+            "isDirectory": True,
+            "resolvedPath": str(tmp_path / "workspace"),
+            "meta": {"source": {"type": "path", "value": str(tmp_path / "workspace")}},
+        },
+    )
+    regular_handler = _run_generated_callback_payload(
+        source,
+        content,
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": digest,
+        },
+        tool_name="read",
+        tool_input={"path": str(tmp_path / "workspace")},
+        details={"source": "fixture"},
+    )
+
+    assert directory_handler["preserved"] is True
+    assert "guard_source_ref" not in directory_handler["payload"]
+    assert directory_handler["payload"]["tool_input"] == {"path": str(tmp_path / "workspace")}
+    assert directory_handler["payload"]["resolved_directory_target"] == str(tmp_path / "workspace")
+
+    selector_directory_handler = _run_generated_callback_payload(
+        source,
+        content,
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": digest,
+        },
+        tool_name="read",
+        tool_input={"path": f"{tmp_path / 'workspace'}:1-5"},
+        details={
+            "isDirectory": True,
+            "resolvedPath": str(tmp_path / "workspace"),
+            "meta": {"source": {"type": "path", "value": str(tmp_path / "workspace")}},
+        },
+    )
+    assert selector_directory_handler["preserved"] is True
+    assert selector_directory_handler["payload"]["tool_input"] == {"path": f"{tmp_path / 'workspace'}:1-5"}
+    assert selector_directory_handler["payload"]["resolved_directory_target"] == str(tmp_path / "workspace")
+
+    assert regular_handler["preserved"] is True
+    assert "resolved_directory_target" not in regular_handler["payload"]
+    assert regular_handler["payload"]["guard_source_ref"]["kind"] == "source_file"
+
+    # A resolved path without the explicit directory flag can also describe a
+    # file result. Keep the source-file re-read path for that ambiguous shape.
+    legacy_file_text = "print(1)\n"
+    legacy_file_digest = hashlib.sha256(legacy_file_text.encode()).hexdigest()
+    legacy_file_handler = _run_generated_callback_payload(
+        source,
+        [{"type": "text", "text": legacy_file_text}],
+        {
+            "decision": "allow",
+            "model_output_action": "allow_original",
+            "reviewed_output_sha256": legacy_file_digest,
+        },
+        tool_name="read",
+        tool_input={"path": str(tmp_path / "legacy.py")},
+        details={
+            "resolvedPath": str(tmp_path / "legacy.py"),
+            "meta": {"source": {"type": "path", "value": str(tmp_path / "legacy.py")}},
+        },
+    )
+    assert legacy_file_handler["preserved"] is True
+    assert legacy_file_handler["payload"]["guard_source_ref"]["kind"] == "source_file"
+    assert legacy_file_handler["payload"]["guard_source_ref"]["path"] == str(tmp_path / "legacy.py")
+
+
+def test_generated_omp_json_query_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content = [{"type": "text", "text": '{"ok": true}'}]
+
+    for path in (f"{tmp_path / 'queries.json'}?q=.queries", "data.NDJSON?q=.a&raw=true"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is None
+    for path in (tmp_path / "queries.json", f"{tmp_path / 'notes.md'}?q=.a"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is not None
+
+
+def test_generated_omp_read_list_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content = [{"type": "text", "text": "1#AB:export const a = 1;"}]
+
+    for path in (f"{tmp_path / 'a.ts'}; {tmp_path / 'b.ts'}", "src/a.ts:1-5;src/b.ts"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is None
+    assert _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts")["sourceRef"] is not None
+
+    # OMP splits a comma or space list too, and names each part it read.
+    comma_path = "src/a.ts:1-5,src/b.ts:2-3"
+    split = {"displayReadTargets": ["src/a.ts", "src/b.ts"]}
+    assert _run_generated_source_ref_fixture(source, content, comma_path, details=split)["sourceRef"] is None
+    single = {"displayReadTargets": ["src/a.ts"]}
+    assert (
+        _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts", details=single)["sourceRef"] is not None
+    )
+    # Details that are present but not an object cannot vouch for one file.
+    for malformed in ("src/a.ts", ["src/a.ts", "src/b.ts"], 1):
+        assert (
+            _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts", details=malformed)["sourceRef"]
+            is None
+        )
+
+
+def test_generated_omp_selector_review_uses_host_resolved_source_path(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    result = _run_generated_callback_payload(
+        source,
+        [{"type": "text", "text": "selected source"}],
+        {"decision": "allow", "notice": "reviewed"},
+        tool_name="read",
+        tool_input={"path": "/tmp/project/src/example.ts:1-5"},
+        details={
+            "isDirectory": False,
+            "meta": {"source": {"value": "/tmp/project/src/example.ts"}},
+        },
+    )
+
+    assert result["payload"]["tool_input"] == {"path": "/tmp/project/src/example.ts"}
+    assert result["preserved"] is True
+
+
+def test_generated_tool_result_keeps_checked_excerpt_after_local_content_cap(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content = [{"type": "text", "text": f"block-{index}"} for index in range(25)]
+    result = _run_generated_callback_payload(
+        source,
+        content,
+        {"decision": "allow", "notice": "excerpt"},
+    )
+
+    returned = result["result"]
+    assert isinstance(returned, dict)
+    assert returned.get("isError") is not True
+    returned_text = returned["content"][0]["text"]
+    assert isinstance(returned_text, str)
+    assert returned_text.startswith("block-0\n")
+    assert "block-23" in returned_text
+    assert "block-24" not in returned_text

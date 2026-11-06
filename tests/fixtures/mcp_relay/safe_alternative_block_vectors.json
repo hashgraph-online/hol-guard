@@ -1,0 +1,45 @@
+{
+  "description": "The safe-alternative block the MCP proxy answers a queued tools/call with (_queue_approval_center_response when blocked_request_mode is not ask); the resident's queue route answers the same message.",
+  "data": {
+    "approvalRequests": [],
+    "guardPolicyAction": "block",
+    "transportOutcome": "not-forwarded"
+  },
+  "vectors": [
+    {
+      "name": "signals",
+      "tool": "delete_secret_file",
+      "server": "workspace-files",
+      "signals": [
+        "MCP tool call deletes files.",
+        "Target path looks sensitive."
+      ],
+      "message": "HOL Guard blocked tool call delete_secret_file from workspace-files. MCP tool call deletes files. Target path looks sensitive. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    },
+    {
+      "name": "no_signals",
+      "tool": "echo_shell_text",
+      "server": "echo",
+      "signals": [],
+      "message": "HOL Guard blocked tool call echo_shell_text from echo. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    },
+    {
+      "name": "whitespace_signal",
+      "tool": "echo_command_key",
+      "server": "echo",
+      "signals": [
+        "Shell command text. "
+      ],
+      "message": "HOL Guard blocked tool call echo_command_key from echo. Shell command text. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    },
+    {
+      "name": "unicode_server",
+      "tool": "lire",
+      "server": "fichiers-été",
+      "signals": [
+        "Lecture d'un fichier."
+      ],
+      "message": "HOL Guard blocked tool call lire from fichiers-été. Lecture d'un fichier. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    }
+  ]
+}

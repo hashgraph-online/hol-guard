@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-git",
+  "version": "1.2.2",
+  "name": "Krusch-Git MCP",
+  "description": "Git DAG indexer, AST symbol search, blast-radius dependency graph, and hybrid BM25 + pgvector semantic code retrieval for coding agents. Local AST and DAG reads inherit Guard policy; semantic search (which embeds queries) and unknown tools require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch-git"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/krusch-git-architecture.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-git"
+  },
+  "riskClasses": [
+    "external-repository-read",
+    "external-embedding-request"
+  ],
+  "tools": [
+    {
+      "name": "krusch_git_list_repos",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_read_tree",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_read_blob",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_search_symbols",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_file_symbols",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_dependency_graph",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_git_semantic_search",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch-git",
+    "https://github.com/kruschdev/krusch-git/blob/main/server/mcp.js",
+    "https://github.com/kruschdev/krusch-git/blob/main/docs/WHAT_MAKES_IT_SPECIAL.md",
+    "https://krusch.dev/articles/krusch-git-architecture.html"
+  ],
+  "saferAlternatives": [
+    "Use krusch_git_search_symbols, krusch_git_file_symbols, and krusch_git_dependency_graph to inspect signatures and call graphs without calling the embedding endpoint.",
+    "Keep krusch_git_semantic_search on Review: hybrid and semantic modes send query text to the configured OLLAMA_URL embedding endpoint, whereas search_type='keyword' uses PostgreSQL BM25 only.",
+    "Point DATABASE_URL at a read-only PostgreSQL role when running the stdio MCP server, since all seven MCP tools only query indexed repositories."
+  ]
+}

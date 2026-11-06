@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.xrpl-trading-lab",
+  "version": "1.0.0",
+  "name": "xrpl-trading-lab",
+  "description": "Free read-only XRPL meme entries, dated token health, public AMM wallet observations and a paper-account journal",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.riehnbean",
+    "displayName": "Zach Riehn (@WtheWendigo)",
+    "url": "https://github.com/Riehnbean"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://cocoeatsai.com/trading-lab/",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://cocoeatsai.com/area4/agent/trading-mcp",
+    "serverNames": [
+      "xrpl-trading-lab"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "financial-data-read"
+  ],
+  "tools": [
+    {
+      "name": "get_good_entries",
+      "state": "inherit"
+    },
+    {
+      "name": "get_token_health",
+      "state": "inherit"
+    },
+    {
+      "name": "get_whale_moves",
+      "state": "inherit"
+    },
+    {
+      "name": "get_claude_picks",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "block"
+    }
+  ],
+  "referenceUrls": [
+    "https://cocoeatsai.com/trading-lab/",
+    "https://cocoeatsai.com/trading-lab/about/"
+  ],
+  "saferAlternatives": [
+    "Use only public token names and exact issuer addresses; no accounts, keys, signing or payments are required.",
+    "Check feed timestamps and incomplete-history flags; empty entries and a paper journal are not evidence of profitability."
+  ]
+}

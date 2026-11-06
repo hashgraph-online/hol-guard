@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import pytest
+
+from codex_plugin_scanner.guard.native_response_decoder import native_error
+from tests.native_approval_protocol_support import (
+    decode_native_approval_challenge,
+    decode_native_approval_result,
+)
+
+
+def _challenge() -> dict[str, object]:
+    digest = "a" * 64
+    return {
+        "schema": "guard-native-approval-challenge.v3",
+        "version": 3,
+        "request_id": "sha256:" + digest,
+        "request_digest": digest,
+        "action_digest": "b" * 64,
+        "action_type": "command",
+        "operation": "execute",
+        "intrinsic_action": "review",
+        "minimum_action": "review",
+        "floor_class": "approvable",
+        "approval_eligible": True,
+        "policy_generation": 1,
+        "policy_digest": "c" * 64,
+        "rule_digest": "d" * 64,
+        "runtime_identity": "e" * 64,
+        "runtime_protocol_version": 1,
+        "runtime_package": "hol-guard-runtime",
+        "runtime_version": "0.1.0",
+        "runtime_binary_identity": "e" * 64,
+        "harness": "claude-code",
+        "workspace_binding": "f" * 64,
+        "device_binding": "1" * 64,
+        "installation_binding": "2" * 64,
+        "publisher_binding": None,
+        "artifact_binding": None,
+        "scope_contract_version": "guard-native-scope.v1",
+        "scope_contract_digest": "3" * 64,
+        "scope_binding": "4" * 64,
+        "resident_epoch": "5" * 64,
+        "nonce": "6" * 64,
+        "issued_at_ms": 1,
+        "expires_at_ms": 2,
+        "requested_action": "review",
+        "signing_key_id": "7" * 64,
+    }
+
+
+def _receipt() -> dict[str, object]:
+    challenge = _challenge()
+    return {
+        "schema": "guard-native-approval-receipt.v3",
+        "version": 3,
+        "phase": "validated",
+        "request_id": challenge["request_id"],
+        "request_digest": challenge["request_digest"],
+        "action_digest": challenge["action_digest"],
+        "policy_generation": challenge["policy_generation"],
+        "policy_digest": challenge["policy_digest"],
+        "rule_digest": challenge["rule_digest"],
+        "runtime_identity": challenge["runtime_identity"],
+        "runtime_protocol_version": 1,
+        "runtime_package": challenge["runtime_package"],
+        "runtime_version": challenge["runtime_version"],
+        "runtime_binary_identity": challenge["runtime_binary_identity"],
+        "harness": challenge["harness"],
+        "workspace_binding": challenge["workspace_binding"],
+        "device_binding": challenge["device_binding"],
+        "installation_binding": challenge["installation_binding"],
+        "publisher_binding": challenge["publisher_binding"],
+        "artifact_binding": challenge["artifact_binding"],
+        "scope_contract_version": challenge["scope_contract_version"],
+        "scope_contract_digest": challenge["scope_contract_digest"],
+        "scope_binding": challenge["scope_binding"],
+        "resident_epoch": challenge["resident_epoch"],
+        "nonce": challenge["nonce"],
+        "issued_at_ms": challenge["issued_at_ms"],
+        "expires_at_ms": challenge["expires_at_ms"],
+        "decision": "allow",
+        "requested_action": "review",
+        "approved_action": "allow",
+        "reason_code": "native_approval_validated",
+        "nonce_digest": "8" * 64,
+        "replay_claimed": True,
+    }
+
+
+def test_decoder_requires_epoch_and_accepts_full_native_contract() -> None:
+    challenge = _challenge()
+    assert decode_native_approval_challenge(challenge) == challenge
+    del challenge["resident_epoch"]
+    assert decode_native_approval_challenge(challenge) is None
+
+    result = {
+        "schema": "guard-native-approval-result.v3",
+        "version": 3,
+        "authority": "rust",
+        "receipt": _receipt(),
+    }
+    assert decode_native_approval_result(result, phase="validated") == result
+    receipt = result["receipt"]
+    assert isinstance(receipt, dict)
+    receipt["phase"] = "consumed"
+    assert decode_native_approval_result(result, phase="validated") is None
+
+
+def test_native_error_rejects_unregistered_approval_codes() -> None:
+    assert native_error({"error": "native_approval_replay", "retryable": False}) == "native_approval_replay"
+    assert native_error({"error": "native_approval_not_in_contract", "retryable": False}) is None
+
+
+def test_native_error_accepts_exact_lifecycle_codes_only() -> None:
+    assert native_error({"error": "native_resident_start_in_progress", "retryable": True}) == (
+        "native_resident_start_in_progress"
+    )
+    assert native_error({"error": "native_resident_start_in_progress:/private/request", "retryable": True}) is None
+    assert native_error({"error": "native_policy_snapshot_future_unregistered_code", "retryable": False}) is None
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "native_business_policy_floor_invalid",
+        "native_business_policy_removal_requires_authority",
+        "native_business_source_authority_invalid",
+        "native_business_source_authority_missing",
+        "native_business_source_authority_not_current",
+        "native_business_source_enforce_required",
+        "native_business_source_mutation_in_progress",
+    ],
+)
+def test_native_error_preserves_registered_business_rejection_without_private_detail(code: str) -> None:
+    assert native_error({"error": code, "retryable": False}) == code
+    assert native_error({"error": code + ":/private/request", "retryable": False}) is None
+
+
+def test_native_error_rejects_unregistered_business_codes() -> None:
+    assert native_error({"error": "native_business_source_future_unregistered_code", "retryable": False}) is None
+
+
+def _validated_result(receipt: dict[str, object] | None = None) -> dict[str, object]:
+    return {
+        "schema": "guard-native-approval-result.v3",
+        "version": 3,
+        "authority": "rust",
+        "receipt": _receipt() if receipt is None else receipt,
+    }
+
+
+def test_approval_decoders_reject_floor_lowering_and_tampering() -> None:
+    assert decode_native_approval_challenge(_challenge()) == _challenge()
+    assert decode_native_approval_result(_validated_result(), phase="validated") == _validated_result()
+
+    lowered_floor = _challenge()
+    lowered_floor["minimum_action"] = "allow"
+    assert decode_native_approval_challenge(lowered_floor) is None
+
+    lowered_class = _challenge()
+    lowered_class["floor_class"] = "allow"
+    assert decode_native_approval_challenge(lowered_class) is None
+
+    ineligible = _challenge()
+    ineligible["approval_eligible"] = False
+    assert decode_native_approval_challenge(ineligible) is None
+
+    unknown_field = _challenge()
+    unknown_field["untrusted"] = True
+    assert decode_native_approval_challenge(unknown_field) is None
+
+    lowered_receipt = _receipt()
+    lowered_receipt["approved_action"] = "review"
+    assert decode_native_approval_result(_validated_result(lowered_receipt), phase="validated") is None
+
+    denied = _receipt()
+    denied["decision"] = "deny"
+    assert decode_native_approval_result(_validated_result(denied), phase="validated") is None
+
+    tampered_receipt = _receipt()
+    tampered_receipt["injected"] = "tamper"
+    assert decode_native_approval_result(_validated_result(tampered_receipt), phase="validated") is None
+
+    tampered_result = _validated_result()
+    tampered_result["injected"] = "tamper"
+    assert decode_native_approval_result(tampered_result, phase="validated") is None

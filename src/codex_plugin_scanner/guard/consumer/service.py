@@ -1,0 +1,872 @@
+"""Guard consumer-facing orchestration."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, TypedDict, TypeGuard, cast
+
+from ...models import ScanOptions
+from ..action_lattice import is_guard_action as _is_guard_action
+from ..adapters.base import HarnessContext
+from ..approval_gate import ApprovalGateGrant
+from ..config import GuardConfig
+from ..models import (
+    DECISION_SCOPE_VALUES,
+    DecisionScope,
+    GuardAction,
+    GuardArtifact,
+    HarnessDetection,
+    PolicyDecision,
+)
+from ..native_artifact_content_hash import (
+    native_artifact_content_hash,
+    native_artifact_content_hashes,
+)
+from ..native_consumer_artifact_compose import NativeConsumerComposeError, native_consumer_compose
+from ..receipts import build_receipt
+from ..risk import NO_RISK_SIGNAL_SUMMARY, artifact_risk_profile
+from ..runtime.approval_context import (
+    build_consumer_approval_context_token,
+)
+from ..runtime.decisions import (
+    build_authoritative_decision,
+)
+from ..runtime.runner_native_authority import authority_error as native_authority_error
+from ..runtime.signals import RiskSignalV2
+from ..schemas import build_consumer_mode_contract
+from ..skill_directory_identity import validated_complete_skill_directory_hash
+from ..store import GuardStore
+from ..types import GuardSignal
+from . import projection
+from .low_trust import low_trust_floor
+from .native_decision_projection import (
+    _compose_unavailable as _compose_unavailable,
+)
+from .native_decision_projection import (
+    _ConsumerAuthorityInputs as _ConsumerAuthorityInputs,
+)
+from .native_decision_projection import (
+    _native_current_action as _native_current_action,
+)
+from .native_decision_projection import (
+    _native_runtime_decision as _native_runtime_decision,
+)
+
+_CONSUMER_APPROVAL_POLICY_VERSION = "consumer-evaluation-v1"
+
+
+class ArtifactDiff(TypedDict):
+    changed: bool
+    changed_fields: list[str]
+    previous_hash: str | None
+    current_hash: str | None
+    current_snapshot: dict[str, object]
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
+    return isinstance(value, str) and value in DECISION_SCOPE_VALUES
+
+
+def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
+    payload = artifact.to_dict()
+    metadata = payload.get("metadata")
+    payload["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
+    return payload
+
+
+def artifact_hash(artifact: GuardArtifact) -> str:
+    """Hash a detected artifact definition (the resident spells the digest)."""
+
+    return native_artifact_content_hash(artifact)
+
+
+def diff_artifact(
+    previous: dict[str, object] | None,
+    current: GuardArtifact,
+    *,
+    guard_home: Path | None = None,
+    content_hash: str | None = None,
+) -> ArtifactDiff:
+    """Compare a stored snapshot to the current artifact (resident-decided).
+
+    A caller diffing many artifacts passes each ``content_hash`` from one
+    batched request instead of paying a resident round trip per artifact.
+    """
+
+    payload = _serialize_artifact(current)
+    evidence = projection.artifact_evidence(
+        None,
+        current,
+        payload=payload,
+        content_hash=(
+            content_hash if content_hash is not None else native_artifact_content_hash(current, guard_home=guard_home)
+        ),
+        previous=previous,
+        with_history=False,
+        guard_home=guard_home,
+    )
+    return {
+        "changed": evidence["changed"],
+        "changed_fields": list(evidence["changed_fields"]),
+        "previous_hash": evidence["previous_hash"],
+        "current_hash": evidence["current_hash"],
+        "current_snapshot": payload,
+    }
+
+
+def _normalized_consumer_path(path: Path) -> str:
+    try:
+        return str(path.expanduser().resolve(strict=False))
+    except (OSError, RuntimeError):
+        return str(path.expanduser().absolute())
+
+
+def _consumer_effective_cwd(config: GuardConfig) -> Path:
+    return config.workspace if config.workspace is not None else Path.cwd()
+
+
+def _consumer_policy_workspace(config: GuardConfig) -> str:
+    return _normalized_consumer_path(_consumer_effective_cwd(config))
+
+
+def _skill_directory_identity_reusable(
+    *,
+    artifact_type: object,
+    metadata: object,
+) -> bool | None:
+    """Classify the optional migrated skill identity boundary.
+
+    ``None`` preserves legacy behavior for adapters that do not emit the
+    marker.  Once the marker key is present, only a complete, reusable v1
+    envelope whose digest agrees with ``directory_hash`` may reuse approval.
+    """
+
+    if artifact_type != "skill" or not isinstance(metadata, Mapping):
+        return None
+    if "skillDirectoryIdentity" not in metadata:
+        return None
+    if metadata.get("inspection_complete") is False:
+        return False
+    return validated_complete_skill_directory_hash(metadata) is not None
+
+
+def _consumer_policy_context(
+    config: GuardConfig,
+    *,
+    harness: str,
+    artifact_id: str | None,
+    publisher: str | None,
+    configured_action: GuardAction | None,
+    effective_default_action: GuardAction | None,
+    current_action: GuardAction,
+) -> dict[str, object]:
+    return {
+        "artifact_override": configured_action,
+        "changed_hash_action": config.changed_hash_action,
+        "current_action": current_action,
+        "default_action": config.default_action,
+        "effective_default_action": effective_default_action,
+        "harness": harness,
+        "harness_risk_actions": config.harness_risk_actions or {},
+        "managed_locked_settings": list(config.managed_locked_settings),
+        "managed_policy_hash": config.managed_policy_hash,
+        "managed_policy_status": config.managed_policy_status,
+        "mode": config.mode,
+        "new_network_domain_action": config.new_network_domain_action,
+        "policy_version": _CONSUMER_APPROVAL_POLICY_VERSION,
+        "resolved_override": config.resolve_action_override(harness, artifact_id, publisher),
+        "risk_actions": config.risk_actions or {},
+        "security_level": config.security_level,
+        "subprocess_action": config.subprocess_action,
+        "unknown_publisher_action": config.unknown_publisher_action,
+    }
+
+
+def _detector_telemetry(runtime_detector_context: Mapping[str, object] | None) -> list[object] | None:
+    """Each runtime detector's status fields, or ``None`` when none ran."""
+
+    telemetry = (runtime_detector_context or {}).get("telemetry")
+    if not isinstance(telemetry, list):
+        return None
+    return [
+        {key: item.get(key) for key in ("detector_id", "error_type", "status")}
+        for item in cast("list[object]", telemetry)
+        if isinstance(item, Mapping)
+    ]
+
+
+def _consumer_context_request(
+    subject: dict[str, object],
+    *,
+    config: GuardConfig,
+    policy: dict[str, object],
+    runtime_detector_context: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """The native consumer approval-context request around one subject.
+
+    The runtime composes the identity, content, capability and sandbox
+    components and builds the launch identity from ``launch_cwd``.
+    """
+
+    effective_cwd = _consumer_effective_cwd(config)
+    return {
+        "subject": subject,
+        "launch_cwd": str(effective_cwd),
+        "cwd": _normalized_consumer_path(effective_cwd),
+        "workspace": _normalized_consumer_path(config.workspace) if config.workspace is not None else None,
+        "detector_telemetry": _detector_telemetry(runtime_detector_context),
+        "policy": policy,
+        "sandbox_analysis": config.sandbox_analysis,
+    }
+
+
+def _consumer_approval_context_token(
+    *,
+    detection: HarnessDetection,
+    artifact: GuardArtifact,
+    content_hash: str,
+    capability_snapshot: Mapping[str, object],
+    config: GuardConfig,
+    configured_action: GuardAction | None,
+    effective_default_action: GuardAction | None,
+    current_action: GuardAction,
+    runtime_detector_context: Mapping[str, object] | None,
+) -> str:
+    subject: dict[str, object] = {
+        "kind": "artifact",
+        "artifact": {
+            "artifact_id": artifact.artifact_id,
+            "name": artifact.name,
+            "artifact_type": artifact.artifact_type,
+            "harness": artifact.harness,
+            "publisher": artifact.publisher,
+            "source_scope": artifact.source_scope,
+            "config_path": artifact.config_path,
+            "command": artifact.command,
+            "args": list(artifact.args),
+            "url": artifact.url,
+            "transport": artifact.transport,
+            "metadata": dict(artifact.metadata),
+        },
+        "detection_harness": detection.harness,
+        "command_available": detection.command_available,
+        "installed": detection.installed,
+        "content_hash": content_hash,
+        "capability_snapshot": dict(capability_snapshot),
+    }
+    policy = _consumer_policy_context(
+        config,
+        harness=detection.harness,
+        artifact_id=artifact.artifact_id,
+        publisher=artifact.publisher,
+        configured_action=configured_action,
+        effective_default_action=effective_default_action,
+        current_action=current_action,
+    )
+    return build_consumer_approval_context_token(
+        _consumer_context_request(
+            subject, config=config, policy=policy, runtime_detector_context=runtime_detector_context
+        )
+    )
+
+
+def _removed_consumer_approval_context_token(
+    *,
+    harness: str,
+    artifact_id: str,
+    previous: Mapping[str, object],
+    previous_hash: str,
+    config: GuardConfig,
+    configured_action: GuardAction | None,
+    effective_default_action: GuardAction | None,
+    current_action: GuardAction,
+    runtime_detector_context: Mapping[str, object] | None,
+) -> str:
+    publisher = previous.get("publisher")
+    raw_args = previous.get("args")
+    subject: dict[str, object] = {
+        "kind": "removed",
+        "harness": harness,
+        "artifact_id": artifact_id,
+        "previous": dict(previous),
+        "previous_hash": previous_hash,
+        "args": [str(argument) for argument in raw_args] if isinstance(raw_args, (list, tuple)) else [],
+    }
+    policy = _consumer_policy_context(
+        config,
+        harness=harness,
+        artifact_id=artifact_id,
+        publisher=publisher if isinstance(publisher, str) else None,
+        configured_action=configured_action,
+        effective_default_action=effective_default_action,
+        current_action=current_action,
+    )
+    return build_consumer_approval_context_token(
+        _consumer_context_request(
+            subject, config=config, policy=policy, runtime_detector_context=runtime_detector_context
+        )
+    )
+
+
+def _runtime_detector_risk_signals(
+    runtime_detector_context: Mapping[str, object] | None,
+) -> tuple[RiskSignalV2, ...]:
+    if runtime_detector_context is None:
+        return ()
+    raw_signals = runtime_detector_context.get("signals_v2")
+    if not isinstance(raw_signals, list):
+        return ()
+    signals: list[RiskSignalV2] = []
+    seen: set[str] = set()
+    for raw_signal in raw_signals:
+        if not isinstance(raw_signal, Mapping):
+            continue
+        try:
+            signal = RiskSignalV2.from_dict(raw_signal)
+        except (TypeError, ValueError):
+            continue
+        if signal.signal_id in seen:
+            continue
+        seen.add(signal.signal_id)
+        signals.append(signal)
+    return tuple(signals)
+
+
+def _runtime_detector_composition(
+    runtime_detector_context: Mapping[str, object] | None,
+) -> dict[str, object] | None:
+    """Project the detector composition fields the resident's authority reads."""
+
+    composition = (runtime_detector_context or {}).get("composition")
+    if not isinstance(composition, Mapping):
+        return None
+    return {"action": composition.get("action"), "reason": composition.get("reason")}
+
+
+def _merge_risk_signals(
+    static_signals: tuple[RiskSignalV2, ...],
+    runtime_signals: tuple[RiskSignalV2, ...],
+) -> tuple[RiskSignalV2, ...]:
+    merged: list[RiskSignalV2] = []
+    seen: set[str] = set()
+    for signal in (*static_signals, *runtime_signals):
+        if signal.signal_id in seen:
+            continue
+        seen.add(signal.signal_id)
+        merged.append(signal)
+    return tuple(merged)
+
+
+def _scoring_inputs(signals: tuple[GuardSignal, ...], evidence_scoring: Mapping[str, object]) -> dict[str, object]:
+    """Scoring evidence the resident's current-action query reads: the typed
+    signals plus the delta, provenance and history evidence it projected."""
+
+    return {
+        "signals": [
+            {
+                "severity": int(signal.severity),
+                "confidence": float(signal.confidence),
+                "explanation": signal.explanation,
+                "family": signal.family,
+                "evidence_source": signal.evidence_source,
+            }
+            for signal in signals
+        ],
+        **evidence_scoring,
+    }
+
+
+_REMOVED_SCORING: dict[str, object] = {
+    "deltas": [],
+    "provenance_source_kind": "none",
+    "publisher_trust": "unknown",
+    "prior_approvals": 0,
+    "prior_incidents": 0,
+}
+
+
+def _runtime_fields(runtime: dict[str, object] | str) -> dict[str, object]:
+    """The composed answer, or why there is none; the resident presents both."""
+
+    if isinstance(runtime, str):
+        return {"runtime": None, "compose_error": runtime}
+    return {"runtime": runtime, "compose_error": None}
+
+
+def _record_outcome(store: GuardStore, harness: str, artifact_id: str, outcome: Mapping[str, Any], now: str) -> int:
+    store.add_receipt(build_receipt(harness=harness, artifact_id=artifact_id, **outcome["receipt"]))
+    if isinstance(outcome["event"], dict):
+        store.add_event("changed_artifact_caught", outcome["event"], now)
+    return 1
+
+
+def _persist_detected(
+    store: GuardStore,
+    harness: str,
+    artifact: GuardArtifact,
+    evidence: Mapping[str, Any],
+    snapshot: dict[str, object],
+    *,
+    policy_action: GuardAction,
+    approved: bool,
+    advance_snapshot: bool,
+    cache_provenance: bool,
+    now: str,
+) -> None:
+    current_hash = str(evidence["current_hash"])
+    store.record_inventory_artifact(
+        artifact=artifact,
+        artifact_hash=current_hash,
+        policy_action=policy_action,
+        changed=bool(evidence["changed"]),
+        now=now,
+        approved=approved,
+    )
+    store.save_artifact_capability(
+        harness=harness,
+        artifact_id=artifact.artifact_id,
+        capability_snapshot=evidence["capability_snapshot"],
+        now=now,
+    )
+    if cache_provenance:
+        store.upsert_provenance_cache(artifact_hash=current_hash, payload=evidence["provenance"], now=now)
+    if evidence["changed"]:
+        previous_hash = evidence["previous_hash"]
+        store.record_diff(
+            harness,
+            artifact.artifact_id,
+            list(evidence["changed_fields"]),
+            previous_hash if isinstance(previous_hash, str) else None,
+            current_hash,
+            now,
+        )
+    if advance_snapshot:
+        store.save_snapshot(
+            harness, artifact.artifact_id, {**snapshot, "artifact_hash": current_hash}, current_hash, now
+        )
+
+
+def detect_all(context: HarnessContext) -> list[HarnessDetection]:
+    """Run detection across all adapters."""
+
+    from ..adapters import list_adapters
+
+    return [adapter.detect(context) for adapter in list_adapters()]
+
+
+def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
+    """Detect a single harness."""
+
+    from ..adapters import get_adapter
+
+    return get_adapter(harness).detect(context)
+
+
+def evaluate_detection(
+    detection: HarnessDetection,
+    store: GuardStore,
+    config: GuardConfig,
+    default_action: str | None = None,
+    persist: bool = True,
+    trusted_request_overrides: Mapping[str, str] | None = None,
+    trusted_request_override_labels: Mapping[str, str] | None = None,
+    pending_approval_claims: list[tuple[Mapping[str, object], str, str]] | None = None,
+    claimed_saved_approval_overrides: Mapping[str, str] | None = None,
+    retained_saved_approval_overrides: Mapping[str, str] | None = None,
+    saved_approval_qualification_overrides: Mapping[str, Mapping[str, object]] | None = None,
+    runtime_detector_block_reason: str | None = None,
+    runtime_detector_context: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """Apply policy, generate diffs, and persist receipts for a harness."""
+
+    from ..native_context import bind_context_digest_home
+
+    # Some consumer entry points run against partial stores (tests, shims)
+    # that carry no guard_home; binding None is a valid no-op.
+    bind_context_digest_home(getattr(store, "guard_home", None))
+    workspace = _consumer_policy_workspace(config)
+    results: list[dict[str, object]] = []
+    blocked = False
+    receipts_recorded = 0
+    now = _now()
+    effective_default_action = default_action if _is_guard_action(default_action) else None
+    prior_receipts = store.count_receipts(detection.harness) if persist else 0
+    previous_snapshots = store.list_snapshots(detection.harness)
+    runtime_risk_signals_v2 = _runtime_detector_risk_signals(runtime_detector_context)
+    # The resident records a label only when the trusted request decided.
+    override_labels = dict(trusted_request_override_labels or {})
+    authority_inputs = _ConsumerAuthorityInputs(
+        store=store,
+        harness=detection.harness,
+        workspace=workspace,
+        now=now,
+        trusted_request_overrides=trusted_request_overrides or {},
+        claimed_saved_approval_overrides=claimed_saved_approval_overrides or {},
+        retained_saved_approval_overrides=retained_saved_approval_overrides or {},
+        saved_approval_qualification_overrides=saved_approval_qualification_overrides or {},
+        runtime_detector_composition=_runtime_detector_composition(runtime_detector_context),
+        runtime_detector_block_reason=runtime_detector_block_reason,
+        runtime_signals=[signal.to_dict() for signal in runtime_risk_signals_v2],
+        pending_approval_claims=pending_approval_claims,
+    )
+    current_artifact_ids: set[str] = set()
+    # Each hash is the approval key its artifact's saved decision is stored
+    # under, and the resident spells it. A scan asks for the harness's whole
+    # detection at once rather than crossing once per artifact.
+    content_hashes = {
+        artifact.artifact_id: digest
+        for artifact, digest in zip(
+            detection.artifacts,
+            native_artifact_content_hashes(detection.artifacts),
+            strict=True,
+        )
+    }
+    for artifact in detection.artifacts:
+        current_artifact_ids.add(artifact.artifact_id)
+        previous = previous_snapshots.get(artifact.artifact_id)
+        inventory_only = (
+            detection.harness == "codex"
+            and artifact.artifact_type == "skill"
+            and artifact.metadata.get("enabled") is False
+            and artifact.runtime_private_metadata.get("inventory_only") is True
+        )
+        current_snapshot = _serialize_artifact(artifact)
+        evidence = projection.artifact_evidence(
+            store,
+            artifact,
+            payload=current_snapshot,
+            content_hash=content_hashes[artifact.artifact_id],
+            previous=previous,
+            with_history=not inventory_only,
+        )
+        if inventory_only:
+            inventory_decision = build_authoritative_decision(
+                "allow",
+                reason="inventory_only",
+                composition_trace={"inventory_only": True},
+                authority_finalized=False,
+            )
+            if persist:
+                _persist_detected(
+                    store,
+                    detection.harness,
+                    artifact,
+                    evidence,
+                    current_snapshot,
+                    policy_action=inventory_decision.action,
+                    approved=False,
+                    advance_snapshot=True,
+                    cache_provenance=False,
+                    now=now,
+                )
+            results.append(
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "changed": evidence["changed"],
+                    "changed_fields": list(evidence["changed_fields"]),
+                    **inventory_decision.to_artifact_projection(),
+                    "artifact_hash": evidence["current_hash"],
+                    "artifact_type": artifact.artifact_type,
+                    "config_path": artifact.config_path,
+                    "source_scope": artifact.source_scope,
+                    "inventory_only": True,
+                }
+            )
+            continue
+        is_first_seen = evidence["first_seen"]
+        configured_action = config.resolve_action_override(
+            detection.harness,
+            artifact.artifact_id,
+            artifact.publisher,
+        )
+        artifact_risk = artifact_risk_profile(artifact)
+        structured_signals = artifact_risk.signals
+        risk_signals_v2 = _merge_risk_signals(artifact_risk.signals_v2, runtime_risk_signals_v2)
+        try:
+            low_trust = low_trust_floor(
+                getattr(store, "guard_home", None),
+                config,
+                harness=detection.harness,
+                artifact=artifact,
+                configured_action=configured_action,
+                fresh_decision=bool(is_first_seen or evidence["changed"]),
+            )
+        except NativeConsumerComposeError as error:
+            # The floor only ever strengthens an action, so an unanswered floor
+            # query is not "no floor": the artifact blocks unscored.
+            low_trust, low_trust_unavailable = None, error.code
+        else:
+            low_trust_unavailable = None
+        if low_trust is not None:
+            risk_signals_v2 = _merge_risk_signals(risk_signals_v2, (low_trust.signal,))
+        skill_directory_identity_reusable = _skill_directory_identity_reusable(
+            artifact_type=artifact.artifact_type,
+            metadata=artifact.metadata,
+        )
+        guard_default_action = artifact.metadata.get("guard_default_action")
+        if low_trust_unavailable is not None:
+            current = _compose_unavailable(low_trust_unavailable)
+        else:
+            current = _native_current_action(
+                store,
+                config,
+                composer=native_consumer_compose,
+                removed=False,
+                artifact_type=artifact.artifact_type,
+                configured_action=configured_action,
+                guard_default_action=guard_default_action if isinstance(guard_default_action, str) else None,
+                first_seen=is_first_seen,
+                changed=bool(evidence["changed"]),
+                effective_default_action=effective_default_action,
+                skill_directory_identity_reusable=skill_directory_identity_reusable,
+                scoring=_scoring_inputs(structured_signals, evidence["scoring"]),
+                low_trust_action=low_trust.action if low_trust is not None else None,
+            )
+        current_policy_action = cast(GuardAction, current["current_action"])
+        scanner_action = cast("GuardAction | None", current["scanner_action"])
+        verdict = cast("dict[str, Any] | None", current["verdict"])
+        approval_context_hash = _consumer_approval_context_token(
+            detection=detection,
+            artifact=artifact,
+            content_hash=str(evidence["current_hash"]),
+            capability_snapshot=evidence["capability_snapshot"],
+            config=config,
+            configured_action=configured_action,
+            effective_default_action=effective_default_action,
+            current_action=current_policy_action,
+            runtime_detector_context=runtime_detector_context,
+        )
+        runtime = _native_runtime_decision(
+            authority_inputs,
+            composer=native_consumer_compose,
+            artifact_id=artifact.artifact_id,
+            approval_context_hash=approval_context_hash,
+            publisher=artifact.publisher,
+            memory_command=artifact.command,
+            memory_artifact_type=artifact.artifact_type,
+            memory_artifact_name=artifact.name,
+            current_action=current_policy_action,
+            configured_action=configured_action,
+            scanner_action=scanner_action,
+            raw_scoring_recommendation=verdict["action"] if verdict is not None else None,
+            skill_directory_identity_reusable=skill_directory_identity_reusable,
+            compose_unavailable=current.get("compose_unavailable"),
+            decision_signals=risk_signals_v2,
+        )
+        outcome = projection.artifact_outcome(
+            store,
+            detection.harness,
+            artifact,
+            evidence,
+            verdict=verdict,
+            scanner_action=scanner_action,
+            configured_action=configured_action,
+            **_runtime_fields(runtime),
+            signals=[signal.to_dict() for signal in structured_signals],
+            decision_signals=[signal.to_dict() for signal in risk_signals_v2],
+            static_risk_summary=artifact_risk.summary if structured_signals else NO_RISK_SIGNAL_SUMMARY,
+            runtime_signals_present=bool(runtime_risk_signals_v2),
+            user_override=override_labels.get(artifact.artifact_id),
+            approval_context_hash=approval_context_hash,
+            effective_workspace=workspace,
+        )
+        blocked = blocked or outcome["blocking"] is True
+        if persist:
+            _persist_detected(
+                store,
+                detection.harness,
+                artifact,
+                evidence,
+                current_snapshot,
+                policy_action=outcome["policy_action"],
+                approved=outcome["snapshot_permitted"],
+                advance_snapshot=outcome["snapshot_permitted"],
+                cache_provenance=True,
+                now=now,
+            )
+            receipts_recorded += _record_outcome(store, detection.harness, artifact.artifact_id, outcome, now)
+        results.append(outcome["result"])
+    removed_artifact_ids = sorted(set(previous_snapshots) - current_artifact_ids)
+    for artifact_id in removed_artifact_ids:
+        previous = previous_snapshots[artifact_id]
+        recorded_hash = previous.get("artifact_hash")
+        previous_hash = recorded_hash if isinstance(recorded_hash, str) else "removed"
+        previous_publisher_value = previous.get("publisher")
+        previous_publisher = previous_publisher_value if isinstance(previous_publisher_value, str) else None
+        configured_action = config.resolve_action_override(
+            detection.harness,
+            artifact_id,
+            previous_publisher,
+        )
+        skill_directory_identity_reusable = _skill_directory_identity_reusable(
+            artifact_type=previous.get("artifact_type"),
+            metadata=previous.get("metadata"),
+        )
+        removed_current = _native_current_action(
+            store,
+            config,
+            composer=native_consumer_compose,
+            removed=True,
+            artifact_type=None,
+            configured_action=configured_action,
+            guard_default_action=None,
+            first_seen=False,
+            changed=True,
+            effective_default_action=effective_default_action,
+            skill_directory_identity_reusable=skill_directory_identity_reusable,
+            scoring=_scoring_inputs((), _REMOVED_SCORING),
+        )
+        current_policy_action = cast(GuardAction, removed_current["current_action"])
+        approval_context_hash = _removed_consumer_approval_context_token(
+            harness=detection.harness,
+            artifact_id=artifact_id,
+            previous=previous,
+            previous_hash=previous_hash,
+            config=config,
+            configured_action=configured_action,
+            effective_default_action=effective_default_action,
+            current_action=current_policy_action,
+            runtime_detector_context=runtime_detector_context,
+        )
+        previous_command_value = previous.get("command")
+        previous_artifact_type_value = previous.get("artifact_type")
+        previous_name_value = previous.get("name")
+        runtime = _native_runtime_decision(
+            authority_inputs,
+            composer=native_consumer_compose,
+            artifact_id=artifact_id,
+            approval_context_hash=approval_context_hash,
+            publisher=previous_publisher,
+            memory_command=previous_command_value if isinstance(previous_command_value, str) else None,
+            memory_artifact_type=(
+                previous_artifact_type_value if isinstance(previous_artifact_type_value, str) else None
+            ),
+            memory_artifact_name=previous_name_value if isinstance(previous_name_value, str) else None,
+            current_action=current_policy_action,
+            configured_action=configured_action,
+            # Removal has no artifact body to score. Keep the historical warn
+            # recommendation as diagnostic evidence, but do not claim it was
+            # an enforcement input.
+            scanner_action=None,
+            raw_scoring_recommendation="warn",
+            skill_directory_identity_reusable=skill_directory_identity_reusable,
+            compose_unavailable=removed_current.get("compose_unavailable"),
+            decision_signals=runtime_risk_signals_v2,
+        )
+        outcome = projection.removed_outcome(
+            store,
+            detection.harness,
+            artifact_id=artifact_id,
+            previous=dict(previous),
+            previous_hash=previous_hash,
+            configured_action=configured_action,
+            **_runtime_fields(runtime),
+            decision_signals=authority_inputs.runtime_signals,
+            user_override=override_labels.get(artifact_id),
+            approval_context_hash=approval_context_hash,
+            effective_workspace=workspace,
+        )
+        blocked = blocked or outcome["blocking"] is True
+        if persist:
+            store.mark_inventory_removed(
+                harness=detection.harness,
+                artifact_id=artifact_id,
+                policy_action=outcome["policy_action"],
+                artifact_hash=previous_hash,
+                now=now,
+            )
+            store.record_diff(
+                detection.harness,
+                artifact_id,
+                ["removed"],
+                recorded_hash if isinstance(recorded_hash, str) else None,
+                "removed",
+                now,
+            )
+            if outcome["snapshot_permitted"]:
+                store.delete_snapshot(detection.harness, artifact_id)
+            receipts_recorded += _record_outcome(store, detection.harness, artifact_id, outcome, now)
+        results.append(outcome["result"])
+    evaluation: dict[str, Any] = {
+        "harness": detection.harness,
+        "artifacts": results,
+        "blocked": blocked,
+        "receipts_recorded": receipts_recorded,
+    }
+    authority_error = native_authority_error(evaluation, require_launch_permitted=False)
+    if authority_error is not None:
+        raise RuntimeError(authority_error)
+    if persist and prior_receipts == 0 and receipts_recorded > 0:
+        store.add_event(
+            "first_protected_harness_session",
+            {
+                "harness": detection.harness,
+                "artifact_count": len(results),
+                "blocked": blocked,
+            },
+            now,
+        )
+    if persist:
+        from ..access_graph_events import queue_access_graph_snapshot
+
+        queue_access_graph_snapshot(
+            store=store,
+            detection=detection,
+            artifacts=results,
+            now=now,
+        )
+    return evaluation
+
+
+def record_policy(
+    store: GuardStore,
+    harness: str,
+    action: str,
+    scope: str,
+    artifact_id: str | None,
+    workspace: str | None,
+    publisher: str | None = None,
+    reason: str | None = None,
+    owner: str | None = None,
+    source: str = "local",
+    expires_at: str | None = None,
+    approval_gate_grant: ApprovalGateGrant | None = None,
+) -> dict[str, object]:
+    """Persist an allow or deny action."""
+
+    if not _is_guard_action(action):
+        raise ValueError(f"Invalid Guard action: {action}")
+    if not _is_decision_scope(scope):
+        raise ValueError(f"Invalid decision scope: {scope}")
+    decision = PolicyDecision(
+        harness=harness,
+        scope=scope,
+        action=action,
+        artifact_id=artifact_id,
+        artifact_hash=None,
+        workspace=workspace,
+        publisher=publisher,
+        reason=reason,
+        owner=owner,
+        source=source,
+        expires_at=expires_at,
+    )
+    store.upsert_policy(decision, _now(), approval_gate_grant=approval_gate_grant)
+    return decision.to_dict()
+
+
+def run_consumer_scan(
+    target: Path,
+    intended_harness: str | None = None,
+    options: ScanOptions | None = None,
+) -> dict[str, object]:
+    """Expose the consumer-mode scan contract."""
+
+    return build_consumer_mode_contract(target, intended_harness=intended_harness, options=options)

@@ -1,0 +1,5 @@
+{
+  "extension": "command.mcp-architecture-intelligence-platform",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "external"
+}

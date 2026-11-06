@@ -1,0 +1,373 @@
+#!/usr/bin/env python3
+"""Collect pytest once and emit deterministic duration-balanced shard files."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import sys
+import time
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Protocol, cast
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.pytest_duration_manifest import load_latest_duration_manifest, node_id_digest
+from scripts.ci.pytest_shard_resources import deadline_counts, deadline_family, resource_metadata
+from scripts.ci.test_inventory import build_inventory, build_suite_metrics, collect_test_items
+
+PLAN_SCHEMA_VERSION = 1
+UNKNOWN_NODE_DURATION_SECONDS = 1.0
+MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
+MAX_NODES_PER_AFFINITY_GROUP = 8
+# These assertions share one full, independently checked corpus evaluation.
+# Keep them in one process rather than paying the 51,000-case setup per shard.
+SINGLE_PROCESS_FILES = frozenset({"tests/test_guard_command_decision_diff.py"})
+# Listed functions share one fixture group; the file's remaining nodes share another.
+FIXTURE_GROUP_FUNCTIONS = {
+    "tests/test_native_offline_cache.py": frozenset(
+        {
+            "test_complete_export_import_and_cached_vs_uncached_enable",
+            "test_import_rejects_corruption_missing_wrong_release_and_traversal",
+        }
+    ),
+}
+SCHEDULING_ONLY_NODE_IDS = frozenset(
+    {
+        "tests/test_guard_command_decision_diff.py::test_fresh_process_report_is_environment_independent_and_bounded",
+        "tests/test_guard_continuation_contract.py::test_bounded_adapter_cancels_a_hung_worker_and_records_timeout",
+        "tests/test_guard_daemon_storage_liveness.py::"
+        "test_locked_storage_hook_burst_fails_safe_without_stranding_daemon",
+        "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
+        "test_listing_first_queue_page_with_100k_rows_stays_under_100ms",
+        "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
+        "test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows",
+        "tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::"
+        "test_resolving_one_request_with_100k_rows_stays_under_100ms",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-240-24]",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-480-two-client-24]",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-960-four-client-8]",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
+        "tests/test_guard_daemon_cli.py::TestDaemonStatusCommand::test_status_does_not_wait_for_guard_database_writer",
+        "tests/test_codex_hook_repair_native_binding.py::test_real_configured_hook_native_protection_commits_repair",
+        "tests/test_guard_js_lockfile_resolution_phase11.py::"
+        "test_representative_large_bun_lockfile_completes_within_scaled_budget",
+        "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
+        "tests/test_guard_cloud_review_runtime_recovery.py::"
+        "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
+        "tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources",
+        "tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker",
+        "tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills",
+        "tests/test_guard_surface_server.py::TestGuardSurfaceServer::"
+        "test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload",
+        "tests/test_guard_headless_daemon_api.py::test_supply_chain_package_firewall_paid_install_and_test_roundtrip",
+        "tests/test_guard_shim_intercept_proofs.py::test_daemon_package_shim_test_uses_projected_shell_profile_path",
+        "tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque",
+        "tests/test_guard_command_corpus.py::"
+        "test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences",
+        "tests/test_guard_policy_integrity.py::test_trust_backend_check_uses_spawn_from_concurrent_threads",
+        "tests/test_guard_daemon_stress_script.py::test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store",
+        "tests/test_guard_headless_daemon_api.py::test_supply_chain_audit_scans_workspace_manifests",
+        "tests/test_guard_update_artifact.py::"
+        "test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat",
+        "tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms",
+        "tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection",
+        "tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability",
+    }
+)
+# The benign and replay gates expect the Linux workspace sandbox. Coverage
+# deselects them; native-gates runs them with bubblewrap.
+SANDBOX_GATE_FILES = frozenset(
+    {
+        "tests/test_guard_benign_false_positive_gate.py",
+        "tests/test_guard_gauntlet_replay_gate.py",
+        "tests/test_guard_cli_hook_rpc_budget.py",
+    }
+)
+# This integration test needs two real engines and the historical Python client.
+# native-offline-upgrade owns it and is required by the aggregate check.
+NATIVE_OFFLINE_UPGRADE_FILES = frozenset({"tests/test_native_pack_offline_upgrade.py"})
+
+
+class _Arguments(Protocol):
+    shard_count: int
+    duration_manifest: list[Path]
+    max_manifest_age_days: int
+    output_directory: Path
+
+
+def node_file(node_id: str) -> str:
+    """Return and validate the repository-relative file that owns a pytest node."""
+
+    if "\n" in node_id or "\r" in node_id or "\x00" in node_id:
+        raise ValueError(f"invalid pytest node id: {node_id!r}")
+    path = node_id.split("::", maxsplit=1)[0]
+    if not path.startswith("tests/") or not path.endswith(".py"):
+        raise ValueError(f"invalid pytest node id: {node_id!r}")
+    return path
+
+
+def estimate_node_durations(node_ids: Sequence[str], durations: Mapping[str, float]) -> dict[str, float]:
+    """Map collected node IDs to current estimates with a conservative fallback."""
+
+    known = sorted(duration for node_id in node_ids if (duration := durations.get(node_id_digest(node_id), 0.0)) > 0)
+    fallback = max(
+        UNKNOWN_NODE_DURATION_SECONDS,
+        known[(len(known) - 1) // 2] if known else 0.0,
+    )
+    parameter_counts: dict[str, int] = defaultdict(int)
+    for node_id in node_ids:
+        if "[" in node_id:
+            parameter_counts[node_id.split("[", maxsplit=1)[0]] += 1
+    estimates: dict[str, float] = {}
+    for node_id in node_ids:
+        duration = durations.get(node_id_digest(node_id))
+        if duration is None and "[" in node_id:
+            # Splitting one long corpus loop must help on the very first run;
+            # its previous unsplit duration is evidence for the new parameters.
+            parent = node_id.split("[", maxsplit=1)[0]
+            parent_duration = durations.get(node_id_digest(parent))
+            if parent_duration is not None:
+                duration = parent_duration / parameter_counts[parent]
+        estimates[node_id] = fallback if duration is None else float(duration)
+    return estimates
+
+
+def _split_file_nodes(
+    file_path: str,
+    node_ids: Sequence[str],
+    estimates: Mapping[str, float],
+    target_seconds: float,
+) -> list[tuple[str, int, list[str], float]]:
+    """Keep shared fixtures in one process while splitting other large modules."""
+    total = sum(estimates[node_id] for node_id in node_ids)
+    if file_path in SINGLE_PROCESS_FILES:
+        return [(file_path, 0, sorted(node_ids), total)]
+    fixture_functions = FIXTURE_GROUP_FUNCTIONS.get(file_path)
+    if fixture_functions is not None:
+        groups: list[list[str]] = [[], []]
+        for node_id in node_ids:
+            function = node_id.split("::", maxsplit=1)[-1].split("[", maxsplit=1)[0]
+            groups[0 if function in fixture_functions else 1].append(node_id)
+        return [
+            (file_path, index, sorted(nodes), sum(estimates[node] for node in nodes))
+            for index, nodes in enumerate(groups)
+            if nodes
+        ]
+    split_count = math.ceil(len(node_ids) / MAX_NODES_PER_AFFINITY_GROUP)
+    if total > target_seconds * MAX_UNSPLIT_FILE_TARGET_MULTIPLIER:
+        split_count = max(split_count, math.ceil(total / target_seconds))
+    split_count = min(len(node_ids), max(1, split_count))
+
+    chunks: list[list[str]] = [[] for _ in range(split_count)]
+    loads = [0.0] * split_count
+    for node_id in sorted(node_ids, key=lambda node: (-estimates[node], node)):
+        eligible = [
+            index
+            for index, chunk in enumerate(chunks)
+            if len(chunk) < MAX_NODES_PER_AFFINITY_GROUP
+            and (not chunk or split_count == 1 or loads[index] + estimates[node_id] <= target_seconds)
+        ]
+        if eligible:
+            index = min(eligible, key=lambda item: (loads[item], item))
+        else:
+            # ceil(total / target) is only a lower bound on the bins needed:
+            # e.g. 47, 47, 41 cannot fit in two bins with a 75-second target.
+            # An individually oversized node may occupy one bin by itself.
+            index = len(chunks)
+            chunks.append([])
+            loads.append(0.0)
+        chunks[index].append(node_id)
+        loads[index] += estimates[node_id]
+
+    return [(file_path, index, sorted(chunk), loads[index]) for index, chunk in enumerate(chunks) if chunk]
+
+
+def build_affinity_node_shards(
+    node_ids: Sequence[str],
+    shard_count: int,
+    durations: Mapping[str, float],
+) -> tuple[list[list[str]], list[float]]:
+    """Balance traced tests, leaving exact timing contracts to their dedicated job."""
+
+    # A timing contract that is deselected during coverage execution must never
+    # own an otherwise empty shard or contribute phantom time to its estimate.
+    nodes = [
+        node_id
+        for node_id in node_ids
+        if node_id not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("::", maxsplit=1)[0] not in SANDBOX_GATE_FILES
+        and node_id.split("::", maxsplit=1)[0] not in NATIVE_OFFLINE_UPGRADE_FILES
+    ]
+    if shard_count < 1:
+        raise ValueError("shard_count must be positive")
+    if shard_count > len(nodes):
+        raise ValueError("shard_count cannot exceed the number of test nodes")
+    if len(nodes) != len(set(nodes)):
+        raise ValueError("test node ids must be unique")
+
+    estimates = estimate_node_durations(nodes, durations)
+    target_seconds = sum(estimates.values()) / shard_count
+    by_file: dict[str, list[str]] = defaultdict(list)
+    for node_id in nodes:
+        by_file[node_file(node_id)].append(node_id)
+
+    groups: list[tuple[str, int, list[str], float]] = []
+    for file_path, file_nodes in sorted(by_file.items()):
+        groups.extend(_split_file_nodes(file_path, file_nodes, estimates, target_seconds))
+
+    shards: list[list[str]] = [[] for _ in range(shard_count)]
+    loads = [0.0] * shard_count
+    for file_path, group_index, group_nodes, group_load in sorted(
+        groups,
+        key=lambda group: (-group[3], group[0], group[1]),
+    ):
+        _ = file_path, group_index
+        shard_index = min(range(shard_count), key=lambda index: (loads[index], index))
+        shards[shard_index].extend(group_nodes)
+        loads[shard_index] += group_load
+
+    if any(not shard for shard in shards):
+        raise ValueError("every pytest shard must contain at least one test node")
+    for shard in shards:
+        shard.sort()
+
+    flattened = [node_id for shard in shards for node_id in shard]
+    if len(flattened) != len(nodes) or set(flattened) != set(nodes):
+        raise ValueError("pytest shard plan must cover every collected node exactly once")
+    return shards, loads
+
+
+def build_coverage_node_shards(
+    node_ids: Sequence[str], shard_count: int, durations: Mapping[str, float]
+) -> tuple[list[list[str]], list[float]]:
+    """Reserve the last existing job for fixed deadlines, retaining coverage."""
+    if shard_count < 3:
+        raise ValueError("deadline isolation needs at least three existing shards")
+    if len(node_ids) != len(set(node_ids)):
+        raise ValueError("test node ids must be unique")
+    for node in node_ids:
+        node_file(node)
+    isolated = sorted(node for node in node_ids if deadline_family(node))
+    if not all(deadline_counts(isolated).values()):
+        raise ValueError("every deadline-sensitive selector family must collect at least one node")
+    ordinary = [node for node in node_ids if deadline_family(node) is None]
+    shards, loads = build_affinity_node_shards(ordinary, shard_count - 1, durations)
+    estimates = estimate_node_durations(node_ids, durations)
+    shards.append(isolated)
+    loads.append(sum(estimates[node] for node in isolated))
+    # Validate both the policy and exact ownership, including duplicate inputs.
+    resource_metadata(shards)
+    return shards, loads
+
+
+def write_shard_plan(
+    output_directory: Path,
+    *,
+    shards: Sequence[Sequence[str]],
+    estimated_loads: Sequence[float],
+    manifest_used: bool,
+    deadline_isolation: bool = False,
+) -> None:
+    """Write one response file per shard plus reviewable plan metadata."""
+
+    if len(shards) != len(estimated_loads) or not shards:
+        raise ValueError("shards and estimated loads must be non-empty and aligned")
+    output_directory.mkdir(parents=True, exist_ok=True)
+    # Keep a stable minimum width at every matrix size, matching printf %03d.
+    # Both formatters naturally expand for indices larger than three digits.
+    width = 3
+    for index, shard in enumerate(shards):
+        path = output_directory / f"shard-{index:0{width}d}.txt"
+        path.write_text("\n".join(shard) + "\n", encoding="utf-8")
+
+    metadata = {
+        "schema_version": PLAN_SCHEMA_VERSION,
+        "shard_count": len(shards),
+        "node_count": sum(len(shard) for shard in shards),
+        "duration_manifest_used": manifest_used,
+        "estimated_load_seconds": [round(load, 6) for load in estimated_loads],
+        "node_counts": [len(shard) for shard in shards],
+        "file_counts": [len({node_file(node_id) for node_id in shard}) for shard in shards],
+    }
+    if deadline_isolation:
+        metadata["execution_policy"] = resource_metadata(shards)
+    (output_directory / "plan.json").write_text(
+        json.dumps(metadata, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _load_current_durations(paths: Sequence[Path], max_age_days: int) -> tuple[dict[str, float], bool]:
+    try:
+        durations, selected_path = load_latest_duration_manifest(
+            paths,
+            now=datetime.now(timezone.utc),
+            max_age=timedelta(days=max_age_days),
+        )
+        print(f"pytest duration evidence: {selected_path}", file=sys.stderr)
+        return durations, True
+    except (OSError, ValueError) as exc:
+        print(
+            f"pytest duration manifest unavailable; using deterministic equal-weight planning: {exc}",
+            file=sys.stderr,
+        )
+        return {}, False
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    _ = parser.add_argument("--shard-count", type=int, required=True)
+    _ = parser.add_argument("--duration-manifest", type=Path, action="append", required=True)
+    _ = parser.add_argument("--max-manifest-age-days", type=int, default=28)
+    _ = parser.add_argument("--output-directory", type=Path, required=True)
+    args = cast(_Arguments, cast(object, parser.parse_args()))
+
+    root = Path(__file__).resolve().parents[2]
+    durations, manifest_used = _load_current_durations(
+        args.duration_manifest,
+        args.max_manifest_age_days,
+    )
+    collection_started = time.monotonic()
+    items = collect_test_items(root, validate_invariants=True)
+    nodes = sorted(item.nodeid for item in items)
+    markers = {item.nodeid: tuple(marker.name for marker in item.iter_markers()) for item in items}
+    inventory = build_inventory(nodes, markers)
+    collection_seconds = time.monotonic() - collection_started
+    shards, loads = build_coverage_node_shards(nodes, args.shard_count, durations)
+    write_shard_plan(
+        args.output_directory,
+        shards=shards,
+        estimated_loads=loads,
+        manifest_used=manifest_used,
+        deadline_isolation=True,
+    )
+    (args.output_directory / "test-inventory.json").write_text(
+        json.dumps(asdict(build_suite_metrics(root, inventory)), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(
+        json.dumps(
+            {
+                "shards": len(shards),
+                "nodes": len(nodes),
+                "collection_seconds": round(collection_seconds, 3),
+                "manifest_used": manifest_used,
+                "estimated_min_seconds": round(min(loads), 3),
+                "estimated_max_seconds": round(max(loads), 3),
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

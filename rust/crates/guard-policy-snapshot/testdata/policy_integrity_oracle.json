@@ -1,0 +1,120 @@
+{
+ "cases": [
+  {
+   "branches": {
+    "degraded": "degraded_mode",
+    "tampered": "tampered",
+    "valid": "valid",
+    "wrong_gen": "rollback_detected",
+    "wrong_key_id": "unknown_key"
+   },
+   "canonical_b64": "7b22616374696f6e223a22616c6c6f77222c2261727469666163745f68617368223a2261616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161222c2261727469666163745f6964223a22636f6d2e686f6c3a617070222c226465636973696f6e5f6964223a312c22657870697265735f6174223a22323039392d30312d30315430303a30303a30302b30303a3030222c226861726e657373223a22636f646578222c22696e746567726974795f67656e65726174696f6e223a372c22696e746567726974795f76657273696f6e223a322c226f776e6572223a22616c696365222c227075626c6973686572223a22686f6c222c22726561736f6e223a22617070726f76656420696e20726576696577222c2273636f7065223a226172746966616374222c22736f75726365223a22617070726f76616c2d67617465222c22757064617465645f6174223a22323032362d30392d33305431323a30303a30312b30303a3030222c22776f726b7370616365223a222f77732f6f6e65227d",
+   "name": "row0",
+   "row": {
+    "action": "allow",
+    "artifact_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "com.hol:app",
+    "created_at": "2026-09-30T12:00:00+00:00",
+    "decision_id": 1,
+    "expires_at": "2099-01-01T00:00:00+00:00",
+    "harness": "codex",
+    "owner": "alice",
+    "publisher": "hol",
+    "reason": "approved in review",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "updated_at": "2026-09-30T12:00:01+00:00",
+    "workspace": "/ws/one"
+   },
+   "signature": {
+    "integrity_generation": 7,
+    "integrity_key_id": "policy-key-1",
+    "integrity_version": 2,
+    "payload_hash": "91c25266a7bc594b8f5bfbeac35cbc77e26d755d881153ef90df7f7858453f31",
+    "payload_mac": "3999d007d65d41664dd2953f359aba4bfed9d81ffb5fd02cacb8412548a392ed",
+    "signed_at": "2026-10-01T00:00:00+00:00"
+   },
+   "signed": {
+    "action": "allow",
+    "artifact_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_id": "com.hol:app",
+    "created_at": "2026-09-30T12:00:00+00:00",
+    "decision_id": 1,
+    "expires_at": "2099-01-01T00:00:00+00:00",
+    "harness": "codex",
+    "integrity_generation": 7,
+    "integrity_key_id": "policy-key-1",
+    "integrity_version": 2,
+    "owner": "alice",
+    "payload_hash": "91c25266a7bc594b8f5bfbeac35cbc77e26d755d881153ef90df7f7858453f31",
+    "payload_mac": "3999d007d65d41664dd2953f359aba4bfed9d81ffb5fd02cacb8412548a392ed",
+    "publisher": "hol",
+    "reason": "approved in review",
+    "scope": "artifact",
+    "signed_at": "2026-10-01T00:00:00+00:00",
+    "source": "approval-gate",
+    "updated_at": "2026-09-30T12:00:01+00:00",
+    "workspace": "/ws/one"
+   }
+  },
+  {
+   "branches": {
+    "degraded": "degraded_mode",
+    "tampered": "tampered",
+    "valid": "valid",
+    "wrong_gen": "rollback_detected",
+    "wrong_key_id": "unknown_key"
+   },
+   "canonical_b64": "7b22616374696f6e223a22616c6c6f77222c2261727469666163745f68617368223a6e756c6c2c2261727469666163745f6964223a6e756c6c2c226465636973696f6e5f6964223a322c22657870697265735f6174223a6e756c6c2c226861726e657373223a22636c61756465222c22696e746567726974795f67656e65726174696f6e223a372c22696e746567726974795f76657273696f6e223a322c226f776e6572223a6e756c6c2c227075626c6973686572223a6e756c6c2c22726561736f6e223a225c75303066635c75303066315c75303065655c75303065375c7530306638645c7530306539205c7532363033222c2273636f7065223a22776f726b7370616365222c22736f75726365223a226c6f63616c222c22757064617465645f6174223a22323032362d30312d30315430303a30303a30322b30303a3030222c22776f726b7370616365223a6e756c6c7d",
+   "name": "row1",
+   "row": {
+    "action": "allow",
+    "artifact_hash": null,
+    "artifact_id": null,
+    "created_at": "2026-01-01T00:00:00+00:00",
+    "decision_id": 2,
+    "expires_at": null,
+    "harness": "claude",
+    "owner": null,
+    "publisher": null,
+    "reason": "\u00fc\u00f1\u00ee\u00e7\u00f8d\u00e9 \u2603",
+    "scope": "workspace",
+    "source": "local",
+    "updated_at": "2026-01-01T00:00:02+00:00",
+    "workspace": null
+   },
+   "signature": {
+    "integrity_generation": 7,
+    "integrity_key_id": "policy-key-1",
+    "integrity_version": 2,
+    "payload_hash": "30a3c9d5558acb2dad547486ead371fc18c5db5490ba3f8c57e3a94c67e59118",
+    "payload_mac": "c88581143a2b8cdb1a893b4798a147ff93a58a077f8acd5ed2d9595434131778",
+    "signed_at": "2026-10-01T00:00:00+00:00"
+   },
+   "signed": {
+    "action": "allow",
+    "artifact_hash": null,
+    "artifact_id": null,
+    "created_at": "2026-01-01T00:00:00+00:00",
+    "decision_id": 2,
+    "expires_at": null,
+    "harness": "claude",
+    "integrity_generation": 7,
+    "integrity_key_id": "policy-key-1",
+    "integrity_version": 2,
+    "owner": null,
+    "payload_hash": "30a3c9d5558acb2dad547486ead371fc18c5db5490ba3f8c57e3a94c67e59118",
+    "payload_mac": "c88581143a2b8cdb1a893b4798a147ff93a58a077f8acd5ed2d9595434131778",
+    "publisher": null,
+    "reason": "\u00fc\u00f1\u00ee\u00e7\u00f8d\u00e9 \u2603",
+    "scope": "workspace",
+    "signed_at": "2026-10-01T00:00:00+00:00",
+    "source": "local",
+    "updated_at": "2026-01-01T00:00:02+00:00",
+    "workspace": null
+   }
+  }
+ ],
+ "key_hex": "706f6c6963792d696e746567726974792d6b65792d30313233343536373839616263646566",
+ "key_id": "policy-key-1"
+}

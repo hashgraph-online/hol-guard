@@ -1,0 +1,187 @@
+{
+  "activeProtectionChanged": false,
+  "binaryIdentityVerified": false,
+  "coverageMeaning": "Enumerated metadata only; not a security certification or proof of runtime completeness.",
+  "discoveredOperations": 14,
+  "discoveryDigest": "9d45c23fb67c15f7a6c1d3568246e6b5a22350b36fe9ebd885310b0dd415a353",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "operations": [
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-8e8b572b7a914ce1",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "check_connection",
+      "untrustedHints": [
+        "network-hint",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-5f6fe9f8dd346786",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "continue_email_thread",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-5e656fb2455234f9",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "delete_message",
+      "untrustedHints": [
+        "destructive-hint",
+        "destructive-name",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-a8529ad07b15b766",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "delete_messages",
+      "untrustedHints": [
+        "destructive-hint",
+        "destructive-name",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-2895a1ad3cd9458e",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "find_unreplied_messages",
+      "untrustedHints": [
+        "network-hint",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-9e5026b7679eff23",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_message",
+      "untrustedHints": [
+        "network-hint",
+        "read-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-4da5ab6b72564e5b",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "get_messages",
+      "untrustedHints": [
+        "network-hint",
+        "read-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-c74f93899985530e",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "list_mailboxes",
+      "untrustedHints": [
+        "network-hint",
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-2bf45e47cbc3de63",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "move_message",
+      "untrustedHints": [
+        "destructive-hint",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-5ea65a010d5012d5",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "move_messages",
+      "untrustedHints": [
+        "destructive-hint",
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-733bdd3564088076",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "reply_to_email",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-5936686265c85ef4",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "save_attachment",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-331c6012c4333529",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "search_messages",
+      "untrustedHints": [
+        "network-hint",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-a1ceb71dd9160bb9",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "send_email",
+      "untrustedHints": [
+        "network-hint"
+      ]
+    }
+  ],
+  "reviewedOperations": 14,
+  "revisionDigest": "e465bfa68d7c4f12bbd6417705ab9fdd4fa9b036c6f17ddda8d87067ef382e66",
+  "schemaVersion": "guard.extension-coverage-report.v1",
+  "unknownOperationBehavior": "inherit",
+  "upstreamVersion": "2.1.0"
+}

@@ -1,0 +1,492 @@
+use super::command_prefix_split;
+
+fn words(command: &[&str]) -> Vec<String> {
+    command.iter().map(|word| (*word).to_string()).collect()
+}
+
+fn split(command: &[&str], drop_data: bool) -> (Vec<String>, Vec<(String, String)>) {
+    let command = words(command);
+    let (index, assignments, _dropped) = command_prefix_split(&command, drop_data);
+    (command[index..].to_vec(), assignments)
+}
+
+/// Whether the peel dropped a setting rather than carrying it.
+fn dropped(command: &[&str], drop_data: bool) -> bool {
+    let command = words(command);
+    command_prefix_split(&command, drop_data).2
+}
+
+#[test]
+fn an_inert_assignment_is_carried_off_the_front() {
+    let (core, carried) = split(&["CI=1", "pytest", "-q"], false);
+
+    assert_eq!(core, words(&["pytest", "-q"]));
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_localisation_setting_is_carried_by_its_prefix() {
+    let (core, carried) = split(&["LC_ALL=C", "pytest"], false);
+
+    assert_eq!(core, words(&["pytest"]));
+    assert_eq!(carried, vec![("LC_ALL".to_string(), "C".to_string())]);
+}
+
+#[test]
+fn a_transparent_prefix_hands_back_the_program_behind_it() {
+    let (core, carried) = split(&["command", "bun", "run", "build"], false);
+
+    assert_eq!(core, words(&["bun", "run", "build"]));
+    assert!(carried.is_empty());
+}
+
+#[test]
+fn an_env_prefix_carries_the_setting_it_spells() {
+    let (core, carried) = split(&["/usr/bin/env", "CI=1", "pytest", "-q"], false);
+
+    assert_eq!(core, words(&["pytest", "-q"]));
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_bare_env_keeps_its_own_spelling() {
+    let (core, carried) = split(&["env", "pytest"], false);
+
+    assert_eq!(core, words(&["env", "pytest"]));
+    assert!(carried.is_empty());
+}
+
+#[test]
+fn an_option_keeps_the_prefix_in_place() {
+    let (core, _) = split(&["command", "-v", "pytest"], false);
+
+    assert_eq!(core, words(&["command", "-v", "pytest"]));
+}
+
+#[test]
+fn an_unfiltered_setting_leaves_the_prefix_in_place() {
+    let (core, carried) = split(&["env", "PYTHONPATH=/tmp/x", "pytest"], true);
+
+    assert_eq!(core, words(&["env", "PYTHONPATH=/tmp/x", "pytest"]));
+    assert!(carried.is_empty());
+}
+
+#[test]
+fn a_plain_data_setting_is_dropped_only_when_the_caller_asks() {
+    assert_eq!(
+        split(&["REPORT_DIR=/tmp/r", "pytest"], false).0,
+        words(&["REPORT_DIR=/tmp/r", "pytest"])
+    );
+    assert_eq!(
+        split(&["REPORT_DIR=/tmp/r", "pytest"], true).0,
+        words(&["pytest"])
+    );
+}
+
+#[test]
+fn a_dropped_setting_is_never_carried_into_the_run() {
+    let (core, carried) = split(&["REPORT_DIR=/tmp/r", "CI=1", "pytest"], true);
+
+    assert_eq!(core, words(&["pytest"]));
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_setting_the_run_would_receive_anyway_is_never_dropped() {
+    for name in [
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "NODE_PATH",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+    ] {
+        let written = format!("{name}=/tmp/x");
+        let (core, _) = split(&[written.as_str(), "pytest"], true);
+
+        assert_eq!(
+            core,
+            words(&[written.as_str(), "pytest"]),
+            "{name} moves the run"
+        );
+    }
+}
+
+#[test]
+fn a_value_opening_with_a_dash_is_not_plain_data() {
+    let (core, _) = split(&["REPORT=-rf", "pytest"], true);
+
+    assert_eq!(core, words(&["REPORT=-rf", "pytest"]));
+}
+
+#[test]
+fn a_value_the_shell_would_expand_is_not_plain_data() {
+    // The sink receives the words a shell already split, so a surviving `$`
+    // is a character the environment filter has no plain reading for.
+    let (core, _) = split(&["REPORT_DIR=$HOME/x", "pytest"], true);
+
+    assert_eq!(core, words(&["REPORT_DIR=$HOME/x", "pytest"]));
+}
+
+#[test]
+fn a_value_longer_than_its_budget_is_not_plain_data() {
+    let written = format!("REPORT={}", "a".repeat(513));
+    let (core, _) = split(&[written.as_str(), "pytest"], true);
+
+    assert_eq!(core, words(&[written.as_str(), "pytest"]));
+
+    let inside = format!("REPORT={}", "a".repeat(512));
+    assert_eq!(
+        split(&[inside.as_str(), "pytest"], true).0,
+        words(&["pytest"])
+    );
+}
+
+#[test]
+fn a_trailing_data_setting_is_kept_because_it_names_no_program() {
+    let (core, _) = split(&["REPORT_DIR=/tmp/r"], true);
+
+    assert_eq!(core, words(&["REPORT_DIR=/tmp/r"]));
+}
+
+#[test]
+fn a_word_the_shell_would_not_read_as_an_assignment_is_not_one() {
+    let (core, carried) = split(&["A-B=1", "pytest"], true);
+
+    assert_eq!(core, words(&["A-B=1", "pytest"]));
+    assert!(carried.is_empty());
+}
+
+#[test]
+fn stacked_prefixes_peel_down_to_the_program() {
+    let (core, carried) = split(
+        &[
+            "CI=1",
+            "command",
+            "env",
+            "NO_COLOR=1",
+            "bun",
+            "run",
+            "build",
+        ],
+        false,
+    );
+
+    assert_eq!(core, words(&["bun", "run", "build"]));
+    assert_eq!(
+        carried,
+        vec![
+            ("CI".to_string(), "1".to_string()),
+            ("NO_COLOR".to_string(), "1".to_string())
+        ]
+    );
+}
+
+#[test]
+fn a_later_write_of_one_name_is_the_value_the_run_receives() {
+    let (_, carried) = split(&["CI=1", "CI=0", "pytest"], false);
+
+    assert_eq!(carried.last(), Some(&("CI".to_string(), "0".to_string())));
+}
+
+#[test]
+fn an_empty_command_peels_nothing() {
+    let (core, carried) = split(&[], false);
+
+    assert!(core.is_empty());
+    assert!(carried.is_empty());
+}
+
+#[test]
+fn a_command_peeled_as_issued_reports_no_drop() {
+    assert!(!dropped(&["CI=1", "command", "pytest"], true));
+    assert!(!dropped(&["REPORT_DIR=/tmp/r", "pytest"], false));
+}
+
+#[test]
+fn a_dropped_setting_is_reported_wherever_it_stood() {
+    assert!(dropped(&["REPORT_DIR=/tmp/r", "pytest"], true));
+    assert!(dropped(&["env", "REPORT_DIR=/tmp/r", "pytest"], true));
+}
+
+#[test]
+fn a_refused_prefix_reports_no_drop_it_did_not_make() {
+    assert!(!dropped(
+        &["env", "REPORT_DIR=/tmp/r", "PYTHONPATH=/tmp/x", "pytest"],
+        true
+    ));
+}
+
+#[test]
+fn a_timing_prefix_hands_back_the_program_behind_it() {
+    assert_eq!(
+        split(&["time", "command", "bun", "test"], false).0,
+        words(&["bun", "test"])
+    );
+    assert_eq!(
+        split(&["LC_ALL=C", "time", "bun"], false).1,
+        vec![("LC_ALL".to_string(), "C".to_string())]
+    );
+}
+
+#[test]
+fn a_prefix_option_keeps_every_spelling_in_place() {
+    for command in [
+        ["command", "-p", "bun"].as_slice(),
+        ["time", "-p", "bun"].as_slice(),
+        ["env", "-i", "CI=1", "bun"].as_slice(),
+    ] {
+        let kept: Vec<&str> = command.to_vec();
+        assert_eq!(split(command, false).0, words(&kept), "{command:?}");
+    }
+}
+
+#[test]
+fn a_prefix_naming_no_program_stays_the_program_itself() {
+    assert_eq!(split(&["command"], false).0, words(&["command"]));
+}
+
+#[test]
+fn a_setting_that_steers_a_run_is_no_inert_assignment() {
+    let (core, carried) = split(&["NODE_OPTIONS=--require=x", "bun"], false);
+
+    assert_eq!(core, words(&["NODE_OPTIONS=--require=x", "bun"]));
+    assert!(carried.is_empty());
+}
+
+#[test]
+fn an_inert_node_options_value_is_carried_off_the_front() {
+    for value in ["--max-old-space-size=4096", "--experimental-vm-modules"] {
+        let setting = format!("NODE_OPTIONS={value}");
+        let (core, carried) = split(&[&setting, "npx", "jest", "--ci"], false);
+
+        assert_eq!(core, words(&["npx", "jest", "--ci"]), "{value}");
+        assert_eq!(
+            carried,
+            vec![("NODE_OPTIONS".to_string(), value.to_string())]
+        );
+    }
+    for value in [
+        "--import=x",
+        "--inspect",
+        "--max-old-space-size=4096 --require=x",
+    ] {
+        let setting = format!("NODE_OPTIONS={value}");
+        let (core, carried) = split(&[&setting, "npx", "jest"], true);
+
+        assert_eq!(core, words(&[&setting, "npx", "jest"]), "{value}");
+        assert!(carried.is_empty(), "{value}");
+    }
+}
+
+#[test]
+fn the_peel_stops_at_the_first_setting_it_cannot_carry() {
+    let (core, carried) = split(&["CI=1", "APP_FLAG=1", "bun"], false);
+
+    assert_eq!(core, words(&["APP_FLAG=1", "bun"]));
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_lone_inert_assignment_leaves_no_program_behind_it() {
+    let (core, carried) = split(&["CI=1"], false);
+
+    assert!(core.is_empty());
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_screened_tool_switch_is_carried_into_the_run() {
+    let (core, carried) = split(
+        &["ESLINT_USE_FLAT_CONFIG=false", "npx", "eslint", "."],
+        true,
+    );
+
+    assert_eq!(core, words(&["npx", "eslint", "."]));
+    assert_eq!(
+        carried,
+        vec![("ESLINT_USE_FLAT_CONFIG".to_string(), "false".to_string())]
+    );
+    assert!(!dropped(
+        &["ESLINT_USE_FLAT_CONFIG=false", "npx", "eslint", "."],
+        true
+    ));
+}
+
+#[test]
+fn a_tool_switch_is_carried_under_the_name_the_command_spelled() {
+    let (_, carried) = split(
+        &["eslint_use_flat_config=false", "npm", "run", "lint"],
+        true,
+    );
+
+    assert_eq!(
+        carried,
+        vec![("eslint_use_flat_config".to_string(), "false".to_string())]
+    );
+}
+
+#[test]
+fn a_screened_option_valued_switch_is_carried_rather_than_refused() {
+    let (core, carried) = split(&["PYTEST_ADDOPTS=-q", "pytest"], true);
+
+    assert_eq!(core, words(&["pytest"]));
+    assert_eq!(
+        carried,
+        vec![("PYTEST_ADDOPTS".to_string(), "-q".to_string())]
+    );
+}
+
+#[test]
+fn a_tool_setting_whose_value_failed_the_screen_stays_in_the_command() {
+    let (core, carried) = split(
+        &[
+            "CYPRESS_INSTALL_BINARY=https://example.test/c.zip",
+            "npm",
+            "test",
+        ],
+        false,
+    );
+
+    assert_eq!(
+        core,
+        words(&[
+            "CYPRESS_INSTALL_BINARY=https://example.test/c.zip",
+            "npm",
+            "test"
+        ])
+    );
+    assert!(carried.is_empty());
+}
+
+/// The review grants a read-only profile to a command whose only setting is
+/// plain data, on the reading that the launcher's environment filter drops it.
+/// A pattern in the value is still plain data — a shell never expands an
+/// assignment's value — so the peel here has to read it the same way. If it
+/// did not, the granted command would reach the planners with the assignment
+/// still in front of its program and be refused.
+#[test]
+fn a_pattern_in_a_data_value_is_dropped_like_any_other_data() {
+    for written in [
+        "REPORT_DIR=reports/*",
+        "JEST_PATTERN=src/**/*.test.ts",
+        "LOG_NAMESPACES=app:*,db:*",
+        "SUITES=unit,{api,web}",
+        "SHARD=shard-[12]",
+        "ONE_CHAR=a?c",
+    ] {
+        assert_eq!(
+            split(&[written, "pytest"], true).0,
+            words(&["pytest"]),
+            "{written} is data the read-only launcher drops"
+        );
+        assert!(
+            dropped(&[written, "pytest"], true),
+            "{written} is dropped rather than carried"
+        );
+    }
+}
+
+/// A value the shell or the run would act on stays in the command, pattern or
+/// not, so the planners judge the word rather than a run that lost it.
+#[test]
+fn a_pattern_never_widens_what_else_counts_as_data() {
+    for written in [
+        "NODE_PATH=lib/*",
+        "TMPDIR=/tmp/*",
+        "REPORT_DIR=-reports/*",
+        "REPORT_DIR=a;id",
+        "REPORT_DIR=a b",
+        "REPORT_DIR=$HOME/*",
+    ] {
+        assert_eq!(
+            split(&[written, "pytest"], true).0,
+            words(&[written, "pytest"]),
+            "{written} is not plain data"
+        );
+    }
+}
+
+#[test]
+fn a_dropped_word_forgets_what_the_prefix_carried_under_the_same_name() {
+    // The run reads the last assignment, so `NODE_OPTIONS=` is a command that
+    // starts Node with no options at all. The empty value is no inert
+    // `NODE_OPTIONS`, so the peel drops it as plain data; carrying the word in
+    // front of it would hand the run options the command had already cleared.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "NODE_OPTIONS=",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert!(carried.is_empty(), "{carried:?}");
+}
+
+#[test]
+fn a_carried_word_behind_a_dropped_one_is_still_the_value_the_run_reads() {
+    // Only the word in front of the drop is forgotten. A later assignment is
+    // the one the run reads, so the peel carries it.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "NODE_OPTIONS=",
+            "NODE_OPTIONS=--max-old-space-size=4096",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(
+        carried,
+        vec![(
+            "NODE_OPTIONS".to_string(),
+            "--max-old-space-size=4096".to_string()
+        )]
+    );
+}
+
+#[test]
+fn a_drop_behind_a_transparent_prefix_forgets_the_same_name() {
+    // The settings a transparent prefix holds are peeled by the same reading,
+    // so the shadow has to reach a name carried on an earlier round too.
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "env",
+            "NODE_OPTIONS=",
+            "CI=1",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(carried, vec![("CI".to_string(), "1".to_string())]);
+}
+
+#[test]
+fn a_drop_forgets_only_its_own_name() {
+    let (core, carried) = split(
+        &[
+            "NODE_OPTIONS=--no-warnings",
+            "REPORT_DIR=/tmp/r",
+            "node",
+            "--test",
+        ],
+        true,
+    );
+
+    assert_eq!(core, words(&["node", "--test"]));
+    assert_eq!(
+        carried,
+        vec![("NODE_OPTIONS".to_string(), "--no-warnings".to_string())]
+    );
+}

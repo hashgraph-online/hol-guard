@@ -1,0 +1,107 @@
+"""SQLite-backed local Guard persistence facade."""
+
+from __future__ import annotations
+
+# ruff: noqa: F401,F403,I001
+from .store_base import *
+from .store_base import (
+    SystemKeyringSecretStore,
+    _is_runtime_scoped_exact_match_key,
+    _runtime_scoped_exact_match_key,
+    runtime_tool_action_exact_match_context,
+    runtime_tool_action_portable_match_context,
+)
+from .store_approval_facade import StoreApprovalsMixin
+from .store_approval_queries import StoreApprovalQueriesMixin
+from .store_advisory_cache import StoreAdvisoryCacheMixin
+from .store_cloud_events import StoreCloudEventsMixin
+from .store_command_activity import StoreCommandActivityMixin
+from .store_command_activity_api import StoreCommandActivityApiMixin
+from .store_command_activity_lifecycle import StoreCommandActivityLifecycleMixin
+from .store_command_activity_maintenance import StoreCommandActivityMaintenanceMixin
+from .store_command_activity_privacy import StoreCommandActivityPrivacyMixin
+from .store_connection_schema import StoreConnectionSchemaMixin
+from .store_continuation import StoreContinuationMixin
+from .store_custom_extension_continuity import StoreCustomExtensionContinuityMixin
+from .store_event_receipts import StoreEventReceiptsMixin
+from .store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
+from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
+from .store_managed_controls_status import StoreManagedControlsStatusMixin
+from .store_local_cli import StoreLocalCliMixin
+from .store_local_cli_retention import StoreLocalCliRetentionMixin
+from .store_local_mcp import StoreLocalMcpMixin
+from .store_evidence_facade import StoreEvidenceMixin
+from .store_exact_cloud_review import StoreExactCloudReviewMixin
+from .store_inventory import StoreInventoryMixin
+from .store_policy_document import StorePolicyDocumentMixin
+from .store_review_event_outbox import StoreReviewEventOutboxMixin
+from .store_review_event_sequence_recovery import StoreReviewEventSequenceRecoveryMixin
+from .store_review_policy_memory import StoreReviewPolicyMemoryMixin
+from .store_native_decision_receipts import StoreNativeDecisionReceiptsMixin
+from .store_native_workspace_review import StoreNativeWorkspaceReviewMixin
+from .store_oauth import StoreOAuthConnectMixin
+from .store_portable_project_memory import StorePortableProjectMemoryMixin
+from .store_policy import StorePolicyMixin
+from .store_policy_integrity_backend import (
+    build_policy_integrity_secret_store as _build_policy_integrity_secret_store,
+)
+from .store_policy_integrity_runtime import StorePolicyIntegrityAdminMixin
+from .store_read_state import StoreReadStateMixin
+from .store_receipts import StoreReceiptsRuntimeMixin
+from .store_secret_policy_integrity import (
+    StoreSecretPolicyIntegrityMixin,
+    _POLICY_INTEGRITY_LOOKUP_UNSET,
+)
+from .store_sessions import StoreSessionsMixin
+from .store_storage_maintenance import StoreStorageMaintenanceMixin
+from .store_temporary_mcp import StoreTemporaryMcpMixin
+from .store_workflow_capabilities import StoreWorkflowCapabilitiesMixin
+from .store_workflow_capability_secret_control import StoreWorkflowCapabilitySecretControlMixin
+
+
+class GuardStore(
+    StoreSecretPolicyIntegrityMixin,
+    StoreWorkflowCapabilitySecretControlMixin,
+    StoreConnectionSchemaMixin,
+    StoreContinuationMixin,
+    StoreManagedControlsStatusMixin,
+    StoreExtensionControlAuthorityMixin,
+    StoreCustomExtensionContinuityMixin,
+    StoreLocalCliMixin,
+    StoreLocalCliRetentionMixin,
+    StoreLocalMcpMixin,
+    StoreCommandActivityMixin,
+    StoreCommandActivityApiMixin,
+    StoreCommandActivityLifecycleMixin,
+    StoreCommandActivityMaintenanceMixin,
+    StoreCommandActivityPrivacyMixin,
+    StoreStorageMaintenanceMixin,
+    StoreInventoryMixin,
+    StorePortableProjectMemoryMixin,
+    StorePolicyMixin,
+    StoreReviewPolicyMemoryMixin,
+    StorePolicyIntegrityAdminMixin,
+    StoreCloudEventsMixin,
+    StoreAdvisoryCacheMixin,
+    StoreReceiptsRuntimeMixin,
+    StoreApprovalQueriesMixin,
+    StoreApprovalsMixin,
+    StoreExactCloudReviewMixin,
+    StoreReviewEventOutboxMixin,
+    StoreExactCloudLocalOnceMixin,
+    StoreReviewEventSequenceRecoveryMixin,
+    StoreEventReceiptsMixin,
+    StoreNativeDecisionReceiptsMixin,
+    StoreNativeWorkspaceReviewMixin,
+    StoreOAuthConnectMixin,
+    StoreSessionsMixin,
+    StoreEvidenceMixin,
+    StorePolicyDocumentMixin,
+    StoreReadStateMixin,
+    StoreTemporaryMcpMixin,
+    StoreWorkflowCapabilitiesMixin,
+):
+    """Local SQLite store for Guard state."""
+
+
+__all__ = tuple(name for name in globals() if not (name.startswith("__") and name.endswith("__")))

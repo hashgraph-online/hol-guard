@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "description": "Expected Guard decisions for all red-team fixtures. Used by the red-team test runner.",
+  "fixtures": {
+    "canary-exfil.py": {
+      "fixture_id": "T604",
+      "expected_decision": "block",
+      "expected_detectors": ["secret_content_generic", "data_flow_exfil"],
+      "benign": false
+    },
+    "canary-exfil-encoded.py": {
+      "fixture_id": "T605",
+      "expected_decision": "block",
+      "expected_detectors": ["data_flow_exfil"],
+      "benign": false
+    },
+    "malicious-prompt-env-read.md": {
+      "fixture_id": "T629",
+      "expected_decision": "block",
+      "expected_detectors": ["secret_path_direct", "data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "prompt"
+    },
+    "malicious-prompt-npmrc-read.md": {
+      "fixture_id": "T630",
+      "expected_decision": "block",
+      "expected_detectors": ["secret_path_direct", "data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "prompt"
+    },
+    "malicious-prompt-guard-bypass.md": {
+      "fixture_id": "T631",
+      "expected_decision": "block",
+      "expected_detectors": ["prompt_injection_override", "prompt_stealth"],
+      "benign": false,
+      "fixture_type": "prompt"
+    },
+    "malicious-mcp-delete.md": {
+      "fixture_id": "T632",
+      "expected_decision": "block",
+      "expected_detectors": ["shell_destructive_command"],
+      "benign": false,
+      "fixture_type": "mcp"
+    },
+    "malicious-mcp-secret-read.md": {
+      "fixture_id": "T633",
+      "expected_decision": "block",
+      "expected_detectors": ["secret_path_direct", "data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "mcp"
+    },
+    "malicious-mcp-skill-exfil.md": {
+      "fixture_id": "T634",
+      "expected_decision": "block",
+      "expected_detectors": ["data_flow_exfil", "secret_content_bearer"],
+      "benign": false,
+      "fixture_type": "mcp"
+    },
+    "malicious-npm-postinstall.js": {
+      "fixture_id": "T635",
+      "expected_decision": "block",
+      "expected_detectors": ["secret_path_direct", "data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "package"
+    },
+    "malicious-python-setup.py": {
+      "fixture_id": "T636",
+      "expected_decision": "block",
+      "expected_detectors": ["secret_path_direct", "data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "package"
+    },
+    "malicious-dockerfile.txt": {
+      "fixture_id": "T637",
+      "expected_decision": "block",
+      "expected_detectors": ["secret_path_direct", "data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "infra"
+    },
+    "malicious-github-action.yml": {
+      "fixture_id": "T638",
+      "expected_decision": "block",
+      "expected_detectors": ["data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "infra"
+    },
+    "malicious-encoded-shell-exfil.py": {
+      "fixture_id": "T639",
+      "expected_decision": "block",
+      "expected_detectors": ["data_flow_exfil"],
+      "benign": false,
+      "fixture_type": "encoded"
+    },
+    "benign-source-search.py": {
+      "fixture_id": "T640",
+      "expected_decision": "allow",
+      "expected_detectors": [],
+      "benign": true
+    },
+    "benign-health-endpoint.py": {
+      "fixture_id": "T641",
+      "expected_decision": "allow",
+      "expected_detectors": [],
+      "benign": true
+    },
+    "benign-docs-fake-token.py": {
+      "fixture_id": "T642",
+      "expected_decision": "allow",
+      "expected_detectors": [],
+      "benign": true
+    },
+    "benign-nvmrc-fake-creds.py": {
+      "fixture_id": "T643",
+      "expected_decision": "allow",
+      "expected_detectors": [],
+      "benign": true
+    }
+  }
+}

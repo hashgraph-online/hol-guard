@@ -1,0 +1,111 @@
+"""Tests for runtime harness attribution (Cursor vs Claude Code hooks)."""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.runtime.harness_attribution import (
+    cursor_hook_query_extras,
+    cursor_runtime_detected,
+    origin_harness_env,
+    resolve_environment_harness,
+    resolve_runtime_hook_harness,
+)
+from tests.conftest import guard_commands_module
+
+
+def test_cursor_runtime_detected_from_cursor_env() -> None:
+    assert cursor_runtime_detected({"CURSOR_VERSION": "2.0.0"}) is True
+    assert cursor_runtime_detected({}) is False
+
+
+def test_resolve_runtime_hook_harness_maps_claude_to_cursor_in_cursor() -> None:
+    env = {"CURSOR_VERSION": "2.0.0", "CURSOR_PROJECT_DIR": "/tmp/project"}
+    assert resolve_runtime_hook_harness("claude-code", env=env) == "cursor"
+    assert resolve_runtime_hook_harness("opencode", env=env) == "opencode"
+
+
+def test_cursor_hook_query_extras_includes_runtime_harness_and_workspace() -> None:
+    extras = cursor_hook_query_extras(
+        {"CURSOR_VERSION": "1.2.3", "CURSOR_PROJECT_DIR": "/Users/me/repo"},
+    )
+    assert extras == {"runtime-harness": "cursor", "workspace": "/Users/me/repo"}
+
+
+def test_resolve_environment_harness_matches_each_runtime_family() -> None:
+    assert resolve_environment_harness({"ZCODE_ENV": "production"}) == "zcode"
+    assert resolve_environment_harness({"ZCODE_APP_VERSION": "3.10.2"}) == "zcode"
+    assert resolve_environment_harness({"__CFBundleIdentifier": "dev.zcode.app"}) == "zcode"
+    assert resolve_environment_harness({"CLAUDECODE": "1"}) == "claude-code"
+    assert resolve_environment_harness({"CLAUDE_CODE_ENTRYPOINT": "cli"}) == "claude-code"
+    assert resolve_environment_harness({"CURSOR_TRACE_ID": "trace-1"}) == "cursor"
+    assert resolve_environment_harness({"CODEX_SANDBOX": "1"}) == "codex"
+    assert resolve_environment_harness({"CODEX_THREAD_ID": "thread-1"}) == "codex"
+    assert resolve_environment_harness({"CODEX_HOME": "/tmp/codex-home"}) is None
+    assert resolve_environment_harness({"GROK_AGENT": "1"}) == "grok"
+    assert resolve_environment_harness({"GROK_SESSION_ID": "session-1"}) == "grok"
+    assert resolve_environment_harness({"GROK_HOME": "/tmp/grok-home"}) is None
+    assert resolve_environment_harness({"OPENCODE_CONFIG_CONTENT": "{}"}) == "opencode"
+    assert resolve_environment_harness({"OPENCODE_CONFIG": "/tmp/opencode.json"}) is None
+    assert resolve_environment_harness({"DEVIN_PROJECT_DIR": "/workspace/project"}) == "devin"
+    assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "grok"}) == "grok"
+    assert resolve_environment_harness({"HOL_GUARD_ORIGIN_HARNESS": "guard-cli"}) is None
+    assert origin_harness_env("grok") == {"HOL_GUARD_ORIGIN_HARNESS": "grok"}
+    assert origin_harness_env("guard-cli") == {}
+    assert origin_harness_env("unknown") == {}
+
+
+def test_resolve_environment_harness_ignores_blank_and_unrelated_env() -> None:
+    assert resolve_environment_harness({}) is None
+    assert resolve_environment_harness({"PATH": "/usr/bin", "TERM": "xterm-256color"}) is None
+    assert resolve_environment_harness({"ZCODE_ENV": "  "}) is None
+    assert resolve_environment_harness({"__CFBundleIdentifier": "com.apple.Terminal"}) is None
+
+
+def test_resolve_environment_harness_prefers_zcode_over_other_markers() -> None:
+    assert (
+        resolve_environment_harness({"ZCODE_ENV": "production", "CLAUDECODE": "1", "CURSOR_SESSION_ID": "s-1"})
+        == "zcode"
+    )
+
+
+@pytest.mark.usefixtures("native_hook_force")
+def test_guard_hook_records_cursor_harness_for_cursor_env(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
+) -> None:
+    from tests.test_guard_runtime import _build_guard_fixture, _run_guard_hook
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setenv("CURSOR_VERSION", "2.0.0")
+    monkeypatch.setenv("CURSOR_PROJECT_DIR", str(workspace_dir))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc, payload = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Shell",
+            "tool_input": {"command": "rm -rf /tmp/hol-guard-cursor-attribution-test"},
+            "source_scope": "project",
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 2  # canonical: detected cursor harness, _RC_BLOCK_IS_TWO
+    assert isinstance(payload, dict)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        harnesses = [row[0] for row in connection.execute("select harness from native_hook_decision_receipts")]
+    assert harnesses == ["cursor"]

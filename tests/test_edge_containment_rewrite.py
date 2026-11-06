@@ -1,0 +1,313 @@
+"""The edge rewrites a call it routes to the contained sink in the same answer.
+
+The rewrite itself is pinned by the Rust tests beside ``edge_containment``.
+These cover the wire: the envelope asks for it only from a resident that
+advertises it, the decoder accepts the mark only on a sink route, and the
+daemon answers an unmarked sink route in a workspace with the host outage.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.adapters import zcode_contained_tests
+from codex_plugin_scanner.guard.daemon import hook_worker_native
+from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
+from codex_plugin_scanner.guard.native_hook_edge import (
+    _decode_edge,
+    review_raw_hook_native,
+)
+from codex_plugin_scanner.guard.native_runtime import (
+    NativeRuntimeCapabilities,
+    NativeRuntimeIdentity,
+    NativeRuntimeStatus,
+)
+
+_PAYLOAD = {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "make build"},
+    "session_id": "sess-1",
+    "tool_call_id": "call-1",
+}
+_RESULT = {
+    "decision": "deny",
+    "minimum_action": "sandbox-required",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_workspace_containment_required",
+}
+_RECEIPT_RESPONSE = {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_workspace_containment_required",
+    "required_execution_profile": "workspace-contained-v1",
+    "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny"},
+}
+_ROUTED_RESPONSE = {
+    "policy_action": "allow",
+    "reason_code": "native_contained_execution_routed",
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "updatedInput": {"command": "guard execute-contained-test"},
+    },
+}
+
+
+def _edge(**fields: object) -> dict[str, object]:
+    return {
+        "schema": "guard-hook-edge-result.v2",
+        "authority": "rust",
+        "harness": "claude-code",
+        "event_name": "PreToolUse",
+        "payload_kind": "inline",
+        "result": dict(_RESULT),
+        "receipt": {"request_id": "req-1", "decision_id": "b" * 64},
+        "harness_response": dict(_RECEIPT_RESPONSE),
+        "containment_route": "sink",
+        **fields,
+    }
+
+
+@pytest.mark.parametrize("rewrite", ("routed", "kept"))
+def test_the_decoder_accepts_the_rewrite_mark_on_a_sink_route(rewrite: str) -> None:
+    edge = _edge(containment_rewrite=rewrite)
+    assert _decode_edge(edge) == edge
+
+
+@pytest.mark.parametrize(
+    "fields",
+    (
+        {"containment_rewrite": "allow"},
+        {"containment_rewrite": True},
+        {"containment_rewrite": ["routed"]},
+        {"containment_rewrite": "routed", "containment_route": "grant"},
+        {"containment_rewrite": "kept", "containment_route": "none"},
+    ),
+)
+def test_the_decoder_refuses_a_rewrite_mark_off_a_sink_route(fields: dict[str, object]) -> None:
+    assert _decode_edge(_edge(**fields)) is None
+
+
+def _status(tmp_path: Path) -> NativeRuntimeStatus:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"runtime")
+    identity = NativeRuntimeIdentity(
+        path=runtime,
+        size=runtime.stat().st_size,
+        mtime_ns=runtime.stat().st_mtime_ns,
+        sha256="a" * 64,
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=1,
+        runtime_version="test",
+        rule_digest="b" * 64,
+        build_sha="c" * 40,
+        target="test",
+        features=(
+            "hook-envelope-v2",
+            "hook-harness-response-v1",
+            "edge-self-check-v1",
+            "native-resident-client-v1",
+            "pre-tool-generic-authority-v1",
+            "git-execution-context-v1",
+        ),
+    )
+    return NativeRuntimeStatus(
+        mode="auto",
+        available=True,
+        compatible=True,
+        reason="ready",
+        identity=identity,
+        capabilities=capabilities,
+    )
+
+
+@pytest.mark.parametrize(
+    ("asked", "workspace", "event", "sent"),
+    (
+        (True, True, "PreToolUse", True),
+        (False, True, "PreToolUse", False),
+        (True, False, "PreToolUse", False),
+        (True, True, "UserPromptSubmit", False),
+    ),
+)
+def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_in_a_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    asked: bool,
+    workspace: bool,
+    event: str,
+    sent: bool,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return json.dumps(_edge(event_name=event), separators=(",", ":")).encode()
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    review_raw_hook_native(
+        payload={**_PAYLOAD, "hook_event_name": event},
+        harness="claude",
+        event=event,
+        guard_home=tmp_path,
+        home_dir=tmp_path,
+        cwd=tmp_path if workspace else None,
+        source_ref_external_allowed=False,
+        observe_mode=False,
+        deadline=None,
+        policy_snapshot={"generation": 1},
+        runtime_status=_status(tmp_path),
+        containment_sink=asked,
+    )
+    encoded = captured["payload"]
+    assert isinstance(encoded, bytes)
+    sink = json.loads(encoded).get("containment_sink")
+    if sent:
+        assert sink == {"sink_command": list(zcode_contained_tests.contained_sink_command_prefix())}
+    else:
+        # Without a workspace there is no snapshot to write.
+        assert sink is None
+
+
+@pytest.mark.parametrize(
+    ("harness", "sent"),
+    (("cursor", True), ("claude", False)),
+)
+def test_only_a_cursor_envelope_offers_the_runtime_sink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, sent: bool
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return json.dumps(_edge(event_name="PreToolUse"), separators=(",", ":")).encode()
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    review_raw_hook_native(
+        payload=dict(_PAYLOAD),
+        harness=harness,
+        event="PreToolUse",
+        guard_home=tmp_path,
+        home_dir=tmp_path,
+        cwd=tmp_path,
+        source_ref_external_allowed=False,
+        observe_mode=False,
+        deadline=None,
+        policy_snapshot={"generation": 1},
+        runtime_status=_status(tmp_path),
+        containment_sink=True,
+    )
+    encoded = captured["payload"]
+    assert isinstance(encoded, bytes)
+    sink = json.loads(encoded)["containment_sink"]
+    # The daemon admits the runtime's sink only on Cursor's `beforeShellExecution`.
+    assert sink.get("native_sink") is (True if sent else None)
+
+
+@pytest.fixture(autouse=True)
+def _no_saved_command_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The fixture daemon has no store; saved command blocks are tested elsewhere.
+    monkeypatch.setattr(hook_worker_native, "native_exact_command_block_response", lambda *_a, **_k: None)
+
+
+class _Metrics:
+    def record_route(self, _route: str) -> None:
+        return None
+
+
+@dataclass
+class _SinkRouteFixture(HookWorkerNativeMixin):
+    """A daemon whose edge answers a sink-routed PreToolUse."""
+
+    edge: dict[str, object]
+    captured: list[dict[str, object]] = field(default_factory=list)
+    activity_writer: object | None = None
+    store: object | None = None
+    metrics: _Metrics = field(default_factory=_Metrics)
+
+    def _review_raw_hook_native(self, **kwargs: object) -> dict[str, object]:
+        self.captured.append(kwargs)
+        return self.edge
+
+    def _record_native_decision_receipt(self, receipt: object) -> object:
+        return receipt
+
+    def _load_config(self, _guard_home: Path, _workspace: Path | None) -> object:
+        raise AssertionError("a PreToolUse sink route reads no structured view")
+
+
+def _review(fixture: _SinkRouteFixture, tmp_path: Path, *, workspace: Path | None) -> tuple[dict[str, object], bool]:
+    return fixture._review_native_edge_with_snapshot(
+        payload=dict(_PAYLOAD),
+        harness="claude-code",
+        event_name="PreToolUse",
+        default_harness="claude-code",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard",
+        workspace=workspace,
+        deadline=None,
+        policy_snapshot={"mode": "enforce"},
+        recording_only=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("rewrite", "response"),
+    (("routed", _ROUTED_RESPONSE), ("kept", _RECEIPT_RESPONSE)),
+)
+def test_the_daemon_answers_with_the_edge_rewrite_in_one_resident_call(
+    tmp_path: Path, rewrite: str, response: dict[str, object]
+) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(response), containment_rewrite=rewrite))
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+    assert native is True
+    assert answer == response
+    assert [call["containment_sink"] for call in fixture.captured] == [True]
+
+
+def test_an_unmarked_sink_route_in_a_workspace_is_the_outage(tmp_path: Path) -> None:
+    fixture = _SinkRouteFixture(edge=_edge())
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+    # Never the receipt's rewrite picked here, never a second resident call, and never an allow.
+    assert native is False
+    assert answer.get("reason_code") == "native_containment_rewrite_unavailable"
+    assert answer.get("policy_action") != "allow"
+    assert len(fixture.captured) == 1
+
+
+def test_without_a_workspace_an_unmarked_sink_route_keeps_the_receipt(tmp_path: Path) -> None:
+    # No snapshot can be written without a workspace, so the receipt stands.
+    answer, native = _review(_SinkRouteFixture(edge=_edge()), tmp_path, workspace=None)
+    assert native is True
+    assert answer == _RECEIPT_RESPONSE
+
+
+@pytest.mark.parametrize(
+    "routed",
+    (
+        # An allow that changes a field other than the command line.
+        {
+            **_ROUTED_RESPONSE,
+            "hookSpecificOutput": {
+                **_ROUTED_RESPONSE["hookSpecificOutput"],  # type: ignore[dict-item]
+                "updatedInput": {"command": "guard execute-contained-test", "run_in_background": True},
+            },
+        },
+        # An allow that is not the routed reason.
+        {**_ROUTED_RESPONSE, "reason_code": "native_allow"},
+        # The receipt, marked routed.
+        _RECEIPT_RESPONSE,
+    ),
+)
+def test_an_edge_routed_allow_off_the_routed_shape_is_the_outage(tmp_path: Path, routed: dict[str, object]) -> None:
+    fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(routed), containment_rewrite="routed"))
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+    assert native is False
+    assert answer.get("reason_code") == "native_containment_rewrite_invalid"
+    assert answer.get("policy_action") != "allow"

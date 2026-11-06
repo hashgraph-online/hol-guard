@@ -1,0 +1,1187 @@
+import { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from "react";
+import type { ChangeEvent, MutableRefObject } from "react";
+import { HiMiniArrowPath, HiMiniExclamationTriangle } from "react-icons/hi2";
+import { ApprovalProofModal } from "./approval-proof-modal";
+import { ActionButton } from "./approval-center-primitives";
+import type {
+  GuardApprovalGatePublicConfig,
+  PackageFirewallStatusResponse,
+  PackageFirewallActionType,
+} from "./guard-types";
+import {
+  fetchPackageFirewallStatus,
+  activatePackageFirewallRuntime,
+  runPackageFirewallAction,
+  runPackageAudit,
+  runPackageSync,
+  GuardOperationTimeoutError,
+  repairSupplyChainProtection,
+  startPackageFirewallConnect,
+} from "./guard-api";
+import {
+  isApprovalGateRequiredError,
+  isPackageFirewallOperationInProgressError,
+  isSupplyChainSyncConnectError,
+  isSupplyChainSyncRetryableError,
+  readHarnessActionUserMessage,
+  readHarnessActionErrorCode,
+  readPackageFirewallActionFailure,
+  resolveApprovalGateSyncFailure,
+} from "./harness-action-errors";
+import {
+  openPackageFirewallAuthorizeFallback,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE,
+} from "./package-firewall-connect-browser";
+import { EntitlementNotice, ConnectFlowCard } from "./supply-chain-firewall-views";
+import type { CompletedOp } from "./supply-chain-firewall-views";
+import {
+  isSupplyChainAuditConnectError,
+  isSupplyChainAuditWorkspaceInvalidError,
+  isSupplyChainAuditWorkspaceRequiredError,
+  packageAuditNeedsCloudConnect,
+  resolveSupplyChainAuditConnectGate,
+  resolveSupplyChainAuditFailure,
+  resolveSupplyChainSyncConnectRecoveryGate,
+  supplyChainAuditUserMessage,
+  type SupplyChainAuditConnectGate,
+} from "./supply-chain-audit-connect";
+import { resolveSupplyChainAuditWorkspaceTarget } from "./supply-chain-audit-workspace";
+import {
+  FirewallControlsView,
+  GlobalActionsBar,
+  type FirewallFailedOp,
+  type FirewallPendingOp,
+} from "./supply-chain-firewall-controls";
+import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
+import { refreshSupplyChainBundle } from "./use-supply-chain-bundle";
+import { parseInterceptProofSnapshot, type InterceptProofSnapshot } from "./supply-chain-firewall-action-result";
+import { InterceptProofModal } from "./supply-chain-intercept-proof-modal";
+import { SupplyChainManagerDrawer } from "./supply-chain-manager-drawer";
+import { resolveSupplyChainAuditRecoveryGate, createSupplyChainSyncApprovalGate, type SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
+import type { SupplyChainRecoveryOperation } from "./supply-chain-audit-failure";
+import {
+  AuditRecoveryModal,
+  type AuditRecoveryModalPhase,
+} from "./supply-chain-audit-recovery-modal";
+import {
+  supplyChainFixAllConnectState, supplyChainFixAllNeedsCloudConnect,
+  supplyChainFixAllRequiresConnection, supplyChainFixAllStateFromRepair,
+  supplyChainFixAllWorkingState, type SupplyChainFixAllState,
+  supplyChainFixAllAccessState, supplyChainFixAllCanRepair,
+} from "./supply-chain-fix-all";
+
+type PanelLoadState =
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "loaded"; data: PackageFirewallStatusResponse };
+
+type PendingOp = FirewallPendingOp;
+type FailedOp = FirewallFailedOp;
+
+type ApprovalOp = {
+  op: PackageFirewallActionType | "fix_all";
+  manager: string | null;
+};
+
+
+export type PackageFirewallPanelHandle = {
+  scrollIntoView: () => void;
+  focusUnprotected: () => void;
+  focusActionable: () => void;
+  runAudit: () => void;
+  startConnect: () => Promise<void>;
+  activateRuntime: () => Promise<void>;
+  fixAll: () => void;
+};
+
+function actionLabel(op: PackageFirewallActionType): string {
+  return op.charAt(0).toUpperCase() + op.slice(1);
+}
+
+type LoadingRowProps = { width: string };
+
+function LoadingRow({ width }: LoadingRowProps) {
+  return (
+    <div className={`h-4 animate-pulse rounded-md bg-slate-100 ${width}`} aria-hidden="true" />
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div
+      className="space-y-3 py-2"
+      aria-label="Loading package firewall status"
+      aria-busy="true"
+    >
+      <LoadingRow width="w-1/3" />
+      <LoadingRow width="w-2/3" />
+      <LoadingRow width="w-1/2" />
+    </div>
+  );
+}
+
+type ErrorBannerProps = {
+  message: string;
+  onRetry: () => void;
+  retryLabel?: string;
+};
+
+function ErrorBanner({ message, onRetry, retryLabel = "Retry" }: ErrorBannerProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-3" role="status">
+      <div className="flex items-start gap-2">
+        <HiMiniExclamationTriangle
+          className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention"
+          aria-hidden="true"
+        />
+        <p className="text-sm text-brand-attention-text">{message}</p>
+      </div>
+      <ActionButton variant="outline" onClick={onRetry}>
+        {retryLabel}
+      </ActionButton>
+    </div>
+  );
+}
+
+type RefreshButtonProps = {
+  disabled: boolean;
+  spinning: boolean;
+  onRefresh: () => void;
+};
+
+function RefreshButton({ disabled, spinning, onRefresh }: RefreshButtonProps) {
+  return (
+    <ActionButton
+      variant="ghost"
+      onClick={onRefresh}
+      disabled={disabled}
+      aria-label="Refresh status"
+    >
+      <HiMiniArrowPath
+        className={`h-4 w-4 ${spinning ? "animate-spin" : ""}`}
+        aria-hidden="true"
+      />
+    </ActionButton>
+  );
+}
+
+export type AuditConnectGateViewState = {
+  gate: SupplyChainAuditConnectGate;
+  connectError: string | null;
+  connectStarting: boolean;
+  connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>;
+  onStartConnect: () => void;
+};
+
+export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
+  props: {
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  auditWorkspaceDir?: string | null;
+  managedAuditWorkspaceDir?: string | null;
+  onAuditConnectGateChange?: (state: AuditConnectGateViewState | null) => void;
+  onAuditErrorChange?: (message: string | null) => void;
+  onAuditWorkspaceRequired?: () => void;
+  onAuditWorkspaceDiscovered?: (workspaceDir: string | null) => void;
+  onStateChanged?: (requireComplete?: boolean) => Promise<void> | void;
+  onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
+  onAuditStarted?: () => void;
+  onAuditRunningChange?: (running: boolean) => void;
+  onFixAllStateChange?: (state: SupplyChainFixAllState) => void;
+  runAuditRef?: MutableRefObject<(() => void) | null>;
+},
+  ref,
+) {
+  const {
+    approvalGate,
+    auditWorkspaceDir,
+    managedAuditWorkspaceDir,
+    onAuditConnectGateChange,
+    onAuditErrorChange,
+    onAuditWorkspaceRequired,
+    onAuditWorkspaceDiscovered,
+    onStateChanged,
+    onAuditCompleted,
+    onAuditStarted,
+    onAuditRunningChange,
+    onFixAllStateChange,
+    runAuditRef,
+  } = props;
+  const rootRef = useRef<HTMLElement>(null);
+  const recoveryConnectHandledRef = useRef(false);
+  const repairNeedsCloudConnectRef = useRef(false);
+  const repairNeedsCloudAccessRef = useRef(false);
+  const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [sharedRefreshError, setSharedRefreshError] = useState<string | null>(null);
+  const [repairAwaitingRefresh, setRepairAwaitingRefresh] = useState<string | null>(null);
+  const statusRequestId = useRef(0);
+  const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
+  const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
+  const [lastFailed, setLastFailed] = useState<FailedOp | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [activationAssistError, setActivationAssistError] = useState<string | null>(null);
+  const [startingConnect, setStartingConnect] = useState(false);
+  const [activatingRuntime, setActivatingRuntime] = useState(false);
+  const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
+  const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
+  const [expandUnprotectedRequest, setExpandUnprotectedRequest] = useState(0);
+  const [managerFilter, setManagerFilter] = useState("");
+  const [interceptProof, setInterceptProof] = useState<InterceptProofSnapshot | null>(null);
+  const [managerDrawerTarget, setManagerDrawerTarget] = useState<string | null>(null);
+  const [auditConnectGateActive, setAuditConnectGateActive] = useState(false);
+  const [resumeAuditAfterConnect, setResumeAuditAfterConnect] = useState(false);
+  const [auditRecoveryGate, setAuditRecoveryGate] = useState<SupplyChainAuditRecoveryGate | null>(null);
+  // Tracks the dialog on screen so a sync that finishes late can tell whether its own dialog is still open.
+  const auditRecoveryGateRef = useRef<SupplyChainAuditRecoveryGate | null>(null);
+  const [auditRecoveryPhase, setAuditRecoveryPhase] = useState<AuditRecoveryModalPhase>("ready");
+  const [auditRecoveryError, setAuditRecoveryError] = useState<string | null>(null);
+  const [auditRecoveryErrorOp, setAuditRecoveryErrorOp] = useState<SupplyChainRecoveryOperation>("sync");
+  const [resumeFixAllAfterConnect, setResumeFixAllAfterConnect] = useState(false);
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
+
+  const openSyncApprovalRecovery = useCallback(
+    async (options?: { autoRetryAuditAfterPrimary?: boolean }) => {
+      await resolveApprovalGate();
+      setAuditRecoveryGate(
+        createSupplyChainSyncApprovalGate({
+          autoRetryAuditAfterPrimary:
+            options?.autoRetryAuditAfterPrimary ?? auditRecoveryGate?.autoRetryAuditAfterPrimary ?? false,
+        }),
+      );
+      setAuditRecoveryPhase("approval");
+      setAuditRecoveryError(null);
+    },
+    [resolveApprovalGate],
+  );
+
+  useEffect(() => {
+    auditRecoveryGateRef.current = auditRecoveryGate;
+  }, [auditRecoveryGate]);
+
+  const closeAuditRecovery = useCallback(() => {
+    setAuditRecoveryGate(null);
+    setAuditRecoveryPhase("ready");
+    setAuditRecoveryError(null);
+  }, []);
+
+  const load = useCallback(async () => {
+    const requestId = ++statusRequestId.current;
+    setRefreshError(null);
+    setPanelLoad({ phase: "loading" });
+    try {
+      const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
+      setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
+    } catch (err) {
+      if (requestId !== statusRequestId.current) return;
+      const message =
+        err instanceof Error ? err.message : "Failed to load package firewall status.";
+      setPanelLoad({ phase: "error", message });
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded") {
+      return;
+    }
+    onAuditWorkspaceDiscovered?.(panelLoad.data.audit_workspace_dir ?? null);
+  }, [onAuditWorkspaceDiscovered, panelLoad]);
+
+  const refreshAfterOp = useCallback(async () => {
+    const requestId = ++statusRequestId.current;
+    try {
+      const data = await fetchPackageFirewallStatus();
+      if (requestId !== statusRequestId.current) return;
+      setPanelLoad({ phase: "loaded", data });
+      setRepairAwaitingRefresh(null);
+      setRefreshError(null);
+    } catch (err) {
+      if (requestId !== statusRequestId.current) return;
+      setRefreshError(
+        "Guard could not check the latest package status. The last known state is shown; check again before retrying a repair.",
+      );
+    }
+  }, []);
+
+  const refreshSharedState = useCallback(async () => {
+    if (onStateChanged === undefined) return;
+    try {
+      await onStateChanged(true);
+      setSharedRefreshError(null);
+    } catch {
+      setSharedRefreshError("Guard could not refresh the rest of the dashboard. Check again before relying on other views.");
+    }
+  }, [onStateChanged]);
+
+  const refreshInBackground = useCallback(() => {
+    void refreshAfterOp();
+    void refreshSharedState();
+  }, [refreshAfterOp, refreshSharedState]);
+
+  useEffect(() => {
+    if (pendingOp?.op === "fix_all") return;
+    if (panelLoad.phase !== "loaded") {
+      return;
+    }
+    const flow = panelLoad.data.connect_flow;
+    if (flow === null || (flow.state !== "running" && flow.state !== "starting")) {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void refreshAfterOp();
+    }, flow.poll_after_ms ?? 1500);
+    return () => window.clearTimeout(handle);
+  }, [panelLoad, refreshAfterOp, pendingOp?.op]);
+
+  const openAuditConnectGate = useCallback((resumeAfterConnect: boolean) => {
+    setAuditConnectGateActive(true);
+    setResumeAuditAfterConnect(resumeAfterConnect);
+    setLastFailed(null);
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const clearAuditConnectGate = useCallback(() => {
+    setAuditConnectGateActive(false);
+    setResumeAuditAfterConnect(false);
+  }, []);
+
+  const runAuditOperation = useCallback(
+    async (options?: { openRecoveryModal?: boolean }) => {
+      const openRecoveryModal = options?.openRecoveryModal ?? true;
+      setPendingOp({ op: "audit", manager: null });
+      setLastFailed(null);
+      setConnectError(null);
+      setActivationAssistError(null);
+      onAuditErrorChange?.(null);
+      onAuditStarted?.();
+      onAuditRunningChange?.(true);
+      const statusWorkspaceDir =
+        panelLoad.phase === "loaded" ? panelLoad.data.audit_workspace_dir ?? null : null;
+      const workspaceDir = resolveSupplyChainAuditWorkspaceTarget({
+        selectedWorkspaceDir: auditWorkspaceDir,
+        managedWorkspaceDir: managedAuditWorkspaceDir,
+        statusWorkspaceDir,
+      });
+      try {
+        const response = await runPackageAudit({ workspaceDir });
+        const recoveryGate = resolveSupplyChainAuditRecoveryGate(response.result_detail);
+        const failureMessage = resolveSupplyChainAuditFailure(response.result_detail);
+        if (failureMessage !== null) {
+          if (openRecoveryModal && recoveryGate !== null) {
+            setAuditRecoveryGate(recoveryGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+            onAuditErrorChange?.(null);
+            clearAuditConnectGate();
+            await refreshAfterOp();
+            await onStateChanged?.();
+            return false;
+          }
+          setLastFailed({ op: "audit", manager: null, message: failureMessage });
+          setLastCompleted(null);
+          onAuditErrorChange?.(failureMessage);
+          clearAuditConnectGate();
+          await refreshAfterOp();
+          await onStateChanged?.();
+          return false;
+        }
+        setLastCompleted({ op: "audit", manager: null, response });
+        onAuditCompleted?.(response.result_detail);
+        clearAuditConnectGate();
+        closeAuditRecovery();
+        onAuditErrorChange?.(null);
+        await refreshAfterOp();
+        await onStateChanged?.();
+        return true;
+      } catch (err) {
+        if (isSupplyChainAuditConnectError(err)) {
+          openAuditConnectGate(true);
+          return false;
+        }
+        if (isSupplyChainAuditWorkspaceRequiredError(err) || isSupplyChainAuditWorkspaceInvalidError(err)) {
+          onAuditWorkspaceRequired?.();
+        }
+        const message = supplyChainAuditUserMessage(err) ?? "Operation failed.";
+        setLastFailed({ op: "audit", manager: null, message });
+        onAuditErrorChange?.(message);
+        setAuditRecoveryPhase("failed");
+        setAuditRecoveryErrorOp("audit");
+        setAuditRecoveryError(message);
+        return false;
+      } finally {
+        onAuditRunningChange?.(false);
+        setPendingOp(null);
+      }
+    },
+    [
+      auditWorkspaceDir,
+      clearAuditConnectGate,
+      closeAuditRecovery,
+      onAuditCompleted,
+      onAuditStarted,
+      onAuditErrorChange,
+      onAuditWorkspaceRequired,
+      onAuditRunningChange,
+      onStateChanged,
+      openAuditConnectGate,
+      managedAuditWorkspaceDir,
+      panelLoad,
+      refreshAfterOp,
+    ],
+  );
+
+  const continueAuditAfterRecovery = useCallback(async () => {
+    setAuditRecoveryPhase("auditing");
+    setAuditRecoveryError(null);
+    const succeeded = await runAuditOperation({ openRecoveryModal: true });
+    if (succeeded) {
+      return;
+    }
+    setAuditRecoveryPhase((currentPhase) => (currentPhase === "failed" ? "failed" : "ready"));
+  }, [runAuditOperation]);
+
+  const runRecoverySync = useCallback(
+    async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
+      setAuditRecoveryPhase("syncing");
+      setAuditRecoveryError(null);
+      try {
+        const response = await runPackageSync(credentials);
+        refreshSupplyChainBundle();
+        setLastCompleted({ op: "sync", manager: null, response });
+        await refreshAfterOp();
+        await onStateChanged?.();
+        if (auditRecoveryGate?.autoRetryAuditAfterPrimary) {
+          await continueAuditAfterRecovery();
+          return;
+        }
+        // Nothing follows a standalone sync, so close the modal and let the panel show the result.
+        // Leave it alone if the user closed this dialog during the sync and opened another one.
+        if (auditRecoveryGateRef.current === auditRecoveryGate) {
+          closeAuditRecovery();
+        }
+      } catch (err) {
+        if (isSupplyChainSyncConnectError(err)) {
+          const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
+          if (connectGate !== null) {
+            setAuditRecoveryGate(connectGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+            return;
+          }
+        }
+        if (isPackageFirewallOperationInProgressError(err)) {
+          // Another package protection change (a sync, repair or shim install) holds the daemon's lock; that is not a failure, so keep the dialog ready.
+          const message = "Guard is still finishing another package protection change. Wait a moment, then sync again.";
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(message);
+          setAuditRecoveryPhase("ready");
+          refreshInBackground();
+          return;
+        }
+        if (err instanceof GuardOperationTimeoutError) {
+          // The daemon may still finish this sync, so recheck status instead of asking for approval again.
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(err.message);
+          setAuditRecoveryPhase("ready");
+          setLastFailed({ op: "sync", manager: null, message: err.message });
+          refreshInBackground();
+          return;
+        }
+        if (isSupplyChainSyncRetryableError(err)) {
+          const message = readHarnessActionUserMessage(
+            err,
+            "Guard Cloud is temporarily unavailable. Try syncing again in a few minutes.",
+          );
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(message);
+          setAuditRecoveryPhase("ready");
+          setLastFailed({ op: "sync", manager: null, message });
+          return;
+        }
+        const failure = resolveApprovalGateSyncFailure(err, {
+          hasCredentials: credentials !== undefined,
+        });
+        if (failure.kind === "approval_required") {
+          await openSyncApprovalRecovery({
+            autoRetryAuditAfterPrimary: auditRecoveryGate?.autoRetryAuditAfterPrimary ?? true,
+          });
+          return;
+        }
+        setAuditRecoveryErrorOp("sync");
+        setAuditRecoveryError(failure.message);
+        setAuditRecoveryPhase(credentials === undefined ? "failed" : "approval");
+        setLastFailed({ op: "sync", manager: null, message: failure.message });
+      }
+    },
+    [
+      auditRecoveryGate,
+      closeAuditRecovery,
+      continueAuditAfterRecovery,
+      onStateChanged,
+      openSyncApprovalRecovery,
+      refreshAfterOp,
+      refreshInBackground,
+    ],
+  );
+
+  const handleRecoveryApprovalBack = useCallback(() => {
+    setAuditRecoveryPhase("ready");
+    setAuditRecoveryError(null);
+  }, []);
+
+  const handleRecoveryApprovalSubmit = useCallback(
+    (credentials: { approval_password?: string; approval_totp_code?: string }) => {
+      void runRecoverySync(credentials);
+    },
+    [runRecoverySync],
+  );
+
+  const handleStartConnect = useCallback(async () => {
+    setStartingConnect(true);
+    setConnectError(null);
+    setActivationAssistError(null);
+    try {
+      const connectFlow = await startPackageFirewallConnect();
+      const popupBlocked = Boolean(
+        connectFlow?.authorize_url &&
+        !openPackageFirewallAuthorizeFallback(
+          connectFlow.authorize_url,
+          connectFlow.browser_opened,
+        )
+      );
+      if (popupBlocked) {
+        setConnectError(PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE);
+      }
+      await refreshAfterOp();
+      await onStateChanged?.();
+      return !popupBlocked;
+    } catch (error) {
+      setConnectError(
+        error instanceof Error ? error.message : "Unable to start Guard Cloud connect.",
+      );
+      return false;
+    } finally {
+      setStartingConnect(false);
+    }
+  }, [onStateChanged, refreshAfterOp]);
+
+  const beginFixAllConnectRecovery = useCallback(async () => {
+    setResumeFixAllAfterConnect(true);
+    onFixAllStateChange?.(
+      supplyChainFixAllConnectState(
+        "connecting",
+        "Finish Guard Cloud sign-in. Repair will resume here automatically.",
+      ),
+    );
+    const started = await handleStartConnect();
+    if (started) return;
+    setResumeFixAllAfterConnect(false);
+    repairNeedsCloudConnectRef.current = true;
+    onFixAllStateChange?.(
+      supplyChainFixAllConnectState(
+        "error",
+        "Guard Cloud sign-in could not start. Connect again to continue.",
+        ["Guard Cloud sign-in could not start."],
+      ),
+    );
+  }, [handleStartConnect, onFixAllStateChange]);
+
+  const handleFixAll = useCallback(
+    async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
+      setPendingOp({ op: "fix_all", manager: null });
+      let checkingAccess = true;
+      try {
+        onFixAllStateChange?.({ phase: "checking", message: "Checking Cloud access before device approval…", completedSteps: [], failedSteps: [] });
+        const requestId = ++statusRequestId.current;
+        const latest = await fetchPackageFirewallStatus();
+        if (requestId !== statusRequestId.current) {
+          onFixAllStateChange?.({ phase: "error", message: "Package status changed while checking. Check again before restoring protection.", completedSteps: [], failedSteps: [] });
+          return;
+        }
+        checkingAccess = false;
+        setPanelLoad({ phase: "loaded", data: latest });
+        if (supplyChainFixAllRequiresConnection(latest) || (repairNeedsCloudConnectRef.current && !latest.entitlement.allowed)) {
+          await beginFixAllConnectRecovery();
+          return;
+        }
+        repairNeedsCloudConnectRef.current = false;
+        if (!supplyChainFixAllCanRepair(latest) || (repairNeedsCloudAccessRef.current && !latest.entitlement.allowed)) {
+          onFixAllStateChange?.(supplyChainFixAllAccessState());
+          return;
+        }
+        repairNeedsCloudAccessRef.current = false;
+        onFixAllStateChange?.(supplyChainFixAllWorkingState());
+        const result = await repairSupplyChainProtection(credentials);
+        const nextState = supplyChainFixAllStateFromRepair(result);
+        repairNeedsCloudAccessRef.current = nextState.remainingAction === "check_access";
+        repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
+        onFixAllStateChange?.(nextState);
+        refreshInBackground();
+      } catch (error) {
+        if (checkingAccess) {
+          onFixAllStateChange?.({ phase: "error", message: "Could not check package status. No repair was attempted. Check that Guard is running, then try again.", completedSteps: [], failedSteps: [] });
+          return;
+        }
+        if (credentials === undefined && isApprovalGateRequiredError(error)) {
+          await resolveApprovalGate();
+          setPendingApprovalOp({ op: "fix_all", manager: null });
+          onFixAllStateChange?.({
+            phase: "approval",
+            message: "Confirm once before Guard repairs supply-chain protection.",
+            completedSteps: [],
+            failedSteps: [],
+          });
+          return;
+        }
+        if (isSupplyChainSyncConnectError(error)) {
+          await beginFixAllConnectRecovery();
+          return;
+        }
+        if (readHarnessActionErrorCode(error) === "paid_guard_cloud_required") {
+          onFixAllStateChange?.(supplyChainFixAllAccessState());
+          refreshInBackground();
+          return;
+        }
+        const message = readHarnessActionUserMessage(
+          error,
+          "Guard could not complete supply-chain repair. Retry remaining steps to continue safely.",
+        );
+        onFixAllStateChange?.({
+          phase: "error",
+          message,
+          completedSteps: [],
+          failedSteps: [message],
+        });
+      } finally {
+        setPendingOp(null);
+      }
+    },
+    [
+      beginFixAllConnectRecovery,
+      onFixAllStateChange,
+      refreshInBackground,
+      resolveApprovalGate,
+    ],
+  );
+
+  useEffect(() => {
+    if (!resumeFixAllAfterConnect || panelLoad.phase !== "loaded") {
+      return;
+    }
+    if (
+      !startingConnect &&
+      !panelLoad.data.entitlement.allowed &&
+      (panelLoad.data.connect_flow === null ||
+        panelLoad.data.connect_flow.state === "idle" ||
+        panelLoad.data.connect_flow.state === "failed")
+    ) {
+      const connectFailed = panelLoad.data.connect_flow?.state === "failed";
+      setResumeFixAllAfterConnect(false);
+      repairNeedsCloudConnectRef.current = true;
+      onFixAllStateChange?.(
+        supplyChainFixAllConnectState(
+          "error",
+          connectFailed
+            ? panelLoad.data.connect_flow?.detail || "Guard Cloud sign-in did not finish. Connect again to continue."
+            : "Guard Cloud sign-in did not grant package protection access. Connect again or review plan access.",
+          [
+            connectFailed
+              ? "Guard Cloud sign-in did not finish."
+              : "Package protection access is still unavailable.",
+          ],
+        ),
+      );
+      return;
+    }
+    if (!panelLoad.data.entitlement.allowed) return;
+    setResumeFixAllAfterConnect(false);
+    repairNeedsCloudConnectRef.current = false;
+    void handleFixAll();
+  }, [
+    handleFixAll,
+    onFixAllStateChange,
+    panelLoad,
+    resumeFixAllAfterConnect,
+    startingConnect,
+  ]);
+
+  const handleRecoveryPrimary = useCallback(() => {
+    if (
+      auditRecoveryGate === null ||
+      (auditRecoveryPhase !== "ready" && auditRecoveryPhase !== "failed")
+    ) {
+      return;
+    }
+    if (auditRecoveryGate.primaryAction === "sync") {
+      void runRecoverySync();
+      return;
+    }
+    if (auditRecoveryGate.primaryAction === "connect") {
+      setAuditRecoveryPhase("connecting");
+      setAuditRecoveryError(null);
+      void handleStartConnect();
+      return;
+    }
+    void continueAuditAfterRecovery();
+  }, [
+    auditRecoveryGate,
+    auditRecoveryPhase,
+    continueAuditAfterRecovery,
+    handleStartConnect,
+    runRecoverySync,
+  ]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded" || !auditConnectGateActive) {
+      onAuditConnectGateChange?.(null);
+      return;
+    }
+    const gate = resolveSupplyChainAuditConnectGate(panelLoad.data, {
+      resumeAfterConnect: resumeAuditAfterConnect,
+    });
+    if (gate === null || panelLoad.data.connect_flow === null) {
+      onAuditConnectGateChange?.(null);
+      return;
+    }
+    onAuditConnectGateChange?.({
+      gate,
+      connectError,
+      connectStarting: startingConnect,
+      connectFlow: panelLoad.data.connect_flow,
+      onStartConnect: () => {
+        void handleStartConnect();
+      },
+    });
+  }, [
+    auditConnectGateActive,
+    connectError,
+    handleStartConnect,
+    onAuditConnectGateChange,
+    panelLoad,
+    resumeAuditAfterConnect,
+    startingConnect,
+  ]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded" || !resumeAuditAfterConnect) {
+      return;
+    }
+    if (!panelLoad.data.entitlement.allowed || packageAuditNeedsCloudConnect(panelLoad.data)) {
+      return;
+    }
+    setResumeAuditAfterConnect(false);
+    void runAuditOperation();
+  }, [panelLoad, resumeAuditAfterConnect, runAuditOperation]);
+
+  useEffect(() => {
+    if (auditRecoveryPhase === "connecting") {
+      recoveryConnectHandledRef.current = false;
+    }
+  }, [auditRecoveryPhase]);
+
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded" || auditRecoveryGate === null) {
+      return;
+    }
+    if (auditRecoveryPhase !== "connecting") {
+      return;
+    }
+    if (recoveryConnectHandledRef.current) {
+      return;
+    }
+    if (!panelLoad.data.entitlement.allowed || packageAuditNeedsCloudConnect(panelLoad.data)) {
+      return;
+    }
+    recoveryConnectHandledRef.current = true;
+    void runRecoverySync();
+  }, [auditRecoveryGate, auditRecoveryPhase, panelLoad, runRecoverySync]);
+
+  const handleAction = useCallback(
+    async (
+      op: PackageFirewallActionType,
+      manager: string | null,
+      credentials?: { approval_password?: string; approval_totp_code?: string },
+    ) => {
+      setPendingOp({ op, manager });
+      setLastFailed(null);
+      setConnectError(null);
+      setActivationAssistError(null);
+      try {
+        const response = await runPackageFirewallAction(op, manager, credentials);
+        setLastCompleted({ op, manager, response });
+        if (op === "repair" && manager !== null) setRepairAwaitingRefresh(manager);
+        if (op === "test") {
+          const proof = parseInterceptProofSnapshot(response);
+          if (proof !== null) {
+            setManagerDrawerTarget(null);
+            setInterceptProof(proof);
+          }
+        }
+        refreshInBackground();
+      } catch (err) {
+        if (
+          credentials === undefined &&
+          manager !== null &&
+          isApprovalGateRequiredError(err)
+        ) {
+          await resolveApprovalGate();
+          setPendingApprovalOp({ op, manager });
+          return;
+        }
+        setLastFailed({ op, manager, message: readPackageFirewallActionFailure(err) });
+      } finally {
+        setPendingOp(null);
+      }
+    },
+    [refreshInBackground, resolveApprovalGate],
+  );
+
+  const handleGlobalOp = useCallback(
+    async (op: "audit" | "sync") => {
+      if (op === "audit") {
+        if (panelLoad.phase === "loaded" && packageAuditNeedsCloudConnect(panelLoad.data)) {
+          openAuditConnectGate(true);
+          return;
+        }
+        await runAuditOperation();
+        return;
+      }
+      setPendingOp({ op, manager: null });
+      setLastFailed(null);
+      setConnectError(null);
+      setActivationAssistError(null);
+      try {
+        const response = await runPackageSync();
+        refreshSupplyChainBundle();
+        setLastCompleted({ op, manager: null, response });
+        await refreshAfterOp();
+        await onStateChanged?.();
+      } catch (err) {
+        if (isApprovalGateRequiredError(err)) {
+          await openSyncApprovalRecovery();
+          return;
+        }
+        if (isSupplyChainSyncConnectError(err)) {
+          const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
+          if (connectGate !== null) {
+            setAuditRecoveryGate(connectGate);
+            setAuditRecoveryPhase("ready");
+            setAuditRecoveryError(null);
+            return;
+          }
+        }
+        if (isSupplyChainSyncRetryableError(err)) {
+          const message = readHarnessActionUserMessage(
+            err,
+            "Guard Cloud is temporarily unavailable. Try syncing again in a few minutes.",
+          );
+          setAuditRecoveryPhase("ready");
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(message);
+          setLastFailed({ op, manager: null, message });
+          return;
+        }
+        const message = readHarnessActionUserMessage(err, "Operation failed.");
+        setLastFailed({ op, manager: null, message });
+        if (err instanceof GuardOperationTimeoutError) {
+          refreshInBackground();
+        }
+      } finally {
+        setPendingOp(null);
+      }
+    },
+    [
+      onStateChanged,
+      openAuditConnectGate,
+      openSyncApprovalRecovery,
+      panelLoad,
+      refreshAfterOp,
+      refreshInBackground,
+      runAuditOperation,
+    ],
+  );
+
+  const handleInstall = useCallback(
+    (manager: string) => void handleAction("install", manager),
+    [handleAction],
+  );
+  const handleRepair = useCallback(
+    (manager: string) => void handleAction("repair", manager),
+    [handleAction],
+  );
+  const handleTest = useCallback(
+    (manager: string) => void handleAction("test", manager),
+    [handleAction],
+  );
+  const handleRemoveRequest = useCallback(
+    (manager: string) => setConfirmRemoveManager(manager),
+    [],
+  );
+  const handleRemoveConfirm = useCallback(
+    (manager: string) => {
+      setConfirmRemoveManager(null);
+      void handleAction("remove", manager);
+    },
+    [handleAction],
+  );
+  const handleRemoveCancel = useCallback(() => setConfirmRemoveManager(null), []);
+  const handleAudit = useCallback(() => {
+    if (panelLoad.phase === "loaded" && packageAuditNeedsCloudConnect(panelLoad.data)) {
+      openAuditConnectGate(true);
+      return;
+    }
+    void runAuditOperation();
+  }, [openAuditConnectGate, panelLoad, runAuditOperation]);
+  const handleSync = useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
+
+  useEffect(() => {
+    if (runAuditRef === undefined) {
+      return;
+    }
+    runAuditRef.current = handleAudit;
+    return () => {
+      runAuditRef.current = null;
+    };
+  }, [handleAudit, runAuditRef]);
+  const handleDismissResult = useCallback(() => setLastCompleted(null), []);
+  const handleRetry = useCallback(() => void load(), [load]);
+  const handleActivateRuntime = useCallback(async () => {
+    setActivatingRuntime(true);
+    setActivationAssistError(null);
+    try {
+      await activatePackageFirewallRuntime();
+      refreshInBackground();
+    } catch (error) {
+      setActivationAssistError(error instanceof Error ? error.message : "Unable to activate package protection.");
+    } finally {
+      setActivatingRuntime(false);
+    }
+  }, [refreshInBackground]);
+  const handleApprovalCancel = useCallback(() => {
+    if (pendingApprovalOp?.op === "fix_all") {
+      onFixAllStateChange?.({
+        phase: "error",
+        message: "Repair was cancelled. No additional supply-chain changes were made.",
+        completedSteps: [],
+        failedSteps: [],
+      });
+    }
+    setPendingApprovalOp(null);
+  }, [onFixAllStateChange, pendingApprovalOp]);
+  const handleApprovalConfirm = useCallback(
+    (credentials: { approval_password?: string; approval_totp_code?: string }) => {
+      const pendingApproval = pendingApprovalOp;
+      if (pendingApproval === null) return;
+      setPendingApprovalOp(null);
+      if (pendingApproval.op === "fix_all") {
+        void handleFixAll(credentials);
+        return;
+      }
+      void handleAction(pendingApproval.op, pendingApproval.manager, credentials);
+    },
+    [handleAction, handleFixAll, pendingApprovalOp],
+  );
+
+  const handleManagerFilterChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setManagerFilter(e.target.value);
+  }, []);
+
+  const handleOpenManagerDetails = useCallback((manager: string) => {
+    setManagerDrawerTarget(manager);
+  }, []);
+
+  const handleCloseManagerDrawer = useCallback(() => {
+    setManagerDrawerTarget(null);
+  }, []);
+
+  const handleCloseInterceptProof = useCallback(() => {
+    setInterceptProof(null);
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollIntoView: () => {
+        rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+      focusUnprotected: () => {
+        setExpandUnprotectedRequest((request) => request + 1);
+        setManagerFilter("");
+      },
+      focusActionable: () => {
+        // Tools that need a fix always lead the roster.
+        setManagerFilter("");
+      },
+      runAudit: () => {
+        handleAudit();
+      },
+      startConnect: async () => {
+        await handleStartConnect();
+      },
+      activateRuntime: handleActivateRuntime,
+      fixAll: () => {
+        void handleFixAll();
+      },
+    }),
+    [handleActivateRuntime, handleAudit, handleFixAll, handleStartConnect],
+  );
+
+
+  const managerDrawerShim =
+    panelLoad.phase === "loaded" && managerDrawerTarget !== null
+      ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget)
+      : undefined;
+
+  const auditConnectGate =
+    panelLoad.phase === "loaded" && auditConnectGateActive
+      ? resolveSupplyChainAuditConnectGate(panelLoad.data, { resumeAfterConnect: resumeAuditAfterConnect })
+      : null;
+
+  const anyPending = pendingOp !== null;
+  return (
+    <section
+      ref={rootRef}
+      aria-labelledby="package-firewall-heading"
+      data-testid="package-firewall-panel"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="min-w-0">
+          <h2 id="package-firewall-heading" className="text-lg font-semibold tracking-tight text-brand-dark">
+            Package managers
+          </h2>
+          <p className="mt-0.5 max-w-[68ch] text-sm leading-6 text-slate-600">
+            Guard checks installs from protected tools before they run.
+          </p>
+        </div>
+        {panelLoad.phase === "loaded" && (
+          <div className="-ml-3 flex shrink-0 items-center gap-1 sm:ml-0">
+            {panelLoad.data.entitlement.allowed && (
+              <GlobalActionsBar anyPending={anyPending} pendingOp={pendingOp} onAudit={handleAudit} onSync={handleSync} />
+            )}
+            <RefreshButton disabled={anyPending} spinning={anyPending} onRefresh={handleRetry} />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 space-y-4">
+      {panelLoad.phase === "loading" && <LoadingSkeleton />}
+
+      {panelLoad.phase === "error" && (
+        <ErrorBanner message={panelLoad.message} onRetry={handleRetry} />
+      )}
+
+      {panelLoad.phase === "loaded" && (
+        <>
+          {refreshError !== null && (
+            <ErrorBanner message={refreshError} onRetry={handleRetry} retryLabel="Check again" />
+          )}
+          {sharedRefreshError !== null && (
+            <ErrorBanner message={sharedRefreshError} onRetry={() => void refreshSharedState()} retryLabel="Check again" />
+          )}
+          {!panelLoad.data.entitlement.allowed && (
+            <div className="rounded-2xl border border-slate-200 bg-white">
+              <EntitlementNotice
+                connectError={connectError}
+                connectPurpose={auditConnectGateActive ? "audit" : "package_firewall"}
+                connectStarting={startingConnect}
+                data={panelLoad.data}
+                headline={auditConnectGate?.headline}
+                detail={auditConnectGate?.detail}
+                onStartConnect={handleStartConnect}
+              />
+            </div>
+          )}
+          <FirewallControlsView
+            data={panelLoad.data}
+            pendingOp={pendingOp}
+            repairAwaitingRefresh={repairAwaitingRefresh}
+            lastCompleted={lastCompleted}
+            lastFailed={lastFailed}
+            confirmRemoveManager={confirmRemoveManager}
+            expandUnprotectedRequest={expandUnprotectedRequest}
+            managerFilter={managerFilter}
+            onManagerFilterChange={handleManagerFilterChange}
+            onInstall={handleInstall}
+            onRepair={handleRepair}
+            onTest={handleTest}
+            onRemoveRequest={handleRemoveRequest}
+            onRemoveConfirm={handleRemoveConfirm}
+            onRemoveCancel={handleRemoveCancel}
+            onAudit={handleAudit}
+            onSync={handleSync}
+            onDismissResult={handleDismissResult}
+            onActivateRuntime={handleActivateRuntime}
+            onRefreshStatus={handleRetry}
+            onOpenManagerDetails={handleOpenManagerDetails}
+            activatingRuntime={activatingRuntime}
+            activationAssistError={activationAssistError}
+          />
+        </>
+      )}
+      </div>
+
+      {pendingApprovalOp !== null && (
+        <ApprovalProofModal
+          title={
+            pendingApprovalOp.op === "fix_all"
+              ? "Restore package protection"
+              : `${actionLabel(pendingApprovalOp.op)} ${pendingApprovalOp.manager}`
+          }
+          detail="Enter local approval proof before Guard changes package-manager protection on this device."
+          confirmLabel={pendingApprovalOp.op === "fix_all" ? "Restore protection" : actionLabel(pendingApprovalOp.op)}
+          approvalGate={resolvedApprovalGate}
+          onCancel={handleApprovalCancel}
+          onConfirm={handleApprovalConfirm}
+        />
+      )}
+
+      {panelLoad.phase === "loaded" && managerDrawerTarget !== null && (
+        <SupplyChainManagerDrawer
+          manager={managerDrawerTarget}
+          shim={managerDrawerShim}
+          actions={panelLoad.data.actions}
+          anyPending={anyPending}
+          repairAwaitingRefresh={repairAwaitingRefresh === managerDrawerTarget}
+          isMine={pendingOp?.manager === managerDrawerTarget}
+          actionHandlers={{
+            install: handleInstall,
+            repair: handleRepair,
+            test: handleTest,
+            removeRequest: handleRemoveRequest,
+          }}
+          onClose={handleCloseManagerDrawer}
+        />
+      )}
+
+      {interceptProof !== null && (
+        <InterceptProofModal proof={interceptProof} onClose={handleCloseInterceptProof} />
+      )}
+
+      {auditRecoveryGate !== null ? (
+        <AuditRecoveryModal
+          gate={auditRecoveryGate}
+          phase={auditRecoveryPhase}
+          error={auditRecoveryError}
+          errorOperation={auditRecoveryErrorOp}
+          connectError={connectError}
+          connectStarting={startingConnect}
+          connectFlow={panelLoad.phase === "loaded" ? panelLoad.data.connect_flow : null}
+          approvalGate={resolvedApprovalGate}
+          onClose={closeAuditRecovery}
+          onPrimaryAction={handleRecoveryPrimary}
+          onStartConnect={() => {
+            setAuditRecoveryPhase("connecting");
+            void handleStartConnect();
+          }}
+          onApprovalSubmit={handleRecoveryApprovalSubmit}
+          onApprovalBack={handleRecoveryApprovalBack}
+        />
+      ) : null}
+    </section>
+  );
+});

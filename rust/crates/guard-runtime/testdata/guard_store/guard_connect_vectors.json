@@ -1,0 +1,5463 @@
+{
+ "now": "2026-10-10T12:00:00+00:00",
+ "order_by": {
+  "guard_connect_requests": "request_id",
+  "guard_connect_states": "request_id",
+  "sync_state": "state_key"
+ },
+ "row_filter": {
+  "sync_state": "state_key = 'sync_summary'"
+ },
+ "scenarios": [
+  {
+   "name": "pairing_then_latest_and_effective",
+   "seed": {
+    "guard_connect_requests": [],
+    "guard_connect_states": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "empty",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "empty no profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "cloud_profile": null,
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "empty profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": null,
+      "created_at": null,
+      "expires_at": null,
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": null,
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": null,
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": null,
+      "created_at": null,
+      "expires_at": null,
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": null,
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": null,
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "generated id",
+     "method": "record_guard_connect_pairing_completed",
+     "native_method": "guard_connect_record_pairing",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2026-10-10T10:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"inventory_items\": 0, \"runtime_session_id\": null, \"runtime_session_synced_at\": null}",
+        "reason": null,
+        "request_id": "connect-00000000000000000000000000000001",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "allowed_origin": "https://hol.org",
+      "now": "2026-10-10T10:00:00+00:00",
+      "request_id": "connect-00000000000000000000000000000001",
+      "sync_url": "https://hol.org/api/guard/receipts/sync"
+     }
+    },
+    {
+     "error": null,
+     "label": "after pairing",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "connected without profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": null,
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "connected profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "profile + summary",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "summary without profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2026-10-10T10:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "connect-00000000000000000000000000000001",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": null,
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "explicit id padded",
+     "method": "record_guard_connect_pairing_completed",
+     "native_method": "guard_connect_record_pairing",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:05:00+00:00",
+      "created_at": "2026-10-10T10:05:00+00:00",
+      "expires_at": "2026-10-10T10:05:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:05:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "conn-explicit",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:05:00+00:00",
+        "created_at": "2026-10-10T10:05:00+00:00",
+        "expires_at": "2026-10-10T10:05:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:05:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"inventory_items\": 0, \"runtime_session_id\": null, \"runtime_session_synced_at\": null}",
+        "reason": null,
+        "request_id": "conn-explicit",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2026-10-10T10:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"inventory_items\": 0, \"runtime_session_id\": null, \"runtime_session_synced_at\": null}",
+        "reason": null,
+        "request_id": "connect-00000000000000000000000000000001",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:05:00+00:00",
+      "created_at": "2026-10-10T10:05:00+00:00",
+      "expires_at": "2026-10-10T10:05:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:05:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "conn-explicit",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "allowed_origin": "https://hol.org",
+      "now": "2026-10-10T10:05:00+00:00",
+      "request_id": "conn-explicit",
+      "sync_url": "https://hol.org/api/guard/receipts/sync"
+     }
+    },
+    {
+     "error": {
+      "message": "UNIQUE constraint failed: guard_connect_states.request_id",
+      "message_exact": true,
+      "type": "IntegrityError"
+     },
+     "label": "duplicate id",
+     "method": "record_guard_connect_pairing_completed",
+     "native_method": "guard_connect_record_pairing",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "allowed_origin": "https://hol.org",
+      "now": "2026-10-10T10:10:00+00:00",
+      "request_id": "conn-explicit",
+      "sync_url": "https://hol.org/api/guard/receipts/sync"
+     }
+    },
+    {
+     "error": null,
+     "label": "blank id falls back",
+     "method": "record_guard_connect_pairing_completed",
+     "native_method": "guard_connect_record_pairing",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:10:00+00:00",
+      "created_at": "2026-10-10T10:10:00+00:00",
+      "expires_at": "2026-10-10T10:10:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:10:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000002",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:10:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:05:00+00:00",
+        "created_at": "2026-10-10T10:05:00+00:00",
+        "expires_at": "2026-10-10T10:05:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:05:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"inventory_items\": 0, \"runtime_session_id\": null, \"runtime_session_synced_at\": null}",
+        "reason": null,
+        "request_id": "conn-explicit",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2026-10-10T10:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"inventory_items\": 0, \"runtime_session_id\": null, \"runtime_session_synced_at\": null}",
+        "reason": null,
+        "request_id": "connect-00000000000000000000000000000001",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:10:00+00:00",
+        "created_at": "2026-10-10T10:10:00+00:00",
+        "expires_at": "2026-10-10T10:10:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:10:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"inventory_items\": 0, \"runtime_session_id\": null, \"runtime_session_synced_at\": null}",
+        "reason": null,
+        "request_id": "connect-00000000000000000000000000000002",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:10:00+00:00",
+      "created_at": "2026-10-10T10:10:00+00:00",
+      "expires_at": "2026-10-10T10:10:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:10:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000002",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:10:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "allowed_origin": "https://hol.org",
+      "now": "2026-10-10T10:10:00+00:00",
+      "request_id": "connect-00000000000000000000000000000002",
+      "sync_url": "https://hol.org/api/guard/receipts/sync"
+     }
+    },
+    {
+     "error": null,
+     "label": "latest by updated_at",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:10:00+00:00",
+      "created_at": "2026-10-10T10:10:00+00:00",
+      "expires_at": "2026-10-10T10:10:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:10:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000002",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:10:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:10:00+00:00",
+      "created_at": "2026-10-10T10:10:00+00:00",
+      "expires_at": "2026-10-10T10:10:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:10:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": null,
+      "request_id": "connect-00000000000000000000000000000002",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:10:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    }
+   ]
+  },
+  {
+   "name": "waiting_request_expiry",
+   "seed": {
+    "guard_connect_requests": [],
+    "guard_connect_states": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_requests": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "pairing_secret_hash": "hash",
+        "request_id": "r-new",
+        "status": "pending",
+        "sync_url": "https://hol.org/api/guard/receipts/sync"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "pairing_secret_hash": "hash",
+        "request_id": "r-old",
+        "status": "pending",
+        "sync_url": "https://hol.org/api/guard/receipts/sync"
+       }
+      ],
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-new",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-old",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into guard_connect_requests (request_id, sync_url, allowed_origin, pairing_secret_hash, status, created_at, expires_at, completed_at) values (?, ?, ?, 'hash', ?, ?, ?, null)",
+       [
+        "r-old",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "pending",
+        "2026-10-10T10:00:00+00:00",
+        "2099-01-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into guard_connect_requests (request_id, sync_url, allowed_origin, pairing_secret_hash, status, created_at, expires_at, completed_at) values (?, ?, ?, 'hash', ?, ?, ?, null)",
+       [
+        "r-new",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "pending",
+        "2026-10-10T10:00:00+00:00",
+        "2099-01-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "r-old",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "waiting",
+        "waiting_for_browser",
+        null,
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "2020-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{}"
+       ]
+      ],
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "r-new",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "waiting",
+        "waiting_for_browser",
+        null,
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:05:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{}"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "newest still waiting",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "waiting_for_browser",
+      "poll_after_ms": 1500,
+      "proof": {},
+      "reason": null,
+      "request_id": "r-new",
+      "status": "waiting",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "waiting_for_browser",
+      "poll_after_ms": 1500,
+      "proof": {},
+      "reason": null,
+      "request_id": "r-new",
+      "status": "waiting",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "make old newest",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-new",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-old",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set updated_at = ? where request_id = 'r-old'",
+       [
+        "2026-10-10T10:10:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "old expires",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-old",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_requests": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "pairing_secret_hash": "hash",
+        "request_id": "r-new",
+        "status": "pending",
+        "sync_url": "https://hol.org/api/guard/receipts/sync"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "pairing_secret_hash": "hash",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync"
+       }
+      ],
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-new",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-old",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "expiry idempotent",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-old",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-old",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "expired with profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "r-old",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "r-old",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "invalid expiry",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "soon",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-new",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set expires_at = 'soon' where request_id = 'r-new'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "r-new newest",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "soon",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-new",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T13:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set updated_at = ? where request_id = 'r-new'",
+       [
+        "2026-10-10T13:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "Invalid isoformat string: 'soon'",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "unparsable expiry",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "naive expiry",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "r-new",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T13:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set expires_at = '2020-01-01T00:00:00' where request_id = 'r-new'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "naive expiry is utc",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-new",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_requests": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "pairing_secret_hash": "hash",
+        "request_id": "r-new",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "pairing_secret_hash": "hash",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync"
+       }
+      ],
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-new",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2020-01-01T00:00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-new",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "zulu expiry",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00Z",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-new",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T13:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2020-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": "request_expired",
+        "request_id": "r-old",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set status='waiting', milestone='waiting_for_browser', expires_at = '2099-01-01T00:00:00Z', updated_at = '2026-10-10T13:00:00+00:00' where request_id = 'r-new'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "zulu future stays waiting",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00Z",
+      "milestone": "waiting_for_browser",
+      "poll_after_ms": 1500,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-new",
+      "status": "waiting",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T13:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00Z",
+      "milestone": "waiting_for_browser",
+      "poll_after_ms": 1500,
+      "proof": {},
+      "reason": "request_expired",
+      "request_id": "r-new",
+      "status": "waiting",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T13:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    }
+   ]
+  },
+  {
+   "name": "sync_result_selection",
+   "seed": {
+    "guard_connect_requests": [],
+    "guard_connect_states": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "empty",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-3",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "c-1",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "connected",
+        "first_sync_pending",
+        null,
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{}"
+       ]
+      ],
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "c-2",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "connected",
+        "first_sync_pending",
+        null,
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:05:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{}"
+       ]
+      ],
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "c-3",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "expired",
+        "expired",
+        null,
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:10:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{}"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "latest connected by updated_at",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "boom",
+      "request_id": "c-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_failed",
+        "proof_json": "{}",
+        "reason": "boom",
+        "request_id": "c-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-3",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "boom",
+      "request_id": "c-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_failed",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": "boom",
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "unknown request id",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "nope",
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "terminal state untouched",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-3",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:10:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-3",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:10:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "c-3",
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "retry_required skipped without id",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-3",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "explicit retry_required",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "c-2",
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "padded id",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "padded",
+      "request_id": "c-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_failed",
+        "proof_json": "{}",
+        "reason": "padded",
+        "request_id": "c-1",
+        "status": "retry_required",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-3",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "padded",
+      "request_id": "c-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_failed",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": "padded",
+      "request_id": " c-1 ",
+      "status": "retry_required",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "blank id is not none",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-3",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_pending",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "  ",
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": {
+      "message": "invalid_connect_state_status",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "invalid status",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "c-1",
+      "status": "bogus",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": {
+      "message": "invalid_connect_state_milestone",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "invalid milestone",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "milestone": "bogus",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "c-1",
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "invalid status without state",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "milestone": "x",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "missing",
+      "status": "bogus",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "waiting status",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "waiting_for_browser",
+      "poll_after_ms": 1500,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-1",
+      "status": "waiting",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-1",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       },
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "c-3",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:10:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "waiting_for_browser",
+      "poll_after_ms": 1500,
+      "proof": {},
+      "reason": null,
+      "request_id": "c-1",
+      "status": "waiting",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "waiting_for_browser",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "c-1",
+      "status": "waiting",
+      "sync_payload": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "sync_payload_proof_merge",
+   "seed": {
+    "guard_connect_requests": [],
+    "guard_connect_states": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 1, \"extra\": {\"k\": \"\\u00e9\"}}",
+        "reason": null,
+        "request_id": "p-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "p-1",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "connected",
+        "first_sync_pending",
+        null,
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 1, \"extra\": {\"k\": \"\\u00e9\"}}"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "full payload",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"extra\": {\"k\": \"\\u00e9\"}, \"inventory_items\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "reason": null,
+        "request_id": "p-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": {
+       "inventory_tracked": 3,
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00",
+       "synced_at": "2026-10-10T10:10:00+00:00"
+      }
+     }
+    },
+    {
+     "error": null,
+     "label": "inventory alias",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 12,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"extra\": {\"k\": \"\\u00e9\"}, \"inventory_items\": 12, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "reason": null,
+        "request_id": "p-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 12,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_payload": {
+       "inventory": "12"
+      }
+     }
+    },
+    {
+     "error": null,
+     "label": "coercions",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"extra\": {\"k\": \"\\u00e9\"}, \"inventory_items\": 0, \"runtime_session_id\": 5, \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "reason": null,
+        "request_id": "p-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": {
+       "inventory_tracked": true,
+       "receipts_stored": -4,
+       "runtime_session_id": 5,
+       "synced_at": null
+      }
+     }
+    },
+    {
+     "error": null,
+     "label": "string and float",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 9,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 9, \"extra\": {\"k\": \"\\u00e9\"}, \"inventory_items\": 0, \"runtime_session_id\": 5, \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "reason": null,
+        "request_id": "p-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 9,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": {
+       "inventory_tracked": 2.5,
+       "receipts_stored": " 9 "
+      }
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable string",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"extra\": {\"k\": \"\\u00e9\"}, \"inventory_items\": 0, \"runtime_session_id\": 5, \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "reason": null,
+        "request_id": "p-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": {
+       "inventory": "",
+       "receipts_stored": "many"
+      }
+     }
+    },
+    {
+     "error": null,
+     "label": "empty payload",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": {}
+     }
+    },
+    {
+     "error": null,
+     "label": "no payload",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "failure with reason",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "network",
+      "request_id": "p-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_failed",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 0, \"extra\": {\"k\": \"\\u00e9\"}, \"inventory_items\": 0, \"runtime_session_id\": 5, \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "reason": "network",
+        "request_id": "p-1",
+        "status": "retry_required",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "network",
+      "request_id": "p-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_failed",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": "network",
+      "request_id": "p-1",
+      "status": "retry_required",
+      "sync_payload": null
+     }
+    },
+    {
+     "error": null,
+     "label": "retry_required recovers by id",
+     "method": "record_latest_guard_connect_sync_result",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 3,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"pairing_completed_at\": \"2026-10-10T10:00:00+00:00\", \"first_synced_at\": null, \"receipts_stored\": 3, \"extra\": {\"k\": \"\\u00e9\"}, \"inventory_items\": 0, \"runtime_session_id\": 5, \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "reason": null,
+        "request_id": "p-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "extra": {
+        "k": "\u00e9"
+       },
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 3,
+       "runtime_session_id": 5,
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": "p-1",
+      "status": "connected",
+      "sync_payload": {
+       "receipts_stored": 3
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "effective_state_normalization",
+   "seed": {
+    "guard_connect_requests": [],
+    "guard_connect_states": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "connected pending",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{}",
+        "reason": "hello",
+        "request_id": "e-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "e-1",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "connected",
+        "first_sync_pending",
+        "hello",
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{}"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "no profile, connected -> retry_required",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "e-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "e-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": null,
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "profile only",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "bare profile url",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": null,
+       "sync_url": "not a url"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "summary promotes",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "summary, no profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "e-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again.",
+      "request_id": "e-1",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": null,
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"inventory\": 4, \"receipts_stored\": -1}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"inventory\": 4, \"receipts_stored\": -1}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "inventory alias and negative",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 4,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 4,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"receipts_stored\": true, \"synced_at\": \"\", \"runtime_session_id\": \"\"}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"receipts_stored\": true, \"synced_at\": \"\", \"runtime_session_id\": \"\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "bool counts and blanks",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": true,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": true,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "[1, 2]",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "[1, 2]",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "list summary ignored",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "5",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "5",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "scalar summary ignored",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "empty summary",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "hello",
+      "request_id": "e-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "reset",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [],
+      "sync_state": []
+     },
+     "result": null,
+     "sql": [
+      [
+       "delete from guard_connect_states",
+       []
+      ],
+      [
+       "delete from guard_connect_requests",
+       []
+      ],
+      [
+       "delete from sync_state",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "no state, profile + summary",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": null,
+      "created_at": null,
+      "expires_at": null,
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": null,
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": null,
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": null,
+      "created_at": null,
+      "expires_at": null,
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": null,
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": null,
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "clear summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": []
+     },
+     "result": null,
+     "sql": [
+      [
+       "delete from sync_state where state_key = 'sync_summary'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "no state, profile only",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": null,
+      "created_at": null,
+      "expires_at": null,
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": null,
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": null,
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": null,
+      "created_at": null,
+      "expires_at": null,
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": null,
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": null,
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "retry_required",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_failed",
+        "proof_json": "{}",
+        "reason": "bad",
+        "request_id": "e-2",
+        "status": "retry_required",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "e-2",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "retry_required",
+        "first_sync_failed",
+        "bad",
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:05:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{}"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"synced_at\": \"2026-10-10T10:10:00+00:00\", \"receipts_stored\": 7, \"inventory_tracked\": 3, \"runtime_session_id\": \"rs-1\", \"runtime_session_synced_at\": \"2026-10-10T10:05:00+00:00\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "retry_required stays",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "retry_required without profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "retry_required",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": null,
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "failed milestone",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_failed",
+        "proof_json": "{}",
+        "reason": "bad",
+        "request_id": "e-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set status='connected', milestone='first_sync_failed' where request_id='e-2'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "failed milestone blocks promotion",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_failed",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "not available",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "sync_not_available",
+        "proof_json": "{}",
+        "reason": "bad",
+        "request_id": "e-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set milestone='sync_not_available' where request_id='e-2'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "sync_not_available blocks",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "sync_not_available",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "sync_not_available",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": "2026-10-10T10:10:00+00:00",
+       "inventory_items": 3,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 7,
+       "runtime_session_id": "rs-1",
+       "runtime_session_synced_at": "2026-10-10T10:05:00+00:00"
+      },
+      "reason": "bad",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "expired",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "expired",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "e-2",
+        "status": "expired",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set status='expired', milestone='expired', reason=null where request_id='e-2'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "clear summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": []
+     },
+     "result": null,
+     "sql": [
+      [
+       "delete from sync_state where state_key = 'sync_summary'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "expired -> pending",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "expired without profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "e-2",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "expired",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "e-2",
+      "status": "expired",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": null,
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "waiting",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "waiting_for_browser",
+        "proof_json": "{}",
+        "reason": null,
+        "request_id": "e-2",
+        "status": "waiting",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set status='waiting', milestone='waiting_for_browser' where request_id='e-2'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "waiting -> pending",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "waiting_for_first_sync",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "empty reason",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{}",
+        "reason": "",
+        "request_id": "e-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set status='connected', milestone='first_sync_succeeded', reason='' where request_id='e-2'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "empty reason kept",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": 0,
+       "pairing_completed_at": "2026-10-10T10:00:00+00:00",
+       "receipts_stored": 0,
+       "runtime_session_id": null,
+       "runtime_session_synced_at": null
+      },
+      "reason": "",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "proof carries counts",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"receipts_stored\": 9, \"inventory_items\": true, \"pairing_completed_at\": \"x\", \"runtime_session_id\": \"old\"}",
+        "reason": "",
+        "request_id": "e-2",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set proof_json = ?, completed_at = null where request_id='e-2'",
+       [
+        "{\"receipts_stored\": 9, \"inventory_items\": true, \"pairing_completed_at\": \"x\", \"runtime_session_id\": \"old\"}"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "sync summary",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"receipts_stored\": 2, \"runtime_session_id\": \"new\"}",
+        "state_key": "sync_summary",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert or replace into sync_state (state_key, payload_json, updated_at) values ('sync_summary', ?, ?)",
+       [
+        "{\"receipts_stored\": 2, \"runtime_session_id\": \"new\"}",
+        "2026-10-10T10:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "proof max",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "x",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": true,
+       "pairing_completed_at": "x",
+       "receipts_stored": 9,
+       "runtime_session_id": "new",
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "x",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": true,
+       "pairing_completed_at": "x",
+       "receipts_stored": 9,
+       "runtime_session_id": "new",
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "blank origin",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "",
+        "completed_at": null,
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"receipts_stored\": 9, \"inventory_items\": true, \"pairing_completed_at\": \"x\", \"runtime_session_id\": \"old\"}",
+        "reason": "",
+        "request_id": "e-2",
+        "status": "connected",
+        "sync_url": "",
+        "updated_at": "2026-10-10T10:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set allowed_origin = '', sync_url = '' where request_id='e-2'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "blank origin falls back",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "x",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": true,
+       "pairing_completed_at": "x",
+       "receipts_stored": 9,
+       "runtime_session_id": "new",
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "x",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": true,
+       "pairing_completed_at": "x",
+       "receipts_stored": 9,
+       "runtime_session_id": "new",
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": "https://hol.org",
+       "sync_url": "https://hol.org/api/guard/receipts/sync"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "blank origin and bare profile",
+     "method": "get_effective_guard_connect_state",
+     "native_method": "guard_connect_effective_state",
+     "native_payload": {
+      "allowed_origin": "",
+      "completed_at": "x",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": true,
+       "pairing_completed_at": "x",
+       "receipts_stored": 9,
+       "runtime_session_id": "new",
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "not a url",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "",
+      "completed_at": "x",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "first_synced_at": null,
+       "inventory_items": true,
+       "pairing_completed_at": "x",
+       "receipts_stored": 9,
+       "runtime_session_id": "new",
+       "runtime_session_synced_at": null
+      },
+      "reason": "first_sync_succeeded",
+      "request_id": "e-2",
+      "status": "connected",
+      "sync_url": "not a url",
+      "updated_at": "2026-10-10T10:05:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "cloud_profile": {
+       "allowed_origin": null,
+       "sync_url": "not a url"
+      },
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    }
+   ]
+  },
+  {
+   "name": "stored_proof_documents",
+   "seed": {
+    "guard_connect_requests": [],
+    "guard_connect_states": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "invalid proof",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{not json",
+        "reason": null,
+        "request_id": "l-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into guard_connect_states (request_id, sync_url, allowed_origin, status, milestone, reason, created_at, updated_at, expires_at, completed_at, proof_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "l-1",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org",
+        "connected",
+        "first_sync_pending",
+        null,
+        "2026-10-10T10:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "2099-01-01T00:00:00+00:00",
+        "2026-10-10T10:00:00+00:00",
+        "{not json"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "invalid proof",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "list proof",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "[1,2]",
+        "reason": null,
+        "request_id": "l-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set proof_json = '[1,2]' where request_id='l-1'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "list proof",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "null-ish proof",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "null",
+        "reason": null,
+        "request_id": "l-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set proof_json = 'null' where request_id='l-1'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "null proof",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_pending",
+      "poll_after_ms": 0,
+      "proof": {},
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T10:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "ordered proof",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_pending",
+        "proof_json": "{\"zeta\": 1, \"alpha\": [1, 2], \"inventory_items\": 5}",
+        "reason": null,
+        "request_id": "l-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T10:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set proof_json = ? where request_id='l-1'",
+       [
+        "{\"zeta\": 1, \"alpha\": [1, 2], \"inventory_items\": 5}"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "merge keeps key order",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "alpha": [
+        1,
+        2
+       ],
+       "inventory_items": 5,
+       "receipts_stored": 2,
+       "runtime_session_id": "r",
+       "zeta": 1
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"zeta\": 1, \"alpha\": [1, 2], \"inventory_items\": 5, \"receipts_stored\": 2, \"runtime_session_id\": \"r\"}",
+        "reason": null,
+        "request_id": "l-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "alpha": [
+        1,
+        2
+       ],
+       "inventory_items": 5,
+       "receipts_stored": 2,
+       "runtime_session_id": "r",
+       "zeta": 1
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": {
+       "receipts_stored": 2,
+       "runtime_session_id": "r"
+      }
+     }
+    },
+    {
+     "error": null,
+     "label": "after merge",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "alpha": [
+        1,
+        2
+       ],
+       "inventory_items": 5,
+       "receipts_stored": 2,
+       "runtime_session_id": "r",
+       "zeta": 1
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "alpha": [
+        1,
+        2
+       ],
+       "inventory_items": 5,
+       "receipts_stored": 2,
+       "runtime_session_id": "r",
+       "zeta": 1
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "duplicate keys",
+     "method": "sql",
+     "native_method": "sql",
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"a\": 1, \"b\": 2, \"a\": 3}",
+        "reason": null,
+        "request_id": "l-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update guard_connect_states set proof_json = '{\"a\": 1, \"b\": 2, \"a\": 3}' where request_id='l-1'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "duplicate key merge",
+     "method": "record_latest_guard_connect_sync_success",
+     "native_method": "guard_connect_record_sync_result",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "a": 3,
+       "b": 2,
+       "first_synced_at": "\u00e9"
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {
+      "guard_connect_states": [
+       {
+        "allowed_origin": "https://hol.org",
+        "completed_at": "2026-10-10T10:00:00+00:00",
+        "created_at": "2026-10-10T10:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
+        "milestone": "first_sync_succeeded",
+        "proof_json": "{\"a\": 3, \"b\": 2, \"first_synced_at\": \"\\u00e9\"}",
+        "reason": null,
+        "request_id": "l-1",
+        "status": "connected",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "updated_at": "2026-10-10T12:00:00+00:00"
+       }
+      ]
+     },
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "a": 3,
+       "b": 2,
+       "first_synced_at": "\u00e9"
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "milestone": "first_sync_succeeded",
+      "now": "2026-10-10T12:00:00+00:00",
+      "reason": null,
+      "request_id": null,
+      "status": "connected",
+      "sync_payload": {
+       "synced_at": "\u00e9"
+      }
+     }
+    },
+    {
+     "error": null,
+     "label": "after duplicate merge",
+     "method": "get_latest_guard_connect_state",
+     "native_method": "guard_connect_latest_state",
+     "native_payload": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "a": 3,
+       "b": 2,
+       "first_synced_at": "\u00e9"
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "post_changed": {},
+     "result": {
+      "allowed_origin": "https://hol.org",
+      "completed_at": "2026-10-10T10:00:00+00:00",
+      "created_at": "2026-10-10T10:00:00+00:00",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "milestone": "first_sync_succeeded",
+      "poll_after_ms": 0,
+      "proof": {
+       "a": 3,
+       "b": 2,
+       "first_synced_at": "\u00e9"
+      },
+      "reason": null,
+      "request_id": "l-1",
+      "status": "connected",
+      "sync_url": "https://hol.org/api/guard/receipts/sync",
+      "updated_at": "2026-10-10T12:00:00+00:00",
+      "version": "guard-connect-state.v1"
+     },
+     "wire_args": {
+      "now": "2026-10-10T12:00:00+00:00"
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-guard-connect-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE sync_state (\n              state_key text primary key,\n              payload_json text not null,\n              updated_at text not null\n            )",
+  "CREATE TABLE guard_connect_states (\n          request_id text primary key,\n          sync_url text not null,\n          allowed_origin text not null,\n          status text not null,\n          milestone text not null,\n          reason text,\n          created_at text not null,\n          updated_at text not null,\n          expires_at text not null,\n          completed_at text,\n          proof_json text not null default '{}'\n        )",
+  "CREATE TABLE guard_connect_requests (\n          request_id text primary key,\n          sync_url text not null,\n          allowed_origin text not null,\n          pairing_secret_hash text not null,\n          status text not null,\n          created_at text not null,\n          expires_at text not null,\n          completed_at text\n        )"
+ ],
+ "source": "guard"
+}

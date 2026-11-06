@@ -1,0 +1,16 @@
+{
+  "batch": 4,
+  "evidence": [
+    "tests/managed_controls/privacy.py",
+    "tests/managed_controls/identity.py",
+    "tests/managed_controls/test_catalog_privacy_identity.py"
+  ],
+  "repository": "hashgraph-online/hol-guard",
+  "schema_version": 1,
+  "target_branch": "release/3.0",
+  "task_range": {
+    "end": 60,
+    "start": 46
+  },
+  "theme": "Privacy-safe catalog projection and stable identity continuity"
+}

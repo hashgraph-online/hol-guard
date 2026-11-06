@@ -1,0 +1,165 @@
+{
+  "$id": "https://hol.org/schemas/guard/mdm-cloud-remediation-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "enum": [
+              "integrity-scan",
+              "policy-refresh"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "maxProperties": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "repair"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "enum": [
+                  "machine",
+                  "users"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "service-register"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "service": {
+                "enum": [
+                  "machine-health",
+                  "supervisor"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "version-converge"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "targetVersion": {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "targetVersion"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "action": {
+      "enum": [
+        "integrity-scan",
+        "policy-refresh",
+        "repair",
+        "service-register",
+        "version-converge"
+      ]
+    },
+    "createdAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
+    "deviceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "expiresAt": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "type": "string"
+    },
+    "idempotencyKey": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "installationGeneration": {
+      "pattern": "^[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "jobId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "maxAttempts": {
+      "maximum": 5,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "parameters": {
+      "maxProperties": 1,
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": "hol-guard-mdm-cloud-remediation.v1"
+    },
+    "workspaceId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "workspaceId",
+    "deviceId",
+    "installationGeneration",
+    "jobId",
+    "idempotencyKey",
+    "action",
+    "parameters",
+    "createdAt",
+    "expiresAt",
+    "maxAttempts"
+  ],
+  "title": "HOL Guard typed MDM remediation v1",
+  "type": "object"
+}

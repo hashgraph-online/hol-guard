@@ -1,0 +1,17 @@
+{
+  "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+  "kind": "GuardPolicy",
+  "metadata": {"id": "policy.source", "name": "private-source-marker", "revision": 1},
+  "spec": {
+    "defaults": {"mode": "enforce", "defaultAction": "block"},
+    "rules": [{
+      "id": "mail.rule", "enabled": true, "effect": "review",
+      "match": {"business": {
+        "schema": "guard.business-policy-match.v1", "version": 1,
+        "services": ["google_gmail"], "operations": ["mail_send"]
+      }},
+      "lifetime": {"mode": "until", "expiresAt": "2026-07-16T00:00:00.000000001Z"},
+      "provenance": {"source": "local", "createdAt": "2026-07-15T00:00:00Z"}
+    }]
+  }
+}
