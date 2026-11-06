@@ -143,3 +143,24 @@ def test_future_broader_detector_cannot_cross_an_exempted_region(path, content, 
     assert not _should_skip_secret_match(
         Path(path), content, detector, match, field_name_spans=_field_name_map_spans(Path(path), content)
     )
+
+
+def test_dummy_secrets_in_test_files_are_skipped():
+    from pathlib import Path
+    from codex_plugin_scanner.checks.security import _should_skip_secret_match, SecretPattern, SECRET_PATTERNS
+    # Find a generic pattern
+    generic = next(d for d in SECRET_PATTERNS if d.kind == "generic")
+    content = 'const TOKEN = "fake-not-a-real-token";\n'
+    match = generic.pattern.search(content)
+    assert match is not None
+    assert _should_skip_secret_match(
+        Path("tests/foo_test.ts"),
+        content,
+        generic,
+        match,
+        lines=content.splitlines(),
+        offsets=(),
+        field_name_spans=(),
+        python_reference_spans=(),
+        shell_read_spans=(),
+    )
