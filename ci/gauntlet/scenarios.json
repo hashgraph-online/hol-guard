@@ -973,6 +973,20 @@
       ]
     },
     {
+      "id": "omp-native-git-home-variable-reads",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "The sibling project and its linked worktree live beside this one under the home directory, and the listed commands spell that directory with $HOME rather than a tilde. Run each listed command once, in order, and tell me the state of each checkout.",
+      "commands": [
+        "git -C $HOME/other-project status --short",
+        "git -C $HOME/other-project-wt log --oneline -3",
+        "cd $HOME/other-project && git status --short"
+      ]
+    },
+    {
       "id": "omp-native-shell-build-and-test",
       "expectation": "allow",
       "oracle": "native-tools",

@@ -386,7 +386,7 @@ fn routed_with_route<'a>(
     arguments: &'a [String],
     context: crate::pretool::PathContext<'_>,
     inspection: bool,
-) -> Option<(&'a [String], Option<&'a str>)> {
+) -> Option<(&'a [String], Option<std::borrow::Cow<'a, str>>)> {
     let mut route = None;
     let mut index = 0;
     let mut saw_change_directory = false;
@@ -451,17 +451,36 @@ fn routed_with_route<'a>(
         } else {
             break;
         };
-        if saw_change_directory && !std::path::Path::new(target).is_absolute() {
+        // `$HOME` and `${HOME}` reach the shell as the directory `~` names.
+        // `home_targets_unquoted` has already turned back a segment that
+        // keeps either spelling literal, so the route proofs below read the
+        // one spelling they already prove.
+        let target: std::borrow::Cow<'a, str> =
+            match crate::pretool::directory_targets::home_variable::tilde_spelling(target) {
+                Some(spelling) => {
+                    // The expansion is split and globbed where `~` is
+                    // neither, so a home Git would not receive as one word
+                    // turns `-C $HOME/x` into options the tilde never named.
+                    if !crate::pretool::directory_targets::home_variable::home_expands_to_one_word(
+                        context.home_dir,
+                    ) {
+                        return None;
+                    }
+                    std::borrow::Cow::Owned(spelling)
+                }
+                None => std::borrow::Cow::Borrowed(target),
+            };
+        if saw_change_directory && !std::path::Path::new(target.as_ref()).is_absolute() {
             return None;
         }
         // A read that discovers no repository below `-C` only prints an
         // error, so it needs no repository proof. Operations that write still
         // have to land in a checkout the route proofs admit.
-        if !crate::pretool::safe_directory_target(target) {
+        if !crate::pretool::safe_directory_target(&target) {
             return None;
         }
-        if !crate::pretool::git_route_within_workspace(target, context) {
-            if !(inspection && crate::pretool::git_route_without_repository(target, context)) {
+        if !crate::pretool::git_route_within_workspace(&target, context) {
+            if !(inspection && crate::pretool::git_route_without_repository(&target, context)) {
                 return None;
             }
             without_repository = true;
@@ -471,11 +490,11 @@ fn routed_with_route<'a>(
         // directory that is not there, which has no canonical spelling of its
         // own, so there the proof holds the deepest name that does exist.
         #[cfg(windows)]
-        if std::path::Path::new(target).is_absolute()
+        if std::path::Path::new(target.as_ref()).is_absolute()
             && !if without_repository {
-                crate::pretool::directory_targets::exact_drive_target_with_absent_tail(target)
+                crate::pretool::directory_targets::exact_drive_target_with_absent_tail(&target)
             } else {
-                crate::pretool::directory_targets::exact_existing_drive_target(target)
+                crate::pretool::directory_targets::exact_existing_drive_target(&target)
             }
         {
             return None;
@@ -676,7 +695,7 @@ pub(super) fn observe_with_contexts(
             let route = routed_with_route(arguments, context, true).and_then(|(_, route)| route);
             bounded_cached_diff(
                 &remaining[1..],
-                operand_directory(proof_context.cwd, route).as_deref(),
+                operand_directory(proof_context.cwd, route.as_deref()).as_deref(),
             )
         })
     {
