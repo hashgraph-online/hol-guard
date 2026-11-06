@@ -316,7 +316,7 @@
     "Keep terminal execution (run_command) and desktop automation (desktop_click, desktop_type, desktop_action) on review to prevent unprompted local system manipulation.",
     "Keep destructive operations (delete_path, delete_recursive, reset_project_brain, reset_context) on review to protect repository files and project history.",
     "Keep file creation and directory operations (write_file, edit_file, batch_replace, create_directory) on review to avoid unprompted filesystem modifications.",
-    "safe and trusted modes constrain operations to the active project root; tools that can change or initialize that root (get_context, bootstrap_project, create_project_workspace, init_context) should remain on review.",
+    "safe and trusted modes constrain ordinary file tools to the active project root. Onboarding tools bootstrap_project, create_project_workspace, and init_context may use explicitly supplied paths outside that root; keep these tools and get_context on review.",
     "Unlisted tools default to review, so newly added capabilities cannot silently inherit a less restrictive policy."
   ]
 }
