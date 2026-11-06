@@ -256,6 +256,33 @@ fn later_comparison_literals_with_a_value_shape_are_credentials() {
 }
 
 #[test]
+fn a_comparison_against_a_short_plain_literal_is_a_label() {
+    // Reading ordinary source stopped on every line of this shape. The
+    // credential rule reads the comparison's own `==` as its separator, so the
+    // literal it compares against arrives with no operator left beside it, and
+    // the cursor used to refuse a literal there outright.
+    for text in [
+        "if token == \"--\" {",
+        "if (secret === 'none') {",
+        "if password == \"\":",
+        "secret == \"default\"",
+        "if (secret === 'none' || mode !== 'prod') {",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    // A literal with a digit or a long one is a value wherever it sits on the
+    // line, and an unclosed one hides however much the cursor never read.
+    for text in [
+        "if (token == \"sk-live-9f2a1c\") {",
+        "if (password === 'correcthorsebattery') {",
+        "if (token == 'dev' || token == 'v2') {",
+        "if (token == 'unterminated",
+    ] {
+        assert!(flagged(text), "{text:?}");
+    }
+}
+
+#[test]
 fn long_bare_fallbacks_are_credentials_and_variables_stay_inert() {
     for text in [
         "const password = getPassword(user, 12) || correcthorsebatterystaple;",

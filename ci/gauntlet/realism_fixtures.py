@@ -59,9 +59,14 @@ REVIEW_NOTES = (
     'Security command examples stay inert in docs.\\n"\n'
 )
 REVIEW_NOTES_MARKER = "credential = 'fixture-only'\\nSecurity"
-# Field copies: each value names another object's field, never a literal.
+# Field copies and one mode comparison: no value is ever spelled out. The
+# comparison is the shape a credential-named field takes when it is checked
+# against a mode rather than assigned, which the scanner read as a finding.
 SESSION_SOURCE = (
     "export function connectAs(session, cfg) {\n"
+    "  if (session.token === 'none') {\n"
+    "    return { client: null, database: null };\n"
+    "  }\n"
     "  const client = connect({ token: session.token, user: session.user });\n"
     "  const database = {\n"
     "    host: cfg.host,\n"

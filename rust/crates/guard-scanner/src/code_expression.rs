@@ -260,12 +260,20 @@ impl<'a> Cursor<'a> {
         self.scan(None, 1) != Scan::Fail
     }
 
-    /// A comparison such as `token === expected`: the other side must be code,
-    /// never a literal.
+    /// A comparison such as `token === expected`: the other side is code, or
+    /// the kind of short plain literal [`equality_literals_ok`] already reads
+    /// as a mode or a label.
     fn comparison(&mut self) -> bool {
         self.skip_blanks();
-        if self.done() || matches!(self.bytes[self.at], b'"' | b'\'' | b'`') {
+        if self.done() {
             return false;
+        }
+        if matches!(self.bytes[self.at], b'"' | b'\'' | b'`') {
+            // The credential rule reads the comparison's own `==` as its
+            // separator, so a literal on the right arrives here at the front
+            // of the expression with no operator left for
+            // [`equality_literals_ok`] to find. Judge it the same way.
+            return every_literal_is_a_label(&self.bytes[self.at..]);
         }
         let start = self.at;
         self.operand(false).is_some()
@@ -304,6 +312,30 @@ fn equality_literals_ok(expression: &[u8]) -> bool {
             }
         }
         at = after;
+    }
+    true
+}
+
+/// Whether every quoted literal in `text` reads as a mode or a label, as in
+/// `if token == "--" {` or `if (secret === 'none' || mode !== 'prod')`. An
+/// unclosed literal hides however much the cursor never read, so it never
+/// qualifies. A value this rejects is still matched on its own line wherever it
+/// is spelled out, so the check loses no credential by reading only labels here.
+fn every_literal_is_a_label(text: &[u8]) -> bool {
+    let mut at = 0usize;
+    while at < text.len() {
+        let quote = text[at];
+        if !matches!(quote, b'"' | b'\'' | b'`') {
+            at += 1;
+            continue;
+        }
+        let Some(body) = leading_literal(&text[at..]) else {
+            return false;
+        };
+        if text.get(at + body.len() + 1) != Some(&quote) || !label(body) {
+            return false;
+        }
+        at += body.len() + 2;
     }
     true
 }
