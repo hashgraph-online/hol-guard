@@ -132,10 +132,8 @@ class ExtensionControlAuthorityCommitMixin:
         try:
             return self._bootstrap_extension_control_authority(catalog_digest, key=None)
         except Exception:
-            with contextlib.suppress(Exception), self._connect() as connection:
-                connection.execute(
-                    "delete from extension_control_authority_snapshot where singleton = 1 and revision = 0"
-                )
+            with contextlib.suppress(Exception):
+                self._extension_control_authority_op("abandon_bootstrap", key=None)
             with contextlib.suppress(Exception):
                 self._secret_store().delete_secret(self._anchor_ref())
             raise

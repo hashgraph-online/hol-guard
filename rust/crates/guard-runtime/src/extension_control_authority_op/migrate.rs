@@ -17,6 +17,7 @@
 
 use std::cell::RefCell;
 
+use guard_command::extension_control::ExtensionControlLayer;
 use guard_contracts::{ExtensionControlAuthorityRequestV1, ExtensionControlMigrationRecordV1};
 use rusqlite::params;
 use serde_json::{json, Value};
@@ -66,8 +67,6 @@ fn int(value: &Value) -> Res<i64> {
     value.as_i64().ok_or_else(|| tampered(INVALID_MIGRATION))
 }
 
-/// `build_catalog_migration_payload`: the migration event, and the regression
-/// row when the migration hands the store back to an older writer.
 fn migration_events(
     request: &ExtensionControlAuthorityRequestV1,
     record: &ExtensionControlMigrationRecordV1,
@@ -82,11 +81,27 @@ fn migration_events(
         .as_deref()
         .ok_or_else(|| tampered(INVALID_MIGRATION))?;
     let layers = layers_from_values(&migration.layers)?;
+    event_rows(
+        (migration.previous_revision, revision),
+        (&migration.previous_catalog_digest, catalog_digest),
+        &layers,
+        record,
+    )
+}
+
+/// `build_catalog_migration_payload`: the migration event, and the regression
+/// row when the migration hands the store back to an older writer.
+pub(super) fn event_rows(
+    (previous_revision, revision): (i64, i64),
+    (previous_catalog_digest, catalog_digest): (&str, &str),
+    layers: &[ExtensionControlLayer],
+    record: &ExtensionControlMigrationRecordV1,
+) -> Res<(String, Option<String>)> {
     let retired = &record.retired_target_ids;
     let mut payload = json!({
-        "previous_revision": migration.previous_revision,
+        "previous_revision": previous_revision,
         "revision": revision,
-        "previous_catalog_digest": migration.previous_catalog_digest,
+        "previous_catalog_digest": previous_catalog_digest,
         "catalog_digest": catalog_digest,
         "layer_count": layers.len(),
         "control_count": layers.iter().map(|layer| layer.controls.len()).sum::<usize>(),
@@ -106,7 +121,7 @@ fn migration_events(
     payload["regression"] = regression.clone();
     let mut row = json!({
         "revision": revision,
-        "previous_catalog_digest": migration.previous_catalog_digest,
+        "previous_catalog_digest": previous_catalog_digest,
         "catalog_digest": catalog_digest,
     });
     for (name, value) in regression.as_object().into_iter().flatten() {
@@ -297,7 +312,7 @@ impl Ctx<'_> {
         self.insert_migration_events(&events, &row_str(row, "created_at")?)
     }
 
-    fn insert_migration_events(
+    pub(super) fn insert_migration_events(
         &self,
         (payload, regression): &(String, Option<String>),
         created_at: &str,
