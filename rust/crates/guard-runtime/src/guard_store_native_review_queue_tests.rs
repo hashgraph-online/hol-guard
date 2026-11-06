@@ -535,3 +535,6 @@ fn a_call_with_no_time_past_the_writes_reserve_skips_the_lookup() {
         local_cli()["queue_group_id"]
     );
 }
+
+#[path = "guard_store_native_review_queue_live_wait_tests.rs"]
+mod live_wait_tests;

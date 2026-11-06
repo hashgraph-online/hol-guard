@@ -708,8 +708,10 @@ fn dispatch(
             add_native_review_approval_request(connection, source, args)
         }),
         "add_silent_native_review_approval_request" => {
-            add_silent_native_review_approval_request(connection, source, args)
-                .and_then(|written| stored_row(connection, guard_home, args, owner, written))
+            queue_with_live_wait(connection, args, |args| {
+                add_silent_native_review_approval_request(connection, source, args)
+            })
+            .and_then(|written| stored_row(connection, guard_home, args, owner, written))
         }
         "add_claude_native_review_approval_request" => {
             add_claude_native_review_approval_request(connection, source, args)
