@@ -62,3 +62,22 @@ fn a_configuration_write_or_another_source_keeps_its_review() {
         assert!(!proven(text), "{text}");
     }
 }
+
+/// Only a `--get-regexp` pattern is matched against configuration keys. Every
+/// other argument is one the shell expands before Git sees it, so it keeps the
+/// path screen: in a directory holding `user.name` and `value`, an unquoted
+/// `git config *` reaches Git as the write `git config user.name value`, and a
+/// `--default` operand can still name a private file.
+#[test]
+fn an_argument_the_shell_expands_keeps_the_path_screen() {
+    for text in [
+        "config *",
+        "config get *",
+        "config --get *",
+        "config --get-all *",
+        "config --list --default=.env",
+        "config --get ~/.aws/*",
+    ] {
+        assert!(!proven(text), "{text}");
+    }
+}

@@ -13524,6 +13524,23 @@
       "expect": "allow"
     },
     {
+      "id": "git-config-unquoted-star-reviewed",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git config *"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-rev-parse-show-toplevel",
       "fix_area": "shell",
       "harnesses": [

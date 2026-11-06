@@ -73,9 +73,52 @@ pub(crate) enum Printed {
     All,
 }
 
+/// The verb, the read mode and the operands of the arguments after `config`.
+struct Form<'a> {
+    verb: &'a str,
+    mode: &'a str,
+    operands: Vec<&'a str>,
+}
+
 /// Classifies the arguments after `config`. Only reads return a value; every
 /// write form, `--file`/`--blob` sources and editor launches return `None`.
 pub(crate) fn read_form(arguments: &[String]) -> Option<Printed> {
+    let Form {
+        verb,
+        mode,
+        operands,
+    } = parse(arguments)?;
+    let key = |name: &str| {
+        (!name.is_empty() && !name.contains('=')).then(|| Printed::Key(name.to_ascii_lowercase()))
+    };
+    match (verb, mode, operands.as_slice()) {
+        ("list", "", []) | ("", "--list" | "-l", []) => Some(Printed::All),
+        ("get", "--get-regexp", [_]) | ("", "--get-regexp", [_] | [_, _]) => Some(Printed::All),
+        ("get", "", [name]) | ("", "" | "--get" | "--get-all", [name]) => key(name),
+        ("", "--get" | "--get-all", [name, _]) => key(name),
+        _ => None,
+    }
+}
+
+/// The arguments the path screen still covers. A `--get-regexp` operand is
+/// matched against the keys in the configuration file, so it is a pattern
+/// rather than a path and the screen would refuse every `remote.*url`. Every
+/// other argument is one the shell can expand over the files that are there,
+/// turning `git config *` into the write `git config user.name value`, so it
+/// keeps the screen those expanded words would face.
+pub(crate) fn screened_arguments(arguments: &[String]) -> Vec<&str> {
+    let patterns = match parse(arguments) {
+        Some(form) if form.mode == "--get-regexp" => form.operands,
+        _ => Vec::new(),
+    };
+    arguments
+        .iter()
+        .map(String::as_str)
+        .filter(|argument| !patterns.contains(argument))
+        .collect()
+}
+
+fn parse(arguments: &[String]) -> Option<Form<'_>> {
     let (verb, rest) = match arguments.split_first() {
         Some((first, rest)) if matches!(first.as_str(), "get" | "list") => (first.as_str(), rest),
         _ => ("", arguments),
@@ -107,16 +150,11 @@ pub(crate) fn read_form(arguments: &[String]) -> Option<Printed> {
             return None;
         }
     }
-    let key = |name: &str| {
-        (!name.is_empty() && !name.contains('=')).then(|| Printed::Key(name.to_ascii_lowercase()))
-    };
-    match (verb, mode, operands.as_slice()) {
-        ("list", "", []) | ("", "--list" | "-l", []) => Some(Printed::All),
-        ("get", "--get-regexp", [_]) | ("", "--get-regexp", [_] | [_, _]) => Some(Printed::All),
-        ("get", "", [name]) | ("", "" | "--get" | "--get-all", [name]) => key(name),
-        ("", "--get" | "--get-all", [name, _]) => key(name),
-        _ => None,
-    }
+    Some(Form {
+        verb,
+        mode,
+        operands,
+    })
 }
 
 /// Git pages the listing forms (`--list`, `--get-all`, `--get-regexp`) by

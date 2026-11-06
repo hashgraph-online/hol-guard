@@ -88,15 +88,23 @@ pub(super) fn safe_git_arguments(
             Some((subcommand, rest)) if subcommand == "tag" => {
                 return leading_safe && super::git_tag_listing::is_listing(rest);
             }
-            // A configuration name, and the pattern `--get-regexp` matches,
-            // name keys in the configuration file. Git never expands either
-            // over the files that are there, so a pattern such as
-            // `remote.*url` is not a glob that could select a private file,
-            // and only the leading git options go through the path checks.
+            // The pattern `--get-regexp` matches names keys in the
+            // configuration file. Git never expands it over the files that
+            // are there, so `remote.*url` is not a glob that could select a
+            // private file, and the path screen that refuses every such
+            // pattern does not apply to it. Each remaining argument is still
+            // screened: the shell expands an unquoted one before Git sees it,
+            // and `git config *` in a directory holding `user.name` and
+            // `value` reaches Git as the write `git config user.name value`.
             // Only the configuration probe can prove what the read prints.
             Some((subcommand, rest)) if subcommand == "config" => {
                 return leading_safe
                     && allow_helper_context
+                    && !super::git_config_reads::screened_arguments(rest)
+                        .iter()
+                        .any(|value| {
+                            value.starts_with(':') || super::sensitive_read_path_argument(value)
+                        })
                     && super::git_config_reads::read_form(rest).is_some();
             }
             // The pattern is search text, not a path: only the revisions and
