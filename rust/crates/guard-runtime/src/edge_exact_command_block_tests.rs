@@ -161,7 +161,7 @@ fn a_heredoc_or_shift_does_not_hide_the_blocked_step() {
 
 #[test]
 fn a_line_too_long_to_read_asks() {
-    let home = home(&[Row {
+    let ruled = home(&[Row {
         action: "block",
         ..rule("npm publish")
     }]);
@@ -169,7 +169,7 @@ fn a_line_too_long_to_read_asks() {
         "echo {}; npm publish",
         "x".repeat(guard_command::MAX_COMMAND_BYTES)
     );
-    let raised = apply(home.path(), &call(&command), Some(NOW), allowed());
+    let raised = apply(ruled.path(), &call(&command), Some(NOW), allowed());
     assert_eq!(raised.minimum_action, "review");
     assert_eq!(raised.reason_code, "exact_command_line_unreadable");
     validate_pre_tool_result_matrix(&raised).unwrap();
