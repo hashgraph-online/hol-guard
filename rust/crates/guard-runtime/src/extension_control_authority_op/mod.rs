@@ -31,6 +31,7 @@ mod managed_seals_tests;
 #[cfg(test)]
 mod managed_tests;
 mod migrate;
+mod migration_event;
 mod pack_finish;
 mod pack_reserve;
 mod plans;
@@ -130,6 +131,8 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "bootstrap" => return commit::bootstrap_op(request, key),
         "write_manifest" => return commit::write_manifest_op(request, key),
         "reset" => return reset::reset_op(request),
+        "abandon_bootstrap" => return reset::abandon_bootstrap_op(request),
+        "record_migration" => return migration_event::record_migration_op(request),
         _ => return Err(INVALID.to_owned()),
     };
     Ok(outcome.unwrap_or_else(|fault| fault_value(&fault, Vec::new())))
