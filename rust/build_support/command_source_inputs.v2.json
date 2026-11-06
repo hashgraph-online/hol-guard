@@ -175,6 +175,7 @@
       "src/jsonc.rs",
       "src/launch_identity.rs",
       "src/launch_identity_common.rs",
+      "src/launch_identity_node_options.rs",
       "src/launch_identity_stub.rs",
       "src/launch_identity_windows.rs",
       "src/local_supply_chain.rs",
