@@ -1,7 +1,7 @@
 use super::*;
 
 fn has(command: &str, spelling: &str) -> bool {
-    spellings(command).iter().any(|text| text == spelling)
+    spellings(command).texts.iter().any(|text| text == spelling)
 }
 
 #[test]
@@ -75,12 +75,66 @@ fn text_a_step_only_prints_is_not_a_step() {
 
 #[test]
 fn the_command_itself_is_not_listed() {
-    assert!(spellings("npm publish").is_empty());
+    let listed = spellings("npm publish");
+    assert!(listed.texts.is_empty());
+    assert!(listed.complete);
 }
 
 #[test]
-fn a_long_line_lists_a_bounded_number() {
-    let line = vec!["npm test"; 400].join(" && ");
-    assert!(spellings(&line).len() <= MAX_SPELLINGS);
-    assert!(spellings(&"x".repeat(MAX_COMMAND_BYTES + 1)).is_empty());
+fn a_padded_line_lists_every_step() {
+    let line = (1..=60)
+        .map(|n| format!("echo {n}"))
+        .chain(["npm publish".to_owned()])
+        .collect::<Vec<_>>()
+        .join("; ");
+    let listed = spellings(&line);
+    assert!(listed.complete);
+    assert!(listed.texts.iter().any(|text| text == "npm publish"));
+    let grouped = format!("({line})");
+    assert!(has(&grouped, "npm publish"));
+}
+
+#[test]
+fn heredocs_and_shifts_do_not_hide_later_steps() {
+    for command in [
+        "cat <<EOF\nx\nEOF\nnpm publish",
+        "cat <<'EOF' > notes\nx\nEOF\n(npm publish)",
+        "cat <<-EOF\n\tx\n\tEOF\nnpm publish",
+        "(npm publish); echo '<<'",
+        "(npm publish) <<< x",
+        "echo $((1<<2))\nnpm publish",
+        "(echo $((1 << 2))); npm publish",
+    ] {
+        assert!(has(command, "npm publish"), "{command:?}");
+    }
+}
+
+#[test]
+fn an_unclosed_heredoc_is_read_as_steps() {
+    assert!(has("cat <<EOF\nnpm publish", "npm publish"));
+}
+
+#[test]
+fn quoted_spaces_are_kept_and_read_as_cloud_saves_them() {
+    let command = "git  commit -m 'two  words'";
+    assert!(has(command, "git commit -m 'two  words'"));
+    assert!(has(command, "git commit -m 'two words'"));
+    assert!(!has(
+        "(git commit -m 'two  words')",
+        "git commit -m 'two words'"
+    ));
+}
+
+#[test]
+fn a_line_too_long_or_deep_is_not_complete() {
+    assert!(!spellings(&"x".repeat(MAX_COMMAND_BYTES + 1)).complete);
+    let mut deep = "npm test".to_owned();
+    for _ in 0..=MAX_DEPTH {
+        deep = format!("bash -c {}", quote(&deep));
+    }
+    assert!(!spellings(&deep).complete);
+}
+
+fn quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', r"'\''"))
 }

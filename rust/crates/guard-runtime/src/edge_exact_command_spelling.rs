@@ -10,35 +10,66 @@
 //!
 //! The list only ever adds texts to look up. Each one is the program and
 //! arguments of a step the shell runs, so a rule can only match a step that
-//! runs the command it names.
+//! runs the command it names. The list has no length cap: a cap let a line
+//! padded with harmless steps push the ruled step off the end. The command's
+//! byte limit bounds it instead.
+
+use std::collections::HashSet;
 
 use guard_command::{parse_command, CommandModelRequestV1, CommandSegmentV1, MAX_COMMAND_BYTES};
 
-/// Nesting followed through `bash -c` scripts and grouped steps.
-const MAX_DEPTH: usize = 3;
-/// Texts listed for one command; a longer line keeps the first ones.
-const MAX_SPELLINGS: usize = 48;
+/// Nesting followed through `bash -c` scripts and grouped steps. A line
+/// nested deeper than this is reported as not fully read.
+const MAX_DEPTH: usize = 8;
 const INLINE_SHELLS: &[&str] = &["bash", "sh", "zsh", "dash", "ash", "ksh"];
 /// Words that start a step without being its program.
 const LEADING_KEYWORDS: &[&str] = &[
     "{", "!", "then", "do", "else", "elif", "if", "while", "until", "time",
 ];
 
+/// The texts a command spells, other than its own text.
+#[derive(Debug, Default)]
+pub(crate) struct Spellings {
+    pub(crate) texts: Vec<String>,
+    /// False when part of the line could not be read, so a rule may name a
+    /// step that is missing from `texts`.
+    pub(crate) complete: bool,
+}
+
+impl Spellings {
+    /// Adds `text`, and `text` as Guard Cloud saves a command rule: every
+    /// run of whitespace read as one space, quoted runs included. These rules
+    /// only block or ask, so the wider match only adds a review.
+    fn push(&mut self, seen: &mut HashSet<String>, text: String) {
+        let cloud = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        for text in [text, cloud] {
+            if !text.is_empty() && seen.insert(text.clone()) {
+                self.texts.push(text);
+            }
+        }
+    }
+}
+
 /// Texts that name a program the shell runs for `command`, other than the
 /// command text itself.
-pub(crate) fn spellings(command: &str) -> Vec<String> {
-    let mut out = Vec::new();
+pub(crate) fn spellings(command: &str) -> Spellings {
+    let mut out = Spellings {
+        texts: Vec::new(),
+        complete: true,
+    };
     if command.len() > MAX_COMMAND_BYTES {
+        out.complete = false;
         return out;
     }
-    push(&mut out, collapse(command));
-    visit(command, 0, &mut out);
-    out.retain(|text| text != command);
+    let mut seen = HashSet::from([command.to_owned()]);
+    out.push(&mut seen, collapse(command));
+    visit(command, 0, &mut out, &mut seen);
     out
 }
 
-fn visit(text: &str, depth: usize, out: &mut Vec<String>) {
-    if depth > MAX_DEPTH || out.len() >= MAX_SPELLINGS {
+fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<String>) {
+    if depth > MAX_DEPTH {
+        out.complete = false;
         return;
     }
     let parsed = parse_command(&CommandModelRequestV1 {
@@ -51,24 +82,22 @@ fn visit(text: &str, depth: usize, out: &mut Vec<String>) {
         Ok(model) if model.confidence == "exact" && !model.segments.is_empty() => {
             for segment in &model.segments {
                 for spelling in segment_spellings(segment) {
-                    push(out, spelling);
+                    out.push(seen, spelling);
                 }
-                push(out, collapse(&segment.text));
-                push(out, bare_step(&collapse(&segment.text)));
+                out.push(seen, collapse(&segment.text));
+                out.push(seen, bare_step(&collapse(&segment.text)));
                 if let Some(executable) = segment.executable.as_deref() {
                     if let Some(script) = inline_script(executable, &segment.arguments) {
-                        push(out, collapse(script));
-                        visit(script, depth + 1, out);
+                        out.push(seen, collapse(script));
+                        visit(script, depth + 1, out, seen);
                     }
                 }
             }
         }
         _ => {
-            // The parser does not model groups such as `(npm publish)`. Each
-            // step outside quotes is read on its own instead.
-            if text.contains("<<") {
-                return;
-            }
+            // The parser does not model groups such as `(npm publish)` or
+            // heredocs. Each step outside quotes and heredoc bodies is read on
+            // its own instead.
             let words = guard_command::rich_command_model_api::shell_tokens_without_redirects(
                 text.trim(),
                 0,
@@ -76,8 +105,8 @@ fn visit(text: &str, depth: usize, out: &mut Vec<String>) {
             );
             if let Some((program, arguments)) = words.split_first() {
                 if let Some(script) = inline_script(program, arguments) {
-                    push(out, collapse(script));
-                    visit(script, depth + 1, out);
+                    out.push(seen, collapse(script));
+                    visit(script, depth + 1, out, seen);
                     return;
                 }
             }
@@ -85,9 +114,9 @@ fn visit(text: &str, depth: usize, out: &mut Vec<String>) {
             if steps.len() == 1 && steps[0] == text.trim() {
                 return;
             }
-            for step in steps.into_iter().take(MAX_SPELLINGS) {
-                push(out, collapse(&step));
-                visit(&step, depth + 1, out);
+            for step in steps {
+                out.push(seen, collapse(&step));
+                visit(&step, depth + 1, out, seen);
             }
         }
     }
@@ -157,22 +186,31 @@ fn double_quoted(word: &str) -> String {
 
 /// The steps of `text` split at `;`, `&`, `|`, parentheses and line breaks
 /// outside quotes, each without the keyword or brace that opens it and
-/// without its redirections.
+/// without its redirections. Heredoc bodies are skipped up to their closing
+/// line; a body that never closes is read as steps, so nothing after an
+/// unclosed `<<` is hidden.
 fn steps(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
     let mut steps = Vec::new();
     let mut current = String::new();
     let mut quote: Option<char> = None;
-    let mut chars = text.chars();
-    while let Some(c) = chars.next() {
+    // `((` and `$((` hold arithmetic, where `<<` is a shift, not a heredoc.
+    let mut arithmetic = 0usize;
+    let mut heredocs: Vec<(String, bool)> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
         match (quote, c) {
             (Some('\''), '\'') | (Some('"'), '"') => {
                 quote = None;
                 current.push(c);
             }
-            (Some('"'), '\\') | (None, '\\') => {
+            (Some('"') | None, '\\') => {
                 current.push(c);
-                if let Some(next) = chars.next() {
+                if let Some(next) = next {
                     current.push(next);
+                    i += 1;
                 }
             }
             (Some(_), _) => current.push(c),
@@ -180,11 +218,40 @@ fn steps(text: &str) -> Vec<String> {
                 quote = Some(c);
                 current.push(c);
             }
-            (None, ';' | '&' | '|' | '(' | ')' | '\n' | '\r' | '`') => {
+            (None, '(') if next == Some('(') => {
+                arithmetic += 1;
+                current.push_str("((");
+                i += 1;
+            }
+            (None, ')') if next == Some(')') && arithmetic > 0 => {
+                arithmetic -= 1;
+                current.push_str("))");
+                i += 1;
+            }
+            (None, '<') if arithmetic == 0 && next == Some('<') => {
+                if chars.get(i + 2) == Some(&'<') {
+                    current.push_str("<<<");
+                    i += 2;
+                } else {
+                    let (delimiter, strip_tabs, end) = heredoc_delimiter(&chars, i + 2);
+                    if !delimiter.is_empty() {
+                        heredocs.push((delimiter, strip_tabs));
+                    }
+                    i = end;
+                    continue;
+                }
+            }
+            (None, '\n') => {
+                steps.push(std::mem::take(&mut current));
+                i = skip_heredoc_bodies(&chars, i + 1, &mut heredocs);
+                continue;
+            }
+            (None, ';' | '&' | '|' | '(' | ')' | '\r' | '`') => {
                 steps.push(std::mem::take(&mut current));
             }
             (None, _) => current.push(c),
         }
+        i += 1;
     }
     steps.push(current);
     steps
@@ -194,8 +261,103 @@ fn steps(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// The delimiter word after `<<` at `start`, whether `<<-` strips leading
+/// tabs, and the index after the word.
+fn heredoc_delimiter(chars: &[char], start: usize) -> (String, bool, usize) {
+    let mut i = start;
+    let strip_tabs = chars.get(i) == Some(&'-');
+    if strip_tabs {
+        i += 1;
+    }
+    while chars.get(i).is_some_and(|c| *c == ' ' || *c == '\t') {
+        i += 1;
+    }
+    let mut delimiter = String::new();
+    while let Some(&c) = chars.get(i) {
+        if c.is_whitespace() || ";&|()<>".contains(c) {
+            break;
+        }
+        if !matches!(c, '\'' | '"' | '\\') {
+            delimiter.push(c);
+        }
+        i += 1;
+    }
+    (delimiter, strip_tabs, i)
+}
+
+/// The index after the bodies of the pending heredocs that start at `start`.
+/// A body without its closing line is not skipped.
+fn skip_heredoc_bodies(chars: &[char], start: usize, heredocs: &mut Vec<(String, bool)>) -> usize {
+    let mut i = start;
+    for (delimiter, strip_tabs) in std::mem::take(heredocs) {
+        let mut line_start = i;
+        let closed = loop {
+            if line_start >= chars.len() {
+                break None;
+            }
+            let line_end = chars[line_start..]
+                .iter()
+                .position(|c| *c == '\n')
+                .map_or(chars.len(), |offset| line_start + offset);
+            let line: String = chars[line_start..line_end].iter().collect();
+            let line = if strip_tabs {
+                line.trim_start_matches('\t')
+            } else {
+                line.as_str()
+            };
+            if line.trim_end_matches('\r') == delimiter {
+                break Some((line_end + 1).min(chars.len()));
+            }
+            line_start = line_end + 1;
+        };
+        match closed {
+            Some(after) => i = after,
+            None => return i,
+        }
+    }
+    i
+}
+
+/// The words of `text` split at whitespace outside quotes, quotes kept.
+fn words(text: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for (index, c) in text.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (quote, c) {
+            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+            (Some('"') | None, '\\') => {
+                start.get_or_insert(index);
+                escaped = true;
+            }
+            (Some(_), _) => {}
+            (None, '\'' | '"') => {
+                start.get_or_insert(index);
+                quote = Some(c);
+            }
+            (None, c) if c.is_whitespace() => {
+                if let Some(begin) = start.take() {
+                    words.push(&text[begin..index]);
+                }
+            }
+            (None, _) => {
+                start.get_or_insert(index);
+            }
+        }
+    }
+    if let Some(begin) = start {
+        words.push(&text[begin..]);
+    }
+    words
+}
+
 fn bare_step(step: &str) -> String {
-    let mut words: Vec<&str> = step.split_whitespace().collect();
+    let mut words = words(step);
     while words
         .first()
         .is_some_and(|word| LEADING_KEYWORDS.contains(word))
@@ -224,15 +386,16 @@ fn bare_step(step: &str) -> String {
 /// the next word holds it), or `None` for a word that is not one.
 fn redirection(word: &str) -> Option<&str> {
     let rest = word.trim_start_matches(|c: char| c.is_ascii_digit());
-    ["&>>", "&>", ">>", ">&", "<&", ">|", ">", "<"]
+    ["<<<", "&>>", "&>", ">>", ">&", "<&", ">|", ">", "<"]
         .iter()
         .find_map(|operator| rest.strip_prefix(operator))
 }
 
-/// `text` with runs of spaces read as one and without the separator that
-/// ends it.
+/// `text` with runs of spaces between words read as one and without the
+/// separator that ends it. Spaces inside quotes are kept: they are part of an
+/// argument.
 fn collapse(text: &str) -> String {
-    let mut collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut collapsed = words(text).join(" ");
     loop {
         let trimmed = match collapsed.as_bytes() {
             [.., b'&', b'&'] => break,
@@ -242,12 +405,6 @@ fn collapse(text: &str) -> String {
         collapsed = trimmed;
     }
     collapsed
-}
-
-fn push(out: &mut Vec<String>, text: String) {
-    if !text.is_empty() && out.len() < MAX_SPELLINGS && !out.contains(&text) {
-        out.push(text);
-    }
 }
 
 #[cfg(test)]

@@ -15,6 +15,7 @@
 //! text let `  npm publish`, `CI=1 npm publish` or `(npm publish)` run after
 //! an approval. A block found under any spelling denies the call outright.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use guard_contracts::{GuardHookEnvelopeV2, PreToolActionTypeV1, PreToolResultV1};
@@ -30,6 +31,7 @@ use crate::policy_enforcement::{ActionFloor, AdmittedPolicySnapshot};
 const POLICY_REVIEW: &str = "policy_exact_command_review";
 const SAVED_REVIEW: &str = "saved_exact_command_review";
 const UNREADABLE_REVIEW: &str = "exact_command_rules_unreadable";
+const UNREAD_LINE_REVIEW: &str = "exact_command_line_unreadable";
 const POLICY_BLOCK: &str = "policy_exact_command_block";
 const SAVED_BLOCK: &str = "saved_exact_command_block";
 /// Sources a Guard Cloud policy writes its decisions under.
@@ -44,7 +46,13 @@ const CLOUD_SOURCES: &[&str] = &[
 /// Whether `reason_code` is this step's review. It names a saved rule, so it
 /// holds the hook verdict at review before execution.
 pub(crate) fn is_review_finding(reason_code: &str) -> bool {
-    [POLICY_REVIEW, SAVED_REVIEW, UNREADABLE_REVIEW].contains(&reason_code)
+    [
+        POLICY_REVIEW,
+        SAVED_REVIEW,
+        UNREADABLE_REVIEW,
+        UNREAD_LINE_REVIEW,
+    ]
+    .contains(&reason_code)
 }
 
 /// The command and folder a hook runs in, as the rules are matched against.
@@ -126,6 +134,15 @@ pub(crate) fn apply(
             review: Some(source),
             ..
         }) if reviewable => raise(result, rule_reason(&source)),
+        Ok(Rules {
+            incomplete: true, ..
+        }) if reviewable => raise(
+            result,
+            (
+                UNREAD_LINE_REVIEW,
+                "Guard could not read every step of this command against your saved rules, so it asks before it runs.",
+            ),
+        ),
         Ok(_) => result,
         Err(Unreadable) if reviewable => raise(
             result,
@@ -156,6 +173,9 @@ struct Unreadable;
 struct Rules {
     block: Option<String>,
     review: Option<String>,
+    /// Part of the line could not be read, so a rule may name a step that
+    /// was not looked up.
+    incomplete: bool,
 }
 
 /// The live block and review rules for `harness` or every harness that name
@@ -189,17 +209,19 @@ fn matching_rules(
         });
     let (key, path) = places.map_or((None, None), |(key, path)| (key, Some(path)));
     let place = (key.as_deref(), path.as_deref());
+    let live = live_rules(&connection, harness, place, now_micros)?;
+    if live.is_empty() {
+        return Ok(rules);
+    }
     let mut texts: Vec<String> = call
         .commands
         .iter()
         .map(|text| (*text).to_owned())
         .collect();
     for command in &call.commands {
-        for spelling in crate::edge_exact_command_spelling::spellings(command) {
-            if !texts.contains(&spelling) {
-                texts.push(spelling);
-            }
-        }
+        let spelled = crate::edge_exact_command_spelling::spellings(command);
+        rules.incomplete |= !spelled.complete;
+        texts.extend(spelled.texts);
     }
     for text in &texts {
         let candidates = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
@@ -210,15 +232,18 @@ fn matching_rules(
             harness: None,
         });
         for id in &candidates.exact_artifact_ids {
-            for (action, source) in live_rules(&connection, harness, id, place, now_micros)? {
-                match action.as_str() {
-                    "block" => {
-                        rules.block = Some(source);
-                        return Ok(rules);
-                    }
-                    _ if rules.review.is_none() => rules.review = Some(source),
-                    _ => {}
+            match live.get(id.as_str()) {
+                Some(LiveRule {
+                    block: true,
+                    source,
+                }) => {
+                    rules.block = Some(source.clone());
+                    return Ok(rules);
                 }
+                Some(LiveRule { source, .. }) if rules.review.is_none() => {
+                    rules.review = Some(source.clone());
+                }
+                _ => {}
             }
         }
     }
@@ -236,31 +261,52 @@ fn holds_command_rules(connection: &Connection) -> Result<bool, Unreadable> {
         .map_err(|_| Unreadable)
 }
 
-/// The action and source of each live block or review row for `artifact_id`.
+/// The strongest live rule saved under one exact-command id.
+struct LiveRule {
+    block: bool,
+    source: String,
+}
+
+/// Every live block and review rule for `harness` or every harness, by
+/// exact-command id. They are read once so each spelling is a map lookup.
 fn live_rules(
     connection: &Connection,
     harness: &str,
-    artifact_id: &str,
     (key, path): (Option<&str>, Option<&str>),
     now_micros: Option<i64>,
-) -> Result<Vec<(String, String)>, Unreadable> {
+) -> Result<HashMap<String, LiveRule>, Unreadable> {
     let mut statement = connection
         .prepare_cached(
-            "select action, coalesce(source, ''), expires_at from policy_decisions \
-             where harness in (?1, '*') and action in ('block', 'review') and artifact_id = ?2 \
-             and (scope = 'artifact' or (scope = 'workspace' and workspace in (?3, ?4)))",
+            "select artifact_id, action, coalesce(source, ''), expires_at from policy_decisions \
+             where harness in (?1, '*') and action in ('block', 'review') \
+             and artifact_id like 'memory:exact-%' \
+             and (scope = 'artifact' or (scope = 'workspace' and workspace in (?2, ?3)))",
         )
         .map_err(|_| Unreadable)?;
     let mut rows = statement
-        .query(params![harness, artifact_id, key, path])
+        .query(params![harness, key, path])
         .map_err(|_| Unreadable)?;
-    let mut live = Vec::new();
+    let mut live: HashMap<String, LiveRule> = HashMap::new();
     while let Some(row) = rows.next().map_err(|_| Unreadable)? {
-        let action = row.get::<_, String>(0).map_err(|_| Unreadable)?;
-        let source = row.get::<_, Option<String>>(1).map_err(|_| Unreadable)?;
-        let expires_at = row.get::<_, Option<String>>(2).map_err(|_| Unreadable)?;
-        if !expired(expires_at.as_deref(), now_micros) {
-            live.push((action, source.unwrap_or_default()));
+        let id = row.get::<_, String>(0).map_err(|_| Unreadable)?;
+        let action = row.get::<_, String>(1).map_err(|_| Unreadable)?;
+        let source = row.get::<_, Option<String>>(2).map_err(|_| Unreadable)?;
+        let expires_at = row.get::<_, Option<String>>(3).map_err(|_| Unreadable)?;
+        if expired(expires_at.as_deref(), now_micros) {
+            continue;
+        }
+        let block = action == "block";
+        match live.get(&id) {
+            Some(saved) if saved.block || !block => {}
+            _ => {
+                live.insert(
+                    id,
+                    LiveRule {
+                        block,
+                        source: source.unwrap_or_default(),
+                    },
+                );
+            }
         }
     }
     Ok(live)
@@ -342,3 +388,7 @@ fn now_micros() -> Option<i64> {
 #[cfg(test)]
 #[path = "edge_exact_command_review_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "edge_exact_command_block_tests.rs"]
+mod block_tests;
