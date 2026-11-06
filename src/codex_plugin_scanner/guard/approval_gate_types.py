@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Literal, cast
@@ -201,3 +204,28 @@ def settings_input_from_payload(payload: object) -> ApprovalGateInput | None:
 
 
 _PULSE_PAYLOAD_KEYS = ("approval_gate_pulse", "approval_pulse_request_id")
+
+# Proof and proof-use fields: they say how the change is approved, not what it is.
+_SETTINGS_PROOF_KEYS = frozenset(
+    {"password", "current_password", "totp_code", "pulse", "pulse_request_id", "use_cooldown"}
+)
+
+
+def settings_write_subject(settings: object, key: str) -> str:
+    """Name one exact settings change, so a grant for it covers no other change.
+
+    The grant's subject is bound into a Pulse request, so an approval in the
+    YID app cannot be resubmitted with different settings. The digest is
+    keyed (the daemon's token), so a new password inside the change cannot be
+    guessed from a subject that reaches a log.
+    """
+    changes = settings if isinstance(settings, dict) else {}
+    gate = changes.get("approval_gate")
+    if isinstance(gate, dict):
+        changes = {
+            **changes,
+            "approval_gate": {name: value for name, value in gate.items() if name not in _SETTINGS_PROOF_KEYS},
+        }
+    canonical = json.dumps(changes, sort_keys=True, separators=(",", ":"), default=str)
+    digest = hmac.new(key.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"settings:{digest}"

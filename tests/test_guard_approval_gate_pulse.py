@@ -441,3 +441,15 @@ def test_json_works_before_or_after_the_subcommand(argv: list[str]) -> None:
     add_approval_pulse_parser(settings, lambda parser, **_: None, argparse.ArgumentParser)
     assert root.parse_args(["approval-pulse", *argv]).json is True
     assert root.parse_args(["approval-pulse", "status"]).json is False
+
+
+def test_a_settings_subject_ignores_the_proof_and_hides_a_new_password() -> None:
+    from codex_plugin_scanner.guard.approval_gate_types import settings_write_subject
+
+    change = {"approval_gate": {"new_password": "hunter2-new", "confirm_password": "hunter2-new"}}
+    with_proof = {"approval_gate": {**change["approval_gate"], "password": "old", "pulse_request_id": "azr_1"}}
+    subject = settings_write_subject(change, "k")
+    assert subject == settings_write_subject(with_proof, "k"), "how it is approved is not part of the change"
+    assert subject != settings_write_subject({"approval_gate": {"new_password": "other"}}, "k")
+    assert subject != settings_write_subject(change, "another key")
+    assert "hunter2" not in subject and subject.startswith("settings:")

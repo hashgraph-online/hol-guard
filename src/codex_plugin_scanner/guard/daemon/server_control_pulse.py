@@ -27,6 +27,12 @@ from ..approval_gate import public_config as approval_gate_public_config
 from ..config import editable_guard_settings, load_guard_config
 from .server_common import _settings_response_payload
 
+# The only Pulse routes. The daemon checks the header token for exactly these
+# paths, so dispatch must not reach a handler through any other path.
+PULSE_ROUTE_PATHS = frozenset(
+    f"/v1/approval-gate/pulse/{action}" for action in ("enroll", "confirm", "poll", "disable", "recover")
+)
+
 
 def _text(payload: dict[str, object], key: str) -> str | None:
     value = payload.get(key)
@@ -39,6 +45,20 @@ class _ControlPulseRoutes:
         settings = editable_guard_settings(load_guard_config(guard_home))
         settings["approval_gate"] = gate
         return _settings_response_payload(guard_home, settings)
+
+    def _write_pulse_confirmed(self, confirmed: dict[str, object]) -> None:
+        """Answer a confirmed setup. Pulse is on now and the recovery code exists only here.
+
+        If the full settings response cannot be built, the gate state and the
+        recovery code are still returned, so the user never loses the code.
+        """
+        recovery_code = confirmed.pop("recovery_code", None)
+        try:
+            response = self._pulse_settings_response(dict(confirmed))
+        except Exception:  # the code must reach the user whatever failed
+            response = {"approval_gate": confirmed}
+        response["pulse_recovery_code"] = recovery_code
+        self._write_json(response)
 
     def _handle_approval_gate_pulse_route(self, action: str, payload: dict[str, object]) -> None:
         guard_home = self.server.store.guard_home
@@ -70,15 +90,13 @@ class _ControlPulseRoutes:
                 self._write_json({"status": poll_pulse_approval(guard_home, request_id)})
                 return
             if action == "confirm":
+                cooldown_seconds = int(payload.get("cooldown_seconds") or 0)
                 confirmed = confirm_pulse_enrollment(
                     guard_home,
                     request_id=_text(payload, "request_id") or "",
-                    cooldown_seconds=int(payload.get("cooldown_seconds") or 0),
+                    cooldown_seconds=cooldown_seconds,
                 )
-                recovery_code = confirmed.pop("recovery_code", None)
-                response = self._pulse_settings_response(confirmed)
-                response["pulse_recovery_code"] = recovery_code
-                self._write_json(response)
+                self._write_pulse_confirmed(confirmed)
                 return
             if action == "disable":
                 # Same path as every other strict settings write: with no Pulse

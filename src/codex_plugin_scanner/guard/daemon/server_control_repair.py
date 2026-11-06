@@ -23,7 +23,7 @@ from ..approval_gate import (
 from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
-from ..approval_gate_types import settings_input_from_payload
+from ..approval_gate_types import settings_input_from_payload, settings_write_subject
 from ..cli.update_commands import build_guard_update_status_payload
 from ..config import (
     editable_guard_settings,
@@ -336,6 +336,9 @@ class _RepairSettingsRoutes:
                     guard_home,
                     purpose="settings_write",
                     approval_gate_input=gate_input,
+                    # One approval covers exactly these settings, so a Pulse
+                    # approval cannot be resubmitted with a different change.
+                    subject=settings_write_subject(settings, str(getattr(self.server, "auth_token", ""))),
                 )
             )
             if isinstance(gate_payload, dict):
