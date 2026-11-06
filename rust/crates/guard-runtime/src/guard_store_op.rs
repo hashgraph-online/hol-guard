@@ -50,6 +50,7 @@ use crate::guard_store_cmd_privacy as privacy;
 use crate::guard_store_composio_catalog as composio_catalog;
 use crate::guard_store_connect as connect;
 use crate::guard_store_connector_context as connector_context;
+use crate::guard_store_continuity_write as continuity_write;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_devices as devices;
 use crate::guard_store_evidence as evidence;
@@ -557,6 +558,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "managed_keyring_reconcile"
         | "record_local_cli_observation"
         | "replace_local_cli_commands"
+        | "apply_custom_extension_continuity"
+        | "upsert_local_cli_grant"
         | "merge_local_cli_commands"
         | "forget_local_cli_observation"
         | "record_connector_setup_context"
@@ -716,6 +719,8 @@ fn dispatch(
         "workflow_capability_plan" => wfcap::plan(connection, args),
         "workflow_capability_commit" => wfcap::commit(connection, args),
         "record_local_cli_observation" => local_cli::record_observation(connection, args),
+        "apply_custom_extension_continuity" => continuity_write::apply_continuity(connection, args),
+        "upsert_local_cli_grant" => continuity_write::upsert_grant(connection, args),
         "replace_local_cli_commands" => {
             local_cli_catalog::write_local_cli_catalog(connection, args, false)
         }
