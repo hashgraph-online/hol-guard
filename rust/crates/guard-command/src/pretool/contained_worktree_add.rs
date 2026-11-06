@@ -135,7 +135,7 @@ pub(crate) fn split(text: &str) -> Option<Parts> {
         add: add.to_owned(),
         entered: entered.to_owned(),
         checks: checks.to_owned(),
-        destination: destination.to_owned(),
+        destination: destination.into_owned(),
     })
 }
 
