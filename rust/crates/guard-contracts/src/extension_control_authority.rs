@@ -19,8 +19,9 @@
 //! anchor the store has earned into the credential vault, and
 //! `seal_managed_revision` and `seal_managed_activation` seal the managed
 //! controls publication epoch and activation, `apply_policy` activates a
-//! verified policy bundle and `clear_policy` removes the cached remote
-//! policy authority. When a read finds work only a writer may do --
+//! verified policy bundle, `apply_review_memory` publishes Cloud Review
+//! policy memory and `clear_policy` removes the cached remote policy
+//! authority. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
 //! `action` naming that work and the authenticated inputs it needs. The caller
@@ -75,8 +76,8 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
     /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
-    /// `queue_change`, `apply_policy`, `clear_policy`, `write_anchor`,
-    /// `seal_managed_revision`, `seal_managed_activation` or `anchor`.
+    /// `queue_change`, `apply_policy`, `apply_review_memory`, `clear_policy`,
+    /// `write_anchor`, `seal_managed_revision`, `seal_managed_activation` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
     /// when the credential store holds none.
@@ -195,6 +196,25 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `apply_policy`: the verified policy bundle an activation writes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_apply: Option<ExtensionControlPolicyApplyV1>,
+    /// `apply_review_memory`: the Cloud Review policy memory a publish writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_memory: Option<ExtensionControlReviewMemoryV1>,
+}
+
+/// `apply_review_policy_memory_state`. The caller verifies and seals the
+/// memory rules; the resident replaces the remote policy decisions with
+/// them and writes the memory cursor state in one transaction.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlReviewMemoryV1 {
+    /// The memory registry, policy version and acknowledgement, as JSON text
+    /// by `sync_state` key.
+    #[serde(default)]
+    pub payloads: BTreeMap<String, String>,
+    /// The remote policy decisions that replace the stored ones, each in
+    /// `policy_decisions` column order.
+    #[serde(default)]
+    pub rows: Vec<Vec<Value>>,
 }
 
 /// An authority reset: the rows whose chain cannot be verified are archived

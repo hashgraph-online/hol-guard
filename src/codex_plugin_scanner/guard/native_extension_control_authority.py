@@ -136,6 +136,7 @@ def _required_feature(op: str) -> str:
     if op in {
         "abandon_bootstrap",
         "apply_policy",
+        "apply_review_memory",
         "bootstrap",
         "clear_policy",
         "commit_prepare",
