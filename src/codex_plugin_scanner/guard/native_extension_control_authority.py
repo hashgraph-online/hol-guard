@@ -134,6 +134,7 @@ def extension_control_authority(
 
 def _required_feature(op: str) -> str:
     if op in {
+        "abandon_bootstrap",
         "apply_policy",
         "apply_review_memory",
         "bootstrap",
@@ -142,6 +143,7 @@ def _required_feature(op: str) -> str:
         "resume",
         "migrate",
         "queue_change",
+        "record_migration",
         "reset",
         "write_anchor",
         "write_manifest",

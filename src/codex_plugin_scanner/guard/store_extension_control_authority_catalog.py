@@ -21,8 +21,6 @@ from .runtime.extension_control_authority import (
 from .runtime.extension_control_contract import ExtensionControlLayer
 from .store_extension_control_authority_catalog_events import (
     already_recorded,
-    build_catalog_migration_payload,
-    insert_catalog_migration_event,
     migration_provenance,
     recorded_writer_version,
 )
@@ -109,7 +107,7 @@ class ExtensionControlAuthorityCatalogMixin:
         with self._connect() as connection:
             if already_recorded(connection, revision):
                 return
-        provenance = migration_provenance(
+        described, downgraded_from = migration_provenance(
             None,
             catalog_digest,
             registry=None,
@@ -117,27 +115,20 @@ class ExtensionControlAuthorityCatalogMixin:
             writer=False,
             guard_home=self.guard_home,
         )
-        with self._connect() as connection:
-            if already_recorded(connection, revision):
-                return
-            payload, regression = build_catalog_migration_payload(
-                previous_revision=previous_revision,
-                revision=revision,
-                previous_catalog_digest=previous_catalog_digest,
-                catalog_digest=catalog_digest,
-                layers=layers,
-                retired_targets=retired_targets,
-                provenance=provenance,
-            )
-            insert_catalog_migration_event(
-                connection,
-                payload=payload,
-                regression=regression,
-                occurred_at=_now(),
-                revision=revision,
-                previous_catalog_digest=previous_catalog_digest,
-                catalog_digest=catalog_digest,
-            )
+        # The resident takes the migration from the committed head again and
+        # writes its event once, in one transaction.
+        self._extension_control_authority_op(
+            "record_migration",
+            key=None,
+            catalog_digest=catalog_digest,
+            revision=revision,
+            now=_now(),
+            migration_record={
+                "provenance": described,
+                "retired_target_ids": [],
+                **({} if downgraded_from is None else {"downgraded_from": downgraded_from}),
+            },
+        )
 
     def _migrate_catalog_in_resident(
         self,

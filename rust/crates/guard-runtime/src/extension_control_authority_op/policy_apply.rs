@@ -35,6 +35,11 @@ const OBSERVED_KEYS: [&str; 5] = [
     ACTIVE_STATE_KEY,
     REVISION_STATE_KEY,
 ];
+/// Each last-good key and the payload `copy_last_good` copies into it.
+const LAST_GOOD_COPIES: [(&str, &str); 2] = [
+    ("policy_bundle_last_good", "policy_bundle"),
+    ("managed_controls_last_good", ACTIVE_STATE_KEY),
+];
 /// The `sync_state` keys an activation may write.
 const PAYLOAD_KEYS: [&str; 13] = [
     "cloud_exceptions",
@@ -108,8 +113,14 @@ fn validate(apply: &ExtensionControlPolicyApplyV1) -> Res<Vec<Vec<SqlValue>>> {
         && [ACTIVE_STATE_KEY, NEGOTIATED_STATE_KEY]
             .iter()
             .any(|state_key| apply.payloads.contains_key(*state_key));
+    let copies_written = apply.copy_last_good
+        && (!apply.payloads.contains_key("policy_bundle")
+            || LAST_GOOD_COPIES
+                .iter()
+                .any(|(last_good, _)| apply.payloads.contains_key(*last_good)));
     if !payloads_valid
         || retires_written
+        || copies_written
         || apply
             .observed
             .keys()
@@ -211,7 +222,15 @@ impl Ctx<'_> {
                 .map_err(store_fault)?;
         }
         self.replace_remote_rows(rows)?;
-        self.write_sync_state(&apply.payloads, now)
+        let mut payloads = apply.payloads.clone();
+        if apply.copy_last_good {
+            for (last_good, source) in LAST_GOOD_COPIES {
+                if let Some(payload) = apply.payloads.get(source) {
+                    payloads.insert(last_good.to_owned(), payload.clone());
+                }
+            }
+        }
+        self.write_sync_state(&payloads, now)
     }
 
     /// Replaces every remote policy decision with `rows`.

@@ -609,10 +609,19 @@ class StorePolicyMixin:
                     else {"base_revision": managed_base_snapshot[0], "base_snapshot_digest": managed_base_snapshot[1]}
                 ),
                 "observed": observed,
-                "payloads": encoded_payloads,
+                # The resident stores the last-good copies from the bundle
+                # and activation it writes, so each is sent once.
+                "payloads": {
+                    state_key: payload
+                    for state_key, payload in encoded_payloads.items()
+                    if not update_last_good
+                    or state_key not in {"policy_bundle_last_good", MANAGED_CONTROLS_LAST_GOOD_STATE_KEY}
+                },
                 "retire_managed": managed_controls_policy is None,
                 "rows": [list(row) for row in rows],
             }
+            if update_last_good:
+                policy_apply["copy_last_good"] = True
             if custom_extension_continuity is not None:
                 policy_apply["continuity"] = mutation_wire(custom_extension_continuity)
             authority_key = managed_authority_key or self._authority_key(required=False)

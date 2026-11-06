@@ -285,6 +285,7 @@
       "src/parser_segments.rs",
       "src/parser_shell_tokens.rs",
       "src/parser_wrappers.rs",
+      "src/parser_wrappers_shell_options.rs",
       "src/pep440.rs",
       "src/powershell_command.rs",
       "src/powershell_effects.rs",

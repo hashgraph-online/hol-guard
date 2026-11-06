@@ -154,12 +154,14 @@ pub(crate) fn git_reads_after_allowed_steps(
 
 /// Whether the user's Allow may settle the Git floor's order check for
 /// `steps`, the earlier steps it could not prove leave a later read's
-/// configuration as Guard read it. A step that may rewrite tracked files
-/// settles it only when no configuration include reaches the work tree, so no
-/// file it checks out becomes configuration the read obeys. Such a step with a
-/// leading option may act on another repository, whose files an absolute
-/// include could name, so it never settles. Steps outside Git keep the Allow's
-/// judgment.
+/// configuration as Guard read it. A step that writes configuration the read
+/// then obeys never settles: the Allow says to run the read as this checkout
+/// configures it, and such a step rewrites that answer first. A step that may
+/// rewrite tracked files settles it only when no configuration include reaches
+/// the work tree, so no file it checks out becomes configuration the read
+/// obeys. Such a step with a leading option may act on another repository,
+/// whose files an absolute include could name, so it never settles. Steps
+/// outside Git keep the Allow's judgment.
 pub(crate) fn allow_settles_read_order(
     model: &CanonicalCommandV1,
     steps: &[usize],
@@ -172,7 +174,18 @@ pub(crate) fn allow_settles_read_order(
         let Some(segment) = model.segments.get(index) else {
             return false;
         };
-        if !git_segment(segment) || preserves_tree(&segment.arguments) {
+        if !git_segment(segment) {
+            continue;
+        }
+        // `git config core.pager 'sh -c true' && git log -1` is the shape this
+        // refuses. The read was left to the Allow because Guard could not
+        // prove the step before it leaves the configuration alone; a step that
+        // writes configuration outright, or whose subcommand Guard does not
+        // model at all, settles nothing.
+        if !preserves_configuration(&segment.arguments) {
+            return false;
+        }
+        if preserves_tree(&segment.arguments) {
             continue;
         }
         if segment
@@ -221,6 +234,32 @@ fn read_directory(model: &CanonicalCommandV1, context: PathContext<'_>) -> Optio
         return None;
     }
     Some(cwd)
+}
+
+/// Whether a Git step, wherever its global options route it, writes no
+/// configuration a later read obeys: a step that records only `branch.*` keys
+/// ([`CONFIG_STABLE_STEPS`]) or writes nothing at all
+/// ([`WRITES_NOTHING_STEPS`]). Every other subcommand is refused, `config`
+/// among them, and so is one the shared Git parser cannot resolve — an alias
+/// runs whatever the configuration names it, which is the program this check
+/// exists to keep out.
+fn preserves_configuration(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    match arguments.get(index).map(String::as_str) {
+        // `git worktree add` writes a configuration of its own; the actions
+        // that only list or retire a checkout leave this one's alone.
+        Some("worktree") => arguments
+            .get(index + 1)
+            .is_some_and(|action| TREE_PRESERVING_WORKTREE_ACTIONS.contains(&action.as_str())),
+        Some(operation) => {
+            CONFIG_STABLE_STEPS.contains(&operation)
+                || WRITES_NOTHING_STEPS.contains(&operation)
+                || REF_READS.contains(&operation)
+        }
+        None => false,
+    }
 }
 
 /// Whether a Git step, wherever its global options route it, rewrites no
@@ -517,6 +556,40 @@ mod tests {
             "config a.b c",
         ] {
             assert!(!super::writes_nothing(&words(command)), "{command}");
+        }
+    }
+
+    #[test]
+    fn a_step_that_writes_configuration_settles_no_order_check() {
+        // The steps a refresh chain puts before a read: each records only
+        // `branch.*` keys, or writes nothing at all.
+        for command in [
+            "fetch origin main",
+            "merge --ff-only origin/main",
+            "stash pop",
+            "checkout -B refresh origin/main",
+            "status --short --branch",
+            "log --oneline -5",
+            "rev-parse HEAD",
+        ] {
+            assert!(super::preserves_configuration(&words(command)), "{command}");
+        }
+        // A configuration write names the pager, textconv or filter program
+        // the read after it would run, so the Allow on the read cannot answer
+        // for it. An unresolvable step is refused for the same reason: an
+        // alias runs whatever the configuration says it does.
+        for command in [
+            "config core.pager sh",
+            "-C ../other config core.pager sh",
+            "remote add origin https://example.invalid/app.git",
+            "submodule update --init",
+            "refresh-cache",
+            "--unknown-global status",
+        ] {
+            assert!(
+                !super::preserves_configuration(&words(command)),
+                "{command}"
+            );
         }
     }
 

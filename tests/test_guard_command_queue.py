@@ -1379,6 +1379,85 @@ def test_command_queue_loop_empty_long_poll_returns_positive_bounded_backoff(
     assert waits == sorted(waits), f"Backoff must not decrease: {waits}"
 
 
+def test_command_queue_loop_leases_again_at_once_after_a_job_with_long_poll(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A finished job is followed by the next lease, not a full poll interval.
+
+    A remote decision made while the device slept would otherwise wait out the
+    interval before this device leased it.
+    """
+    store = FakeStore(tmp_path / "guard-home")
+    waits: list[float] = []
+
+    class StopAfterThreeWaits:
+        def is_set(self) -> bool:
+            return False
+
+        def wait(self, seconds: float) -> bool:
+            waits.append(seconds)
+            return len(waits) >= 3
+
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "25000")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "2")
+    statuses = iter(
+        [
+            {"state": "idle", "last_poll_was_empty": False},
+            {"state": "disabled", "last_poll_was_empty": False},
+            {"state": "idle", "last_poll_was_empty": False},
+        ]
+    )
+
+    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+        return next(statuses)
+
+    monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
+
+    command_queue.command_queue_loop(
+        store,
+        _context(tmp_path),
+        stop_event=StopAfterThreeWaits(),
+    )
+
+    # A disabled queue still waits the full interval rather than spinning.
+    assert waits == [0.05, 2, 0.05]
+
+
+def test_command_queue_loop_waits_the_interval_after_a_job_without_long_poll(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    waits: list[float] = []
+
+    class StopAfterOneWait:
+        def is_set(self) -> bool:
+            return False
+
+        def wait(self, seconds: float) -> bool:
+            waits.append(seconds)
+            return True
+
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "0")
+    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "2")
+
+    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+        return {"state": "idle", "last_poll_was_empty": False}
+
+    monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
+
+    command_queue.command_queue_loop(
+        store,
+        _context(tmp_path),
+        stop_event=StopAfterOneWait(),
+    )
+
+    assert waits == [2]
+
+
 def test_command_queue_loop_backs_off_after_empty_short_poll_when_wait_disabled(
     tmp_path: Path,
     monkeypatch,

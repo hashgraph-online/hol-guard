@@ -221,7 +221,7 @@ fn global_lockdown_still_blocks_unparsed_commands() {
 }
 
 #[test]
-fn an_expired_deadline_still_fails_closed_for_unparsed_commands() {
+fn an_expired_deadline_asks_about_unparsed_commands() {
     let binding = binding_with_layers(serde_json::json!([]));
     let controls = CompiledNativeCommandControls::new(&binding).unwrap();
     let decision = crate::pretool::evaluate_pre_tool(&crate::CommandModelRequestV1 {
@@ -241,10 +241,13 @@ fn an_expired_deadline_still_fails_closed_for_unparsed_commands() {
         intrinsic,
         Some(Instant::now() - std::time::Duration::from_secs(1)),
     );
-    assert_eq!(result.minimum_action, "block");
+    // Nothing was inspected, so the command is neither proven safe nor shown
+    // to be dangerous. A review puts that to the user with Allow once and
+    // Always allow; a block would leave them no way through.
+    assert_eq!(result.minimum_action, "review");
     assert_eq!(
         result.reason_code,
-        "native_command_extension_evaluation_failed"
+        "native_command_extension_evaluation_timed_out"
     );
 }
 

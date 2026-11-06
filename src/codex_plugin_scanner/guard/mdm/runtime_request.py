@@ -36,8 +36,11 @@ def runtime_answer(
     kills the command and answers `None`.
     """
 
+    from ..native_process_stop_scope import native_process_stop_requested
     from ..native_runtime import _run_native_process, native_runtime_status
 
+    if native_process_stop_requested():
+        return None
     status_deadline = time.monotonic() + status_timeout_seconds
     status = native_runtime_status(
         deadline_monotonic=status_deadline if deadline is None else min(deadline, status_deadline)

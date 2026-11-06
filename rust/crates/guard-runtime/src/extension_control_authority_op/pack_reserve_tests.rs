@@ -5,7 +5,8 @@
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_contracts::{
-    ExtensionControlAuthorityRequestV1, ExtensionControlPackFinishV1, ExtensionControlPackReserveV1,
+    ExtensionControlAuthorityRequestV1, ExtensionControlPackBaselineV1,
+    ExtensionControlPackFinishV1, ExtensionControlPackReserveV1,
 };
 use serde_json::{json, Value};
 
@@ -167,4 +168,117 @@ fn commit_prepare_refuses_a_draft_that_does_not_authenticate_by_name() {
     let refused = prepare(&staged, reserve);
     assert_eq!(refused["fault"], json!("pack"), "{refused}");
     assert_unwritten(&staged.home);
+}
+
+fn baseline() -> ExtensionControlPackBaselineV1 {
+    ExtensionControlPackBaselineV1 {
+        program_digest: "1".repeat(64),
+        catalog_digest: catalog('a'),
+        trust_digest: "3".repeat(64),
+        recorded_at: "t1".to_owned(),
+    }
+}
+
+#[test]
+fn a_first_activation_retains_the_legacy_baseline_with_its_reservation() {
+    let staged = staged();
+    staged
+        .home
+        .db
+        .execute("delete from extension_command_pack_activation", [])
+        .unwrap();
+    let reserve = ExtensionControlPackReserveV1 {
+        baseline: Some(baseline()),
+        ..staged.reserve.clone()
+    };
+    let reply = prepare(&staged, reserve);
+    assert_eq!(reply["plan"]["prepared"], json!(true), "{reply}");
+    let (revision, record, recorded_at): (i64, String, String) = staged
+        .home
+        .db
+        .query_row(
+            "select revision, record_json, recorded_at from extension_command_pack_activation",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!((revision, recorded_at.as_str()), (0, "t1"));
+    let record: Value = serde_json::from_str(&record).unwrap();
+    assert_eq!(
+        record["schema"],
+        json!("guard.command-pack-legacy-baseline.v1")
+    );
+    assert_eq!(record["catalog_digest"], json!(catalog('a')));
+    assert_eq!(
+        count(
+            &staged.home,
+            "select count(*) from extension_command_pack_pending"
+        ),
+        1
+    );
+}
+
+#[test]
+fn an_empty_slot_without_a_baseline_is_refused_and_a_refusal_retains_none() {
+    let staged = staged();
+    staged
+        .home
+        .db
+        .execute("delete from extension_command_pack_activation", [])
+        .unwrap();
+    let refused = prepare(&staged, staged.reserve.clone());
+    assert_eq!(
+        refused["reason"],
+        json!("native_command_pack_activation_missing"),
+        "{refused}"
+    );
+    assert_unwritten(&staged.home);
+    let reserve = ExtensionControlPackReserveV1 {
+        previous_digest: Some("9".repeat(64)),
+        baseline: Some(baseline()),
+        ..staged.reserve.clone()
+    };
+    let refused = prepare(&staged, reserve);
+    assert_eq!(refused["fault"], json!("pack"), "{refused}");
+    assert_unwritten(&staged.home);
+    assert_eq!(
+        count(
+            &staged.home,
+            "select count(*) from extension_command_pack_activation"
+        ),
+        0
+    );
+}
+
+#[test]
+fn a_baseline_over_an_occupied_slot_is_ignored() {
+    let staged = staged();
+    let before: String = staged
+        .home
+        .db
+        .query_row(
+            "select record_digest from extension_command_pack_activation",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let reserve = ExtensionControlPackReserveV1 {
+        baseline: Some(ExtensionControlPackBaselineV1 {
+            catalog_digest: catalog('b'),
+            ..baseline()
+        }),
+        ..staged.reserve.clone()
+    };
+    let reply = prepare(&staged, reserve);
+    assert_eq!(reply["plan"]["prepared"], json!(true), "{reply}");
+    let after: String = staged
+        .home
+        .db
+        .query_row(
+            "select record_digest from extension_command_pack_activation",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(after, before);
 }

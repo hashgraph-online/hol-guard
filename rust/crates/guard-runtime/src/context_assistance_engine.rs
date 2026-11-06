@@ -40,7 +40,9 @@ mod policy;
 #[path = "context_assistance_engine_prompt.rs"]
 mod prompt;
 use policy::{allowed, current_sources, effective, policy_current, policy_document, revision};
-pub(crate) use prompt::{project_context_on, quick_excerpts, PickedExcerpt};
+pub(crate) use prompt::{
+    definition, opened, project_context_on, prose, quick_excerpts, screened_texts, PickedExcerpt,
+};
 #[cfg(target_os = "macos")]
 #[path = "context_assistance_engine_execution.rs"]
 mod execution;

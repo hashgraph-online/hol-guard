@@ -186,6 +186,8 @@ def test_unsettled_replies_always_go_back_to_the_resident(tmp_path: Path, payloa
         "bootstrap",
         "reset",
         "apply_review_memory",
+        "abandon_bootstrap",
+        "record_migration",
         "write_anchor",
         "write_manifest",
         "unknown",
