@@ -420,6 +420,11 @@ fn evaluate_release_feed_frame(request: &ReleaseFeedProjectRequest) -> Result<Va
         _ => return Err(FeedError::Request),
     };
     let body = serde_json::to_string(&projection).map_err(|_| FeedError::Payload)?;
+    // The reader holds the projected body to the same cap as the upstream
+    // document, so a projection past it is a payload this build cannot show.
+    if body.len() > MAX_BODY_BYTES {
+        return Err(FeedError::Payload);
+    }
     Ok(json!({
         "schema": RELEASE_FEED_RESULT_SCHEMA,
         "outcome": "ok",
