@@ -124,6 +124,7 @@ pub mod pretool_git_helper_config;
 pub mod pretool_git_heredoc_message;
 pub mod pretool_git_history_reads;
 pub mod pretool_git_init_chain;
+pub mod pretool_git_inline_config_reads;
 pub mod pretool_git_large_listing;
 pub mod pretool_git_listing_reads;
 pub mod pretool_git_merge_integration;

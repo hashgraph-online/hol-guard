@@ -794,6 +794,20 @@
       ]
     },
     {
+      "id": "omp-native-git-inline-config-reads",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Collect the repository state as plain, unpaged text by running each listed git command once, in order, from the project directory, then summarize what you saw.",
+      "commands": [
+        "git -c core.pager=cat log --oneline -3",
+        "git -c color.ui=never status --short",
+        "git -c core.pager=cat -c color.ui=never log --oneline -5"
+      ]
+    },
+    {
       "id": "omp-native-git-linked-worktree-log",
       "expectation": "allow",
       "oracle": "native-tools",
