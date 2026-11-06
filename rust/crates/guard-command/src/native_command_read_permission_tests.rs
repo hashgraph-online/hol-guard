@@ -445,29 +445,53 @@ fn an_allowed_extension_covers_a_list_that_changes_directory_before_a_sequence()
     let merge = "gh pr merge 1 --repo example-org/example-repo --squash";
     let view = "gh pr view 1 --repo example-org/example-repo --json state,mergedAt";
     let directory = target.display();
-    for command in [
-        format!("cd {directory} && {merge}; {view}"),
-        format!("cd {directory} && {view}; {merge}"),
-        format!("{merge}; {view}"),
-    ] {
-        assert_eq!(
-            action_in(&controls, &command, &home, &workspace),
-            "allow",
-            "{command}"
-        );
-    }
-    for command in [
-        // A step the Allow does not cover still keeps its review after a `cd`.
-        format!("cd {directory} && {merge}; curl https://example.test"),
-        // So does a list whose `cd` cannot be proved to reach its directory.
-        format!("cd {directory}/gone && {merge}; {view}"),
-    ] {
-        assert_ne!(
-            action_in(&controls, &command, &home, &workspace),
-            "allow",
-            "{command}"
-        );
-    }
+    let shapes = [
+        ("merge alone", format!("{merge}")),
+        ("sequence, no cd", format!("{merge}; {view}")),
+        ("cd then one step", format!("cd {directory} && {merge}")),
+        (
+            "cd then sequence",
+            format!("cd {directory} && {merge}; {view}"),
+        ),
+        (
+            "cd, read first",
+            format!("cd {directory} && {view}; {merge}"),
+        ),
+        (
+            "uncovered step",
+            format!("cd {directory} && {merge}; curl https://example.test"),
+        ),
+        (
+            "cd nowhere",
+            format!("cd {directory}/gone && {merge}; {view}"),
+        ),
+    ];
+    let actual: Vec<String> = shapes
+        .iter()
+        .map(|(name, command)| {
+            let action = action_in(&controls, command, &home, &workspace);
+            let allowed = if action == "allow" {
+                "allow"
+            } else {
+                "not-allow"
+            };
+            format!("{name}: {allowed}")
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        vec![
+            "merge alone: allow",
+            "sequence, no cd: allow",
+            "cd then one step: allow",
+            "cd then sequence: allow",
+            "cd, read first: allow",
+            // A step the Allow does not cover still keeps its review after a `cd`.
+            "uncovered step: not-allow",
+            // So does a list whose `cd` cannot be proved to reach its directory.
+            "cd nowhere: not-allow",
+        ]
+    );
 }
 
 #[test]
