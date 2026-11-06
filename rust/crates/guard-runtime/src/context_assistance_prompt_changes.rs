@@ -10,8 +10,9 @@
 //! and with flags that keep repository configuration from starting other
 //! programs: no external diff, textconv, signature check, fsmonitor, pager
 //! or optional lock. Comparing the working tree runs clean filters, so the
-//! uncommitted part is left out when the repository configures a filter; a
-//! partial clone could fetch missing objects, so it gets nothing at all. Every
+//! uncommitted part is left out when the repository configures a filter. Git
+//! runs offline: no transport is allowed and a partial clone fetches nothing,
+//! so a part whose objects are not on disk is left out. Every
 //! changed file goes through the checks Guard's own read applies, and a file
 //! that fails them is left out. The diff holds lines no file has any more, so
 //! each part shown and each commit subject is also scanned for secrets, and
@@ -129,7 +130,7 @@ impl Git {
             cwd: &self.root,
             environment: &self.environment,
         };
-        let output = prober.run(&all)?;
+        let output = prober.run_offline(&all)?;
         output
             .success()
             .then(|| output.text().map(str::to_owned))
@@ -210,13 +211,7 @@ fn allowed(git: &Git, until: Instant) -> Allowed {
         .filter(|(scope, _)| *scope != "system")
         .map(|(_, name)| name.to_ascii_lowercase())
         .collect();
-    let partial = names.iter().any(|name| {
-        name == "extensions.partialclone"
-            || (name.starts_with("remote.") && name.ends_with(".promisor"))
-    });
-    if partial {
-        Allowed::Nothing
-    } else if names.iter().any(|name| name.starts_with("filter.")) {
+    if names.iter().any(|name| name.starts_with("filter.")) {
         Allowed::CommitsOnly
     } else {
         Allowed::Everything
