@@ -20,6 +20,8 @@ use crate::package_execution_context::{
     PackageExecutionContextComponent, PACKAGE_EXECUTION_CONTEXT_VERSION,
 };
 
+#[cfg(test)]
+mod checkout_reuse_tests;
 mod configuration;
 mod configuration_names;
 mod dependency;

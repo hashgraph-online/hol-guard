@@ -2,7 +2,9 @@
 //! approval-hash path before it was deleted. Their policy digests were later
 //! recomputed when bundle and feed revisions left the policy context,
 //! reasons were reduced to their codes, and the matched rule and advisories
-//! left it.
+//! left it. The `manifests_and_lockfiles` content digest was recomputed when
+//! `package.json` and `pyproject.toml` hashes came to bind only their install
+//! sections.
 
 use super::*;
 use guard_contracts::PackageApprovalHashRequestV1;
@@ -440,3 +442,6 @@ fn a_quiet_spelling_keeps_the_whole_package_approval_key() {
     }));
     assert_ne!(unbound, loud);
 }
+
+#[path = "package_approval_hash_op_manifest_tests.rs"]
+mod manifest;
