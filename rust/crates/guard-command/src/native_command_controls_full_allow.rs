@@ -35,10 +35,13 @@ impl super::CompiledNativeCommandControls {
     /// reset can replace the program, configuration or bind-mounted file a
     /// later step runs; segments after such a step keep the review they had.
     ///
-    /// A step that points its own output at a file it names is left out of the
-    /// coverage as well as ending the walk. `git log --output=.git/config`
-    /// reads a verb the extension models, but what it does is write, and an
-    /// answer about Git's reads never covers that.
+    /// A step that points its own output over `.git` or out of the workspace
+    /// is left out of the coverage as well as ending the walk.
+    /// `git log --output=.git/config` reads a verb the extension models, but
+    /// what it writes is the configuration the next step runs under, and an
+    /// answer about Git's own work never covers that. `git archive -o
+    /// snapshot.tar HEAD` writes where the workspace already allows, so it
+    /// stays inside the Allow.
     ///
     /// This widens coverage, not the floors around it: `fixed_command_floor`,
     /// `protected_checkout_destination`, the caller's bounded and
@@ -70,7 +73,7 @@ impl super::CompiledNativeCommandControls {
         for (index, segment) in command.segments.iter().enumerate() {
             let watches_this_segment = watched
                 .contains(&crate::command_compatibility::basename(segment))
-                && !crate::pretool::git_step_names_an_output_file(segment)
+                && !crate::pretool::git_step_overwrites_what_runs_next(segment)
                 && crate::command_compatibility::segment_settles_uncertainty(segment, context);
             if watches_this_segment {
                 covered.insert(index);

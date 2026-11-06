@@ -483,17 +483,18 @@ impl CompiledNativeCommandControls {
         // models. It runs last so it never hides a rule the user left off and
         // never changes what the proofs above read.
         covered.extend(self.fully_allowed_extension_segments(command, &benign, context));
-        // A Git step that points its own output at a file it names writes,
-        // whichever route covered it: a `git log` rule the user enabled reads
-        // the verb, not the `--output=.git/config` that rewrites what the
-        // next step runs under. Only the native benign proof, which reads
-        // where the file lands, still carries such a step.
+        // A Git step that points its own output over `.git` or out of the
+        // workspace writes whichever route covered it: a `git log` rule the
+        // user enabled reads the verb, not the `--output=.git/config` that
+        // rewrites what the next step runs under. Packaging a tree into a
+        // file the workspace names is ordinary Git work and stays covered.
+        // Only the native benign proof, which reads where the file lands,
+        // still carries the rest.
         covered.retain(|index| {
             benign.contains(index)
-                || command
-                    .segments
-                    .get(*index)
-                    .is_none_or(|segment| !crate::pretool::git_step_names_an_output_file(segment))
+                || command.segments.get(*index).is_none_or(|segment| {
+                    !crate::pretool::git_step_overwrites_what_runs_next(segment)
+                })
         });
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a

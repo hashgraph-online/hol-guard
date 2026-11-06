@@ -304,17 +304,20 @@ fn ref_read(
 pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
     let arguments = &segment.arguments;
     git_segment(segment)
-        && !points_output_at_a_file(arguments)
+        && !points_output_at_a_protected_file(arguments)
         && (preserves_tree(arguments) || writes_nothing(arguments))
 }
 
-/// Whether `segment` is a Git step that writes its output to a file it names.
+/// Whether `segment` is a Git step that writes its output over a file a later
+/// step runs under.
 ///
-/// A read that writes is not a read. An extension-wide Allow answers for what
-/// Git itself reads, so a step that points its output at a path of its own
-/// choosing keeps the review it had, whether or not anything runs after it.
-pub(crate) fn git_step_names_an_output_file(segment: &crate::CommandSegmentV1) -> bool {
-    git_segment(segment) && points_output_at_a_file(&segment.arguments)
+/// An extension-wide Allow answers for Git's own work, and packaging a tree
+/// into a file the workspace names -- `git archive -o snapshot.tar HEAD` --
+/// is part of that work. Pointing the same output at `.git/config`, a hook,
+/// or a path that leaves the workspace is not: it rewrites what the next Git
+/// step runs, so that step keeps the review it had.
+pub(crate) fn git_step_overwrites_what_runs_next(segment: &crate::CommandSegmentV1) -> bool {
+    git_segment(segment) && points_output_at_a_protected_file(&segment.arguments)
 }
 
 /// Whether a Git step, wherever its global options route it, writes nothing a
@@ -336,15 +339,19 @@ fn writes_nothing(arguments: &[String]) -> bool {
 /// option to the remote, so refusing `-o` outright would stop ordinary work.
 const SHORT_OUTPUT_VERBS: &[&str] = &["archive", "bundle", "format-patch"];
 
-/// Whether a step points its output at a file of its own choosing.
+/// Whether a step points its output at a file that decides what runs next.
 ///
 /// Git's diff options reach every verb that can show a diff, so `log`, `show`,
 /// `whatchanged` and `rev-list` all take `--output=<file>` and write wherever
-/// it points -- over `.git/config` or a hook a later step runs. Git resolves
-/// any unambiguous long-option abbreviation, so every spelling from `--out`
-/// up is refused; the short form is refused for the verbs that read it as the
-/// output file.
-fn points_output_at_a_file(arguments: &[String]) -> bool {
+/// it points. Git resolves any unambiguous long-option abbreviation, so every
+/// spelling from `--out` up is read as that option; the short form is read as
+/// the output file for the verbs that package a tree.
+///
+/// The file the option names decides the answer. A workspace-relative path
+/// Git packages into is the ordinary shape of the option and stays inside an
+/// Allow on the Git extension; a path Guard cannot place, or one that names
+/// Git's own tree, does not.
+fn points_output_at_a_protected_file(arguments: &[String]) -> bool {
     let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
         return false;
     };
@@ -352,9 +359,59 @@ fn points_output_at_a_file(arguments: &[String]) -> bool {
         return false;
     };
     let short_writes = SHORT_OUTPUT_VERBS.contains(&operation);
-    arguments.iter().skip(index + 1).any(|argument| {
-        argument.starts_with("--out") || (short_writes && argument.starts_with("-o"))
+    let rest = arguments.get(index + 1..).unwrap_or_default();
+    rest.iter().enumerate().any(|(position, argument)| {
+        match output_option_value(argument, short_writes) {
+            None => false,
+            Some(Some(value)) => !output_target_is_inert(value),
+            Some(None) => rest
+                .get(position + 1)
+                .map(String::as_str)
+                .is_none_or(|value| !output_target_is_inert(value)),
+        }
     })
+}
+
+/// The file a single argument points Git's output at, when it is that option.
+///
+/// `Some(Some(path))` carries the value in the argument itself,
+/// `Some(None)` means the option is there and the next word carries its
+/// value, and `None` means the argument is not an output option at all.
+fn output_option_value(argument: &str, short_writes: bool) -> Option<Option<&str>> {
+    if let Some(rest) = argument.strip_prefix("--out") {
+        return Some(rest.split_once('=').map(|(_, value)| value));
+    }
+    if short_writes {
+        if let Some(rest) = argument.strip_prefix("-o") {
+            return Some((!rest.is_empty()).then_some(rest));
+        }
+    }
+    None
+}
+
+/// Whether a path Git writes its output to leaves what a later step runs as
+/// Guard read it.
+///
+/// `snapshot.tar` or `patches/0001.patch` below the workspace is what
+/// `git archive -o` and `git format-patch -o` are for, and an Allow on the
+/// Git extension answers for them. A path that climbs out of the workspace or
+/// names `.git` -- `.git/config`, `.git/hooks/pre-commit`, `.gitattributes` --
+/// changes the configuration, hook or filter the next Git step runs under, so
+/// it keeps its review. A value Guard cannot place, because it is absent,
+/// home-relative or still carries a shell expansion, is treated the same way.
+fn output_target_is_inert(target: &str) -> bool {
+    if target.is_empty() || target.starts_with('-') || target.starts_with('~') {
+        return false;
+    }
+    if target.starts_with('/') || target.starts_with('\\') || target.contains('$') {
+        return false;
+    }
+    if target.len() > 1 && target.as_bytes()[1] == b':' {
+        return false;
+    }
+    !target
+        .split(['/', '\\'])
+        .any(|component| component == ".." || component.starts_with(".git"))
 }
 
 #[cfg(test)]
@@ -392,23 +449,39 @@ mod tests {
     }
 
     #[test]
-    fn a_read_that_names_an_output_file_is_not_a_read() {
+    fn an_output_file_that_decides_what_runs_next_is_not_a_read() {
         // Git's diff options reach every verb that shows a diff, and the
         // short form is the output file for the verbs that package a tree.
+        // Each of these lands on Git's own tree, climbs out of the workspace
+        // or is a value Guard cannot place.
         for command in [
             "log -1 --output=.git/config",
             "show --output .git/hooks/pre-commit HEAD",
             "whatchanged --out=.git/config",
             "rev-list --output=.git/config HEAD",
-            "diff --output=hook",
-            "archive -o out.tar HEAD",
+            "diff --output=.gitattributes",
+            "archive -o ../out.tar HEAD",
+            "archive -o /tmp/out.tar HEAD",
+            "archive -o ~/out.tar HEAD",
+            "archive -o $DEST/out.tar HEAD",
             "format-patch -o .git/hooks HEAD~1",
+            "archive --output",
         ] {
-            assert!(super::points_output_at_a_file(&words(command)), "{command}");
+            assert!(
+                super::points_output_at_a_protected_file(&words(command)),
+                "{command}"
+            );
         }
-        // The same letter means something that writes nothing here, and a
-        // long option that merely starts with the same letters names no file.
+        // Packaging a tree into a file the workspace names is the ordinary
+        // shape of the option. The same letter means something that writes
+        // nothing below, and a long option that merely starts with the same
+        // letters names no file.
         for command in [
+            "archive -o out.tar HEAD",
+            "archive -oout.tar HEAD",
+            "archive --output=snapshot.tar HEAD",
+            "format-patch -o patches HEAD~1",
+            "diff --output=hook",
             "ls-files -o --exclude-standard",
             "push -o ci.skip origin main",
             "status --short --branch",
@@ -416,7 +489,7 @@ mod tests {
             "log --one-line",
         ] {
             assert!(
-                !super::points_output_at_a_file(&words(command)),
+                !super::points_output_at_a_protected_file(&words(command)),
                 "{command}"
             );
         }

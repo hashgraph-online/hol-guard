@@ -150,8 +150,10 @@ const UNMODELLED: &[&str] = &[
     "git count-objects -v",
     "git ls-remote --heads origin && git log --oneline -3",
     // A read leaves the next step running what Guard read, so the Allow
-    // carries the whole chain.
+    // carries the whole chain, and packaging a tree into a file the
+    // workspace names is Git's own work.
     "git ls-remote --heads origin && git archive --format=tar -o snapshot.tar HEAD",
+    "git format-patch -o patches HEAD~1",
     "git status --short --branch && git log --oneline -5 && git remote -v",
 ];
 
@@ -236,6 +238,10 @@ const OUTSIDE_THE_ALLOW: &[&str] = &[
     // `--output` reaches every verb that shows a diff, so this read writes
     // the configuration the `git status` after it reads.
     "git log -1 --output=.git/config && git status",
+    // The same option on a verb that packages a tree, pointed at the hook
+    // the next step would run and at a path outside the workspace.
+    "git archive --format=tar -o .git/hooks/pre-commit HEAD && git status",
+    "git archive --format=tar -o ../snapshot.tar HEAD && git status",
 ];
 
 /// Allowing Git in full answers for Git's own work, not for whatever program

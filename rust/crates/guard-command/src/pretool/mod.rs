@@ -274,7 +274,7 @@ pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
 pub(crate) use git_read_after_allow::{
-    git_reads_after_allowed_steps, git_step_names_an_output_file, step_preserves_later_programs,
+    git_reads_after_allowed_steps, git_step_overwrites_what_runs_next, step_preserves_later_programs,
 };
 pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
