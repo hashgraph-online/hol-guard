@@ -16,8 +16,8 @@
 //! last-good restore must pass, the records it seals, and whether a prepared
 //! transition is resumed, committed or abandoned -- and the caller performs
 //! that step under the exclusive authority lease. `write_anchor` writes an
-//! anchor the store has earned into the credential vault, `seal_manifest`
-//! seals the catalog manifest record the caller stores, and `seal_managed_revision` and `seal_managed_activation` the managed
+//! anchor the store has earned into the credential vault, and
+//! `seal_managed_revision` and `seal_managed_activation` seal the managed
 //! controls publication epoch and activation. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
@@ -73,8 +73,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
     /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
-    /// `queue_change`,
-    /// `write_anchor`, `seal_manifest`, `seal_managed_revision`,
+    /// `queue_change`, `write_anchor`, `seal_managed_revision`,
     /// `seal_managed_activation` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
@@ -140,7 +139,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
     /// The caller's clock, as Python's `datetime.now(timezone.utc).isoformat()`
-    /// spells it, for the plan ops and `seal_manifest`.
+    /// spells it, for the plan ops and `write_manifest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub now: Option<String>,
     /// `resume`: the pending cloud-event capacity the change event is queued

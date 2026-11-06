@@ -111,7 +111,6 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "anchor" => anchor_op(request, key),
         "managed_activation" => managed::activation_op(request, key),
         "managed_revision" => managed::revision_op(request, key),
-        "seal_manifest" => seals::seal_manifest_op(request, key),
         "seal_managed_revision" => managed_seals::seal_revision_op(request, key),
         "seal_managed_activation" => managed_seals::seal_activation_op(request, key),
         "read" | "read_composed" | "sync_manifest" | "compose_managed" | "load_manifest"

@@ -50,8 +50,8 @@ pub(super) fn anchor_json(anchor: &Anchor, key: &[u8]) -> Res<String> {
     canonical(&json!({ "record": record, "digest": digest, "mac": mac }))
 }
 
-/// `seal_manifest`: the record `_write_catalog_manifest` stores for the
-/// current catalog's trusted target manifest.
+/// The record `write_manifest` stores for the current catalog's trusted
+/// target manifest.
 pub(super) fn seal_manifest_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,

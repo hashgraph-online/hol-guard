@@ -43,10 +43,14 @@ fn a_sealed_manifest_is_the_record_load_manifest_trusts() {
         ("extension:b".to_owned(), "2".to_owned()),
         ("extension:a".to_owned(), "1".to_owned()),
     ]);
-    let sealed_manifest = run(&ExtensionControlAuthorityRequestV1 {
-        current_manifest: Some(manifest.clone()),
-        ..writer(&home, "seal_manifest")
-    });
+    let sealed_manifest = super::seals::seal_manifest_op(
+        &ExtensionControlAuthorityRequestV1 {
+            current_manifest: Some(manifest.clone()),
+            ..writer(&home, "write_manifest")
+        },
+        Some(&KEY),
+    )
+    .unwrap();
     let manifest_json = sealed_manifest["manifest_json"].as_str().unwrap();
     assert_eq!(manifest_json, r#"{"extension:a":"1","extension:b":"2"}"#);
     let record = &sealed_manifest["record"];
