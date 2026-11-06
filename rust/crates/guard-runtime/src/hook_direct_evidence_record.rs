@@ -12,6 +12,9 @@
 //! `capture_recorded` for what was recorded, so a page sent again does not
 //! record it twice. Whatever the writer refuses, or a lane bound without a
 //! source, stays with the daemon.
+//!
+//! A connector-setup review's desktop notice needs no writer, so it is raised
+//! for every paged record that names one and marked `connector_notice_raised`.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -150,6 +153,16 @@ pub(super) fn leftovers(
     paged: &mut [Paged],
 ) -> Option<Value> {
     let home = Path::new(guard_home);
+    // The notice needs no writer, so it is raised whatever the writer does.
+    let mut notices = Vec::new();
+    let mut noticed = Vec::new();
+    for paged in paged.iter() {
+        if let Some(notice) = super::notice::pending(&paged.record) {
+            notices.push(notice);
+            noticed.push((paged.seq, vec![super::notice::NOTICE_RAISED]));
+        }
+    }
+    super::notice::raise(guard_home, source, notices);
     let capturing = capture_marker_present(home);
     let capture_deadline = Instant::now() + CAPTURE_PAGE_BUDGET;
     let pending = |paged: &Paged| {
@@ -160,9 +173,10 @@ pub(super) fn leftovers(
     if !paged.iter().any(pending) {
         // The writer saves on its own thread, so a store failure can follow
         // the page that gave it the last record.
+        mark(queue, paged, &noticed);
         return crate::hook_evidence_writer_op::drained_fatal(home);
     }
-    let (marks, fatal) = crate::hook_evidence_writer_op::record_drained(home, source, |writer| {
+    let recorded = crate::hook_evidence_writer_op::record_drained(home, source, |writer| {
         let mut marks = Vec::new();
         for paged in paged.iter().filter(|paged| pending(paged)) {
             let mut recorded = Vec::new();
@@ -201,9 +215,17 @@ pub(super) fn leftovers(
             marks.push((paged.seq, recorded));
         }
         marks
-    })?;
+    });
+    mark(queue, paged, &noticed);
+    let (marks, fatal) = recorded?;
+    mark(queue, paged, &marks);
+    Some(fatal)
+}
+
+/// Mark what was recorded on the page and in the queue.
+fn mark(queue: &DirectEvidenceQueue, paged: &mut [Paged], marks: &[(u64, Vec<&str>)]) {
     let mut state = queue.state.lock().ok();
-    for (seq, recorded) in &marks {
+    for (seq, recorded) in marks {
         if let Some(state) = state.as_mut() {
             state.mark(*seq, recorded);
         }
@@ -214,5 +236,4 @@ pub(super) fn leftovers(
             }
         }
     }
-    Some(fatal)
 }

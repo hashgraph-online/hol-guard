@@ -155,8 +155,10 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
         return True
     if not recorded:
         _record_native_pre_activity(host, harness, payload, response, accepted)  # pyright: ignore[reportArgumentType]
-    with suppress(Exception):
-        _raise_connector_setup_notice(host.store, record.get(_CONNECTOR_NOTICE_FIELD))
+    if record.get("connector_notice_raised") is not True:
+        # A current resident raises the notice as the page leaves.
+        with suppress(Exception):
+            _raise_connector_setup_notice(host.store, record.get(_CONNECTOR_NOTICE_FIELD))
     return True
 
 

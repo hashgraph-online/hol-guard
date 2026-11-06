@@ -207,3 +207,29 @@ fn the_drain_leaves_a_codex_receipt_uncaptured_while_the_capture_is_off() {
     assert!(records[0].get("capture_recorded").is_none());
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
 }
+
+#[test]
+fn the_drain_raises_a_connector_setup_notice_once() {
+    let home = store_home("drain-raises-connector-notice");
+    let (_, edge) = answered(&home, true);
+    let mut record = allowed(&edge);
+    // A stored row the store does not hold raises nothing, so no notice shows.
+    record["connector_setup_notice"] =
+        json!({"request_id": "req-missing", "connector_name": "Example CLI"});
+    let queue = DirectEvidenceQueue::default();
+    assert!(offer_direct(&queue, &home, record, true));
+    let records = drained(&queue, &home, Some("guard"))["records"].clone();
+    assert_eq!(records[0]["connector_notice_raised"], json!(true));
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
+#[test]
+fn the_drain_marks_no_notice_a_record_does_not_name() {
+    let home = store_home("drain-no-connector-notice");
+    let (_, edge) = answered(&home, true);
+    let queue = DirectEvidenceQueue::default();
+    assert!(offer_direct(&queue, &home, allowed(&edge), true));
+    let records = drained(&queue, &home, Some("guard"))["records"].clone();
+    assert!(records[0].get("connector_notice_raised").is_none());
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
