@@ -21,20 +21,23 @@
 //!   review rule matches every spelling of a command, but an allow lifts only
 //!   the text it was approved for;
 //! - only while the cached signed bundle still yields the row, checked the
-//!   way the policy lookup keeps a `policy-bundle` row. A row the bundle no
-//!   longer authorizes, or a bundle Guard cannot validate, lifts nothing.
+//!   way the policy lookup keeps a `policy-bundle` row. A v2 bundle's
+//!   `policy-bundle-canonical` row is checked against the rules that bundle
+//!   compiles to for this device. A row the bundle no longer authorizes, or a
+//!   bundle Guard cannot validate, lifts nothing.
 //!
-//! The caller applies block and review rules first, so a block or review on
-//! any spelling of the command wins over this allow.
-
-use std::path::Path;
+//! The caller applies block and review rules first, in the same read
+//! snapshot, so a block or review on any spelling of the command wins over
+//! this allow even while a policy sync commits.
 
 use guard_contracts::PreToolResultV1;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
-use crate::local_store_read::{open_read_only_cached, table_exists, STORE_FILE_NAME};
-use crate::policy_bundle_store_identities::{cached_bundle_authority, Identity};
+use crate::local_store_read::table_exists;
+use crate::policy_bundle_store_identities::{
+    cached_bundle_authority, canonical_identities, Identity,
+};
 use crate::policy_decision_lookup_op::materialized_policy_bundle_row_identity;
 
 const POLICY_ALLOW: &str = "policy_exact_command_allow";
@@ -54,16 +57,23 @@ const LIFTABLE_REASONS: &[&str] = &[
 /// when they cannot be derived.
 pub(crate) type BundleIdentities = fn(&Connection, &str) -> Option<Vec<Identity>>;
 
-/// The identities the cached signed policy bundle yields for this device.
+/// The identities the cached signed policy bundle yields for this device: a
+/// v1 bundle's materialized decisions, and the rules a canonical (v2) bundle
+/// compiles to.
 pub(crate) fn cached_identities(connection: &Connection, now: &str) -> Option<Vec<Identity>> {
-    cached_bundle_authority(connection, now).map(|(identities, _bundle)| identities)
+    let (mut identities, bundle) = cached_bundle_authority(connection, now)?;
+    if let Some(bundle) = bundle {
+        identities.extend(canonical_identities(connection, &bundle)?);
+    }
+    Some(identities)
 }
 
 /// Settles a liftable review at allow when a Guard Cloud policy rule allows
 /// one of `commands` exactly; any other result, or any read that fails, is
-/// returned unchanged.
+/// returned unchanged. `connection` is the read snapshot the caller matched
+/// the block and review rules in.
 pub(crate) fn apply(
-    guard_home: &Path,
+    connection: &Connection,
     commands: &[&str],
     now_micros: Option<i64>,
     result: PreToolResultV1,
@@ -77,11 +87,8 @@ pub(crate) fn apply(
     else {
         return result;
     };
-    let Ok(Some(connection)) = open_read_only_cached(&guard_home.join(STORE_FILE_NAME)) else {
-        return result;
-    };
     let harness = result.action.harness.as_str();
-    if allowed(&connection, harness, commands, now_micros, &now, identities) {
+    if allowed(connection, harness, commands, now_micros, &now, identities) {
         settle(result)
     } else {
         result
@@ -97,8 +104,9 @@ fn liftable(result: &PreToolResultV1) -> bool {
         && LIFTABLE_REASONS.contains(&result.reason_code.as_str())
 }
 
-/// Whether a live `policy-bundle` allow row names one of `commands` exactly
-/// and the signed bundle still yields it.
+/// Whether a live signed-bundle allow row (`policy-bundle` or
+/// `policy-bundle-canonical`) names one of `commands` exactly and the signed
+/// bundle still yields it.
 fn allowed(
     connection: &Connection,
     harness: &str,
@@ -151,14 +159,14 @@ fn allowed(
     })
 }
 
-/// The artifact-scoped `policy-bundle` allow rows saved under `id` for
+/// The artifact-scoped signed-bundle allow rows saved under `id` for
 /// `harness` or every harness, with the columns their identity is read from.
 fn allow_rows(connection: &Connection, harness: &str, id: &str) -> rusqlite::Result<Vec<Value>> {
     let mut statement = connection.prepare_cached(
         "select harness, scope, artifact_id, artifact_hash, workspace, publisher, action, \
          reason, owner, source, expires_at from policy_decisions \
          where harness in (?1, '*') and artifact_id = ?2 and scope = 'artifact' \
-         and action = 'allow' and source = 'policy-bundle'",
+         and action = 'allow' and source in ('policy-bundle', 'policy-bundle-canonical')",
     )?;
     let rows = statement.query_map(params![harness, id], |row| {
         let text = |index: usize| row.get::<_, Option<String>>(index);

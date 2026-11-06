@@ -8,6 +8,7 @@ use rusqlite::{params, Connection};
 
 use super::*;
 use crate::edge_exact_command_review::{apply_with, Call};
+use crate::local_store_read::STORE_FILE_NAME;
 use crate::policy_enforcement::validate_pre_tool_result_matrix;
 
 /// 2026-11-01T00:00:00Z.
@@ -108,13 +109,13 @@ fn home(rows: &[Row<'_>]) -> tempfile::TempDir {
     home
 }
 
-/// A signed bundle that still yields every saved `policy-bundle` row.
+/// A signed bundle that still yields every saved signed-bundle row.
 fn yields_every_row(connection: &Connection, _now: &str) -> Option<Vec<Identity>> {
     let mut statement = connection
         .prepare(
             "select harness, scope, artifact_id, artifact_hash, workspace, publisher, action, \
              reason, owner, source, expires_at from policy_decisions \
-             where source = 'policy-bundle'",
+             where source in ('policy-bundle', 'policy-bundle-canonical')",
         )
         .unwrap();
     let rows = statement
@@ -147,6 +148,17 @@ fn reviewed(reason_code: &str) -> PreToolResultV1 {
     reviewed
 }
 
+/// [`yields_every_row`], read only inside the snapshot the rules were read in.
+fn yields_every_row_in_the_rules_snapshot(
+    connection: &Connection,
+    now: &str,
+) -> Option<Vec<Identity>> {
+    if connection.is_autocommit() {
+        return None;
+    }
+    yields_every_row(connection, now)
+}
+
 fn edge(
     home: &Path,
     call: &Call<'_>,
@@ -174,6 +186,43 @@ fn a_cloud_allow_rule_settles_the_review_of_its_exact_command() {
         assert!(settled.reason.contains("Guard Cloud policy"));
         validate_pre_tool_result_matrix(&settled).unwrap();
     }
+}
+
+#[test]
+fn a_v2_bundle_allow_rule_settles_the_review_of_its_exact_command() {
+    let home = home(&[Row {
+        source: "policy-bundle-canonical",
+        ..allow_rule(COMMAND)
+    }]);
+    let settled = edge(
+        home.path(),
+        &call(COMMAND),
+        reviewed("native_package_review"),
+        yields_every_row,
+    );
+    assert_eq!(settled.decision, "allow");
+    assert_eq!(settled.reason_code, "policy_exact_command_allow");
+    let review = reviewed("native_package_review");
+    for identities in [yields_nothing as BundleIdentities, unavailable] {
+        assert_eq!(
+            edge(home.path(), &call(COMMAND), review.clone(), identities),
+            review
+        );
+    }
+}
+
+#[test]
+fn the_allow_and_its_bundle_are_read_in_the_rules_snapshot() {
+    // A policy sync that commits between the reads could otherwise pair a
+    // newly signed allow with the block and review rules from before it.
+    let home = home(&[allow_rule(COMMAND)]);
+    let settled = edge(
+        home.path(),
+        &call(COMMAND),
+        reviewed("native_package_review"),
+        yields_every_row_in_the_rules_snapshot,
+    );
+    assert_eq!(settled.decision, "allow");
 }
 
 #[test]

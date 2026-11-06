@@ -145,7 +145,19 @@ pub(crate) fn apply_with(
         return result;
     }
     let reviewable = minimum <= ActionFloor::Warn;
-    match matching_rules(guard_home, &result.action.harness, call, now_micros) {
+    // A missing store holds no rule.
+    let connection = match open_read_only_cached(&guard_home.join(STORE_FILE_NAME)) {
+        Ok(Some(connection)) => connection,
+        Ok(None) => return result,
+        Err(_) => return unreadable(result, reviewable),
+    };
+    // One read snapshot for the block and review rules, the allow rule and the
+    // signed bundle behind it, so a policy sync that commits between the reads
+    // cannot pair a newly signed allow with the rules from before it.
+    let Ok(_snapshot) = connection.unchecked_transaction() else {
+        return unreadable(result, reviewable);
+    };
+    match matching_rules(&connection, &result.action.harness, call, now_micros) {
         Ok(Rules {
             block: Some(source),
             ..
@@ -171,22 +183,30 @@ pub(crate) fn apply_with(
             incomplete: false,
             ..
         }) => crate::edge_exact_command_allow::apply(
-            guard_home,
+            &connection,
             &call.commands,
             now_micros,
             result,
             identities,
         ),
         Ok(_) => result,
-        Err(Unreadable) if reviewable => raise(
-            result,
-            (
-                UNREADABLE_REVIEW,
-                "Guard could not read its saved rules, so it asks before this command runs.",
-            ),
-        ),
-        Err(Unreadable) => result,
+        Err(Unreadable) => unreadable(result, reviewable),
     }
+}
+
+/// A store that exists but cannot be read may hold a block or review rule, so
+/// an allowed call is raised to review.
+fn unreadable(result: PreToolResultV1, reviewable: bool) -> PreToolResultV1 {
+    if !reviewable {
+        return result;
+    }
+    raise(
+        result,
+        (
+            UNREADABLE_REVIEW,
+            "Guard could not read its saved rules, so it asks before this command runs.",
+        ),
+    )
 }
 
 fn is_shell_action(action_type: &PreToolActionTypeV1) -> bool {
@@ -214,21 +234,16 @@ struct Rules {
 
 /// The live block and review rules for `harness` or every harness that name
 /// one of the exact-command ids of the call's commands, under any spelling,
-/// everywhere or in its folder. A missing store or table holds no rule.
+/// everywhere or in its folder. A missing table holds no rule.
 fn matching_rules(
-    guard_home: &Path,
+    connection: &Connection,
     harness: &str,
     call: &Call<'_>,
     now_micros: Option<i64>,
 ) -> Result<Rules, Unreadable> {
     let mut rules = Rules::default();
-    let Some(connection) =
-        open_read_only_cached(&guard_home.join(STORE_FILE_NAME)).map_err(|_| Unreadable)?
-    else {
-        return Ok(rules);
-    };
-    if !table_exists(&connection, "policy_decisions").map_err(|_| Unreadable)?
-        || !holds_command_rules(&connection)?
+    if !table_exists(connection, "policy_decisions").map_err(|_| Unreadable)?
+        || !holds_command_rules(connection)?
     {
         return Ok(rules);
     }
@@ -243,7 +258,7 @@ fn matching_rules(
         });
     let (key, path) = places.map_or((None, None), |(key, path)| (key, Some(path)));
     let place = (key.as_deref(), path.as_deref());
-    let live = live_rules(&connection, harness, place, now_micros)?;
+    let live = live_rules(connection, harness, place, now_micros)?;
     if live.is_empty() {
         return Ok(rules);
     }
