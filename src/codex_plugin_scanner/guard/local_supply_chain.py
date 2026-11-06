@@ -614,6 +614,7 @@ def _final_package_protect_authority(
     config: GuardConfig | None,
     current_config_provider: Callable[[], GuardConfig] | None,
     additional_authority_provider: Callable[[], tuple[object | None, dict[str, object] | None]] | None,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> tuple[_PackageProtectAuthority, Any]:
     """Refresh mode, claim required approval, then rebuild authority before spawn."""
 
@@ -646,6 +647,7 @@ def _final_package_protect_authority(
             execution_context=initial.execution_context,
             current_action=initial.current_action,
             claim_saved_approval=True,
+            waited_request_ids=waited_request_ids,
         )
         claimed_action = _protect_action_for_policy_action(claimed_resolution.evaluation.policy_action)
         if not is_execution_permitted(claimed_action):
@@ -752,6 +754,7 @@ def build_package_protect_payload(
     additional_policy_context: dict[str, object] | None = None,
     current_config_provider: Callable[[], GuardConfig] | None = None,
     additional_authority_provider: Callable[[], tuple[object | None, dict[str, object] | None]] | None = None,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> tuple[dict[str, object], int] | None:
     authority = _build_package_protect_authority(
         command=command,
@@ -774,6 +777,7 @@ def build_package_protect_payload(
         execution_context=authority.execution_context,
         current_action=authority.current_action,
         claim_saved_approval=False,
+        waited_request_ids=waited_request_ids,
     ).evaluation
     effective_dry_run = dry_run and not (
         allow_saved_approval_execution and _evaluation_uses_saved_package_approval(evaluation)
@@ -808,6 +812,7 @@ def build_package_protect_payload(
         config=config,
         current_config_provider=current_config_provider,
         additional_authority_provider=additional_authority_provider,
+        waited_request_ids=waited_request_ids,
     )
     try:
         final_projection = native_package_protect_projection(
@@ -922,6 +927,7 @@ def _resolve_stored_package_policy_override(
     current_action: object | None = None,
     claim_saved_approval: bool = True,
     policy_workspaces: tuple[str, ...] | None = None,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> _StoredPackagePolicyResolution:
     """Hydrate saved-policy facts and let the resident decide the override.
 
@@ -952,6 +958,7 @@ def _resolve_stored_package_policy_override(
         policy_workspaces=policy_workspaces,
         current_action=current_action,
         claim_saved_approval=claim_saved_approval,
+        waited_request_ids=waited_request_ids,
     )
     return _StoredPackagePolicyResolution(
         resolved,

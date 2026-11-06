@@ -209,3 +209,93 @@ fn a_saved_allow_naming_another_artifact_is_not_reused() {
         json!("require-reapproval")
     );
 }
+
+/// The recorded `require-reapproval` package request carrying the exact Cloud
+/// allow a waiting install read for its own request, and that request row.
+fn waited_exact_cloud(edit: impl FnOnce(&mut Value)) -> (Value, Value) {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let mut vector = vectors
+        .into_iter()
+        .find(|item| item["name"] == "fresh_expiring_request_require_reapproval")
+        .unwrap();
+    let artifact_id = "guard-cli:project:package-request:npm-install";
+    let hash = vector["request"]["artifact_hash"].clone();
+    vector["request"]["artifact_id"] = json!(artifact_id);
+    vector["request"]["harness"] = json!("guard-cli");
+    vector["request"]["decision"] = json!({
+        "action": "allow",
+        "approval_id": "approval-1",
+        "artifact_hash": hash,
+        "artifact_id": artifact_id,
+        "authority_kind": "exact-cloud",
+        "decision_id": null,
+        "expires_at": "2026-07-18T00:00:00Z",
+        "harness": "claude-code",
+        "publisher": null,
+        "request_id": "req-1",
+        "scope": "artifact",
+        "source": "approval-gate-once",
+        "workspace": "workspace:digest",
+        "_approval_authority_revision": 3,
+    });
+    vector["request"]["approval_request"] = json!({
+        "request_id": "req-1",
+        "artifact_type": "package_request",
+        "status": "resolved",
+        "resolution_action": "allow",
+        "resolution_scope": "artifact",
+        "artifact_id": artifact_id,
+        "artifact_hash": hash,
+    });
+    edit(&mut vector["request"]);
+    let payload = run(&request(&vector, None)).unwrap();
+    (applied(&vector, &payload), payload)
+}
+
+#[test]
+fn a_waited_exact_cloud_allow_lets_the_install_run_once() {
+    let (view, payload) = waited_exact_cloud(|_| {});
+    assert_eq!(view["policy_action"], json!("allow"));
+    assert_eq!(payload["reused"], json!(true));
+    assert_eq!(payload["claim"], json!("exact_cloud"));
+    assert_eq!(payload["claim_disposition"], json!("consumed"));
+}
+
+#[test]
+fn a_waited_exact_cloud_allow_needs_its_resolved_package_request() {
+    let edits: [(&str, fn(&mut Value)); 6] = [
+        ("no request row", |r| r["approval_request"] = Value::Null),
+        ("another request", |r| {
+            r["approval_request"]["request_id"] = json!("req-2")
+        }),
+        ("pending", |r| {
+            r["approval_request"]["status"] = json!("pending")
+        }),
+        ("not a package", |r| {
+            r["approval_request"]["artifact_type"] = json!("tool_action")
+        }),
+        ("other hash", |r| {
+            r["approval_request"]["artifact_hash"] = json!("sha256:other")
+        }),
+        ("local kind", |r| {
+            r["decision"]["authority_kind"] = json!("legacy")
+        }),
+    ];
+    for (name, edit) in edits {
+        let (_, payload) = waited_exact_cloud(edit);
+        assert_ne!(payload["claim"], json!("exact_cloud"), "{name}");
+    }
+}
+
+#[test]
+fn a_waited_exact_cloud_allow_for_changed_content_is_reviewed_again() {
+    let (view, payload) = waited_exact_cloud(|r| {
+        let changed = token("1.0.1");
+        r["decision"]["artifact_hash"] = json!(token("1.0.0"));
+        r["approval_request"]["artifact_hash"] = json!(token("1.0.0"));
+        r["artifact_hash"] = json!(changed);
+    });
+    assert_eq!(view["policy_action"], json!("require-reapproval"));
+    assert_eq!(payload["reused"], json!(false));
+    assert_eq!(payload["claim"], Value::Null);
+}

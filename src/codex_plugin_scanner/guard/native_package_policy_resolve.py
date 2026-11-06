@@ -21,7 +21,7 @@ from .native_package_approval_hash import _evaluation_view, _transport
 from .native_package_evaluation_compose import NativePackageEvaluationComposeError, apply_package_evaluation_patch
 
 _RESOLVE_FEATURE = "package-policy-resolve-v1"
-_CLAIM_KINDS = frozenset({"daemon", "legacy_local", "store"})
+_CLAIM_KINDS = frozenset({"daemon", "exact_cloud", "legacy_local", "store"})
 _DISPOSITIONS = frozenset({"consumed", "retained"})
 _SAVED_ACTIONS = frozenset({"allow", "block"})
 _VERDICT_KEYS = ("decision", "risk_summary", "user_copy", "record_monitor_evidence")
@@ -74,6 +74,7 @@ def _hydrate(
     artifact_hash: str,
     policy_workspaces: tuple[str, ...],
     now: str,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> dict[str, object]:
     decision: dict[str, object] | None = None
     ignored_integrity: object = None
@@ -110,6 +111,18 @@ def _hydrate(
         if resolution.decision is not None:
             decision = resolution.decision
             ignored_integrity = None
+    if decision is None and ignored_integrity is None:
+        # Only the install that waited on these requests names them; the
+        # resident decides whether the exact Cloud allow it reads applies.
+        for request_id in waited_request_ids:
+            decision = store.peek_waited_exact_cloud_package_allow(
+                request_id=request_id,
+                artifact_id=artifact.artifact_id,
+                artifact_hash=artifact_hash,
+                now=now,
+            )
+            if decision is not None:
+                break
     facts: dict[str, object] = {
         "ignored_integrity": ignored_integrity is not None,
         "daemon_authority": authority is not None,
@@ -141,6 +154,8 @@ def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: An
         from .daemon.policy_authority_client import claim_package_policy
 
         return claim_package_policy(authority, decision)
+    if kind == "exact_cloud":
+        return store.consume_waited_exact_cloud_package_allow(decision, now=now)
     if kind == "legacy_local":
         if not isinstance(decision.get("approval_id"), str):
             raise NativePackagePolicyResolveError("Native package policy claim invalid")
@@ -261,6 +276,7 @@ def native_resolve_stored_package_policy(
     policy_workspaces: tuple[str, ...],
     current_action: object | None,
     claim_saved_approval: bool,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> tuple[Any, str | None, dict[str, object] | None]:
     """Return the resolved evaluation, claim disposition and the reused saved decision."""
 
@@ -270,6 +286,7 @@ def native_resolve_stored_package_policy(
         artifact_hash=artifact_hash,
         policy_workspaces=policy_workspaces,
         now=now,
+        waited_request_ids=waited_request_ids,
     )
     authority = facts.pop("authority")
     decision = facts.get("decision")
