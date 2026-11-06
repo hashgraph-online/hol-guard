@@ -1,6 +1,0 @@
-{
-  "name": "beta-plugin",
-  "version": "1.0.0",
-  "description": "Beta plugin with intentionally incomplete metadata.",
-  "skills": "./skills/"
-}

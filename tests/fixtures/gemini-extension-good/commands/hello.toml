@@ -1,5 +1,0 @@
-name = "hello"
-description = "Say hello"
-
-[prompt]
-text = "Say hello to the user"

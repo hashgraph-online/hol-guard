@@ -1,5 +1,0 @@
-{
-  "schemaVersion": "guard.extension-trust-binding.v1",
-  "extension": "command.ccx",
-  "trustClass": "external"
-}

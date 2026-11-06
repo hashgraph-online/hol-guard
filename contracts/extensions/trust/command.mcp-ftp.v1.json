@@ -1,5 +1,0 @@
-{
-  "schemaVersion": "guard.extension-trust-binding.v1",
-  "extension": "command.mcp-ftp",
-  "trustClass": "external"
-}

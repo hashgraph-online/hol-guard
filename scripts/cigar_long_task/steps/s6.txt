@@ -1,1 +1,0 @@
-Review every change made in this session against the original code. Remove duplication, make sure naming and style match the surrounding code, and make sure CHANGES.rst describes everything. Run the full test suite at the end.

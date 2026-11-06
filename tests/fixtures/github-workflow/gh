@@ -1,3 +1,0 @@
-#!/bin/sh
-# Identity fixture only: tests hash this file and never execute it.
-exit 97

@@ -1,1 +1,0 @@
-{"authorization":"Bearer <redacted>"}

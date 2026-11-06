@@ -1,9 +1,0 @@
-{
-  "name": "benign-npm-package",
-  "version": "1.0.0",
-  "scripts": {
-    "build": "tsc",
-    "test": "jest",
-    "lint": "eslint ."
-  }
-}

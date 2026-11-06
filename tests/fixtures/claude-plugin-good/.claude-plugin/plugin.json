@@ -1,6 +1,0 @@
-{
-  "name": "claude-example-plugin",
-  "version": "1.0.0",
-  "description": "Example Claude plugin package",
-  "strict": true
-}

@@ -1,1 +1,0 @@
-# Mixed Codex Plugin

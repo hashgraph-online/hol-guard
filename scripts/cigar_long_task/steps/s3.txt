@@ -1,1 +1,0 @@
-When a user types an invalid value for a click.Choice, the error should suggest the closest valid choice, the way unknown options already say "Did you mean ...?". Keep the existing list of valid choices in the message. Add tests and run the full test suite before you finish.

@@ -1,5 +1,0 @@
-{
-  "extension": "command.faf-cli",
-  "schemaVersion": "guard.extension-trust-binding.v1",
-  "trustClass": "external"
-}

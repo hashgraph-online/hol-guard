@@ -113,6 +113,16 @@ def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
         "generate_handoff",
         "create_task",
         "set_phase",
+        "update_task",
+        "complete_task",
+        "complete_phase",
+        "next_phase",
+        "add_milestone",
+        "add_task",
+        "end_session",
+        "extract_requirements",
+        "sync_workspace",
+        "export_context_markdown",
         "git_add",
         "git_commit",
         "git_create_branch",
@@ -122,8 +132,8 @@ def test_dev_mcp_protects_destructive_and_execution_tools() -> None:
     for tool_name in review_tools:
         assert declared[tool_name] == "review"
         assert mcp_tool_state(payload, tool_name) == "review"
-    assert declared["other"] == "inherit"
-    assert mcp_tool_state(payload, "unlisted_diagnostic_tool") == "inherit"
+    assert declared["other"] == "review"
+    assert mcp_tool_state(payload, "unlisted_diagnostic_tool") == "review"
 
 
 def test_filesystem_contribution_cannot_self_declare_trusted_library() -> None:

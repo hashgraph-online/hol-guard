@@ -1,7 +1,0 @@
-{
-  "canonicalProjectionJson": "{\"authorityMode\":\"managed-restrictive\",\"delegatedTargets\":[],\"ruleTargets\":[{\"extensionIds\":[\"command.git\"],\"permissionIds\":[\"command.git.permission.force-push\"],\"ruleId\":\"force-push-review\"}],\"schemaVersion\":\"guard.signed-cloud-extension-projection.v1\",\"signedCloudLayersJson\":\"[{\\\"catalog_digest\\\":\\\"e27a20311c72def2ca490db1b03a34deaa35860c4c537d453cfa346967293b1f\\\",\\\"controls\\\":[{\\\"state\\\":\\\"disabled\\\",\\\"target_id\\\":\\\"command.git.permission.force-push\\\",\\\"target_kind\\\":\\\"permission\\\"}],\\\"global_lockdown\\\":false,\\\"kind\\\":\\\"signed-cloud\\\",\\\"schema_version\\\":\\\"1.0.0\\\"}]\"}",
-  "catalogDigest": "e27a20311c72def2ca490db1b03a34deaa35860c4c537d453cfa346967293b1f",
-  "expectedExtensionProjectionDigest": "sha256:7fb5310f60395b624123872305baa9f4a0d3a996a2dbfba10fa3c0b583dcdad9",
-  "schemaVersion": "guard.signed-cloud-extension-projection-vector.v1",
-  "sourceBundleVector": "policy-bundle-v2-extension-signature-vector.json"
-}
