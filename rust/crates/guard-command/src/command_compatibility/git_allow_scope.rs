@@ -70,55 +70,124 @@ const INERT_KEYS: &[&str] = &[
 ];
 
 /// Git built-ins whose program-running options the scan below holds, so an
-/// explicit Git Allow may settle uncertainty about them. Anything else keeps
-/// its review: `send-email`, `instaweb`, `daemon`, `credential*`, `help`,
-/// bridges such as `p4`, `svn` and `cvs*`, `maintenance` (which installs
-/// scheduler jobs), and `git <name>` resolving to a `git-<name>` on `PATH`.
+/// explicit Git Allow may settle uncertainty about them.
+///
+/// A user who allows Git means Git, not the porcelain subset. Plumbing is the
+/// same program reading the same repository, so `git whatchanged`, `git fsck`
+/// and `git verify-pack` belong here next to `git log`; leaving them out is
+/// what makes an Allow stop partway through ordinary work.
+///
+/// Anything else keeps its review, and the reasons are these:
+///
+/// - Starts a program the user configured rather than Git: `credential*`,
+///   `difftool`, `mergetool`, `hook`, `remote-ext`, `remote-fd`, `instaweb`,
+///   `web--browse`, `send-email`, `citool`, `gui`, `filter-branch`, `help`
+///   (which opens a pager or a browser), and the `p4`, `svn` and `cvs*`
+///   bridges.
+/// - Serves or consumes whatever a peer sends: `upload-pack`,
+///   `upload-archive*`, `receive-pack`, `send-pack`, `fetch-pack`,
+///   `fast-import`, `daemon`, `http-backend`, `shell`.
+/// - Keeps running, or installs a schedule: `fsmonitor--daemon`,
+///   `maintenance`.
+/// - Packages configuration and environment into a report: `bugreport`,
+///   `diagnose`.
+/// - Runs a further Git command this contract never read: `for-each-repo`,
+///   `submodule--helper`.
+/// - Rewrites history wholesale: `replay`.
+///
+/// `git <name>` resolving to a `git-<name>` on `PATH` is not a built-in and
+/// is never settled here.
 const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "add",
-    "annotate",
     "am",
+    "annotate",
     "apply",
     "archive",
+    "backfill",
     "bisect",
     "blame",
     "branch",
+    "bundle",
     "cat-file",
     "check-attr",
+    "check-ignore",
     "check-mailmap",
     "check-ref-format",
     "checkout",
+    "checkout--worker",
+    "checkout-index",
+    "cherry",
     "cherry-pick",
     "clean",
     "clone",
+    "column",
     "commit",
+    "commit-graph",
+    "commit-tree",
     "config",
     "count-objects",
     "describe",
     "diff",
+    "diff-files",
+    "diff-index",
+    "diff-pairs",
+    "diff-tree",
+    "fast-export",
     "fetch",
+    "fmt-merge-msg",
     "for-each-ref",
     "format-patch",
+    "fsck",
+    "fsck-objects",
     "gc",
+    "get-tar-commit-id",
     "grep",
+    "hash-object",
+    "index-pack",
     "init",
+    "init-db",
     "interpret-trailers",
+    "last-modified",
     "log",
     "ls-files",
     "ls-remote",
+    "ls-tree",
+    "mailinfo",
+    "mailsplit",
     "merge",
     "merge-base",
+    "merge-file",
+    "merge-index",
+    "merge-ours",
+    "merge-recursive",
+    "merge-recursive-ours",
+    "merge-recursive-theirs",
+    "merge-subtree",
+    "merge-tree",
+    "mktag",
+    "mktree",
+    "multi-pack-index",
     "mv",
     "name-rev",
     "notes",
+    "pack-objects",
+    "pack-redundant",
+    "pack-refs",
     "patch-id",
+    "pickaxe",
+    "prune",
+    "prune-packed",
     "pull",
     "push",
     "range-diff",
+    "read-tree",
     "rebase",
     "reflog",
+    "refs",
     "remote",
     "replace",
+    "repo",
+    "rerere",
     "reset",
     "restore",
     "rev-list",
@@ -128,8 +197,10 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "shortlog",
     "show",
     "show-branch",
+    "show-index",
     "show-ref",
     "sparse-checkout",
+    "stage",
     "stash",
     "status",
     "stripspace",
@@ -137,8 +208,19 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "switch",
     "symbolic-ref",
     "tag",
+    "unpack-file",
+    "unpack-objects",
+    "update-index",
+    "update-ref",
+    "update-server-info",
     "var",
+    "verify-commit",
+    "verify-pack",
+    "verify-tag",
+    "version",
+    "whatchanged",
     "worktree",
+    "write-tree",
 ];
 
 /// Merge strategies built into Git. Any other `-s <name>` runs a
@@ -482,5 +564,124 @@ mod archive_format_tests {
         assert!(runs(&["archive", "--output", "snapshot.tar.gz", "HEAD"]));
         // A value the parser never sees settles nothing.
         assert!(runs(&["archive", "--format"]));
+    }
+}
+
+#[cfg(test)]
+mod settleable_subcommand_tests {
+    use super::SETTLEABLE_SUBCOMMANDS;
+
+    fn settles(name: &str) -> bool {
+        SETTLEABLE_SUBCOMMANDS.contains(&name)
+    }
+
+    #[test]
+    fn the_list_is_sorted_and_holds_each_name_once() {
+        let mut sorted = SETTLEABLE_SUBCOMMANDS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.as_slice(), SETTLEABLE_SUBCOMMANDS);
+    }
+
+    #[test]
+    fn plumbing_that_only_reads_or_writes_this_repository_settles() {
+        // A user who allows Git means Git. Porcelain and the plumbing under
+        // it are the same program reading the same objects.
+        for name in [
+            "whatchanged",
+            "ls-tree",
+            "cat-file",
+            "rev-list",
+            "diff-tree",
+            "show-index",
+            "verify-pack",
+            "verify-commit",
+            "verify-tag",
+            "fsck",
+            "count-objects",
+            "version",
+        ] {
+            assert!(settles(name), "{name} should settle under a Git Allow");
+        }
+    }
+
+    #[test]
+    fn aliases_settle_wherever_the_name_they_alias_does() {
+        for (alias, porcelain) in [
+            ("init-db", "init"),
+            ("stage", "add"),
+            ("fsck-objects", "fsck"),
+            ("pickaxe", "blame"),
+            ("whatchanged", "log"),
+        ] {
+            assert_eq!(
+                settles(alias),
+                settles(porcelain),
+                "{alias} and {porcelain} are the same built-in"
+            );
+        }
+    }
+
+    #[test]
+    fn write_plumbing_settles_because_the_floors_around_it_stay() {
+        // These write no more than `commit`, `reset`, `checkout` and `rm`,
+        // which already settle. The path and history-loss floors are what
+        // hold them, and an Allow does not lift those.
+        for name in [
+            "update-ref",
+            "update-index",
+            "commit-tree",
+            "write-tree",
+            "read-tree",
+            "checkout-index",
+            "hash-object",
+            "pack-refs",
+            "prune",
+        ] {
+            assert!(settles(name), "{name} should settle under a Git Allow");
+        }
+    }
+
+    #[test]
+    fn a_built_in_that_reaches_past_this_repository_keeps_its_review() {
+        for name in [
+            // Starts a program the user configured rather than Git.
+            "credential",
+            "credential-store",
+            "difftool",
+            "mergetool",
+            "hook",
+            "remote-ext",
+            "remote-fd",
+            "instaweb",
+            "send-email",
+            "filter-branch",
+            "help",
+            "p4",
+            "svn",
+            // Serves or consumes whatever a peer sends.
+            "upload-pack",
+            "upload-archive",
+            "receive-pack",
+            "send-pack",
+            "fetch-pack",
+            "fast-import",
+            "daemon",
+            "http-backend",
+            "shell",
+            // Keeps running, or installs a schedule.
+            "fsmonitor--daemon",
+            "maintenance",
+            // Packages configuration and environment into a report.
+            "bugreport",
+            "diagnose",
+            // Runs a further Git command this contract never read.
+            "for-each-repo",
+            "submodule--helper",
+            // Rewrites history wholesale.
+            "replay",
+        ] {
+            assert!(!settles(name), "{name} should keep its review");
+        }
     }
 }
