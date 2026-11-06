@@ -6,11 +6,13 @@ mod git_allow_scope;
 mod git_fetch;
 #[path = "git_hooks_path.rs"]
 mod git_hooks_path;
+#[path = "git_inline_config.rs"]
+mod git_inline_config;
 pub(crate) use git_allow_scope::{
     repository_routes_verified, runs_configured_program, subcommand_settles_uncertainty,
 };
-use git_hooks_path::hooks_path_names_no_hooks;
 pub(crate) use git_hooks_path::rooted_hooks_inert;
+use git_inline_config::inline_setting_is_inert;
 
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
@@ -375,59 +377,6 @@ fn routed<'a>(
     inspection: bool,
 ) -> Option<&'a [String]> {
     routed_with_route(arguments, context, inspection).map(|(rest, _)| rest)
-}
-
-/// Whether one `-c <key>=<value>` before the subcommand leaves the read Guard
-/// proved.
-///
-/// Git takes the setting for this one command, so the question is not whether
-/// the value is sensible but whether it can change what the command starts or
-/// which repository it reads. Two kinds of setting cannot. One switches a
-/// program off: `core.fsmonitor=false` starts no monitor, `core.pager=cat`
-/// and `pager.<command>=false` start no pager, an empty `credential.helper`
-/// clears the helper list, and a hooks path that holds no hooks runs none.
-/// The other names no program to begin with: a colour mode, an abbreviation
-/// length, the path-quoting switch and the wire protocol version all change
-/// how Git prints or negotiates, never what it executes, and none of them
-/// moves the worktree or the object store.
-///
-/// Everything else is held. A setting this does not model may name a program
-/// (`diff.external`, `gpg.program`, a filter driver), may turn a verification
-/// on that runs one (`log.showSignature`), or may point Git at another
-/// checkout (`core.worktree`, `include.path`), and the proof taken over the
-/// words after it would not be a proof of what runs.
-fn inline_setting_is_inert(
-    key: &str,
-    value: &str,
-    inspection: bool,
-    context: crate::pretool::PathContext<'_>,
-    arguments: &[String],
-) -> bool {
-    let key = key.to_ascii_lowercase();
-    let lowered = value.to_ascii_lowercase();
-    let disabled = matches!(lowered.as_str(), "false" | "0" | "no" | "off");
-    let boolean = disabled || matches!(lowered.as_str(), "true" | "1" | "yes" | "on");
-    let paging_off = value.is_empty() || lowered == "cat";
-    match key.as_str() {
-        "core.fsmonitor" => disabled,
-        "core.hookspath" => inspection && hooks_path_names_no_hooks(value, context.cwd, arguments),
-        "core.quotepath" => boolean,
-        "core.pager" => paging_off,
-        "core.abbrev" => {
-            lowered == "auto"
-                || (!lowered.is_empty() && lowered.chars().all(|c| c.is_ascii_digit()))
-        }
-        "credential.helper" => value.is_empty(),
-        "protocol.version" => matches!(lowered.as_str(), "0" | "1" | "2"),
-        _ if key.starts_with("pager.") => disabled || paging_off,
-        // A colour setting chooses a mode or a colour. Holding it to the
-        // modes keeps the common machine-readable spelling working without
-        // taking a view on what a colour string may hold.
-        _ if key.starts_with("color.") => {
-            boolean || matches!(lowered.as_str(), "auto" | "always" | "never")
-        }
-        _ => false,
-    }
 }
 
 /// [`routed`] plus the last `-C <dir>` the prefix entered. Git resolves a bare

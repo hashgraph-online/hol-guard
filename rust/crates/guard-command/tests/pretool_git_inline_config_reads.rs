@@ -103,6 +103,10 @@ fn an_inline_setting_that_runs_a_program_keeps_its_review() {
     for command in [
         "git -c core.pager=less log --oneline -3",
         "git -c core.pager=x log",
+        // Git compares the pager with `strcmp`, so only a lowercase `cat`
+        // means no pager; any other spelling is a program name.
+        "git -c core.pager=CAT log --oneline -3",
+        "git -c pager.log=Cat log --oneline -3",
         "git -c pager.log=./synthetic-never-execute log --oneline -3",
         "git -c color.ui=./synthetic-never-execute status --short",
         "git -c log.showSignature=true log --oneline -3",
