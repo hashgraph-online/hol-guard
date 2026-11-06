@@ -123,9 +123,7 @@ def test_marker_sync_failure_prevents_control_mutation(tmp_path: Path, monkeypat
         def fail_write(*args, **kwargs):
             raise NativePolicySnapshotError("injected_fence_sync_failure")
 
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.native_command_control_authority_store.write_private_state", fail_write
-        )
+        monkeypatch.setattr("codex_plugin_scanner.guard.native_command_control_authority_store._write", fail_write)
         with pytest.raises(NativePolicySnapshotError, match="injected_fence_sync_failure"):
             _commit(store)
         after = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
@@ -334,9 +332,7 @@ with hold_command_control_authority_lock(pathlib.Path(sys.argv[1]), shared=True)
         def forbid_write(*args, **kwargs):
             pytest.fail("unchanged verified controls attempted an authority write")
 
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.native_command_control_authority_store.write_private_state", forbid_write
-        )
+        monkeypatch.setattr("codex_plugin_scanner.guard.native_command_control_authority_store._write", forbid_write)
         assert publisher._compiled_command_extensions() == first["command_extensions"]
         process.communicate("release\n", timeout=5)
         assert process.returncode == 0

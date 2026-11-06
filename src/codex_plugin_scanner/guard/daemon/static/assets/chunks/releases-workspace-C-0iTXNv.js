@@ -1,4 +1,52 @@
 import { r as reactExports, j as jsxRuntimeExports, A as ActionButton, v as HiMiniCheckCircle, k as HiMiniCheck, aO as HiMiniClipboard, T as Tag, a0 as HiMiniShieldCheck, fa as HiMiniEllipsisHorizontal, fb as HiMiniMinus, fc as HiMiniWrench, i as HiMiniArrowPath, da as HiMiniPlus, b5 as HiMiniArrowTopRightOnSquare, fd as HiMiniArrowLongRight, cS as HiMiniInformationCircle, H as HiMiniChevronRight, bR as HiMiniArrowDownTray, a6 as HiMiniXMark, bE as HiMiniArrowUpCircle, fe as fetchReleaseFeedApi, a7 as EmptyState } from "../guard-dashboard.js";
+const HOL_RELEASES_URL = "https://hol.org/guard/releases";
+function holReleaseUrl(slug) {
+  return slug && /^[a-z0-9][a-z0-9.-]{0,127}$/.test(slug) ? `${HOL_RELEASES_URL}/${slug}` : HOL_RELEASES_URL;
+}
+const FAILURE_COPY = {
+  offline: {
+    title: "Guard could not reach the release archive",
+    body: "The archive is published by hol.org and read through Guard on this device. Check this device's connection and try again."
+  },
+  unavailable: {
+    title: "The release archive did not answer",
+    body: "hol.org could not serve the archive just now. Nothing on this device is affected; try again in a few minutes."
+  },
+  "not-found": {
+    title: "That release is not published",
+    body: "Guard only shows releases that have been published and verified. Pick another version from the list."
+  },
+  unsupported: {
+    title: "This Guard build cannot read the archive",
+    body: "The release archive needs Guard's native runtime. Update Guard to see release history here."
+  },
+  unreadable: {
+    title: "Guard can't show this release here",
+    body: "hol.org answered, but this release isn't in a form Guard can safely display. Nothing on this device is affected. Read it on hol.org; a Guard update may show it here."
+  },
+  session: {
+    title: "This window's session has ended",
+    body: "Guard is still running on this device. Open the dashboard again from Guard to keep reading release history."
+  },
+  disabled: {
+    title: "Release history is turned off on this device",
+    body: "Guard is set to skip the release archive (HOL_GUARD_RELEASE_FEED=off). Nothing on hol.org is affected; clear that setting and restart Guard to read release history here."
+  }
+};
+function failureCopy(failure) {
+  return FAILURE_COPY[failure];
+}
+function isRetryable(failure) {
+  return failure === "unavailable" || failure === "offline";
+}
+function readsOnHol(failure) {
+  return failure === "unreadable";
+}
+function trimmedNote(shown, total, noun) {
+  if (!Number.isFinite(total) || total <= shown) return null;
+  const format = new Intl.NumberFormat("en-US");
+  return `Showing the first ${format.format(shown)} of ${format.format(total)} ${noun}.`;
+}
 const CHANGE_ORDER = [
   "security",
   "added",
@@ -153,34 +201,6 @@ function standingCopy(standing) {
     title: normalizeVersionLabel(standing.release.versionLabel),
     body: `Running here. ${count} been published since.${newest}`
   };
-}
-const FAILURE_COPY = {
-  offline: {
-    title: "Guard could not reach the release archive",
-    body: "The archive is published by hol.org and read through Guard on this device. Check this device's connection and try again."
-  },
-  unavailable: {
-    title: "The release archive did not answer",
-    body: "hol.org could not serve the archive just now. Nothing on this device is affected; try again in a few minutes."
-  },
-  "not-found": {
-    title: "That release is not published",
-    body: "Guard only shows releases that have been published and verified. Pick another version from the list."
-  },
-  unsupported: {
-    title: "This Guard build cannot read the archive",
-    body: "The release archive needs Guard's native runtime. Update Guard to see release history here."
-  },
-  disabled: {
-    title: "Release history is turned off on this device",
-    body: "Guard is set to skip the release archive (HOL_GUARD_RELEASE_FEED=off). Nothing on hol.org is affected; clear that setting and restart Guard to read release history here."
-  }
-};
-function failureCopy(failure) {
-  return FAILURE_COPY[failure];
-}
-function isRetryable(failure) {
-  return failure === "unavailable" || failure === "offline";
 }
 function openingSlug(releases, installedVersion, current, readerChose) {
   const held = current !== null && releases.some((release) => release.slug === current);
@@ -884,6 +904,25 @@ function CoverageNote({ note }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: note })
   ] });
 }
+function TrimmedNote({ note, href }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm leading-6 text-brand-dark/75", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums", children: note }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "a",
+      {
+        href,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        className: "inline-flex items-center gap-1 rounded font-medium text-brand-dark underline decoration-brand-dark/25 underline-offset-[3px] transition-colors duration-150 hover:text-brand-blue hover:decoration-brand-blue/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30 motion-reduce:transition-none",
+        children: [
+          "See the full list on hol.org",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-3.5", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "(opens in a new tab)" })
+        ]
+      }
+    )
+  ] });
+}
 function Disclosure(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-xl border border-brand-dark/10 open:bg-brand-dark/[0.015]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-dark/80 transition-colors duration-150 hover:text-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30 motion-reduce:transition-none", children: [
@@ -1012,6 +1051,9 @@ function ReleaseDetailPanel({
   const roster = reactExports.useMemo(() => mergeContributors(detail.roster), [detail.roster]);
   const note = coverageNote(detail.coverage);
   const countLabel = reactExports.useMemo(() => changeCountLabel(sections), [sections]);
+  const holUrl = holReleaseUrl(detail.slug);
+  const changesTrimmed = trimmedNote(detail.changes.length, detail.changesTotal, "change entries");
+  const rosterTrimmed = trimmedNote(detail.roster.length, detail.rosterTotal, "contributor credits");
   const changeList = sections.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-5", children: sections.map((section) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "section",
     {
@@ -1097,9 +1139,11 @@ function ReleaseDetailPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx(ReleaseNotes, { source: detail.summary })
         ] }),
         changeList === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: "No itemised changes were published for this release." }) : notesLead ? /* @__PURE__ */ jsxRuntimeExports.jsx(Disclosure, { summary: "Itemised changes", count: changes.length, children: changeList }) : changeList,
+        changesTrimmed ? /* @__PURE__ */ jsxRuntimeExports.jsx(TrimmedNote, { note: changesTrimmed, href: holUrl }) : null,
         detail.roster.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "release-roster-heading", className: "space-y-2.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "release-roster-heading", className: "text-sm font-semibold text-brand-dark", children: "Verified contributors" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-2", children: roster.map((contributor) => /* @__PURE__ */ jsxRuntimeExports.jsx(ContributorChip, { contributor }, contributor.creditId)) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-2", children: roster.map((contributor) => /* @__PURE__ */ jsxRuntimeExports.jsx(ContributorChip, { contributor }, contributor.creditId)) }),
+          rosterTrimmed ? /* @__PURE__ */ jsxRuntimeExports.jsx(TrimmedNote, { note: rosterTrimmed, href: holUrl }) : null
         ] }) : null,
         detail.assets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Disclosure, { summary: "Downloads", count: detail.assets.length, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 pt-2", children: [
           assets.groups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-2", children: [
@@ -1221,9 +1265,17 @@ async function errorCode(response) {
     return null;
   }
 }
+const UNREADABLE_CODES = /* @__PURE__ */ new Set([
+  "release_feed_payload_invalid",
+  "release_feed_response_too_large"
+]);
 async function failureForResponse(response) {
   if (response.status === 404) return "not-found";
   if (response.status === 501) return "unsupported";
+  if (response.status === 401) return "session";
+  if (response.status === 502 && UNREADABLE_CODES.has(await errorCode(response) ?? "")) {
+    return "unreadable";
+  }
   if (response.status === 503 && await errorCode(response) === CAPABILITY_UNAVAILABLE) {
     return "disabled";
   }
@@ -1272,16 +1324,33 @@ async function fetchReleaseDetail(slug, options = {}) {
   }
   return { status: "ok", detail: result.document };
 }
-function FailureNotice(props) {
-  const copy = failureCopy(props.failure);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    EmptyState,
+function FailureAction(props) {
+  if (props.onRetry) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Try again" });
+  }
+  if (!readsOnHol(props.failure)) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "a",
     {
-      title: copy.title,
-      body: copy.body,
-      action: props.onRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Try again" }) : void 0
+      href: props.holUrl,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      className: "inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-brand-dark/15 px-4 text-sm font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/40 hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30 motion-reduce:transition-none",
+      children: [
+        "Read it on hol.org",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "(opens in a new tab)" })
+      ]
     }
   );
+}
+function FailureNotice(props) {
+  const copy = failureCopy(props.failure);
+  const hasAction = Boolean(props.onRetry) || readsOnHol(props.failure);
+  const action = hasAction ? /* @__PURE__ */ jsxRuntimeExports.jsx(FailureAction, { ...props }) : void 0;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: copy.title, body: copy.body, action });
 }
 function LoadingNotice({ label }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "py-8 text-center text-sm text-brand-dark/75", children: label });
@@ -1396,6 +1465,7 @@ function ReleasesWorkspace({ installedVersion }) {
       FailureNotice,
       {
         failure: indexState.failure,
+        holUrl: holReleaseUrl(null),
         onRetry: isRetryable(indexState.failure) ? () => setReloadToken((token) => token + 1) : void 0
       }
     ) : null,
@@ -1423,6 +1493,7 @@ function ReleasesWorkspace({ installedVersion }) {
           FailureNotice,
           {
             failure: detailState.failure,
+            holUrl: holReleaseUrl(selectedSlug),
             onRetry: isRetryable(detailState.failure) ? () => setDetailToken((token) => token + 1) : void 0
           }
         ) : null,

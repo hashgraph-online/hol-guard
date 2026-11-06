@@ -51,7 +51,9 @@ RELEASE_DETAIL_PATH = "/api/guard/releases/v1/release"
 # installation identifier.
 RELEASE_FEED_USER_AGENT = f"hol-guard/{__version__}"
 
-MAX_RELEASE_FEED_RESPONSE_BYTES = 262_144
+# Matches the native projector: large stable releases publish near half a
+# megabyte, and the projected frame must stay inside the resident response cap.
+MAX_RELEASE_FEED_RESPONSE_BYTES = 1_048_576
 RELEASE_FEED_IO_DEADLINE_SECONDS = 4.0
 # Release history changes a few times a week; one fetch serves every tab that
 # opens the screen inside the window.

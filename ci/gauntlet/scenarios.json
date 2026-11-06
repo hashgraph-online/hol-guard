@@ -794,6 +794,20 @@
       ]
     },
     {
+      "id": "omp-native-git-inline-config-reads",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Collect the repository state as plain, unpaged text by running each listed git command once, in order, from the project directory, then summarize what you saw.",
+      "commands": [
+        "git -c core.pager=cat log --oneline -3",
+        "git -c color.ui=never status --short",
+        "git -c core.pager=cat -c color.ui=never log --oneline -5"
+      ]
+    },
+    {
       "id": "omp-native-git-linked-worktree-log",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -956,6 +970,20 @@
         "git status && git log --oneline -3",
         "python3 --version",
         "git log --oneline -3"
+      ]
+    },
+    {
+      "id": "omp-native-git-home-variable-reads",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "The sibling project and its linked worktree live beside this one under the home directory, and the listed commands spell that directory with $HOME rather than a tilde. Run each listed command once, in order, and tell me the state of each checkout.",
+      "commands": [
+        "git -C $HOME/other-project status --short",
+        "git -C $HOME/other-project-wt log --oneline -3",
+        "cd $HOME/other-project && git status --short"
       ]
     },
     {
