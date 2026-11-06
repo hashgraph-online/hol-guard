@@ -86,10 +86,7 @@ fn activation() -> ExtensionControlPolicyApplyV1 {
             (CHECKPOINT.to_owned(), r#"{"sequence": 2}"#.to_owned()),
         ]),
         retire_managed: true,
-        rows: vec![
-            row("fresh", "policy-bundle"),
-            row("pack", "team-policy-pack"),
-        ],
+        rows: vec![row("fresh", "policy-bundle"), row("pack", "team-policy")],
         ..ExtensionControlPolicyApplyV1::default()
     }
 }
@@ -141,7 +138,7 @@ fn an_activation_replaces_the_remote_decisions_and_writes_its_state() {
         [
             ("fresh".to_owned(), "policy-bundle".to_owned()),
             ("mine".to_owned(), "local".to_owned()),
-            ("pack".to_owned(), "team-policy-pack".to_owned()),
+            ("pack".to_owned(), "team-policy".to_owned()),
         ]
     );
     let version: i64 = home
