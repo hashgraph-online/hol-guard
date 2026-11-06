@@ -60,14 +60,6 @@
   },
   {
    "file": "rust/crates/guard-command/src/local_supply_chain.rs",
-   "item": "fn package_request_artifact_hash -- non-Unix block",
-   "verdict": "windows-equivalent",
-   "note": "The POSIX `launch_identity` module is stubbed off Unix, so the same hash material is built inline here. The two have to stay in step: a field added to `package_request_launch_identity_material` has to be added here as well.",
-   "cfg": "not(unix)",
-   "body": "17c7c0d025d5"
-  },
-  {
-   "file": "rust/crates/guard-command/src/local_supply_chain.rs",
    "item": "fn build_package_protect_payload -- non-Unix block",
    "verdict": "windows-unsupported",
    "note": "No reusable launch command off Unix, so approval reuse lands on `launch_identity_unstable` and asks again. Conservative, and one reason Windows prompts more than macOS for package work.",
