@@ -170,9 +170,9 @@ static PRESENTATION_VALUE_PREFIXES: &[&str] = &[
 /// after one of these belongs to that program, where it can mean anything
 /// (`grep -v` inverts the match), so those commands keep their exact spelling.
 static DOWNSTREAM_PROGRAM_VERBS: &[(&str, &[&str])] = &[
-    ("npm", &["exec", "run", "run-script", "x"]),
-    ("pnpm", &["dlx", "exec", "run"]),
-    ("yarn", &["dlx", "exec", "run"]),
+    ("npm", &["create", "exec", "init", "run", "run-script", "x"]),
+    ("pnpm", &["create", "dlx", "exec", "init", "run"]),
+    ("yarn", &["create", "dlx", "exec", "init", "run"]),
     ("pipx", &["run"]),
     ("poetry", &["run"]),
     ("pipenv", &["run"]),
@@ -408,6 +408,28 @@ mod tests {
                 &t(&["sync", "-q", "--frozen", "--extra", "dev"])
             ),
             t(&["sync", "--frozen", "--extra", "dev"]),
+        );
+    }
+
+    #[test]
+    fn a_scaffolding_verb_keeps_the_downstream_argv() {
+        // `npm create` and `npm init` run a `create-*` package with the rest of
+        // the line, so a `--verbose` there belongs to that program.
+        for verb in ["create", "init"] {
+            let args = t(&[verb, "vite", "--verbose"]);
+            assert_eq!(strip_manager_presentation_arguments("npm", &args), args);
+            assert_eq!(strip_manager_presentation_arguments("pnpm", &args), args);
+            assert_eq!(strip_manager_presentation_arguments("yarn", &args), args);
+        }
+    }
+
+    #[test]
+    fn a_package_named_like_a_verb_is_still_an_operand() {
+        // The verb is the first non-option token. `create` here is the package
+        // being installed, so the quiet spelling still binds like the loud one.
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &t(&["install", "create", "--quiet"])),
+            t(&["install", "create"]),
         );
     }
 
