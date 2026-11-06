@@ -106,14 +106,34 @@ pub(crate) fn apply_to_envelope(
 }
 
 /// Denies a shell `PreToolUse` when a saved block rule names its command
-/// under any spelling, and raises an allowed one to review when a saved
-/// review rule does. A store that exists but cannot be read may hold such a
-/// rule, so an allowed call is raised to review then too.
+/// under any spelling, raises an allowed one to review when a saved review
+/// rule does, and settles a review a Guard Cloud allow rule names exactly
+/// ([`crate::edge_exact_command_allow`]). A store that exists but cannot be
+/// read may hold a block or review rule, so an allowed call is raised to
+/// review then too.
 pub(crate) fn apply(
     guard_home: &Path,
     call: &Call<'_>,
     now_micros: Option<i64>,
     result: PreToolResultV1,
+) -> PreToolResultV1 {
+    apply_with(
+        guard_home,
+        call,
+        now_micros,
+        result,
+        crate::edge_exact_command_allow::cached_identities,
+    )
+}
+
+/// [`apply`] with the source of the signed bundle's decision identities, which
+/// a Guard Cloud allow rule is checked against.
+pub(crate) fn apply_with(
+    guard_home: &Path,
+    call: &Call<'_>,
+    now_micros: Option<i64>,
+    result: PreToolResultV1,
+    identities: crate::edge_exact_command_allow::BundleIdentities,
 ) -> PreToolResultV1 {
     if result.action.event != "PreToolUse" || !is_shell_action(&result.action.action_type) {
         return result;
@@ -125,7 +145,19 @@ pub(crate) fn apply(
         return result;
     }
     let reviewable = minimum <= ActionFloor::Warn;
-    match matching_rules(guard_home, &result.action.harness, call, now_micros) {
+    // A missing store holds no rule.
+    let connection = match open_read_only_cached(&guard_home.join(STORE_FILE_NAME)) {
+        Ok(Some(connection)) => connection,
+        Ok(None) => return result,
+        Err(_) => return unreadable(result, reviewable),
+    };
+    // One read snapshot for the block and review rules, the allow rule and the
+    // signed bundle behind it, so a policy sync that commits between the reads
+    // cannot pair a newly signed allow with the rules from before it.
+    let Ok(_snapshot) = connection.unchecked_transaction() else {
+        return unreadable(result, reviewable);
+    };
+    match matching_rules(&connection, &result.action.harness, call, now_micros) {
         Ok(Rules {
             block: Some(source),
             ..
@@ -143,16 +175,38 @@ pub(crate) fn apply(
                 "Guard could not read every step of this command against your saved rules, so it asks before it runs.",
             ),
         ),
-        Ok(_) => result,
-        Err(Unreadable) if reviewable => raise(
+        // No block or review rule names the command under any spelling, and
+        // every step was read, so a Guard Cloud allow on its exact text may
+        // settle the review.
+        Ok(Rules {
+            review: None,
+            incomplete: false,
+            ..
+        }) => crate::edge_exact_command_allow::apply(
+            &connection,
+            &call.commands,
+            now_micros,
             result,
-            (
-                UNREADABLE_REVIEW,
-                "Guard could not read its saved rules, so it asks before this command runs.",
-            ),
+            identities,
         ),
-        Err(Unreadable) => result,
+        Ok(_) => result,
+        Err(Unreadable) => unreadable(result, reviewable),
     }
+}
+
+/// A store that exists but cannot be read may hold a block or review rule, so
+/// an allowed call is raised to review.
+fn unreadable(result: PreToolResultV1, reviewable: bool) -> PreToolResultV1 {
+    if !reviewable {
+        return result;
+    }
+    raise(
+        result,
+        (
+            UNREADABLE_REVIEW,
+            "Guard could not read its saved rules, so it asks before this command runs.",
+        ),
+    )
 }
 
 fn is_shell_action(action_type: &PreToolActionTypeV1) -> bool {
@@ -180,21 +234,16 @@ struct Rules {
 
 /// The live block and review rules for `harness` or every harness that name
 /// one of the exact-command ids of the call's commands, under any spelling,
-/// everywhere or in its folder. A missing store or table holds no rule.
+/// everywhere or in its folder. A missing table holds no rule.
 fn matching_rules(
-    guard_home: &Path,
+    connection: &Connection,
     harness: &str,
     call: &Call<'_>,
     now_micros: Option<i64>,
 ) -> Result<Rules, Unreadable> {
     let mut rules = Rules::default();
-    let Some(connection) =
-        open_read_only_cached(&guard_home.join(STORE_FILE_NAME)).map_err(|_| Unreadable)?
-    else {
-        return Ok(rules);
-    };
-    if !table_exists(&connection, "policy_decisions").map_err(|_| Unreadable)?
-        || !holds_command_rules(&connection)?
+    if !table_exists(connection, "policy_decisions").map_err(|_| Unreadable)?
+        || !holds_command_rules(connection)?
     {
         return Ok(rules);
     }
@@ -209,7 +258,7 @@ fn matching_rules(
         });
     let (key, path) = places.map_or((None, None), |(key, path)| (key, Some(path)));
     let place = (key.as_deref(), path.as_deref());
-    let live = live_rules(&connection, harness, place, now_micros)?;
+    let live = live_rules(connection, harness, place, now_micros)?;
     if live.is_empty() {
         return Ok(rules);
     }
@@ -314,7 +363,7 @@ fn live_rules(
 
 /// Whether a rule's expiry has passed. An expiry Guard cannot read keeps the
 /// rule: honoring it only asks before the command runs.
-fn expired(expires_at: Option<&str>, now_micros: Option<i64>) -> bool {
+pub(crate) fn expired(expires_at: Option<&str>, now_micros: Option<i64>) -> bool {
     let (Some(expires_at), Some(now)) = (expires_at.filter(|text| !text.is_empty()), now_micros)
     else {
         return false;
