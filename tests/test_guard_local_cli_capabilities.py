@@ -231,11 +231,9 @@ def test_only_the_authority_apply_writes_capabilities() -> None:
                 writers.add(path.name)
     assert writers == {"store_local_cli_capabilities.py", "guard_store_continuity_choices.rs"}
     assert _calls("write_local_cli_capabilities") == {"store_custom_extension_continuity.py"}
-    # The store forwards its own parameter; only the local mutation recorder sets it.
-    assert _calls("capability_updates") == {
-        "runtime/custom_extension_continuity.py",
-        "store_custom_extension_continuity.py",
-    }
+    # The store forwards its own parameter to the resident; only the local
+    # mutation recorder sets it.
+    assert _calls("capability_updates") == {"runtime/custom_extension_continuity.py"}
     callers = _calls("record_local_custom_extension_mutation") - {"runtime/custom_extension_continuity.py"}
     with_capabilities = {path for path in callers if "capabilities=" in (_SRC / path).read_text(encoding="utf-8")}
     assert with_capabilities == {"daemon/local_cli_api.py"}
