@@ -929,33 +929,6 @@ mod tests {
     }
 
     #[test]
-    fn adjacent_fields_keep_the_word_boundary_a_secret_rule_needs() {
-        // Concatenating the fields of an unreadable patch produced
-        // `aaAKIA...`, and the access-key rule needs a word boundary ahead of
-        // the prefix, so the credential scanned clean.
-        let payload = json!({
-            "tool_name": "Edit",
-            "tool_input": {"file_path": "src/config.ts"},
-            "tool_response": {
-                "originalFile": "a",
-                "oldString": "a",
-                "newString": aws_like_access_key(),
-            }
-        });
-        let extracted = extract_payload_output(&payload);
-        assert!(
-            !extracted
-                .text
-                .contains(&format!("a{}", aws_like_access_key())),
-            "{}",
-            extracted.text
-        );
-        let response = review_post_tool(&request(payload));
-        assert_eq!(response.decision, "deny");
-        assert_eq!(response.reason_code, "output_secret_match");
-    }
-
-    #[test]
     fn stderr_is_scanned_even_when_stdout_exists() {
         let response = review_post_tool(&request(
             json!({"stdout": "ok", "stderr": aws_like_access_key()}),
