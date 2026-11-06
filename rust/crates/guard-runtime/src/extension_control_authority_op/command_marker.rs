@@ -152,11 +152,14 @@ pub(super) fn publish(guard_home: &Path, encoded: &[u8]) -> Result<(), String> {
     )
     .map_err(|_| WRITE_FAILED.to_owned())?;
     let path = marker_path(guard_home);
-    crate::resident_private_file::write_private(&path, encoded, guard_home)
+    crate::managed_resident::private_file::write_private(&path, encoded, guard_home)
         .map_err(|_| WRITE_FAILED.to_owned())?;
-    let observed =
-        crate::resident_private_file::read_private_bytes(&path, guard_home, "command_authority")
-            .map_err(|_| MISMATCH.to_owned())?;
+    let observed = crate::managed_resident::private_file::read_private_bytes(
+        &path,
+        guard_home,
+        "command_authority",
+    )
+    .map_err(|_| MISMATCH.to_owned())?;
     if observed.as_deref() != Some(encoded) {
         return Err(MISMATCH.to_owned());
     }
