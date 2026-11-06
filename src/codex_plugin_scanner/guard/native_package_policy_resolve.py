@@ -111,17 +111,22 @@ def _hydrate(
         if resolution.decision is not None:
             decision = resolution.decision
             ignored_integrity = None
-    if decision is None and ignored_integrity is None:
+    if ignored_integrity is None and authority is None and not _saved_artifact_block(decision):
         # Only the install that waited on these requests names them; the
         # resident decides whether the exact Cloud allow it reads applies.
+        # That allow is bound to this request, artifact and hash, so it
+        # outranks a broader row the ordinary lookup returned, such as the
+        # package-request family rule that queued the request for review. A
+        # block saved for this artifact still wins.
         for request_id in waited_request_ids:
-            decision = store.peek_waited_exact_cloud_package_allow(
+            waited = store.peek_waited_exact_cloud_package_allow(
                 request_id=request_id,
                 artifact_id=artifact.artifact_id,
                 artifact_hash=artifact_hash,
                 now=now,
             )
-            if decision is not None:
+            if waited is not None:
+                decision = waited
                 break
     facts: dict[str, object] = {
         "ignored_integrity": ignored_integrity is not None,
@@ -147,6 +152,14 @@ def _hydrate(
                     facts["diagnosed_stored_hash"] = stored_hash
                 break
     return facts
+
+
+def _saved_artifact_block(decision: Mapping[str, object] | None) -> bool:
+    return (
+        decision is not None
+        and decision.get("action") == "block"
+        and decision.get("artifact_id") != "family:package-request"
+    )
 
 
 def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: Any, now: str) -> bool:

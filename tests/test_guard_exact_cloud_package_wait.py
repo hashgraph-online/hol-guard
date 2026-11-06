@@ -116,6 +116,84 @@ def test_a_retry_that_waited_on_nothing_reads_no_cloud_allow(tmp_path: Path) -> 
     assert "decision" not in facts
 
 
+def _ordinary_lookup_returns(store: GuardStore, monkeypatch: pytest.MonkeyPatch, decision: dict[str, object]) -> None:
+    monkeypatch.setattr(
+        store,
+        "resolve_policy_decision_lookup",
+        lambda *_args, **_kwargs: {"decision": dict(decision), "ignored_local_integrity": None},
+    )
+
+
+def test_a_family_rule_row_does_not_hide_the_waited_cloud_allow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The package-request family rule that queued the request for review is
+    # broader than the exact Cloud allow answering that request.
+    store, now = _cloud_approved_package_request(tmp_path, "pkg-cloud-family")
+    family_row: dict[str, object] = {
+        "action": "block",
+        "artifact_hash": None,
+        "artifact_id": "family:package-request",
+        "decision_id": 3,
+        "harness": "guard-cli",
+        "owner": "rule-1",
+        "scope": "harness",
+        "source": "policy-bundle",
+    }
+    _ordinary_lookup_returns(store, monkeypatch, family_row)
+
+    def hydrate(waited: tuple[str, ...]) -> dict[str, object]:
+        return _hydrate(
+            store,
+            artifact=_artifact(),
+            artifact_hash=ARTIFACT_HASH,
+            policy_workspaces=(str(tmp_path / "app"),),
+            now=now,
+            waited_request_ids=waited,
+        )
+
+    unwaited = hydrate(())["decision"]
+    assert isinstance(unwaited, dict)
+    assert unwaited["artifact_id"] == "family:package-request"
+    waited = hydrate(("pkg-cloud-family",))["decision"]
+    assert isinstance(waited, dict)
+    assert waited["authority_kind"] == "exact-cloud"
+    assert waited["request_id"] == "pkg-cloud-family"
+
+
+def test_a_block_saved_for_the_artifact_still_wins_over_the_waited_cloud_allow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, now = _cloud_approved_package_request(tmp_path, "pkg-cloud-block")
+    _ordinary_lookup_returns(
+        store,
+        monkeypatch,
+        {
+            "action": "block",
+            "artifact_hash": ARTIFACT_HASH,
+            "artifact_id": ARTIFACT_ID,
+            "decision_id": 4,
+            "harness": "guard-cli",
+            "scope": "artifact",
+            "source": "approval-gate",
+        },
+    )
+
+    facts = _hydrate(
+        store,
+        artifact=_artifact(),
+        artifact_hash=ARTIFACT_HASH,
+        policy_workspaces=(str(tmp_path / "app"),),
+        now=now,
+        waited_request_ids=("pkg-cloud-block",),
+    )
+
+    decision = facts["decision"]
+    assert isinstance(decision, dict)
+    assert decision["action"] == "block"
+    assert decision["decision_id"] == 4
+
+
 def test_the_cloud_allow_binds_the_artifact_hash_and_is_spent_once(tmp_path: Path) -> None:
     store, now = _cloud_approved_package_request(tmp_path, "pkg-cloud-3")
 
