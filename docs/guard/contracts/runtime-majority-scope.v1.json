@@ -2009,19 +2009,6 @@
         "root_function": true
       },
       {
-        "id": "edge-event-outbox-builders",
-        "category": "async_control_plane",
-        "path": "src/codex_plugin_scanner/guard/edge_events.py",
-        "symbols": [
-          "build_memory_decision_event_envelope",
-          "build_runtime_session_event",
-          "build_access_graph_snapshot_event"
-        ],
-        "entry_points": [],
-        "reason": "Building Cloud edge events for queued memory decisions, runtime session reports and access-graph snapshots. These are assembled by background delivery and the supervisor, after any hook decision has returned.",
-        "evidence": "build_memory_decision_event_envelope is called only from memory_decision_outbox.py, build_runtime_session_event only from runtime/runner.py and build_access_graph_snapshot_event only from access_graph_events.py; all three callers are outside runtime scope. The retained receipt, policy and harness-usage builders do not reference them, and the report validates this reference closure on every run."
-      },
-      {
         "id": "unlisted-cli-check-for-mcp-probe",
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
