@@ -516,6 +516,7 @@ mod guard_store_connect_effective;
 #[cfg(test)]
 mod guard_store_connect_vectors_tests;
 mod guard_store_connector_context;
+mod guard_store_continuity_write;
 mod guard_store_db;
 mod guard_store_devices;
 mod guard_store_evidence;
@@ -529,7 +530,6 @@ mod guard_store_inventory;
 mod guard_store_inventory_page_tests;
 #[cfg(test)]
 mod guard_store_inventory_vectors_tests;
-mod guard_store_continuity_write;
 mod guard_store_json;
 mod guard_store_legacy_probe;
 mod guard_store_lineage;
