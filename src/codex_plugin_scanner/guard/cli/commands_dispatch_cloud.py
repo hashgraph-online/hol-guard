@@ -42,6 +42,7 @@ from ..runtime.command_capability import (
 )
 from ..runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from ..runtime.command_queue import command_queue_status
+from ..store_base import GuardCloudSyncBusyError
 from ..supply_chain_workspace_audit import (
     build_supply_chain_explain_payload,
     build_workspace_audit_payload,
@@ -279,6 +280,13 @@ def _run_guard_bridge_command(
     return 0
 
 
+GUARD_SYNC_IN_PROGRESS_MESSAGE = (
+    "Guard is already syncing with Guard Cloud in the background, so this sync did not start. "
+    "Your policy and receipts update when that sync finishes. Run `hol-guard status` to see the "
+    "last sync time, or run `hol-guard sync` again in a few minutes."
+)
+
+
 def _run_guard_sync_command(
     args: argparse.Namespace,
     *,
@@ -332,6 +340,14 @@ def _run_guard_sync_command(
             _emit("sync", {"synced": False, "error": message}, True)
         else:
             print(message, file=sys.stderr)
+        return 1
+    except GuardCloudSyncBusyError:
+        # The background service holds the sync lock while it syncs, so a busy
+        # lock is a sync already under way rather than a failure.
+        if getattr(args, "json", False):
+            _emit("sync", {"synced": False, "in_progress": True, "error": GUARD_SYNC_IN_PROGRESS_MESSAGE}, True)
+        else:
+            print(GUARD_SYNC_IN_PROGRESS_MESSAGE, file=sys.stderr)
         return 1
     except RuntimeError as error:
         if getattr(args, "json", False):
