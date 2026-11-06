@@ -96,6 +96,12 @@ pub(super) fn execution_free_paging(
 /// inspection cut short -- is not an unanswered probe. A helper may already
 /// be configured there, so that refusal is not an open question an explicit
 /// allow can settle.
+///
+/// Two doors let an explicit allow settle such a read: the helper-context
+/// review in `git_helper_context`, and the read floor's `allowable_review`,
+/// whose answer `generic::git_read_settled_by_allow` turns into a plain
+/// allow rather than read-only containment. Both ask this one predicate, so
+/// a configuration the probe did read cannot ride an allow through either.
 pub(super) fn probe_unanswered(
     executable: &str,
     arguments: &[String],
@@ -113,38 +119,6 @@ pub(super) fn probe_unanswered(
         execution_environment,
         stdout_piped,
     ) == Raw::Unanswered
-}
-
-/// Whether this read's refusal names nothing the read floor can act on --
-/// either a probe that never read the configuration, or one that read it and
-/// then could not finish a check against what it read.
-///
-/// The read floor does not grant the read; it delegates it to read-only
-/// containment, where a configured helper runs inside the containment the
-/// floor imposes rather than under a user's allow. A refusal with no finding
-/// to name is therefore the same answer either way, which is why this is a
-/// wider question than [`probe_unanswered`]. Both go through one probe memo,
-/// so asking it after [`execution_free`] starts no second Git process.
-pub(super) fn probe_without_finding(
-    executable: &str,
-    arguments: &[String],
-    context: super::PathContext<'_>,
-    deadline: Option<Instant>,
-    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-    stdout_piped: bool,
-) -> bool {
-    matches!(
-        raw_paging(
-            executable,
-            arguments,
-            None,
-            context,
-            deadline,
-            execution_environment,
-            stdout_piped,
-        ),
-        Raw::Unanswered | Raw::Unproven
-    )
 }
 
 fn raw_paging(

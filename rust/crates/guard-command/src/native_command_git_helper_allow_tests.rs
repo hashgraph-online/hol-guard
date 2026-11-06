@@ -38,6 +38,66 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        let fixture = Self::initialised();
+        let config = fixture.repo.join(".git").join("config");
+        let mut text = fs::read_to_string(&config).unwrap();
+        text.push_str("[core\n");
+        fs::write(&config, text).unwrap();
+        let unreadable = Command::new("git")
+            .args(["--no-pager", "config", "--null", "--get-regexp", "^core\\."])
+            .current_dir(&fixture.repo)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("HOME", &fixture.declared)
+            .output()
+            .unwrap();
+        assert!(
+            !unreadable.status.success(),
+            "the fixture must leave the configuration unreadable"
+        );
+        fixture
+    }
+
+    /// A repository whose configuration Git reads without trouble and whose
+    /// reply for the probe's own keys runs past the probe's bound.
+    ///
+    /// `core.fsmonitor` is a helper the probe would refuse the read for if it
+    /// ever reached that key. The padding makes sure it does not: the reply
+    /// overruns the bound, so the probe comes away having read the
+    /// configuration without finishing its checks against it.
+    fn with_an_overflowing_configuration() -> Self {
+        let fixture = Self::initialised();
+        let config = fixture.repo.join(".git").join("config");
+        let mut text = fs::read_to_string(&config).unwrap();
+        text.push_str(&format!(
+            "[core]\n\tfsmonitor = demo-monitor\n[pretty]\n\tpad = {}\n",
+            "a".repeat(70_000)
+        ));
+        fs::write(&config, text).unwrap();
+        let reply = Command::new("git")
+            .args([
+                "--no-pager",
+                "config",
+                "--null",
+                "--get-regexp",
+                "^(core\\.fsmonitor|pretty\\..*)$",
+            ])
+            .current_dir(&fixture.repo)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("HOME", &fixture.declared)
+            .output()
+            .unwrap();
+        assert!(
+            reply.status.success(),
+            "the fixture must leave the configuration readable"
+        );
+        assert!(
+            reply.stdout.len() > 65_536,
+            "the fixture must push the reply past the probe's bound"
+        );
+        fixture
+    }
+
+    fn initialised() -> Self {
         let nonce = crate::unique_nanos::unique_nanos();
         let root =
             std::env::temp_dir().join(format!("hg-helper-allow-{}-{nonce}", std::process::id()));
@@ -66,21 +126,6 @@ impl Fixture {
             init.status.success(),
             "{}",
             String::from_utf8_lossy(&init.stderr)
-        );
-        let config = repo.join(".git").join("config");
-        let mut text = fs::read_to_string(&config).unwrap();
-        text.push_str("[core\n");
-        fs::write(&config, text).unwrap();
-        let unreadable = Command::new("git")
-            .args(["--no-pager", "config", "--null", "--get-regexp", "^core\\."])
-            .current_dir(&repo)
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("HOME", &declared)
-            .output()
-            .unwrap();
-        assert!(
-            !unreadable.status.success(),
-            "the fixture must leave the configuration unreadable"
         );
         Self {
             root,
@@ -219,4 +264,29 @@ fn an_unrelated_allow_leaves_the_unreadable_configuration_reviewed() {
         "{}",
         result.reason_code.clone()
     );
+}
+
+/// A configuration the probe read but could not finish checking is not
+/// settled by an explicit allow, through either door.
+///
+/// Two places let an allow answer a Git read the probe left unproven: the
+/// helper-context review, and the read floor, whose `allowable_review` becomes
+/// a plain allow rather than read-only containment. A reply that overran the
+/// probe's bound is not that question -- a repository can set `core.fsmonitor`
+/// beside enough padding to push the reply past the bound, so an allow that
+/// settled it would start the monitor the probe never reached. Both doors read
+/// `probe_unanswered`, so neither opens here.
+#[test]
+fn a_configuration_read_past_the_bound_is_not_settled_by_an_explicit_allow() {
+    let fixture = Fixture::with_an_overflowing_configuration();
+    let allowed = fixture.evaluate(
+        &with_enabled_permissions(&["command.git.permission.status"]),
+        "git status --short",
+    );
+    assert_eq!(
+        allowed.minimum_action, "review",
+        "{} ({})",
+        allowed.reason_code, allowed.reason
+    );
+    assert!(!allowed.explicitly_benign);
 }
