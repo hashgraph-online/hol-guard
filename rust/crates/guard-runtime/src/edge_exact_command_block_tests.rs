@@ -153,6 +153,9 @@ fn a_heredoc_or_shift_does_not_hide_the_blocked_step() {
         "cat <<EOF\nx\nEOF\nnpm publish",
         "cat <<-'EOF' > notes\n\tx\n\tEOF\n(npm publish)",
         "cat <<EOF\nnpm publish",
+        "cat <<'E O F'\nx\nE O F\nnpm publish",
+        "((npm publish); true)",
+        "bash -euo pipefail -c 'npm publish'",
     ] {
         let blocked = apply(home.path(), &call(command), Some(NOW), allowed());
         assert_eq!(blocked.minimum_action, "block", "{command}");

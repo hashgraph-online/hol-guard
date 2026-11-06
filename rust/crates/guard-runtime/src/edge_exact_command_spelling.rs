@@ -87,9 +87,13 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
                 out.push(seen, collapse(&segment.text));
                 out.push(seen, bare_step(&collapse(&segment.text)));
                 if let Some(executable) = segment.executable.as_deref() {
-                    if let Some(script) = inline_script(executable, &segment.arguments) {
-                        out.push(seen, collapse(script));
-                        visit(script, depth + 1, out, seen);
+                    match inline_script(executable, &segment.arguments) {
+                        Inline::Script(script) => {
+                            out.push(seen, collapse(script));
+                            visit(script, depth + 1, out, seen);
+                        }
+                        Inline::Unread => out.complete = false,
+                        Inline::No => {}
                     }
                 }
             }
@@ -104,17 +108,35 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
                 &[],
             );
             if let Some((program, arguments)) = words.split_first() {
-                if let Some(script) = inline_script(program, arguments) {
-                    out.push(seen, collapse(script));
-                    visit(script, depth + 1, out, seen);
-                    return;
+                match inline_script(program, arguments) {
+                    Inline::Script(script) => {
+                        out.push(seen, collapse(script));
+                        visit(script, depth + 1, out, seen);
+                        return;
+                    }
+                    Inline::Unread => {
+                        out.complete = false;
+                        return;
+                    }
+                    Inline::No => {}
                 }
             }
-            let steps = steps(text);
-            if steps.len() == 1 && steps[0] == text.trim() {
+            let (mut found, closed) = steps(text, true);
+            out.complete &= closed;
+            // Bash reads `((` as arithmetic only when it parses as one, and
+            // runs `((npm publish); true)` as nested groups. Both readings
+            // are listed; an extra text can only add a match.
+            if text.contains("((") {
+                for step in steps(text, false).0 {
+                    if !found.contains(&step) {
+                        found.push(step);
+                    }
+                }
+            }
+            if found.len() == 1 && found[0] == text.trim() {
                 return;
             }
-            for step in steps {
+            for step in found {
                 out.push(seen, collapse(&step));
                 visit(&step, depth + 1, out, seen);
             }
@@ -147,18 +169,55 @@ fn segment_spellings(segment: &CommandSegmentV1) -> Vec<String> {
     }
 }
 
+/// What an inline shell runs from its arguments.
+enum Inline<'a> {
+    /// Not a shell given a script with `-c`.
+    No,
+    /// The script of `bash -c '…'` and the like.
+    Script(&'a str),
+    /// `-c` with no script word Guard could find.
+    Unread,
+}
+
 /// The script of `bash -c '…'` and the like, when the parser kept the shell
-/// as the program.
-fn inline_script<'a>(executable: &str, arguments: &'a [String]) -> Option<&'a str> {
-    let program = executable.rsplit('/').next().unwrap_or(executable);
+/// as the program. Option operands such as `-o pipefail` and `--rcfile file`
+/// are skipped, so `bash -euo pipefail -c '…'` reads its script.
+fn inline_script<'a>(executable: &str, arguments: &'a [String]) -> Inline<'a> {
+    let program = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
     if !INLINE_SHELLS.contains(&program) {
-        return None;
+        return Inline::No;
     }
-    let flags = arguments
-        .iter()
-        .take_while(|word| word.starts_with('-'))
-        .position(|word| !word.starts_with("--") && word.contains('c'))?;
-    arguments.get(flags + 1).map(String::as_str)
+    let mut command = false;
+    let mut words = arguments.iter();
+    while let Some(word) = words.next() {
+        if word == "--" || word == "-" {
+            break;
+        }
+        if let Some(long) = word.strip_prefix("--") {
+            if matches!(long, "rcfile" | "init-file") {
+                words.next();
+            }
+            continue;
+        }
+        let Some(cluster) = word.strip_prefix('-').or_else(|| word.strip_prefix('+')) else {
+            return if command {
+                Inline::Script(word)
+            } else {
+                Inline::No
+            };
+        };
+        if word.starts_with('-') && cluster.contains('c') {
+            command = true;
+        }
+        for _ in cluster.chars().filter(|&c| c == 'o' || c == 'O') {
+            words.next();
+        }
+    }
+    match (command, words.next()) {
+        (true, Some(word)) => Inline::Script(word),
+        (true, None) => Inline::Unread,
+        _ => Inline::No,
+    }
 }
 
 fn safe_word(word: &str) -> bool {
@@ -189,7 +248,7 @@ fn double_quoted(word: &str) -> String {
 /// without its redirections. Heredoc bodies are skipped up to their closing
 /// line; a body that never closes is read as steps, so nothing after an
 /// unclosed `<<` is hidden.
-fn steps(text: &str) -> Vec<String> {
+fn steps(text: &str, read_arithmetic: bool) -> (Vec<String>, bool) {
     let chars: Vec<char> = text.chars().collect();
     let mut steps = Vec::new();
     let mut current = String::new();
@@ -218,7 +277,7 @@ fn steps(text: &str) -> Vec<String> {
                 quote = Some(c);
                 current.push(c);
             }
-            (None, '(') if next == Some('(') => {
+            (None, '(') if read_arithmetic && next == Some('(') => {
                 arithmetic += 1;
                 current.push_str("((");
                 i += 1;
@@ -254,11 +313,12 @@ fn steps(text: &str) -> Vec<String> {
         i += 1;
     }
     steps.push(current);
-    steps
+    let steps = steps
         .into_iter()
         .map(|step| bare_step(&step))
         .filter(|step| !step.is_empty())
-        .collect()
+        .collect();
+    (steps, quote.is_none())
 }
 
 /// The delimiter word after `<<` at `start`, whether `<<-` strips leading
@@ -273,12 +333,20 @@ fn heredoc_delimiter(chars: &[char], start: usize) -> (String, bool, usize) {
         i += 1;
     }
     let mut delimiter = String::new();
+    let mut quote: Option<char> = None;
     while let Some(&c) = chars.get(i) {
-        if c.is_whitespace() || ";&|()<>".contains(c) {
-            break;
-        }
-        if !matches!(c, '\'' | '"' | '\\') {
-            delimiter.push(c);
+        match (quote, c) {
+            (Some(open), c) if c == open => quote = None,
+            (Some(_), c) => delimiter.push(c),
+            (None, '\'' | '"') => quote = Some(c),
+            (None, '\\') => {
+                if let Some(&escaped) = chars.get(i + 1) {
+                    delimiter.push(escaped);
+                    i += 1;
+                }
+            }
+            (None, c) if c.is_whitespace() || ";&|()<>".contains(c) => break,
+            (None, c) => delimiter.push(c),
         }
         i += 1;
     }

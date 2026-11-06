@@ -142,3 +142,36 @@ fn nested_inline_scripts_list_the_inner_step() {
 fn quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', r"'\''"))
 }
+
+#[test]
+fn quoted_heredoc_delimiters_do_not_hide_later_steps() {
+    for command in [
+        "cat <<'E O F'\nx\nE O F\nnpm publish",
+        "cat <<'EOF;'\nx\nEOF;\nnpm publish",
+        "cat <<\"END\"\nx\nEND\n(npm publish)",
+    ] {
+        assert!(has(command, "npm publish"), "{command:?}");
+    }
+}
+
+#[test]
+fn a_double_paren_bash_runs_as_groups_is_read_as_groups() {
+    for command in ["((npm publish); true)", "((npm publish) )"] {
+        assert!(has(command, "npm publish"), "{command}");
+    }
+}
+
+#[test]
+fn shell_options_before_the_script_are_skipped() {
+    for command in [
+        "bash -euo pipefail -c 'npm publish'",
+        "bash -o pipefail -c 'npm publish'",
+        "bash +o posix -c 'npm publish'",
+        "bash --norc -c 'npm publish'",
+        "bash --rcfile notes -c 'npm publish'",
+        "sh -e -c -- 'npm publish'",
+    ] {
+        assert!(has(command, "npm publish"), "{command}");
+    }
+    assert!(!spellings("bash -c").complete);
+}
