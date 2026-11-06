@@ -17,6 +17,7 @@ from . import (
     store_review_event_outbox_schema,
     store_storage_gate,
 )
+from .cloud_sync_busy import GuardCloudSyncBusyError
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_deadline_connection import DeadlineConnection

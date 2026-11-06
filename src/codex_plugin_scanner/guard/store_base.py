@@ -349,10 +349,6 @@ def _release_advisory_file_lock(handle) -> None:
     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-class GuardCloudSyncBusyError(TimeoutError):
-    """Another Guard process holds the Guard Cloud sync lock while it syncs."""
-
-
 class SecretStore(Protocol):
     """Credential persistence contract for local Guard secrets."""
 

@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud
+from codex_plugin_scanner.guard.cloud_sync_busy import GUARD_SYNC_IN_PROGRESS_MESSAGE
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -35,7 +36,7 @@ def test_sync_reports_a_background_sync_as_in_progress_in_json(busy_sync_lock: l
     assert rc == 1
     assert payload["synced"] is False
     assert payload["in_progress"] is True
-    assert payload["error"] == commands_dispatch_cloud.GUARD_SYNC_IN_PROGRESS_MESSAGE
+    assert payload["error"] == GUARD_SYNC_IN_PROGRESS_MESSAGE
 
 
 def test_sync_tells_the_user_a_background_sync_is_running(busy_sync_lock: list[str], capsys) -> None:
@@ -43,5 +44,5 @@ def test_sync_tells_the_user_a_background_sync_is_running(busy_sync_lock: list[s
     captured = capsys.readouterr()
 
     assert rc == 1
-    assert "already syncing with Guard Cloud in the background" in captured.err
+    assert "Another Guard process is talking to Guard Cloud right now" in captured.err
     assert "Timed out waiting" not in captured.err

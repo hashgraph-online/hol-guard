@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     )
 
 
+from ..cloud_sync_busy import GUARD_SYNC_IN_PROGRESS_MESSAGE, GuardCloudSyncBusyError
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..mdm.user_health import (
     configure_user_health_leases,
@@ -42,7 +43,6 @@ from ..runtime.command_capability import (
 )
 from ..runtime.command_executors import SUPPORTED_COMMAND_OPERATIONS
 from ..runtime.command_queue import command_queue_status
-from ..store_base import GuardCloudSyncBusyError
 from ..supply_chain_workspace_audit import (
     build_supply_chain_explain_payload,
     build_workspace_audit_payload,
@@ -278,13 +278,6 @@ def _run_guard_bridge_command(
     bridge = GuardBridge(config=bridge_config, store=store, backend=backend)
     bridge.run()
     return 0
-
-
-GUARD_SYNC_IN_PROGRESS_MESSAGE = (
-    "Guard is already syncing with Guard Cloud in the background, so this sync did not start. "
-    "Your policy and receipts update when that sync finishes. Run `hol-guard status` to see the "
-    "last sync time, or run `hol-guard sync` again in a few minutes."
-)
 
 
 def _run_guard_sync_command(
