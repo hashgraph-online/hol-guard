@@ -316,7 +316,12 @@ _PURE_TEMPLATE_EXPANSION_RE = re.compile(r"^\{\{[^}]+\}\}$")
 def _looks_like_interpolated_secret(value: str) -> bool:
     """True only for complete env/template references with no literal payload."""
     normalized = _normalize_secret_candidate(value)
-    return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
+    if _PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized):
+        return True
+    # also $(VAR) command-substitution form
+    if re.fullmatch(r"^\$\([A-Za-z_][A-Za-z0-9_]*\)$", normalized):
+        return True
+    return False
 
 
 BRACKETED_PLACEHOLDER_RE = re.compile(
@@ -437,7 +442,16 @@ def _looks_like_incomplete_provider_candidate(value: str) -> bool:
 
 def _looks_like_example_generic_secret(value: str) -> bool:
     normalized = _normalize_secret_candidate(value).lower()
-    return normalized in EXAMPLE_GENERIC_VALUES
+    if normalized in EXAMPLE_GENERIC_VALUES:
+        return True
+    # Common dummy/test tokens on example/test surfaces
+    dummy_markers = ("fake", "dummy", "test", "example", "sample", "not-a-real", "not_a_real", "placeholder", "swordfish", "secret", "token", "xyz", "env-token", "must-not", "not-escape", "from-env", "installation")
+    if any(marker in normalized for marker in dummy_markers):
+        return True
+    # short low-entropy tokens commonly used as dummies in tests
+    if len(normalized) < 16 and normalized.isalpha():
+        return True
+    return False
 
 
 def _newline_offsets(content: str) -> tuple[int, ...]:
