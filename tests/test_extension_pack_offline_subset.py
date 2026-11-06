@@ -108,3 +108,16 @@ def test_subset_writes_schema6_and_keeps_schema5_readable(delivery, monkeypatch)
         pytest.raises(NativePolicySnapshotError, match="conflict"),
     ):
         activation_store.write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
+
+
+def test_a_refused_first_activation_sends_the_baseline_again() -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    ensure_extension_control_authority_schema(connection, activate_packs=True)
+    metadata = SimpleNamespace(program_digest="1" * 64, catalog_digest="2" * 64, trust_digest="3" * 64)
+    assert activation_baseline.baseline_request(connection, metadata, recorded_at="unit") == {
+        "program_digest": "1" * 64,
+        "catalog_digest": "2" * 64,
+        "trust_digest": "3" * 64,
+        "recorded_at": "unit",
+    }

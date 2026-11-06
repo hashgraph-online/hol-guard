@@ -34,15 +34,15 @@ def reserve_request(store, connection, draft, *, recorded_at, now=None):
     if type(draft) is not ActivationDraft or draft.directory != directory_for_store(store):
         raise NativePolicySnapshotError("native_command_pack_draft_invalid")
     key = _key(store)
+    try:
+        format_v2 = json.loads(draft.data).get("schema") == SCHEMA_V2
+    except (AttributeError, ValueError):
+        raise NativePolicySnapshotError("native_command_pack_draft_invalid") from None
     baseline = None
     if draft.previous_digest is None:
         if draft.baseline_metadata is None:
             raise NativePolicySnapshotError("native_command_pack_baseline_missing")
         baseline = activation_baseline.baseline_request(connection, draft.baseline_metadata, recorded_at=recorded_at)
-    try:
-        format_v2 = json.loads(draft.data).get("schema") == SCHEMA_V2
-    except (AttributeError, ValueError):
-        raise NativePolicySnapshotError("native_command_pack_draft_invalid") from None
     from ..native_store_policy import encode_key
     from ..store_extension_control_authority_schema import ensure_extension_control_authority_schema
     from .active_security import read as read_security
