@@ -47,6 +47,12 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     let spelled;
     let value = match home_variable::tilde_spelling(value) {
         Some(spelling) => {
+            // Unlike `~`, the expansion is split on the shell's IFS, so a
+            // home path holding whitespace reaches the program as several
+            // words the tilde proof would not describe.
+            if !home_variable::home_expands_to_one_word(context.home_dir) {
+                return None;
+            }
             spelled = spelling;
             spelled.as_str()
         }

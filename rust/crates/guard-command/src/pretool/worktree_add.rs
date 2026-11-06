@@ -347,6 +347,17 @@ fn planned_checkout<'a>(
     if !segment.environment_names.is_empty() {
         return None;
     }
+    // A `$HOME` destination is proved in its `~` spelling, which the shell
+    // never splits. The expansion is split, so a home path holding
+    // whitespace would hand Git other arguments than the ones proved.
+    if segment
+        .arguments
+        .iter()
+        .any(|argument| super::directory_targets::home_variable::tilde_spelling(argument).is_some())
+        && !super::directory_targets::home_variable::home_expands_to_one_word(context.home_dir)
+    {
+        return None;
+    }
     let spec = parse(segment)?;
     let chdir_cwd = match spec.chdir {
         Some(directory) => Some(resolve_chdir(directory, context)?),

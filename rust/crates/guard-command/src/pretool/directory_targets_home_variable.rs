@@ -55,7 +55,7 @@ fn shell_keeps_variable_literal(text: &str) -> bool {
         if escaped {
             escaped = false;
             // `\$HOME` is a literal `$HOME` inside double quotes and out.
-            if character == '$' && names_home(&characters[index + 1..]) {
+            if character == '$' && names_home(&unquoted_head(&characters[index + 1..])) {
                 return true;
             }
             continue;
@@ -64,7 +64,18 @@ fn shell_keeps_variable_literal(text: &str) -> bool {
             '\\' if quote != Some('\'') => escaped = true,
             '\'' | '"' if quote.is_none() => quote = Some(character),
             _ if Some(character) == quote => quote = None,
-            '$' if quote == Some('\'') && names_home(&characters[index + 1..]) => return true,
+            // The tokenizer has removed the quotes, so Guard reads `$HOME`
+            // from `'$'HOME`, `"$"HOME` and `$HO"ME"` alike. The shell runs
+            // none of them as an expansion: a quoted `$` is a literal
+            // dollar, and a quote inside the name ends it before `HOME` is
+            // spelled. Whenever the quote-stripped text names home but the
+            // written text does not spell it contiguously outside single
+            // quotes, the word stays literal.
+            '$' if names_home(&unquoted_head(&characters[index + 1..]))
+                && (quote == Some('\'') || !names_home(&characters[index + 1..])) =>
+            {
+                return true
+            }
             _ => {}
         }
     }
@@ -74,6 +85,28 @@ fn shell_keeps_variable_literal(text: &str) -> bool {
 fn names_home(rest: &[char]) -> bool {
     let head: String = rest.iter().take(6).collect();
     head.starts_with("HOME") || head.starts_with("{HOME}")
+}
+
+/// The characters after a `$` as the tokenizer leaves them, with the quoting
+/// removed. Six are enough to spell `{HOME}`.
+fn unquoted_head(rest: &[char]) -> Vec<char> {
+    rest.iter()
+        .copied()
+        .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+        .take(6)
+        .collect()
+}
+
+/// Whether the shell hands a `$HOME` word to the program as one argument.
+///
+/// `~` expands without word splitting; `$HOME` does not. A home path holding
+/// a space, a tab or a newline therefore arrives as several arguments, and a
+/// proof taken over the tilde spelling would describe a command the shell
+/// never runs -- `git worktree add $HOME/wt` becomes `add <first word> -b
+/// injected/wt` when home is named `<first word> -b injected`. An unknown
+/// home is refused for the same reason.
+pub(crate) fn home_expands_to_one_word(home_dir: Option<&str>) -> bool {
+    home_dir.is_some_and(|home| !home.chars().any(char::is_whitespace))
 }
 
 #[cfg(test)]
@@ -113,5 +146,29 @@ mod tests {
         assert!(!shell_keeps_variable_literal("ls \"$HOME/projects\""));
         assert!(!shell_keeps_variable_literal("ls ${HOME}/projects"));
         assert!(!shell_keeps_variable_literal("echo 'no variable here'"));
+    }
+
+    #[test]
+    fn quoting_inside_the_spelling_keeps_the_word_literal() {
+        // The tokenizer reads `$HOME` from each of these, but the shell
+        // spells no expansion: the dollar is quoted, or a quote ends the
+        // name before `HOME` is written.
+        assert!(shell_keeps_variable_literal("ls '$'HOME/projects"));
+        assert!(shell_keeps_variable_literal("ls \"$\"HOME/projects"));
+        assert!(shell_keeps_variable_literal("ls $HO\"ME\"/projects"));
+        assert!(shell_keeps_variable_literal("ls $'HOME'/projects"));
+        // A quote that opens after a whole `$HOME` leaves the expansion.
+        assert!(!shell_keeps_variable_literal("ls $HOME\"/projects\""));
+        assert!(!shell_keeps_variable_literal("ls \"$HOME\"/projects"));
+    }
+
+    #[test]
+    fn a_home_that_would_split_into_words_is_refused() {
+        assert!(home_expands_to_one_word(Some("/Users/someone")));
+        assert!(!home_expands_to_one_word(Some(
+            "/tmp/guard home -b injected"
+        )));
+        assert!(!home_expands_to_one_word(Some("/tmp/guard\thome")));
+        assert!(!home_expands_to_one_word(None));
     }
 }
