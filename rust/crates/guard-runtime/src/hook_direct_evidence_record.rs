@@ -14,6 +14,7 @@
 //! source, stays with the daemon.
 
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use guard_command::hook_evidence_writer::{
     RuntimeHookEvidenceWriter, POLICY_SOURCE_FENCE_WINDOW_EVENT,
@@ -34,6 +35,10 @@ const CAPTURE_MARKER: [&str; 2] = ["diagnostics", "codex-binding-capture.v2.json
 /// `native_codex_binding_capture._MAX_TEXT_BYTES`.
 #[cfg(unix)]
 const CAPTURE_TEXT_BYTES: usize = 64 * 1024;
+/// How long one page may spend on captures. A capture waits on the capture
+/// file's lock, so a busy file must not hold the page's receipts past the
+/// drain's deadline; what is left over stays unmarked for the daemon.
+const CAPTURE_PAGE_BUDGET: Duration = Duration::from_millis(250);
 /// `hook_policy_fence_window.REBUILD_WAIT_SECONDS`, in milliseconds: no
 /// window reports a longer wait than a hook may poll.
 const REBUILD_WAIT_MS: u64 = 8_000;
@@ -146,6 +151,7 @@ pub(super) fn leftovers(
 ) -> Option<Value> {
     let home = Path::new(guard_home);
     let capturing = capture_marker_present(home);
+    let capture_deadline = Instant::now() + CAPTURE_PAGE_BUDGET;
     let pending = |paged: &Paged| {
         receipt_pending(paged)
             || fence_wait_ms(&paged.record).is_some()
@@ -186,7 +192,10 @@ pub(super) fn leftovers(
                     recorded.push(DIRECT_ACTIVITY_RECORDED);
                 }
             }
-            if capture_pending(paged, capturing) && capture(home, &paged.record) {
+            if capture_pending(paged, capturing)
+                && Instant::now() < capture_deadline
+                && capture(home, &paged.record)
+            {
                 recorded.push(CAPTURE_RECORDED);
             }
             marks.push((paged.seq, recorded));
