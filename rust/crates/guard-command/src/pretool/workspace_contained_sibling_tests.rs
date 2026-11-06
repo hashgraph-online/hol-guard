@@ -802,3 +802,6 @@ fn a_quoted_delimiter_in_a_peeled_stage_stays_contained() {
 
 #[path = "workspace_contained_sibling_cat_tests.rs"]
 mod cat;
+
+#[path = "workspace_contained_sibling_chain_tests.rs"]
+mod chain;
