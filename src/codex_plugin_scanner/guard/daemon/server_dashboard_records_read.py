@@ -21,6 +21,7 @@ from .command_activity_api import (
     handle_command_extensions,
 )
 from .managed_controls_api import managed_policy_rows
+from .request_resolution_wait import requested_resolution_wait_seconds, wait_for_request_resolution
 from .server_common import _ServerProxy
 
 m = _ServerProxy()
@@ -54,6 +55,9 @@ class _DashboardRecordsReadRoutes:
             return True
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
+            wait_seconds = requested_resolution_wait_seconds(parsed.query)
+            if approval is not None and wait_seconds > 0:
+                approval = wait_for_request_resolution(store, path_parts[2], approval, wait_seconds)
             if approval is None and not self._is_hosted_dashboard_origin():
                 from .business_review_queue import NativeBusinessReviewQueueReadError, native_request_detail
 
