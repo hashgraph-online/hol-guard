@@ -319,11 +319,11 @@ fn raw_paging(
             Paging {
                 operation: &pager_operation,
                 stdout_piped,
+                read_configuration: &read_configuration,
             },
             context,
             deadline,
             execution_environment,
-            &read_configuration,
         );
         // Recorded beside the probe's own answer so a later proof served from
         // the memo still knows which of the two refusals this was.
@@ -391,10 +391,13 @@ fn stash_execution_free(
 
 /// How the read would page: the configuration key the pager is proved under,
 /// and whether the caller already sends stdout down a pipe, which leaves Git
-/// no terminal to page to.
+/// no terminal to page to. `read_configuration` carries the proof's answer
+/// back out: the probe sets it once the effective configuration is in hand,
+/// which is what tells its two refusals apart.
 struct Paging<'a> {
     operation: &'a str,
     stdout_piped: bool,
+    read_configuration: &'a std::cell::Cell<bool>,
 }
 
 fn probe(
@@ -405,11 +408,11 @@ fn probe(
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-    read_configuration: &std::cell::Cell<bool>,
 ) -> Option<bool> {
     let Paging {
         operation: pager_operation,
         stdout_piped,
+        read_configuration,
     } = paging;
     let operation = remaining.first()?.as_str();
     // `git notes show` execs `git show <note>`. A note is a blob when Git
