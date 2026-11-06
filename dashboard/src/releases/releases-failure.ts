@@ -37,8 +37,8 @@ const FAILURE_COPY: Record<ReleaseFeedFailure, ReleaseFailureCopy> = {
     body: "hol.org answered, but this release isn't in a form Guard can safely display. Nothing on this device is affected. Read it on hol.org; a Guard update may show it here.",
   },
   session: {
-    title: "This window needs a signed session",
-    body: "Guard is still running on this device. Reconnect this window to keep reading release history.",
+    title: "This window's session has ended",
+    body: "Guard is still running on this device. Open the dashboard again from Guard to keep reading release history.",
   },
   disabled: {
     title: "Release history is turned off on this device",
@@ -52,9 +52,10 @@ export function failureCopy(failure: ReleaseFeedFailure): ReleaseFailureCopy {
 
 /** Only a failure that could clear on its own is worth a retry button: an old
  * build and a switched-off archive both stay failed however often the reader
- * presses it, and a release that was never published stays unpublished. */
+ * presses it, a release that was never published stays unpublished, and an
+ * ended session needs the dashboard opened again from Guard. */
 export function isRetryable(failure: ReleaseFeedFailure): boolean {
-  return failure === "unavailable" || failure === "offline" || failure === "session";
+  return failure === "unavailable" || failure === "offline";
 }
 
 /** Only a release Guard declined to display is still worth reading somewhere
@@ -64,8 +65,8 @@ export function readsOnHol(failure: ReleaseFeedFailure): boolean {
 }
 
 /** The note under a list Guard trimmed, or null when it shows everything. */
-export function trimmedNote(shown: number, total: number | undefined, noun: string): string | null {
-  if (typeof total !== "number" || !Number.isFinite(total) || total <= shown) return null;
+export function trimmedNote(shown: number, total: number, noun: string): string | null {
+  if (!Number.isFinite(total) || total <= shown) return null;
   const format = new Intl.NumberFormat("en-US");
   return `Showing the first ${format.format(shown)} of ${format.format(total)} ${noun}.`;
 }

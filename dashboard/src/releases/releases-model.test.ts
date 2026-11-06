@@ -316,14 +316,13 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   // it, and do not tell the reader hol.org failed to serve it.
   assert.match(failureCopy("unreadable").body, /Read it on hol.org/);
   assert.doesNotMatch(failureCopy("unreadable").body, /could not serve/);
-  assert.match(failureCopy("session").title, /signed session/);
+  assert.match(failureCopy("session").title, /session has ended/);
 }
 
 // A trimmed list says how much is shown; a complete one says nothing.
 {
   assert.equal(trimmedNote(1000, 1250, "changes"), "Showing the first 1,000 of 1,250 changes.");
   assert.equal(trimmedNote(980, 980, "changes"), null);
-  assert.equal(trimmedNote(3, undefined, "contributors"), null, "older Guard builds send no total");
   assert.equal(holReleaseUrl("v3.59.0"), "https://hol.org/guard/releases/v3.59.0");
   assert.equal(holReleaseUrl("../x"), "https://hol.org/guard/releases");
   assert.equal(holReleaseUrl(null), "https://hol.org/guard/releases");
@@ -337,7 +336,7 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   assert.equal(isRetryable("unsupported"), false);
   assert.equal(isRetryable("not-found"), false);
   assert.equal(isRetryable("unreadable"), false, "the same document comes back on every retry");
-  assert.equal(isRetryable("session"), true, "reconnecting re-mints the window's session");
+  assert.equal(isRetryable("session"), false, "the same token is refused again; the dashboard must be reopened");
   assert.equal(readsOnHol("unreadable"), true);
   assert.equal(readsOnHol("unavailable"), false);
 }

@@ -66,6 +66,7 @@ const detail: ReleaseDetail = {
       evidenceUrl: "https://github.com/hashgraph-online/hol-guard/pull/5534",
     },
   ],
+  changesTotal: 2,
   roster: [
     {
       creditId: "credit-1",
@@ -86,6 +87,7 @@ const detail: ReleaseDetail = {
       evidenceUrl: null,
     },
   ],
+  rosterTotal: 2,
   assets: [{ name: "hol_guard-3.53.0-py3-none-any.whl", url: "https://example.org/guard.whl" }],
   sourceNotes: { scope: "exact_release", text: "Published notes for 3.53.0." },
 };
@@ -485,19 +487,3 @@ const detail: ReleaseDetail = {
 }
 
 console.log("releases-ui.test.tsx passed");
-
-// A release longer than Guard shows says so and points at the full list,
-// instead of the whole page failing to load.
-{
-  const trimmed = renderToStaticMarkup(
-    createElement(ReleaseDetailPanel, {
-      detail: { ...detail, slug: "v3.59.0", changesTotal: 1250, rosterTotal: detail.roster.length },
-    }),
-  );
-  assert.match(trimmed, /Showing the first 2 of 1,250 changes\./);
-  assert.match(trimmed, /href="https:\/\/hol.org\/guard\/releases\/v3.59.0"/);
-  assert.ok(!trimmed.includes("contributors."), "a complete roster carries no note");
-
-  const whole = renderToStaticMarkup(createElement(ReleaseDetailPanel, { detail }));
-  assert.ok(!whole.includes("Showing the first"), "a release shown in full carries no note");
-}

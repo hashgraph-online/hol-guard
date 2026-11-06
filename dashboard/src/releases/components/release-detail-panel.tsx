@@ -234,8 +234,8 @@ export function ReleaseDetailPanel({
   // What is in this release, counted, before a word of it is read.
   const countLabel = useMemo(() => changeCountLabel(sections), [sections]);
   const holUrl = holReleaseUrl(detail.slug);
-  const changesTrimmed = trimmedNote(detail.changes.length, detail.changesTotal, "changes");
-  const rosterTrimmed = trimmedNote(detail.roster.length, detail.rosterTotal, "contributors");
+  const changesTrimmed = trimmedNote(detail.changes.length, detail.changesTotal, "change entries");
+  const rosterTrimmed = trimmedNote(detail.roster.length, detail.rosterTotal, "contributor credits");
   const changeList =
     sections.length > 0 ? (
       <div className="space-y-5">
@@ -265,7 +265,6 @@ export function ReleaseDetailPanel({
             </ul>
           </section>
         ))}
-        {changesTrimmed ? <TrimmedNote note={changesTrimmed} href={holUrl} /> : null}
       </div>
     ) : null;
 
@@ -350,6 +349,7 @@ export function ReleaseDetailPanel({
       ) : (
         changeList
       )}
+      {changesTrimmed ? <TrimmedNote note={changesTrimmed} href={holUrl} /> : null}
 
       {detail.roster.length > 0 ? (
         <section aria-labelledby="release-roster-heading" className="space-y-2.5">

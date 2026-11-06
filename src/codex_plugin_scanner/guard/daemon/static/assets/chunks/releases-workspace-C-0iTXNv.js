@@ -25,8 +25,8 @@ const FAILURE_COPY = {
     body: "hol.org answered, but this release isn't in a form Guard can safely display. Nothing on this device is affected. Read it on hol.org; a Guard update may show it here."
   },
   session: {
-    title: "This window needs a signed session",
-    body: "Guard is still running on this device. Reconnect this window to keep reading release history."
+    title: "This window's session has ended",
+    body: "Guard is still running on this device. Open the dashboard again from Guard to keep reading release history."
   },
   disabled: {
     title: "Release history is turned off on this device",
@@ -37,13 +37,13 @@ function failureCopy(failure) {
   return FAILURE_COPY[failure];
 }
 function isRetryable(failure) {
-  return failure === "unavailable" || failure === "offline" || failure === "session";
+  return failure === "unavailable" || failure === "offline";
 }
 function readsOnHol(failure) {
   return failure === "unreadable";
 }
 function trimmedNote(shown, total, noun) {
-  if (typeof total !== "number" || !Number.isFinite(total) || total <= shown) return null;
+  if (!Number.isFinite(total) || total <= shown) return null;
   const format = new Intl.NumberFormat("en-US");
   return `Showing the first ${format.format(shown)} of ${format.format(total)} ${noun}.`;
 }
@@ -1052,31 +1052,28 @@ function ReleaseDetailPanel({
   const note = coverageNote(detail.coverage);
   const countLabel = reactExports.useMemo(() => changeCountLabel(sections), [sections]);
   const holUrl = holReleaseUrl(detail.slug);
-  const changesTrimmed = trimmedNote(detail.changes.length, detail.changesTotal, "changes");
-  const rosterTrimmed = trimmedNote(detail.roster.length, detail.rosterTotal, "contributors");
-  const changeList = sections.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
-    sections.map((section) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "section",
-      {
-        "aria-labelledby": `release-changes-${section.kind}`,
-        className: section.kind === "security" ? "space-y-2.5 rounded-xl border border-brand-purple/20 bg-brand-purple/[0.03] p-3 sm:p-4" : "space-y-2.5",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ChangeKindHeading,
-            {
-              id: `release-changes-${section.kind}`,
-              kind: section.kind,
-              label: section.label,
-              count: section.changes.length
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "list-disc space-y-2 pl-5", children: section.changes.map((change) => /* @__PURE__ */ jsxRuntimeExports.jsx(ChangeItem, { change }, change.id)) })
-        ]
-      },
-      section.kind
-    )),
-    changesTrimmed ? /* @__PURE__ */ jsxRuntimeExports.jsx(TrimmedNote, { note: changesTrimmed, href: holUrl }) : null
-  ] }) : null;
+  const changesTrimmed = trimmedNote(detail.changes.length, detail.changesTotal, "change entries");
+  const rosterTrimmed = trimmedNote(detail.roster.length, detail.rosterTotal, "contributor credits");
+  const changeList = sections.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-5", children: sections.map((section) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      "aria-labelledby": `release-changes-${section.kind}`,
+      className: section.kind === "security" ? "space-y-2.5 rounded-xl border border-brand-purple/20 bg-brand-purple/[0.03] p-3 sm:p-4" : "space-y-2.5",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ChangeKindHeading,
+          {
+            id: `release-changes-${section.kind}`,
+            kind: section.kind,
+            label: section.label,
+            count: section.changes.length
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "list-disc space-y-2 pl-5", children: section.changes.map((change) => /* @__PURE__ */ jsxRuntimeExports.jsx(ChangeItem, { change }, change.id)) })
+      ]
+    },
+    section.kind
+  )) }) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "article",
     {
@@ -1142,6 +1139,7 @@ function ReleaseDetailPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx(ReleaseNotes, { source: detail.summary })
         ] }),
         changeList === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: "No itemised changes were published for this release." }) : notesLead ? /* @__PURE__ */ jsxRuntimeExports.jsx(Disclosure, { summary: "Itemised changes", count: changes.length, children: changeList }) : changeList,
+        changesTrimmed ? /* @__PURE__ */ jsxRuntimeExports.jsx(TrimmedNote, { note: changesTrimmed, href: holUrl }) : null,
         detail.roster.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "release-roster-heading", className: "space-y-2.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "release-roster-heading", className: "text-sm font-semibold text-brand-dark", children: "Verified contributors" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-2", children: roster.map((contributor) => /* @__PURE__ */ jsxRuntimeExports.jsx(ContributorChip, { contributor }, contributor.creditId)) }),
@@ -1326,9 +1324,14 @@ async function fetchReleaseDetail(slug, options = {}) {
   }
   return { status: "ok", detail: result.document };
 }
-function FailureNotice(props) {
-  const copy = failureCopy(props.failure);
-  const action = props.onRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: props.failure === "session" ? "Reconnect" : "Try again" }) : readsOnHol(props.failure) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+function FailureAction(props) {
+  if (props.onRetry) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Try again" });
+  }
+  if (!readsOnHol(props.failure)) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "a",
     {
       href: props.holUrl,
@@ -1341,7 +1344,12 @@ function FailureNotice(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "(opens in a new tab)" })
       ]
     }
-  ) : void 0;
+  );
+}
+function FailureNotice(props) {
+  const copy = failureCopy(props.failure);
+  const hasAction = Boolean(props.onRetry) || readsOnHol(props.failure);
+  const action = hasAction ? /* @__PURE__ */ jsxRuntimeExports.jsx(FailureAction, { ...props }) : void 0;
   return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: copy.title, body: copy.body, action });
 }
 function LoadingNotice({ label }) {

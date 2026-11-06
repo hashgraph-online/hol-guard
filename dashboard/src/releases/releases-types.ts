@@ -89,12 +89,12 @@ export type ReleaseDetail = ReleaseIdentity & {
   summary: string;
   comparison: ReleaseComparison;
   changes: ReleaseChange[];
-  /** How many changes hol.org published. Guard shows the first part of a
-   * very long list and says so; absent from older Guard builds. */
-  changesTotal?: number;
+  /** How many change entries hol.org published. Guard shows the first part
+   * of a very long list and says so. */
+  changesTotal: number;
   roster: ReleaseContributor[];
-  /** How many contributors hol.org credited, trimmed the same way. */
-  rosterTotal?: number;
+  /** How many contributor credits hol.org published, trimmed the same way. */
+  rosterTotal: number;
   assets: ReleaseAsset[];
   sourceNotes: ReleaseSourceNotes;
 };

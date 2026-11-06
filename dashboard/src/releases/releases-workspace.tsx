@@ -31,13 +31,18 @@ type DetailState =
   | { kind: "ready"; detail: ReleaseDetail }
   | { kind: "failed"; failure: ReleaseFeedFailure };
 
-function FailureNotice(props: { failure: ReleaseFeedFailure; holUrl: string; onRetry?: () => void }) {
-  const copy = failureCopy(props.failure);
-  const action = props.onRetry ? (
-    <ActionButton variant="outline" onClick={props.onRetry}>
-      {props.failure === "session" ? "Reconnect" : "Try again"}
-    </ActionButton>
-  ) : readsOnHol(props.failure) ? (
+function FailureAction(props: { failure: ReleaseFeedFailure; holUrl: string; onRetry?: () => void }) {
+  if (props.onRetry) {
+    return (
+      <ActionButton variant="outline" onClick={props.onRetry}>
+        Try again
+      </ActionButton>
+    );
+  }
+  if (!readsOnHol(props.failure)) {
+    return null;
+  }
+  return (
     <a
       href={props.holUrl}
       target="_blank"
@@ -48,7 +53,13 @@ function FailureNotice(props: { failure: ReleaseFeedFailure; holUrl: string; onR
       <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
       <span className="sr-only">(opens in a new tab)</span>
     </a>
-  ) : undefined;
+  );
+}
+
+function FailureNotice(props: { failure: ReleaseFeedFailure; holUrl: string; onRetry?: () => void }) {
+  const copy = failureCopy(props.failure);
+  const hasAction = Boolean(props.onRetry) || readsOnHol(props.failure);
+  const action = hasAction ? <FailureAction {...props} /> : undefined;
   return <EmptyState title={copy.title} body={copy.body} action={action} />;
 }
 
