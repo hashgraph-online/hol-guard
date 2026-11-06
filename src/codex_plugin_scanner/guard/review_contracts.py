@@ -186,6 +186,20 @@ def _risk_category(request_row: dict[str, object]) -> str:
     return "unknown"
 
 
+def _substring_risk_category(request_row: dict[str, object]) -> str:
+    """The rule claims used before the word rule; see ``local_review_request_claims``."""
+
+    for key in ("risk_headline", "risk_summary", "policy_action"):
+        value = (_non_empty_string(request_row.get(key)) or "").lower()
+        if any(token in value for token in ("critical", "high", "block", "destructive")):
+            return "high"
+        if any(token in value for token in ("medium", "review", "reapproval")):
+            return "medium"
+        if any(token in value for token in ("low", "allow")):
+            return "low"
+    return "unknown"
+
+
 def _policy_version(request_row: dict[str, object]) -> str:
     decision_v2 = _read_json_mapping(request_row.get("decision_v2_json")) or {}
     value = _non_empty_string(decision_v2.get("policyVersion"))
@@ -212,6 +226,7 @@ def build_local_review_request_claim(
     request_row: dict[str, object],
     oauth: GuardReviewOAuthMetadata,
     store,
+    substring_risk_rule: bool = False,
 ) -> dict[str, object]:
     local_request_id = _non_empty_string(request_row.get("request_id"))
     approval_id = _non_empty_string(request_row.get("request_id"))
@@ -256,13 +271,36 @@ def build_local_review_request_claim(
         "projectIdentity": _project_identity(request_row, store),
         "queueGroupId": _non_empty_string(request_row.get("queue_group_id")),
         "recommendedScope": recommended_scope,
-        "riskCategory": _risk_category(request_row),
+        "riskCategory": (_substring_risk_category if substring_risk_rule else _risk_category)(request_row),
         "runtimeId": oauth.runtime_id,
         "workspaceId": oauth.workspace_id,
         **review_policy_attribution(store, request_row),
     }
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
     return attach_exact_review_capability(claim, oauth, store)
+
+
+def local_review_request_claims(
+    *,
+    request_row: dict[str, object],
+    oauth: GuardReviewOAuthMetadata,
+    store,
+) -> list[dict[str, object]]:
+    """Every claim a reply for this row may answer: the current one first.
+
+    A request uploaded before the word rule carries the substring rule's level
+    in its claim hash, so a reply signed after an update must still verify
+    against that claim. Every other field binds exactly as before.
+    """
+
+    claims = [build_local_review_request_claim(request_row=request_row, oauth=oauth, store=store)]
+    if _substring_risk_category(request_row) != claims[0]["riskCategory"]:
+        claims.append(
+            build_local_review_request_claim(
+                request_row=request_row, oauth=oauth, store=store, substring_risk_rule=True
+            )
+        )
+    return claims
 
 
 def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> str:
@@ -327,6 +365,22 @@ def validated_remote_approval_envelope(
     return envelope
 
 
+def _claim_answers_envelope(
+    expected_claim: dict[str, object], envelope: dict[str, object], source_claim_hash: object
+) -> bool:
+    if envelope.get("nativeBindingVersion") == NATIVE_BINDING_VERSION:
+        return native_binding_commitment_matches(expected_claim) and (
+            _non_empty_string(source_claim_hash) == _non_empty_string(expected_claim.get("claimHash"))
+            and _non_empty_string(envelope.get("nativeBindingDigest"))
+            == _non_empty_string(expected_claim.get("nativeBindingDigest"))
+        )
+    if envelope.get("nativeBindingVersion") is None:
+        return envelope.get("nativeBindingDigest") is None and (
+            _non_empty_string(source_claim_hash) == compute_legacy_local_review_request_claim_hash(expected_claim)
+        )
+    return False
+
+
 def validate_remote_approval_request_binding(
     *,
     envelope: dict[str, object],
@@ -365,21 +419,11 @@ def validate_remote_approval_request_binding(
         raise GuardReviewContractError("remote_approval_action_hash_mismatch")
     if _non_empty_string(envelope.get("policyVersion")) != _policy_version(claim_row):
         raise GuardReviewContractError("remote_approval_policy_version_mismatch")
-    expected_claim = build_local_review_request_claim(request_row=claim_row, oauth=oauth, store=store)
     source_claim_hash = envelope.get("sourceClaimHash")
-    if envelope.get("nativeBindingVersion") == NATIVE_BINDING_VERSION:
-        hash_matches = native_binding_commitment_matches(expected_claim) and (
-            _non_empty_string(source_claim_hash) == _non_empty_string(expected_claim.get("claimHash"))
-            and _non_empty_string(envelope.get("nativeBindingDigest"))
-            == _non_empty_string(expected_claim.get("nativeBindingDigest"))
-        )
-    elif envelope.get("nativeBindingVersion") is None:
-        hash_matches = envelope.get("nativeBindingDigest") is None and (
-            _non_empty_string(source_claim_hash) == compute_legacy_local_review_request_claim_hash(expected_claim)
-        )
+    for expected_claim in local_review_request_claims(request_row=claim_row, oauth=oauth, store=store):
+        if _claim_answers_envelope(expected_claim, envelope, source_claim_hash):
+            break
     else:
-        hash_matches = False
-    if not hash_matches:
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
     expected_nonce = _non_empty_string(expected_claim.get("nonce"))
     receipt_id = _non_empty_string(envelope.get("receiptId"))

@@ -15,9 +15,9 @@ from ..approval_scope_support import (
 from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..review_contracts import (
     GuardReviewContractError,
-    build_local_review_request_claim,
     compute_legacy_local_review_request_claim_hash,
     local_review_request_claim_hash_matches,
+    local_review_request_claims,
     remote_approval_uses_workspace_admin_mfa,
     validate_remote_approval_request_binding,
     validated_remote_approval_envelope,
@@ -203,10 +203,18 @@ def _frozen_claim_request(
         if not isinstance(snapshot, dict):
             continue
         try:
-            claim = build_local_review_request_claim(request_row=snapshot, oauth=oauth, store=store)
+            claims = local_review_request_claims(request_row=snapshot, oauth=oauth, store=store)
         except GuardReviewContractError:
             continue
-        if local_review_request_claim_hash_matches(claim, source_claim_hash, allow_legacy=allow_legacy):
+        claim = next(
+            (
+                candidate
+                for candidate in claims
+                if local_review_request_claim_hash_matches(candidate, source_claim_hash, allow_legacy=allow_legacy)
+            ),
+            None,
+        )
+        if claim is not None:
             matching_snapshots.append((snapshot, claim))
     if not matching_snapshots:
         if allow_legacy:
@@ -218,12 +226,24 @@ def _frozen_claim_request(
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
     snapshot, claim = matching_snapshots[0]
     try:
-        live_claim = build_local_review_request_claim(request_row=live_claim_request, oauth=oauth, store=store)
+        live_claims = local_review_request_claims(request_row=live_claim_request, oauth=oauth, store=store)
     except GuardReviewContractError as error:
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch") from error
-    live_hash_matches = local_review_request_claim_hash_matches(
-        live_claim, source_claim_hash, allow_legacy=allow_legacy
+    live_claim = next(
+        (
+            candidate
+            for candidate in live_claims
+            if local_review_request_claim_hash_matches(candidate, source_claim_hash, allow_legacy=allow_legacy)
+        ),
+        None,
     )
+    live_hash_matches = live_claim is not None
+    if live_claim is None:
+        # Compare the live row under the same risk rule as the snapshot claim.
+        live_claim = next(
+            (candidate for candidate in live_claims if candidate.get("riskCategory") == claim.get("riskCategory")),
+            live_claims[0],
+        )
     legacy_projection_matches = compute_legacy_local_review_request_claim_hash(
         live_claim
     ) == compute_legacy_local_review_request_claim_hash(claim)
