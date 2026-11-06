@@ -6254,35 +6254,11 @@ fn package_request_artifact_hash(
         "package_manager_executable".into(),
         digest_or_null("package_manager_executable"),
     );
-    #[cfg(unix)]
+    // `crate::launch_identity` is the Unix module or its stub, and both
+    // re-export the same projection, so every platform binds the approval
+    // through one code path.
     let package_launch_identity_material =
         crate::launch_identity::package_request_launch_identity_material(launch_identity);
-    #[cfg(not(unix))]
-    let package_launch_identity_material = {
-        let mut material = Map::new();
-        if let Some(launch_identity) = launch_identity {
-            let wrapper_resolution = launch_identity
-                .get("wrapper_resolution")
-                .filter(|value| value.is_object())
-                .cloned()
-                .unwrap_or_else(|| {
-                    let mut direct = Map::new();
-                    direct.insert("status".into(), json!("direct"));
-                    Value::Object(direct)
-                });
-            material.insert(
-                "argv_sha256".into(),
-                launch_identity
-                    .get("argv_sha256")
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            );
-            material.insert("wrapper_resolution".into(), wrapper_resolution);
-        } else {
-            material.insert("available".into(), json!(false));
-        }
-        material
-    };
     identity.insert(
         "package_launch_identity".into(),
         Value::Object(package_launch_identity_material),

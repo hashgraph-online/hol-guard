@@ -204,9 +204,18 @@ pub(super) fn executable_material(
     };
     let location = canonical_location(&candidate, input.workspace, input.repository_root);
     let search_path = input.environment.get("PATH").map(String::as_str);
+    // Reporting-only options are dropped before the argv is digested. `-q`
+    // changes nothing about which bytes the manager installs, so an approval
+    // saved for the quiet spelling has to cover the loud one and the other way
+    // round. Only the binding sees the stripped form; the review card still
+    // carries the command exactly as it was typed.
+    let bound_arguments = crate::package_manager_command::strip_manager_presentation_arguments(
+        manager,
+        input.arguments,
+    );
     let identity = ports.launch_identity(
         requested,
-        input.arguments,
+        &bound_arguments,
         search_path,
         input.workspace,
         input.environment,

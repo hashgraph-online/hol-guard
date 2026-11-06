@@ -119,7 +119,8 @@ class ExtensionControlAuthorityCommitMixin:
         through that refusal. Bootstrap commits the snapshot before its vault
         anchor, so a failure in between would leave a snapshot the next read
         calls tampered. Removing the revision-0 row and anchor this call wrote
-        returns the home to unenrolled, and the next attempt starts over.
+        returns the home to unenrolled, and the next attempt starts over. The
+        anchor goes only once the resident has removed the row.
         """
 
         from .catalog_delivery import lifecycle_store
@@ -131,12 +132,15 @@ class ExtensionControlAuthorityCommitMixin:
         try:
             return self._bootstrap_extension_control_authority(catalog_digest, key=None)
         except Exception:
-            with contextlib.suppress(Exception), self._connect() as connection:
-                connection.execute(
-                    "delete from extension_control_authority_snapshot where singleton = 1 and revision = 0"
-                )
+            abandoned = False
             with contextlib.suppress(Exception):
-                self._secret_store().delete_secret(self._anchor_ref())
+                self._extension_control_authority_op("abandon_bootstrap", key=None)
+                abandoned = True
+            # A snapshot the resident could not remove keeps its anchor, so a
+            # bootstrap that did commit both still reads as protected.
+            if abandoned:
+                with contextlib.suppress(Exception):
+                    self._secret_store().delete_secret(self._anchor_ref())
             raise
 
     def commit_extension_control_layers(

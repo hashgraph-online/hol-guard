@@ -31,12 +31,15 @@ mod managed_seals_tests;
 #[cfg(test)]
 mod managed_tests;
 mod migrate;
+mod migration_event;
 mod pack_finish;
 mod pack_reserve;
 mod plans;
 #[cfg(test)]
 mod plans_tests;
+mod policy_clear;
 pub(crate) mod records;
+mod reset;
 mod resume;
 mod seals;
 #[cfg(test)]
@@ -123,9 +126,13 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "commit_prepare" => return commit::commit_prepare_op(request, key),
         "resume" => return resume::resume_op(request, key),
         "queue_change" => return change_event::queue_change_op(request, key),
+        "clear_policy" => return policy_clear::clear_policy_op(request, key),
         "migrate" => return migrate::migrate_op(request, key),
         "bootstrap" => return commit::bootstrap_op(request, key),
         "write_manifest" => return commit::write_manifest_op(request, key),
+        "reset" => return reset::reset_op(request),
+        "abandon_bootstrap" => return reset::abandon_bootstrap_op(request),
+        "record_migration" => return migration_event::record_migration_op(request),
         _ => return Err(INVALID.to_owned()),
     };
     Ok(outcome.unwrap_or_else(|fault| fault_value(&fault, Vec::new())))

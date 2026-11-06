@@ -15833,6 +15833,102 @@
       "expect": "allow"
     },
     {
+      "id": "shell-inline-pipefail-bundle-build",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -euo pipefail -c 'npm run build'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-pipefail-separate-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -o pipefail -c 'git status'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-long-names-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -o errexit -o nounset -c 'ls'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-norc-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash --norc -c 'ls'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-noprofile-norc-pipefail-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash --noprofile --norc -euo pipefail -c 'pytest -q'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-pipefail-publish-stays-approvable",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -euo pipefail -c 'npm publish'"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "shell-inline-fail-fast-three-letters",
       "fix_area": "shell",
       "harnesses": [

@@ -560,6 +560,7 @@ def _build_package_protect_authority(
             direct_executable=True,
             cwd=launch_cwd,
             launch_env=launch_environment,
+            package_manager_binding=True,
         )
         if command and executable is not None and str(command[0]) != executable:
             launch_identity["wrapper_resolution"] = {
