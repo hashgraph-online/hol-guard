@@ -467,7 +467,17 @@ fn routed_with_route<'a>(
         // one spelling they already prove.
         let target: std::borrow::Cow<'a, str> =
             match crate::pretool::directory_targets::home_variable::tilde_spelling(target) {
-                Some(spelling) => std::borrow::Cow::Owned(spelling),
+                Some(spelling) => {
+                    // The expansion is split and globbed where `~` is
+                    // neither, so a home Git would not receive as one word
+                    // turns `-C $HOME/x` into options the tilde never named.
+                    if !crate::pretool::directory_targets::home_variable::home_expands_to_one_word(
+                        context.home_dir,
+                    ) {
+                        return None;
+                    }
+                    std::borrow::Cow::Owned(spelling)
+                }
                 None => std::borrow::Cow::Borrowed(target),
             };
         if saw_change_directory && !std::path::Path::new(target.as_ref()).is_absolute() {

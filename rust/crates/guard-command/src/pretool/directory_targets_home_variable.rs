@@ -97,16 +97,24 @@ fn unquoted_head(rest: &[char]) -> Vec<char> {
         .collect()
 }
 
-/// Whether the shell hands a `$HOME` word to the program as one argument.
+/// Whether the shell hands a `$HOME` word to the program as one argument
+/// naming the directory it spells.
 ///
-/// `~` expands without word splitting; `$HOME` does not. A home path holding
-/// a space, a tab or a newline therefore arrives as several arguments, and a
+/// POSIX exempts the result of a tilde expansion from both field splitting
+/// and pathname expansion. An unquoted `$HOME` has neither exemption, so a
 /// proof taken over the tilde spelling would describe a command the shell
-/// never runs -- `git worktree add $HOME/wt` becomes `add <first word> -b
-/// injected/wt` when home is named `<first word> -b injected`. An unknown
-/// home is refused for the same reason.
+/// never runs. A home path holding a space, a tab or a newline arrives as
+/// several arguments -- `git worktree add $HOME/wt` becomes `add <first
+/// word> -b injected/wt` when home is named `<first word> -b injected`. A
+/// home holding `*`, `?` or `[` is matched against the filesystem instead,
+/// so it can become a different path, or several of them, whenever entries
+/// beside it match. An unknown home is refused for the same reason.
 pub(crate) fn home_expands_to_one_word(home_dir: Option<&str>) -> bool {
-    home_dir.is_some_and(|home| !home.chars().any(char::is_whitespace))
+    home_dir.is_some_and(|home| {
+        !home
+            .chars()
+            .any(|character| character.is_whitespace() || matches!(character, '*' | '?' | '['))
+    })
 }
 
 #[cfg(test)]
@@ -169,6 +177,11 @@ mod tests {
             "/tmp/guard home -b injected"
         )));
         assert!(!home_expands_to_one_word(Some("/tmp/guard\thome")));
+        // An unquoted expansion is also matched against the filesystem, so a
+        // home that is a pattern names whatever happens to be beside it.
+        assert!(!home_expands_to_one_word(Some("/srv/w*")));
+        assert!(!home_expands_to_one_word(Some("/srv/w?rk")));
+        assert!(!home_expands_to_one_word(Some("/srv/[w]ork")));
         assert!(!home_expands_to_one_word(None));
     }
 }
