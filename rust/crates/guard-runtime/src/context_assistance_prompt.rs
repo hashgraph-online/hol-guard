@@ -23,10 +23,14 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+#[path = "context_assistance_prompt_changes.rs"]
+mod changes;
 #[path = "context_assistance_prompt_lookup.rs"]
 mod lookup;
 #[path = "context_assistance_prompt_map.rs"]
 mod map;
+#[path = "context_assistance_prompt_sections.rs"]
+mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
 mod seen;
 
@@ -149,6 +153,24 @@ fn attach(
     let session = session(envelope, &root, harness);
     let earlier = session.as_ref().map(seen::earlier).unwrap_or_default();
     let left = || waiting_time(envelope.deadline_budget_ms).saturating_sub(started.elapsed());
+    // What changed since the session began comes first, for a prompt about
+    // changes; a third of the wait at most, the rest is the search's.
+    let until = Instant::now() + left() / 3;
+    let changed = changes::since_start(
+        store.guard_home(),
+        home,
+        &root,
+        harness,
+        session.as_ref(),
+        prompt,
+        until,
+    )
+    .filter(|_| {
+        service.prompt_context_chosen() && project_context_on(store.guard_home(), &root, harness)
+    });
+    if let Some(changed) = changed {
+        add_context(response, &changed);
+    }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
