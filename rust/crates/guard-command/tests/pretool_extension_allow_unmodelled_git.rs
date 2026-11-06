@@ -220,3 +220,31 @@ fn a_partial_allow_does_not_reach_the_unmodelled_shapes() {
     assert!(reached.is_empty(), "{reached:#?}");
     assert!(measured > 0, "the full Allow reaches no shape to scope");
 }
+
+/// Git shapes an extension-wide Allow must never reach. Each one either runs
+/// a program the user configured rather than Git itself, or is a verb this
+/// release does not model, so no answer about Git's own reads covers it.
+const OUTSIDE_THE_ALLOW: &[&str] = &[
+    "git credential fill",
+    "git filter-branch --force --tree-filter 'rm -f secret.txt' HEAD",
+    "git -c alias.sneak='!printf hi' sneak",
+    "git -c core.pager='printf hi' log --oneline -3",
+];
+
+/// Allowing Git in full answers for Git's own work, not for whatever program
+/// a setting, an alias or an unmodelled verb makes Git start. Coverage runs
+/// through the same per-program contract the uncertainty path uses, so these
+/// keep the answer they had before the Allow.
+#[test]
+fn an_allowed_git_extension_does_not_reach_a_configured_program() {
+    let (root, _cleanup) = checkout("configured");
+    let controls = git_allow(None);
+    let mut reached = Vec::new();
+    for command in OUTSIDE_THE_ALLOW {
+        let result = decide(&root, "omp", command, &controls);
+        if result.decision == "allow" {
+            reached.push(format!("{command}: {}", result.reason_code));
+        }
+    }
+    assert!(reached.is_empty(), "{reached:#?}");
+}

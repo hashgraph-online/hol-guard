@@ -302,8 +302,11 @@ mod tests {
 ///
 /// A Git step that rewrites tracked files can replace the program, the
 /// configuration or the bind-mounted file a later step starts, so coverage
-/// that reads a whole extension as allowed stops at it. A step outside Git is
-/// answered by the caller's own proof rather than here.
+/// that reads a whole extension as allowed stops at it. Only a Git step whose
+/// verb rewrites nothing is answered here; every other program -- `ln`, `cp`,
+/// `mv`, `tee`, `gh pr checkout` -- can replace the same files without Guard
+/// modelling how, so it ends the walk unless the caller already proved that
+/// segment benign.
 pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
-    !git_segment(segment) || preserves_tree(&segment.arguments)
+    git_segment(segment) && preserves_tree(&segment.arguments)
 }
