@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
-import json
 import logging
 import secrets
 import sqlite3
@@ -229,78 +227,19 @@ class StoreExtensionControlAuthorityMixin(
         begin_native_command_control_recovery(cast(GuardStore, self), new_authority_key=recovered_key)
         if key is None:
             self._secret_store().set_secret(self._key_ref(), base64.urlsafe_b64encode(recovered_key).decode())
-        reset_at = _now()
         with self._connect() as connection:
             ensure_extension_control_authority_schema(connection)
-            snapshot = connection.execute(
-                "select * from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
-            transitions = connection.execute(
-                "select * from extension_control_authority_transition order by revision"
-            ).fetchall()
-            proofs = connection.execute(
-                "select * from extension_control_authority_proof order by transition_revision, proof_id_hash"
-            ).fetchall()
-            snapshot_payload = dict(snapshot) if snapshot is not None else None
-            transition_payload = [dict(row) for row in transitions]
-            proof_payload = [dict(row) for row in proofs]
-            previous_snapshot_digest = (
-                str(snapshot_payload["snapshot_digest"]) if snapshot_payload is not None else "missing"
-            )
-            archive_id = hashlib.sha256(f"{reset_at}\0{reason}\0{previous_snapshot_digest}".encode()).hexdigest()
-            provenance = {
-                "reason": reason,
-                "archive_id": archive_id,
-                "previous_revision": int(snapshot_payload["revision"]) if snapshot_payload is not None else None,
-                "previous_catalog_digest": (
-                    str(snapshot_payload["catalog_digest"]) if snapshot_payload is not None else None
-                ),
-                "previous_snapshot_digest": (
-                    str(snapshot_payload["snapshot_digest"]) if snapshot_payload is not None else None
-                ),
-                "previous_layers_bytes": (
-                    len(str(snapshot_payload["layers_json"]).encode("utf-8")) if snapshot_payload is not None else 0
-                ),
-                "previous_transition_count": len(transition_payload),
-                "catalog_digest": catalog_digest,
-            }
-            connection.execute(
-                """
-                insert into extension_control_authority_recovery_archive (
-                    archive_id, reason, archived_at, previous_revision, previous_catalog_digest,
-                    snapshot_row_json, transition_rows_json, proof_rows_json
-                ) values (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    archive_id,
-                    reason,
-                    reset_at,
-                    provenance["previous_revision"],
-                    provenance["previous_catalog_digest"],
-                    json.dumps(snapshot_payload, sort_keys=True, separators=(",", ":")),
-                    json.dumps(transition_payload, sort_keys=True, separators=(",", ":")),
-                    json.dumps(proof_payload, sort_keys=True, separators=(",", ":")),
-                ),
-            )
-            connection.execute(
-                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-                (
-                    "extension_control_authority_reset",
-                    json.dumps(provenance, sort_keys=True, separators=(",", ":")),
-                    reset_at,
-                ),
-            )
-            connection.execute("delete from extension_control_authority_proof")
-            connection.execute("delete from extension_control_authority_transition")
-            connection.execute("delete from extension_control_authority_snapshot")
-            from .catalog_delivery.activation_journal import abandon_all
-
-            abandon_all(connection, archive_id=archive_id)
-            if key is None:
-                # These rows authenticate with the lost key. They cannot be
-                # reused under the explicit new-key recovery epoch. Managed
-                # activation remains independently authenticated and fail-closed.
-                connection.execute("delete from extension_control_catalog_manifest")
+        # The resident archives every row whose chain cannot be verified and
+        # empties the authority in one transaction. The catalog manifests the
+        # lost key authenticated cannot be reused under the new one; managed
+        # activation remains independently authenticated and fail-closed.
+        self._extension_control_authority_op(
+            "reset",
+            key=recovered_key,
+            catalog_digest=catalog_digest,
+            now=_now(),
+            reset={"reason": reason, "drop_manifest": key is None},
+        )
         return self._bootstrap_extension_control_authority(catalog_digest, key=recovered_key)
 
     def acknowledge_extension_control_degraded_mode(self) -> ExtensionControlAuthorityView:
