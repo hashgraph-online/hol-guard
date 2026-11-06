@@ -211,7 +211,11 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         sealed = reply.get("anchor_json")
         if not isinstance(sealed, str):
             raise ExtensionControlAuthorityError("invalid extension control anchor seal")
-        self._mirror_resident_anchor(sealed)
+        # The row is committed; an unrecorded anchor is finished on the next read.
+        try:
+            self._mirror_resident_anchor(sealed)
+        except Exception as exc:
+            raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
         resumed = self._read_extension_control_authority_locked(str(resumed_head["catalog_digest"]))
         if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
             raise ExtensionControlAuthorityError("idempotent transition recovery failed")
