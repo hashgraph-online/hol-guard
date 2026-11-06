@@ -142,10 +142,11 @@ fn only_a_queue_write_with_facts_is_prepared() {
     assert!(prepare("add_approval_request", &without, &guard_home).is_none());
     let with = args("codex", facts(json!(90), Value::Null));
     assert!(prepare("add_native_review_approval_request", &with, &guard_home).is_some());
+    // A silent block that links its approval holds the bridge's wait too.
     assert!(prepare(
         "add_silent_native_review_approval_request",
         &with,
         &guard_home
     )
-    .is_none());
+    .is_some());
 }

@@ -319,6 +319,19 @@ pub(crate) fn delegate(
         exact_action_allowable: exact,
         connector_is_local: connector.as_ref().is_some_and(Connector::is_local),
     });
+    // A silent block names its approval link, and so holds a Codex bridge's
+    // wait, only when approving the row can let the retry run (the render's
+    // own rule). A wait no bridge holds is never linked.
+    let silent_links = respond.as_ref().is_some_and(|respond| match &respond.ask {
+        RespondAsk::SilentReviewBlock(ask) => {
+            (bound || exact)
+                && (ask.ask || respond.setup_reason.is_none() || respond.connector_is_local)
+        }
+        RespondAsk::PausedReview(_) => false,
+    });
+    if silent && !silent_links {
+        delegated.remove(crate::codex_live_wait_build::FACTS_KEY);
+    }
     let connector_setup = connector.as_ref().map(|connector| {
         json!({
             "name": connector.display_name(),
