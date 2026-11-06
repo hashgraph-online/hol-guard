@@ -44,6 +44,11 @@ GIT_ALLOW_MIXED_WORKTREE_CASE = "git-allow-worktree-then-secret-read"
 GIT_ALLOW_UNMODELLED_CASE = "git-allow-unmodelled-reads-against-origin"
 # Git's own plumbing names for work the porcelain above already settles.
 GIT_ALLOW_PLUMBING_CASE = "git-allow-plumbing-reads-under-allow"
+# The read-only chain a developer runs to see where a checkout stands. It
+# writes nothing, and every verb in it is a read the git extension models, so
+# a full git Allow has to carry it whatever the configuration probe managed to
+# answer for the reads along the way.
+GIT_ALLOW_READ_CHAIN_CASE = "git-allow-read-chain-status-log-remote"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
@@ -55,6 +60,7 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_MIXED_WORKTREE_CASE,
         GIT_ALLOW_UNMODELLED_CASE,
         GIT_ALLOW_PLUMBING_CASE,
+        GIT_ALLOW_READ_CHAIN_CASE,
     }
 )
 GIT_EXTENSION_ID = "command.git"
@@ -193,6 +199,11 @@ def git_allow_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     if scenario_id == GIT_ALLOW_MIXED_WORKTREE_CASE:
         # The whole compound is denied, so the allowed checkout never ran either.
         return {"git-allow-mixed-worktree-absent": not (workspace.parent / MIXED_WORKTREE).exists()}
+    if scenario_id == GIT_ALLOW_READ_CHAIN_CASE:
+        # Every step reads, so the checkout is still where the fixture left
+        # it: one commit behind the origin this lane builds.
+        heads = _heads(workspace)
+        return {"git-allow-read-chain-left-checkout-alone": heads is not None and heads[0] != heads[1]}
     heads = _heads(workspace)
     checks = {"git-allow-head-advanced": heads is not None and heads[0] == heads[1]}
     if scenario_id == GIT_ALLOW_STASH_CASE:
