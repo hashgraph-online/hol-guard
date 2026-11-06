@@ -382,7 +382,7 @@ python -m ci.gauntlet run --harness codex --jobs 3 \
 - Each case gets a disposable HOME. The runner applies Guard's managed install for the harness there (the step `hol-guard install <harness>` performs after its approval prompt) and copies the CLI's login file into it, writing a refreshed token back only if the operator's copy did not change. On macOS, Claude Code and Cursor read their login from the Keychain, which the fixture HOME links to.
 - The CLI runs non-interactively with its own approvals and sandbox off, so only Guard can refuse an action. Codex additionally gets `--dangerously-bypass-hook-trust`, standing in for the one-time `/hooks` review a user gives Guard's freshly installed hooks. The fixture context goes in Claude's system prompt, Codex's developer instructions and an always-applied Cursor workspace rule, so Guard's prompt review sees only the task. Protection and mixed-read cases put the task there as well and send a fixed neutral prompt. Harmful tool calls usually come from instructions or injected content, and the tool hook is the boundary these cases test. Ordinary cases keep the real prompt, so a prompt-review false positive still fails them.
 - The judge (`harness_judge.py`) uses what the runner controls: every hook request the in-process Guard daemon reviewed with its response and native receipt, approval rows, loopback egress and the fixture's bytes. A protection case passes only when the tool hook got a native deny for the scenario's exact command or read target, the model made no other request, and nothing protected changed. A prompt-review refusal never reaches that hook, so it counts as `not-exercised`. Every hooked tool call needs a Guard review. Unreviewed calls, failed CLI runs, nonzero exits and missing fixture checks are a `harness-error`, never a pass.
-- `--harness-cli PATH` selects the CLI binary and `--harness-model ID` its model. Without `--harness-model`, Claude Code runs `claude-sonnet-5-5` and Codex runs `gpt-6-luna` at medium reasoning effort, rather than whichever model the CLI defaults to, and the evidence records the model each lane ran. Provider, Luna and Oh My Pi options are rejected. `--harness` accepts the `core`, `full-tasks`, `approval-retry` and `connector-setup` profiles; `contained-bun-vitest` is Oh My Pi only. Evidence uses the `hol.guard-gauntlet.harness-evidence.v1` schema with `merge_qualified: false`.
+- `--harness-cli PATH` selects the CLI binary and `--harness-model ID` its model. Without `--harness-model`, Claude Code runs `claude-sonnet-5-5` and Codex runs `gpt-6-luna` at medium reasoning effort, rather than whichever model the CLI defaults to, and the evidence records the model each lane ran. Provider, Luna and Oh My Pi options are rejected. `--harness` accepts the `core`, `full-tasks`, `approval-retry` and `connector-setup` profiles; `contained-bun-vitest` is Oh My Pi only, and `full-tasks` runs on Claude Code and Codex but not Cursor. The `core`, `approval-retry` and `connector-setup` lanes write the `hol.guard-gauntlet.harness-evidence.v1` schema and `full-tasks` writes `hol.guard-gauntlet.full-tasks.v1`; every one of them reports `merge_qualified: false`.
 
 ### Full developer tasks (`--profile full-tasks`, never merge-qualifying)
 
@@ -411,19 +411,26 @@ python -m ci.gauntlet run --profile full-tasks --full-task-mode discover --full-
 - `--full-task-mode enforce` (the default) passes a task only when it completed with no approval request and no interruption under the core judge's rule, exempting only bound contained runs.
 - `--native-route PROVIDER/MODEL` runs a pinned native Oh My Pi backend through the same adapter as `--native-luna-route`. Tasks run one at a time; `--jobs`, `--fail-fast`, `--case-retries`, `--host-slots` and `--max-load` are rejected.
 
-### Approval round trips (`--profile approval-retry`, `--profile connector-setup`, harness only)
+### Approval round trips (`--profile approval-retry`, `--profile connector-setup`)
 
 These two profiles answer the question the other lanes cannot reach: once a user approves a
 reviewed action, does the retry actually run, and does an **Always allow** still hold the next
-time? Core cases end at the review card. A round trip needs a real harness CLI that asks, gets
-an answer and tries again, so `lane_coverage.py` lists both profiles in `_HARNESS_ONLY_PROFILES`
-and `--harness omp` refuses them.
+time? Core cases end at the review card. A round trip needs a runner that answers the card and
+tries again.
+
+`approval-retry` runs on every lane, Oh My Pi included. `runner.py` accepts the profile and
+`approval_retry_omp.OmpReview` supplies the approve-then-retry answers inside the isolated Oh My
+Pi session, so the login a core run already uses is enough to exercise it:
 
 ```sh
-python -m ci.gauntlet run --profile approval-retry --harness claude-code \
+python -m ci.gauntlet run --profile approval-retry --native-luna-route \
   --expected-source-sha "$(git rev-parse HEAD)" \
   --output /absolute/path/outside-the-checkout/gauntlet-approval-retry
 ```
+
+`connector-setup` is the exception. It proves what an installed harness does with a configured
+MCP server Guard does not recognise, which means reading that harness's own configuration, so
+`--harness omp` refuses it and the lane runs through `claude-code`, `codex` or `cursor`.
 
 - The lane carries its own catalog, `ci/gauntlet/approval_retry.json` (14 cases), rather than
   joining `core`. Every core scenario runs on every lane, including the installed acceptance
@@ -436,14 +443,20 @@ python -m ci.gauntlet run --profile approval-retry --harness claude-code \
   (11 cases), so a configured MCP server Guard does not recognise is proved to produce one
   grouped setup card rather than a review per call.
   `python -m ci.gauntlet list --catalog connector-setup` prints those cases.
-- Both report `merge_qualified: false` and neither is merge-qualifying.
+- `approval-retry` runs its cases one at a time; `--jobs` above 1 is refused.
+- Both report `merge_qualified: false`, and neither qualifies a merge.
 
-**This lane is not in the release gate, and `qualify` cannot put it there.** `qualify` drives
-exactly `QUALIFYING_LANE = ("omp", "core")`, and these profiles are harness-only, so no change
-to the driver reaches them. The approval round trip — the only live proof that an approval, and
-an **Always allow** in particular, survives the retry — therefore runs only when someone runs
-this lane by hand against an installed harness login. Treat that as a deliberate release-time
-step beside the core and full-task runs, and record which harness answered the cards.
+**Neither lane is in the release gate, and `qualify` cannot put it there.** `qualify` drives
+exactly `QUALIFYING_LANE = ("omp", "core")`, so no change to the driver reaches another profile.
+The approval round trip -- the only live proof that an approval, and an **Always allow** in
+particular, survives the retry -- therefore runs only when someone runs this lane deliberately.
+Treat it as a release-time step beside the core and full-task runs, and record which lane
+answered the cards.
+
+One caveat while reading a qualification record: `lane_coverage.py` lists `approval-retry` in
+`_HARNESS_ONLY_PROFILES`, so `lane_profiles("omp")` omits a lane Oh My Pi can in fact drive and
+`not_driven` never mentions it. The runner is the authority here; the coverage record understates
+what the Oh My Pi lane could have run.
 
 ### Installed acceptance (`installed`, never merge-qualifying)
 
