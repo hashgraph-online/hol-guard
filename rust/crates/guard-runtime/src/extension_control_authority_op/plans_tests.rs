@@ -132,6 +132,7 @@ fn ordinary_control_writes_retain_the_bound_pack_without_a_new_activation() {
         &[local(&catalog('a'))],
         "committed",
         Some(&retained),
+        false,
     );
     for replacement in [None, Some("b".repeat(64))] {
         let mut write = commit(2, 1);

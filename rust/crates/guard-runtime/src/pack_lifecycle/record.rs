@@ -52,6 +52,7 @@ impl From<Fault> for Refusal {
     fn from(fault: Fault) -> Self {
         match fault {
             Fault::Tampered(reason) | Fault::Degraded(reason) => Self::Tampered(reason),
+            Fault::Pack(reason) => Self::Invalid(reason),
         }
     }
 }

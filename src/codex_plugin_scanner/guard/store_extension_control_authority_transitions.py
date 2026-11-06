@@ -8,8 +8,9 @@ abandoned; this module performs the writes it cannot, under the caller's lease.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.extension_control_authority import (
@@ -22,10 +23,12 @@ from .runtime.extension_control_authority import (
 from .store_extension_control_authority_support import (
     _ExtensionControlAuthoritySupportMixin,
     _now,
-    _plan_pack_digest,
     _row_int,
     _row_str,
 )
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 _RESUMED_OUTCOMES = frozenset({"commit_pending", "mark_committed", "finish"})
 
@@ -137,26 +140,66 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         # The resident takes the verdict again inside the transaction that
         # applies it, then seals the committed anchor into the vault, refreshes
         # the last-good export and queues the change event.
-        reply = self._extension_control_authority_op(
-            "resume",
-            key=key,
-            anchor_json=self._read_anchor_json(),
-            revision=revision,
-            now=_now(),
-            event_queue_limit=self._guard_event_queue_limit,
-        )
-        if reply.get("pack_bound") is True:
-            # Committing this row activates a command pack, which is still
-            # finished here.
-            return self._finish_resumed_transition(
-                connection,
-                "commit_pending",
-                revision,
-                current=None,
-                key=key,
-                pack_record_digest=_plan_pack_digest(reply),
-            )
+        reply = self._resume_extension_control_op(revision, key=key, now=_now())
         return self._adopt_resumed_transition(reply, revision)
+
+    def _resume_extension_control_op(
+        self, revision: int, *, key: bytes, now: str, **fields: object
+    ) -> dict[str, object]:
+        """Have the resident resume ``revision``, with the pack state it asks for.
+
+        A row whose commit activates a command pack comes back ``pack_bound``.
+        The resident then needs the protected pack state, which only this
+        process reads: the verifier key, the lifecycle floor and the active
+        security record. It names anything still owed with nothing written:
+        the retained evidence a link sealed before lifecycle binding needs, or
+        a floor that has to move first. The floor moves here, before the
+        resident installs the activation it admits.
+        """
+
+        def resume(**pack: object) -> dict[str, object]:
+            return self._extension_control_authority_op(
+                "resume",
+                key=key,
+                anchor_json=self._read_anchor_json(),
+                revision=revision,
+                now=now,
+                event_queue_limit=self._guard_event_queue_limit,
+                **fields,
+                **pack,
+            )
+
+        reply = resume()
+        if reply.get("pack_bound") is not True:
+            return reply
+        from .catalog_delivery import active_security, lifecycle_store
+        from .native_command_control_authority_io import require_exclusive_command_control_mutation_lease
+        from .native_command_control_authority_store import _key
+        from .native_store_policy import encode_key
+
+        require_exclusive_command_control_mutation_lease(self.guard_home)
+        pack_key = encode_key(_key(cast("GuardStore", self)))
+        with contextlib.ExitStack() as transport:
+            evidence: object = None
+            floor_moved = False
+            while True:
+                pack_finish: dict[str, object] = {
+                    "key_b64": pack_key,
+                    "floor": lifecycle_store.read(self),
+                    "security": active_security.read(self),
+                    "legacy_evidence": evidence,
+                }
+                reply = resume(pack_finish={name: value for name, value in pack_finish.items() if value is not None})
+                owed = reply.get("pack_floor_owed")
+                if reply.get("pack_legacy_owed") is True and evidence is None:
+                    evidence = transport.enter_context(lifecycle_store.legacy_transport(self))
+                elif isinstance(owed, dict) and not floor_moved:
+                    lifecycle_store.commit(self, owed.get("before"), owed.get("after"))
+                    floor_moved = True
+                elif reply.get("pack_legacy_owed") is True or isinstance(owed, dict):
+                    raise ExtensionControlAuthorityError("extension control authority concurrent update")
+                else:
+                    return reply
 
     def _adopt_resumed_transition(
         self, reply: dict[str, object], revision: int

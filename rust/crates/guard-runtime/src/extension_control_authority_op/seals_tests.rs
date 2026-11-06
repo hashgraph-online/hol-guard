@@ -139,6 +139,7 @@ fn ordinary_catalog_rebinding_retains_the_committed_pack_without_reserving_one()
         &[local(&catalog('b'))],
         "committed",
         Some(&pack),
+        false,
     );
     let result = run(&ExtensionControlAuthorityRequestV1 {
         catalog_migration: Some(migration(&catalog('b'))),

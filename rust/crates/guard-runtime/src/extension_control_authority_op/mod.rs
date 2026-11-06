@@ -29,6 +29,7 @@ mod managed_seals_tests;
 #[cfg(test)]
 mod managed_tests;
 mod migrate;
+mod pack_finish;
 mod plans;
 #[cfg(test)]
 mod plans_tests;
@@ -131,6 +132,7 @@ fn fault_value(fault: &Fault, events: Vec<Value>) -> Value {
     let (kind, reason) = match fault {
         Fault::Tampered(reason) => ("tampered", reason),
         Fault::Degraded(reason) => ("degraded", reason),
+        Fault::Pack(reason) => ("pack", reason),
     };
     json!({ "fault": kind, "reason": reason, "events": events })
 }

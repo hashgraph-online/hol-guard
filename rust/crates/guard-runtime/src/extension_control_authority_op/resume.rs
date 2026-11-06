@@ -1,6 +1,6 @@
 //! `resume`: the resident finishes a prepared transition itself.
 //!
-//! This is `_apply_resumed_transition` for a row that binds no command pack.
+//! This is `_apply_resumed_transition`.
 //! The verdict `resume_plan` answers with is taken again inside the immediate
 //! transaction that applies it, so nothing changes between the two. Once the
 //! rows commit, the committed anchor is sealed into the credential vault and
@@ -10,7 +10,10 @@
 //! proof it reserved so the proof is consumed in that transaction.
 //!
 //! A row whose commit would activate a command pack comes back `pack_bound`
-//! with nothing written: the pack activation journal stays with the caller.
+//! with nothing written unless the caller sent the protected pack state
+//! (`pack_finish`). With it, the pending activation is installed in the same
+//! transaction as the row; a lifecycle floor that has not moved yet, or legacy
+//! evidence the link needs, comes back owed with nothing written.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -22,6 +25,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::layers::{layers_from_json, validate_serialized_layers};
+use super::pack_finish::PackStep;
 use super::plans::Resume;
 use super::records::{
     canonical, degraded, query_row, row_int, row_str, row_value, store_fault, tampered, Anchor,
@@ -49,6 +53,8 @@ enum Applied {
     Abandoned,
     /// Committing the row activates a command pack; nothing was written.
     PackBound(Value),
+    /// The pack activation needs the caller first; nothing was written.
+    PackOwed(Value),
     /// The row and snapshot are committed; the anchor and event are owed.
     Committed(Row),
 }
@@ -125,6 +131,11 @@ impl Ctx<'_> {
                     "command_pack_record_digest": pack,
                 }));
             }
+            Applied::PackOwed(mut owed) => {
+                owed["resumed"] = Value::Null;
+                owed["outcome"] = json!("commit_pending");
+                return Ok(owed);
+            }
             Applied::Committed(row) => row,
         };
         let anchor = Anchor {
@@ -189,7 +200,20 @@ impl Ctx<'_> {
                     )?
                     .is_some();
                 if !pack.is_null() || reserved {
-                    return Ok(Applied::PackBound(pack));
+                    if self.request.pack_finish.is_none() {
+                        return Ok(Applied::PackBound(pack));
+                    }
+                    match self.finish_pack(&row, &pack)? {
+                        PackStep::Finished => {}
+                        PackStep::FloorOwed { before, after } => {
+                            return Ok(Applied::PackOwed(json!({
+                                "pack_floor_owed": { "before": before, "after": after },
+                            })));
+                        }
+                        PackStep::LegacyOwed => {
+                            return Ok(Applied::PackOwed(json!({ "pack_legacy_owed": true })));
+                        }
+                    }
                 }
                 validate_serialized_layers(&row_str(&row, "layers_json")?)?;
                 let updated = self

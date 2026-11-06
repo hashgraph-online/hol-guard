@@ -148,7 +148,23 @@ def raise_fault(payload: Mapping[str, object]) -> None:
     message = reason if isinstance(reason, str) and reason else "extension control authority fault"
     if fault == "tampered":
         raise ExtensionControlAuthorityError(message)
+    if fault == "pack":
+        _raise_pack_fault(message)
     raise RuntimeError(message)
+
+
+def _raise_pack_fault(reason: str) -> None:
+    """Raise what the command-pack activation journal raised for ``reason``."""
+
+    from .catalog_delivery.activation_journal import UnverifiablePackTransitionError
+    from .native_policy_snapshot_constants import NativePolicySnapshotError
+
+    if reason in {"native_command_pack_transition_missing", "native_command_pack_transition_mismatch"}:
+        raise UnverifiablePackTransitionError(reason)
+    if reason.startswith("native_command_pack_"):
+        raise NativePolicySnapshotError(reason)
+    # The lifecycle floor and active-security checks refuse by name.
+    raise ValueError(reason)
 
 
 def manifest_sha256(manifest: Mapping[str, str]) -> str:

@@ -398,91 +398,13 @@ class ExtensionControlAuthorityCommitMixin:
                         own_transition_digest=transition_digest,
                     )
                 raise
-            if pack_activation is None:
-                # The resident commits the row and its proof, seals the committed
-                # anchor and queues the event; a pack-bound row is finished below.
-                reply = self._extension_control_authority_op(
-                    "resume",
-                    key=key,
-                    anchor_json=self._read_anchor_json(),
-                    revision=revision,
-                    now=created_at,
-                    event_queue_limit=self._guard_event_queue_limit,
-                    proof_hash=proof_hash,
-                )
-                if reply.get("pack_bound") is not True:
-                    committed = self._adopt_resumed_transition(reply, revision)
-                    if committed is None:
-                        raise ExtensionControlAuthorityError("extension control authority concurrent update")
-                    return committed
-            with self._connect() as connection:
-                from .catalog_delivery.activation_journal import finish
-
-                pending = connection.execute(
-                    "select * from extension_control_authority_transition where revision=?", (revision,)
-                ).fetchone()
-                finish(
-                    self,
-                    connection,
-                    pending,
-                    expected_pack=pack_activation.digest if pack_activation is not None else None,
-                )
-                connection.execute(
-                    "update extension_control_authority_transition set phase = ? where revision = ?",
-                    (AuthorityPhase.ANCHORED.value, revision),
-                )
-                connection.execute(
-                    """
-                    update extension_control_authority_snapshot
-                    set revision = ?, catalog_digest = ?, layers_json = ?, previous_digest = ?,
-                        snapshot_json = ?, snapshot_digest = ?, snapshot_mac = ?, committed_at = ?
-                    where singleton = 1 and revision = ? and snapshot_digest = ?
-                    """,
-                    (
-                        revision,
-                        catalog_digest,
-                        layers_json,
-                        previous_digest,
-                        snapshot_json,
-                        snapshot_digest,
-                        snapshot_mac,
-                        created_at,
-                        previous_revision,
-                        previous_digest,
-                    ),
-                )
-                if connection.execute("select changes()").fetchone()[0] != 1:
-                    raise ExtensionControlAuthorityError("extension control authority concurrent update")
-                connection.execute(
-                    """
-                    update extension_control_authority_proof
-                    set consumed_at = ?
-                    where proof_id_hash = ? and transition_revision = ? and consumed_at is null
-                    """,
-                    (created_at, proof_hash, revision),
-                )
-                if connection.execute("select changes()").fetchone()[0] != 1:
-                    raise ExtensionControlAuthorityError("extension control authority proof state conflict")
-                connection.execute(
-                    "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-                    (AuthorityPhase.COMMITTED.value, created_at, revision),
-                )
-            try:
-                self._write_and_verify_anchor(
-                    AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.COMMITTED),
-                    key=key,
-                )
-            except Exception as exc:
-                raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
-            with self._connect() as connection:
-                self._queue_extension_control_change_event(
-                    connection,
-                    revision=revision,
-                    previous_revision=previous_revision,
-                    layers_json=layers_json,
-                    occurred_at=created_at,
-                )
-            return self._read_extension_control_authority_locked(catalog_digest)
+            # The resident commits the row and its proof, installs the command
+            # pack it reserved, seals the committed anchor and queues the event.
+            reply = self._resume_extension_control_op(revision, key=key, now=created_at, proof_hash=proof_hash)
+            committed = self._adopt_resumed_transition(reply, revision)
+            if committed is None:
+                raise ExtensionControlAuthorityError("extension control authority concurrent update")
+            return committed
 
     def _bootstrap_extension_control_authority(
         self, catalog_digest: str, *, key: bytes | None

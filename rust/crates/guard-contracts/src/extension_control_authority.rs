@@ -166,6 +166,10 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// instead of recording its first one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manifest_replace: Option<bool>,
+    /// `resume` of a row whose commit activates a command pack: what the
+    /// caller read from the protected store for the resident to check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_finish: Option<ExtensionControlPackFinishV1>,
     /// `seal_managed_activation`: the verified policy to activate on the
     /// authority committed under `catalog_digest`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -220,6 +224,35 @@ pub struct ExtensionControlMigrationRecordV1 {
     pub downgraded_from: Option<String>,
     #[serde(default)]
     pub retired_target_ids: Vec<String>,
+}
+
+/// The protected state a command-pack activation is checked against. The
+/// caller reads it from the policy-integrity store and writes the lifecycle
+/// floor the resident names; the resident authenticates and decides.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPackFinishV1 {
+    /// The command-pack verifier key, base64url without padding.
+    pub key_b64: String,
+    /// The protected lifecycle floor record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor: Option<String>,
+    /// The active pack security record, when one is stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security: Option<String>,
+    /// The retained evidence a link sealed before lifecycle binding needs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_evidence: Option<Value>,
+}
+
+impl std::fmt::Debug for ExtensionControlPackFinishV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ExtensionControlPackFinishV1")
+            .field("security", &self.security.is_some())
+            .field("legacy_evidence", &self.legacy_evidence.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 /// One requested extension-control commit. The identities are sent as the
