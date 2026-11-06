@@ -421,6 +421,10 @@ pub(super) fn inspection_writes_nothing(
 }
 
 #[cfg(test)]
+#[path = "git_reads_config_pattern_tests.rs"]
+mod config_pattern_tests;
+
+#[cfg(test)]
 mod tests {
     use super::names_refused_option;
 
