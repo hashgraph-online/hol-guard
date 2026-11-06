@@ -155,6 +155,20 @@ const UNMODELLED: &[&str] = &[
     "git ls-remote --heads origin && git archive --format=tar -o snapshot.tar HEAD",
     "git format-patch -o patches HEAD~1",
     "git status --short --branch && git log --oneline -5 && git remote -v",
+    // Plumbing. Git's own name for work the porcelain above already settles,
+    // and the verb a user reaches for the moment the porcelain stops short.
+    "git whatchanged -2",
+    "git ls-tree -r --name-only HEAD",
+    "git diff-tree -r --name-only HEAD",
+    "git cherry -v main",
+    "git check-ignore -v build",
+    "git fsck --no-progress",
+    "git version",
+    "git ls-tree -r --name-only HEAD && git log --oneline -3",
+    // A plumbing read the Allow did not reach held the write after it,
+    // so the pair asked while the same pair spelled `ls-remote` did not.
+    "git ls-tree -r --name-only HEAD && git archive --format=tar -o tree.tar HEAD",
+    "git whatchanged -2 --format=%H && git archive --format=tar -o changes.tar HEAD",
 ];
 
 const HARNESSES: &[&str] = &["omp", "zcode", "codex", "claude-code"];
@@ -242,6 +256,30 @@ const OUTSIDE_THE_ALLOW: &[&str] = &[
     // the next step would run and at a path outside the workspace.
     "git archive --format=tar -o .git/hooks/pre-commit HEAD && git status",
     "git archive --format=tar -o ../snapshot.tar HEAD && git status",
+    // Serves whatever a peer sends down the connection.
+    "git upload-pack .",
+    "git remote-ext . 'printf hi'",
+    // Collects the configuration and environment into a report.
+    "git bugreport",
+    // Runs a further Git command this contract never read.
+    "git for-each-repo --config=maintenance.repo gc",
+    "git submodule--helper list",
+    // Runs the program named on its own command line, once per unmerged path.
+    "git merge-index sh -a",
+    "git merge-index ./merge-driver -a",
+    // Writes where no floor here reads the destination.
+    "git checkout-index --prefix=../outside/ --all",
+    "git checkout-index --prefix=.git/hooks/ --all",
+    "git bundle create ../snapshot.bundle --all",
+    "git pack-objects ../outside/pack",
+    "git mailsplit -o../outside",
+    "git fast-export --export-marks=../outside/marks --all",
+    "git fast-export --export-marks=.git/hooks/pre-commit --all",
+    "git read-tree --index-output=../outside/index HEAD",
+    "git commit-graph write --object-dir=../outside",
+    "git multi-pack-index --object-dir=/tmp/outside write",
+    // The `init` template and destination floors never see this spelling.
+    "git init-db --template=templates fresh",
 ];
 
 /// Allowing Git in full answers for Git's own work, not for whatever program
