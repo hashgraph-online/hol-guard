@@ -303,8 +303,20 @@ fn scratch_checkout_package_state_directories_list() {
 fn package_state_listings_keep_their_screens() {
     let fixture = fixture("module-state-reviewed");
     let installed = fixture.scratch.join("installed");
+    // Each negative names a directory that exists, so the listing is refused
+    // on the rule rather than because the path is absent.
+    for relative in [
+        "node_modules/.husky",
+        "node_modules/.secrets",
+        "node_modules/.pnpm/pkg",
+        ".pnpm",
+        ".cache",
+    ] {
+        std::fs::create_dir_all(installed.join(relative)).unwrap();
+    }
     let installed = installed.display();
     let home = fixture.home.display();
+    let mut allowed = Vec::new();
     for command in [
         // A dot directory `node_modules` does not own.
         format!("ls {installed}/node_modules/.husky"),
@@ -317,8 +329,11 @@ fn package_state_listings_keep_their_screens() {
         // A protected root keeps its screen.
         format!("ls {home}/.ssh/node_modules/.pnpm"),
     ] {
-        assert!(!permitted(&fixture, &command), "{command}");
+        if permitted(&fixture, &command) {
+            allowed.push(command);
+        }
     }
+    assert!(allowed.is_empty(), "{allowed:?}");
 }
 
 #[test]
