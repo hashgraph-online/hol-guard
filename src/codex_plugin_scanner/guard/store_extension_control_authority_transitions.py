@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.extension_control_authority import (
@@ -23,6 +23,9 @@ from .store_extension_control_authority_support import (
     _ExtensionControlAuthoritySupportMixin,
     _now,
 )
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 
 def _plan(reply: dict[str, object]) -> dict[str, object]:
@@ -89,7 +92,7 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         from .native_store_policy import encode_key
 
         require_exclusive_command_control_mutation_lease(self.guard_home)
-        pack_key = encode_key(_key(self))
+        pack_key = encode_key(_key(cast("GuardStore", self)))
         with contextlib.ExitStack() as transport:
             evidence: object = None
             floor_moved = False

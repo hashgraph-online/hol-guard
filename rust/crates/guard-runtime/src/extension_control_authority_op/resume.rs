@@ -170,9 +170,15 @@ impl Ctx<'_> {
         self.write_anchor(&sealed)?;
         // Best effort, as in `_export_last_good_authority`.
         let _ = self.export_last_good(&anchor);
-        if self.request.migration_record.is_none() {
-            immediate(self.connection, || self.queue_change_event(&row))?;
-        }
+        // A retry's proof is spent only once its committed anchor is written,
+        // so a retry that fails before then can be sent again.
+        immediate(self.connection, || {
+            self.settle_retry_proof(revision)?;
+            if self.request.migration_record.is_none() {
+                self.queue_change_event(&row)?;
+            }
+            Ok(())
+        })?;
         Ok(json!({
             "resumed": {
                 "revision": revision,
@@ -226,6 +232,7 @@ impl Ctx<'_> {
                 return Ok(Applied::Abandoned);
             }
             Resume::CommitPending => {
+                self.check_retry_proof_owner(revision)?;
                 let reserved = journal
                     && query_row(
                         self.connection,
@@ -290,8 +297,28 @@ impl Ctx<'_> {
                 return Ok(Applied::Current(row));
             }
         }
-        self.settle_retry_proof(revision)?;
         Ok(Applied::Committed(row))
+    }
+
+    /// Refuses a retry whose proof is already reserved for another row before
+    /// anything commits, so the refusal leaves the snapshot where it was. The
+    /// proof is still only spent after the anchor is written.
+    fn check_retry_proof_owner(&self, revision: i64) -> Res<()> {
+        let Some(retry) = &self.request.retry_proof else {
+            return Ok(());
+        };
+        let owner = query_row(
+            self.connection,
+            "select transition_revision from extension_control_authority_proof
+             where proof_id_hash = ?",
+            params![retry.proof_hash],
+        )?;
+        if let Some(owner) = owner {
+            if row_int(&owner, "transition_revision")? != revision {
+                return Err(tampered("extension control authority proof state conflict"));
+            }
+        }
+        Ok(())
     }
 
     /// Records a retry's proof as consumed by the row at `revision`: inserted
