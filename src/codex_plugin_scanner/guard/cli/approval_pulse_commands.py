@@ -24,6 +24,7 @@ from ..approval_gate import (
     recover_pulse,
     require_high_risk,
 )
+from ..approval_gate_types import PULSE_DISABLE_BINDING
 from .approval_gate_prompt import print_pulse_status, prompt_for_approval_gate
 
 PULSE_DOCS_URL = "https://docs.yanez.ai/pulse/"
@@ -125,7 +126,13 @@ def _enroll(args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
 
 def _disable(guard_home: Path) -> dict[str, object]:
     gate_input = prompt_for_approval_gate(guard_home, use_cooldown=False, strict=True)
-    grant = require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
+    grant = require_high_risk(
+        guard_home,
+        purpose="settings_write",
+        approval_gate_input=gate_input,
+        action=PULSE_DISABLE_BINDING.action,
+        subject=PULSE_DISABLE_BINDING.subject,
+    )
     return {"approval_gate": disable_pulse(guard_home, approval_gate_grant=grant).to_dict()}
 
 

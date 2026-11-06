@@ -25,6 +25,7 @@ from ..approval_gate import (
 )
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
 from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_gate_types import PULSE_DISABLE_BINDING
 from ..config import editable_guard_settings, load_guard_config
 from .server_common import _settings_response_payload
 
@@ -105,7 +106,13 @@ class _ControlPulseRoutes:
                 # Same path as every other strict settings write: with no Pulse
                 # request id yet, this answers 202 with one to approve and poll.
                 gate_input = approval_gate_input_from_mapping({**payload, "approval_gate_pulse": True})
-                grant = require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
+                grant = require_high_risk(
+                    guard_home,
+                    purpose="settings_write",
+                    approval_gate_input=gate_input,
+                    action=PULSE_DISABLE_BINDING.action,
+                    subject=PULSE_DISABLE_BINDING.subject,
+                )
                 self._write_json(
                     self._pulse_settings_response(disable_pulse(guard_home, approval_gate_grant=grant).to_dict())
                 )

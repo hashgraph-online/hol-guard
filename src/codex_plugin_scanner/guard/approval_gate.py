@@ -339,9 +339,19 @@ def require_settings_write(
     guard_home: Path,
     *,
     approval_gate_grant: ApprovalGateGrant | None = None,
+    action: str | None = None,
+    subject: str | None = None,
     now: str | None = None,
 ) -> None:
-    _native_or_unconfigured("require_settings_write", guard_home, approval_gate_grant=approval_gate_grant, now=now)
+    """With ``action`` and ``subject``, the grant must name exactly that change."""
+    params = {key: value for key, value in (("action", action), ("subject", subject)) if value is not None}
+    _native_or_unconfigured(
+        "require_settings_write",
+        guard_home,
+        params=params or None,
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
 
 
 def require_high_risk(

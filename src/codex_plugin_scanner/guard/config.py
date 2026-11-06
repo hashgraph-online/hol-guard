@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TypeGuard, cast, get_args
 
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
+from .approval_gate_types import SETTINGS_RESET_BINDING, update_channel_binding
 from .approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS  # noqa: F401 - re-exported
 from .config_constants import (
     VALID_GUARD_ACTIONS,
@@ -417,7 +418,10 @@ def update_guard_update_channel(
 ) -> GuardConfig:
     """Persist the local release channel selected from the update surface."""
 
-    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
+    binding = update_channel_binding(update_channel)
+    require_settings_write(
+        guard_home, approval_gate_grant=approval_gate_grant, action=binding.action, subject=binding.subject
+    )
     _write_guard_config_change(guard_home, "channel", update_channel)
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)
@@ -431,7 +435,12 @@ def reset_guard_settings(
 ) -> GuardConfig:
     """Reset editable local Guard settings while preserving non-dashboard config."""
 
-    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
+    require_settings_write(
+        guard_home,
+        approval_gate_grant=approval_gate_grant,
+        action=SETTINGS_RESET_BINDING.action,
+        subject=SETTINGS_RESET_BINDING.subject,
+    )
     _write_guard_config_change(guard_home, "reset", None)
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)

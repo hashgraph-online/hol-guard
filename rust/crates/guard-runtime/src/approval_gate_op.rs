@@ -361,7 +361,14 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
             Ok(json!({"ok": true}))
         }
         ApprovalGateMethodV1::RequireSettingsWrite => {
-            consumers::require_settings_write(&guard_home, grants, grant_ref, now)?;
+            consumers::require_settings_write(
+                &guard_home,
+                grants,
+                grant_ref,
+                pstr(params, "action"),
+                pstr(params, "subject"),
+                now,
+            )?;
             Ok(json!({"ok": true}))
         }
         ApprovalGateMethodV1::RequirePolicyWrite => {
