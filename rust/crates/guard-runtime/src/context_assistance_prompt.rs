@@ -11,7 +11,7 @@
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts, PickedExcerpt};
 use crate::context_assistance_prompt_files::{
-    asks_for_tests, candidates, phrases, project_root, terms, test_file,
+    asks_for_tests, candidates, named, phrases, project_root, terms, test_file,
 };
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
@@ -151,7 +151,7 @@ fn attach(
     };
     let mut words = terms(prompt);
     let quoted = phrases(prompt);
-    let found = candidates(&root, &words, &quoted, walk);
+    let found = candidates(&root, &words, &quoted, &named(prompt), walk);
     if found.is_empty() {
         return;
     }
