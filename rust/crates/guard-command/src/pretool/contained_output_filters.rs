@@ -43,6 +43,9 @@ const CUT_VALUED: &[&str] = &["-b", "-c", "-f", "-d"];
 /// including a lone `-`, is a file `cat` opens, which `text_filter` refuses.
 const CAT_SWITCHES: &str = "AbeEnstTuv";
 
+#[path = "contained_sed_script.rs"]
+mod sed_script;
+
 /// `sed`'s own switches, none of which names anything to open: `-n` prints
 /// only what the script selects, `-E` and `-r` read the script's patterns as
 /// extended regular expressions, `-s` treats each input separately, `-u`
@@ -137,6 +140,11 @@ fn stdin_arguments(arguments: &[String], switches: &str) -> bool {
         }
         if options_done || !argument.starts_with('-') {
             operands += 1;
+            // The first operand is the script when no `-e` gave one; a
+            // second operand is a file, which the count below refuses.
+            if operands == 1 && expressions == 0 && !sed_script::text_filter_script(argument) {
+                return false;
+            }
             continue;
         }
         if argument == "--" {
@@ -144,7 +152,10 @@ fn stdin_arguments(arguments: &[String], switches: &str) -> bool {
             continue;
         }
         if argument == "-e" {
-            if index >= arguments.len() {
+            let Some(script) = arguments.get(index) else {
+                return false;
+            };
+            if !sed_script::text_filter_script(script) {
                 return false;
             }
             index += 1;
@@ -243,6 +254,11 @@ pub(in crate::pretool) fn rejoined_words(program: &str, arguments: &[String]) ->
 /// `-e` already gave the script. Any further operand is a file `sed` opens,
 /// and a lone `-` is standard input spelled as one, which the peel cannot
 /// write back.
+///
+/// Counting operands is not enough on its own, because a `sed` script opens
+/// files and runs programs by itself: `r FILE` reads one, `w FILE` writes
+/// one and GNU `e COMMAND` runs a shell. Every script the command carries
+/// therefore goes through [`sed_script::text_filter_script`] as well.
 fn sed_arguments(arguments: &[String]) -> bool {
     let mut expressions = 0usize;
     let mut operands = 0usize;

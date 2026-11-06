@@ -23939,6 +23939,70 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-sibling-cd-jest-sed-script-reads-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>&1 | sed '1r ${HOME}/.ssh/id_rsa'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-cd-jest-sed-script-writes-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>&1 | sed -n 'w ${HOME}/notes.md'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-cd-jest-sed-script-runs-a-command",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>&1 | sed '1e id'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-cd-jest-sed-substitute-writes-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>&1 | sed 's/a/b/w ${HOME}/notes.md'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-linked-modules-relative-vite-build",
       "fix_area": "shell",
       "harnesses": [
