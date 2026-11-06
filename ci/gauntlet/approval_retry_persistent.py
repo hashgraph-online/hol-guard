@@ -14,6 +14,7 @@ agent that stopped after the first attempt cannot pass on the grant count alone.
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +22,13 @@ CASE = "approved-retry-persistent-shell-command"
 MARKER = "persistent-approval-runs.txt"
 # The command appends one `run = ok` line per invocation, so the file is the run count.
 RUN_LINE = "run = ok"
-# Present in the command text of every review for this case's own action.
-CONSENT_KEY = "gauntlet.run"
+# The exact argv of this case's own action, as the prompt pins it. The review
+# target is matched token for token against this, never by substring: the prompt
+# also asks the agent to report the run count, and a natural check such as
+# `git config --file persistent-approval-runs.txt --get-all gauntlet.run` carries
+# the same words. Counting that review as the pinned action would grant it
+# persistently and then fail the case for a second review of an Always allow.
+CASE_COMMAND = ("git", "config", "--file", "persistent-approval-runs.txt", "--add", "gauntlet.run", "ok")
 EXPECTED_RUNS = 3
 
 
@@ -59,6 +65,14 @@ def _runs(marker: Path) -> int:
     return sum(1 for line in text.splitlines() if line.strip() == RUN_LINE)
 
 
+def targets_case_command(target: str) -> bool:
+    """Whether `target` is this case's own action and nothing else."""
+    try:
+        return tuple(shlex.split(target)) == CASE_COMMAND
+    except ValueError:
+        return False
+
+
 def persistent_consent(scenario_id: str, target: str) -> bool:
     """Whether this review is the one the operator answers with Always allow.
 
@@ -66,7 +80,7 @@ def persistent_consent(scenario_id: str, target: str) -> bool:
     stop something else the agent tries, and granting that once keeps the case
     moving without making it look like the approved action was reviewed twice.
     """
-    return scenario_id == CASE and CONSENT_KEY in target
+    return scenario_id == CASE and targets_case_command(target)
 
 
 def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str]) -> tuple[str, str]:
@@ -83,7 +97,7 @@ def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str])
     rows = grants.get("granted")
     if not isinstance(rows, list):
         return "harness-error", "the lane recorded no approvals at all"
-    covered = [row for row in rows if isinstance(row, dict) and CONSENT_KEY in str(row.get("target") or "")]
+    covered = [row for row in rows if isinstance(row, dict) and targets_case_command(str(row.get("target") or ""))]
     if not covered:
         return "harness-error", "the lane recorded no approval for the case's own command"
     if not all(row.get("persist_policy") is True for row in covered):
