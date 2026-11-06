@@ -41,6 +41,7 @@ mod policy_clear;
 pub(crate) mod records;
 mod reset;
 mod resume;
+mod review_memory;
 mod seals;
 #[cfg(test)]
 mod seals_tests;
@@ -127,6 +128,7 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "resume" => return resume::resume_op(request, key),
         "queue_change" => return change_event::queue_change_op(request, key),
         "apply_policy" => return policy_apply::apply_policy_op(request, key),
+        "apply_review_memory" => return review_memory::apply_review_memory_op(request, key),
         "clear_policy" => return policy_clear::clear_policy_op(request, key),
         "migrate" => return migrate::migrate_op(request, key),
         "bootstrap" => return commit::bootstrap_op(request, key),

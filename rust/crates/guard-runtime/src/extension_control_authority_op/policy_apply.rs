@@ -9,6 +9,7 @@
 //! nothing is written and the caller decides again.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 
 use guard_contracts::{ExtensionControlAuthorityRequestV1, ExtensionControlPolicyApplyV1};
 use guard_policy_snapshot::policy_integrity::REMOTE_POLICY_SOURCES;
@@ -78,7 +79,7 @@ pub(super) fn apply_policy_op(
 }
 
 /// One decision's column values; a remote row only.
-fn row_values(row: &[Value]) -> Res<Vec<SqlValue>> {
+pub(super) fn row_values(row: &[Value]) -> Res<Vec<SqlValue>> {
     let remote = row
         .get(SOURCE_COLUMN)
         .and_then(Value::as_str)
@@ -209,6 +210,12 @@ impl Ctx<'_> {
                 )
                 .map_err(store_fault)?;
         }
+        self.replace_remote_rows(rows)?;
+        self.write_sync_state(&apply.payloads, now)
+    }
+
+    /// Replaces every remote policy decision with `rows`.
+    pub(super) fn replace_remote_rows(&self, rows: &[Vec<SqlValue>]) -> Res<()> {
         let placeholders = vec!["?"; REMOTE_POLICY_SOURCES.len()].join(",");
         self.connection
             .execute(
@@ -223,7 +230,16 @@ impl Ctx<'_> {
                 .execute(&insert, params_from_iter(row))
                 .map_err(store_fault)?;
         }
-        for (state_key, payload) in &apply.payloads {
+        Ok(())
+    }
+
+    /// Writes each `sync_state` payload, stamped `now`.
+    pub(super) fn write_sync_state(
+        &self,
+        payloads: &BTreeMap<String, String>,
+        now: &str,
+    ) -> Res<()> {
+        for (state_key, payload) in payloads {
             self.connection
                 .execute(
                     "insert into sync_state (state_key, payload_json, updated_at)
