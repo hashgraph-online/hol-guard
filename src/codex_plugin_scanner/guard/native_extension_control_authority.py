@@ -140,9 +140,10 @@ def write_private_state(store: GuardStore, name: str, payload: bytes) -> str | N
     byte for byte. Returns ``None`` once written, or the code it refused with.
     """
 
+    guard_home = Path(store.guard_home)
     reply = extension_control_authority(
-        store_path=Path(store.path),
-        guard_home=Path(store.guard_home),
+        store_path=guard_home / "guard.db",
+        guard_home=guard_home,
         op="write_private_state",
         key=None,
         state={"name": name, "content_b64": base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")},

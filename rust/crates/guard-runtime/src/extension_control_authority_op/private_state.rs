@@ -5,7 +5,7 @@
 //! record are signed or verified natively before the caller holds them; only
 //! their persistence was left in Python. The caller sends the exact bytes
 //! under one of the file names below, and the resident writes them
-//! atomically, read them back, and compares them byte for byte, as the
+//! atomically, reads them back, and compares them byte for byte, as the
 //! Python writer did. Any other name, an empty payload or one over the file's
 //! limit is refused before anything is written.
 
