@@ -30,9 +30,16 @@ pub(crate) fn leading_cd_segment(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> Vec<usize> {
+    // `cd $((PATH=10))` assigns as it expands, so the step the proof reads as
+    // a directory change also decides what the programs after it run.
+    let assigns = model
+        .segments
+        .first()
+        .is_some_and(|segment| super::shell_arithmetic::arithmetic_assigns(&segment.text));
     if model.confidence != "exact"
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
+        || assigns
         || cwd::verified_leading_cd_target(model, context).is_none()
     {
         return Vec::new();
