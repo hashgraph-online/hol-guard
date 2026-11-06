@@ -833,10 +833,10 @@ fn a_queued_cursor_review_reaches_the_agent_with_one_signed_link() {
     )
     .expect("the resident pauses the review");
     let raw_url = response["approval_url"].as_str().unwrap().to_owned();
-    assert!(response["reason"]
-        .as_str()
-        .unwrap()
-        .contains(&format!("{raw_url}#guard-token=")));
+    let reason = response["reason"].as_str().unwrap();
+    // A queued request gets the short signed path, not a session fragment.
+    assert!(reason.contains(&format!("{raw_url}/")), "{reason}");
+    assert!(!reason.contains("#guard-token="), "{reason}");
     // The Cursor bridge renders the resident's answer for the agent.
     let text = serde_json::to_string(&response).unwrap();
     let (document, unmap) = crate::cursor_hook_bridge_response::python_document(&text).unwrap();
@@ -851,7 +851,8 @@ fn a_queued_cursor_review_reaches_the_agent_with_one_signed_link() {
     let rendered: Value = serde_json::from_str(&stdout).unwrap();
     for field in ["user_message", "agent_message"] {
         let message = rendered[field].as_str().unwrap();
-        assert_eq!(message.matches("#guard-token=").count(), 1, "{message}");
+        assert_eq!(message.matches(&format!("{raw_url}/")).count(), 1, "{message}");
+        assert!(!message.contains("#guard-token="), "{message}");
         assert_eq!(message, response["reason"].as_str().unwrap());
     }
     std::fs::remove_dir_all(home).unwrap();

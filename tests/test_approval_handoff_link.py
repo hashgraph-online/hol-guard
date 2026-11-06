@@ -84,3 +84,30 @@ def test_diagnostics_redact_the_short_code() -> None:
     assert url is not None
 
     assert sanitize_secret(f"open {url} now") == f"open {REVIEW_URL}/<redacted> now"
+
+
+def _session_claims(location: str) -> dict[str, object]:
+    import base64
+    import json
+
+    session = location.split("=", 1)[1]
+    payload = session.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+
+
+def test_opening_the_link_late_never_extends_access_past_the_code() -> None:
+    from datetime import datetime
+
+    link = build_approval_handoff_url(REVIEW_URL, auth_token=AUTH, now=NOW)
+    assert link is not None
+    expires = NOW + HANDOFF_TTL_SECONDS
+    path = link.split("127.0.0.1:5474", 1)[1]
+
+    late = approval_handoff_location(path, auth_token=AUTH, now=expires - 30)
+
+    assert late is not None and "=" in late
+    claims = _session_claims(late)
+    assert datetime.fromisoformat(str(claims["expires_at"])).timestamp() <= expires
+    started = datetime.fromisoformat(str(claims["session_started_at"])).timestamp()
+    assert started == NOW
+    assert approval_handoff_location(path, auth_token=AUTH, now=expires + 1) == f"/requests/{REQUEST_ID}"

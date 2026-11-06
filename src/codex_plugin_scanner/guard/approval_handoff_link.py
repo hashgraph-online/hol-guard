@@ -44,16 +44,24 @@ def build_approval_handoff_url(review_url: str, *, auth_token: str, now: float |
     return f"{review_url}/{expires}-{mac}"
 
 
-def handoff_code_is_valid(*, request_id: str, code: str, auth_token: str, now: float | None = None) -> bool:
+def handoff_code_expiry(*, request_id: str, code: str, auth_token: str, now: float | None = None) -> int | None:
+    """The signed expiry of a valid code for `request_id`, else None."""
+
     match = _HANDOFF_CODE.match(code)
     if match is None or re.fullmatch(r"[0-9a-f]{32}", request_id) is None:
-        return False
+        return None
     expires = int(match.group("expires"))
     current = now if now is not None else time.time()
     if expires <= current or expires > current + HANDOFF_TTL_SECONDS + _CLOCK_SKEW_SECONDS:
-        return False
+        return None
     expected = handoff_mac(auth_token=auth_token, request_id=request_id, expires=expires)
-    return hmac.compare_digest(expected, match.group("mac"))
+    if not hmac.compare_digest(expected, match.group("mac")):
+        return None
+    return expires
+
+
+def handoff_code_is_valid(*, request_id: str, code: str, auth_token: str, now: float | None = None) -> bool:
+    return handoff_code_expiry(request_id=request_id, code=code, auth_token=auth_token, now=now) is not None
 
 
 def redact_handoff_links(text: str) -> str:

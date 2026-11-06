@@ -137,6 +137,7 @@ fn browser_url(
 const HANDOFF_VERSION: &str = "guard-approval-link.v1";
 const HANDOFF_TTL_SECONDS: i64 = 12 * 60 * 60;
 const HANDOFF_MAC_BYTES: usize = 16;
+const HANDOFF_MAC_HEX: usize = HANDOFF_MAC_BYTES * 2;
 
 /// `build_approval_handoff_url`: `<origin>/requests/<id>/<expires>-<mac>` for
 /// a bare request link. Agents relay this whole; they drop the long session
@@ -158,6 +159,31 @@ fn handoff_url(url: &str, auth_token: &str, now_micros: i64) -> Option<String> {
     let digest = mac.finalize().into_bytes();
     let code = hex::encode(digest.get(..HANDOFF_MAC_BYTES)?);
     Some(format!("{url}/{expires}-{code}"))
+}
+
+/// Whether `reason` already carries `review_url` as a short signed link:
+/// `<review_url>/<expires>-<32 hex mac>`, ending there. Any other path after
+/// the review link is not one, and still needs signing.
+pub(crate) fn carries_handoff_link(reason: &str, review_url: &str) -> bool {
+    let prefix = format!("{review_url}/");
+    reason
+        .match_indices(&prefix)
+        .any(|(at, _)| is_handoff_code(&reason.as_bytes()[at + prefix.len()..]))
+}
+
+fn is_handoff_code(rest: &[u8]) -> bool {
+    let digits = rest.iter().take_while(|byte| byte.is_ascii_digit()).count();
+    if !(1..=12).contains(&digits) || rest.get(digits) != Some(&b'-') {
+        return false;
+    }
+    let mac = &rest[digits + 1..];
+    mac.len() >= HANDOFF_MAC_HEX
+        && mac[..HANDOFF_MAC_HEX]
+            .iter()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        && !mac
+            .get(HANDOFF_MAC_HEX)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_'))
 }
 
 fn py_space(character: char) -> bool {

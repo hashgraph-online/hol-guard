@@ -201,6 +201,35 @@ fn only_a_bare_request_link_on_the_approval_surface_gets_the_short_path() {
     ] {
         let signed = approval_browser_url(url, || Some("vector-auth".to_owned()), surface, now)
             .expect("loopback link is signed");
-        assert!(signed.starts_with(&format!("{url}#guard-token=gld1.")), "{signed}");
+        assert!(
+            signed.starts_with(&format!("{url}#guard-token=gld1.")),
+            "{signed}"
+        );
+    }
+}
+
+#[test]
+fn only_an_exact_short_code_counts_as_an_already_signed_link() {
+    let url = HANDOFF_REVIEW_URL;
+    let mac = "7c3d07b3dee665161df59cb58f93bcdf";
+    for signed in [
+        format!("Open HOL Guard: {url}/1800043200-{mac}."),
+        format!("{url}/1800043200-{mac}"),
+        format!("({url}/1-{mac})"),
+    ] {
+        assert!(carries_handoff_link(&signed, url), "{signed}");
+    }
+    for unsigned in [
+        format!("Open HOL Guard: {url}."),
+        format!("{url}/details"),
+        format!("{url}/1800043200-{}", &mac[..31]),
+        format!("{url}/1800043200-{mac}0"),
+        format!("{url}/1800043200-{mac}/more"),
+        format!("{url}/1800043200-{}", mac.to_uppercase()),
+        format!("{url}/1234567890123-{mac}"),
+        format!("{url}/-{mac}"),
+        format!("{url}/1800043200{mac}"),
+    ] {
+        assert!(!carries_handoff_link(&unsigned, url), "{unsigned}");
     }
 }
