@@ -362,6 +362,41 @@ pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
     Some(script.clone())
 }
 
+/// Whether this text is only a shell carrying a script under options Guard
+/// does not model, such as a login shell's `-lc`, a `--posix` or any `zsh`,
+/// while the same script under plain `bash -c` is one Guard reads. Those
+/// options run startup files or change how the script's words are read, so
+/// the invocation stays blocked; this only says whether a plain `-c` is a
+/// recovery that would be reviewed instead.
+pub(crate) fn refused_inline_shell(raw: &str) -> bool {
+    if raw.len() > crate::MAX_COMMAND_BYTES
+        || raw.contains(['$', '`', '\n', '\r'])
+        || carries_unquoted_operator(raw)
+    {
+        return false;
+    }
+    let Ok(tokens) = crate::shell_tokens(raw, false) else {
+        return false;
+    };
+    let [shell, options @ .., flag, script] = tokens.as_slice() else {
+        return false;
+    };
+    let readable_shell = INLINE_SHELLS.contains(&shell.as_str()) || shell == "zsh";
+    let carries_flag =
+        flag.len() > 1 && !flag.starts_with("--") && flag.starts_with('-') && flag.contains('c');
+    if !readable_shell
+        || !carries_flag
+        || options
+            .first()
+            .is_some_and(|word| !word.starts_with(['-', '+']))
+        || script.contains('\'')
+        || inline_shell_script(raw).is_some()
+    {
+        return false;
+    }
+    inline_shell_script(&format!("bash -c '{script}'")).is_some()
+}
+
 /// Whether an operator stands outside the quoting, where the shell reads it as
 /// its own word.
 ///

@@ -453,6 +453,7 @@ impl CompiledNativeCommandControls {
             self.observe_command(probe, deadline, context, environment)
                 .is_ok_and(|(batch, _)| batch.evaluation_error.is_none())
         });
+        floor::explain_startup_shell(&mut result, command);
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
