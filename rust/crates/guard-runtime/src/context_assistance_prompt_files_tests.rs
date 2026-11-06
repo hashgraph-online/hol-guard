@@ -469,3 +469,20 @@ fn a_named_path_is_not_taken_by_a_bare_name_for_the_same_file() {
     );
     assert_eq!(found, ["a/cli.py", "b/cli.py", "packages/z/cli.py"]);
 }
+
+#[test]
+fn a_traceback_path_written_out_in_full_names_the_project_file() {
+    let (_dir, root) = canonical();
+    let project = root.join("traced");
+    fs::create_dir_all(project.join("src/app")).unwrap();
+    for file in ["cli.py", "core.py"] {
+        fs::write(
+            project.join("src/app").join(file),
+            "def main():\n    pass\n",
+        )
+        .unwrap();
+    }
+    let prompt = "It fails:\n```\n  File \"/home/me/traced/src/app/cli.py\", line 3\n```";
+    let found = candidates(&project, &[], &[], &named(prompt), WALK_BUDGET);
+    assert_eq!(found, ["src/app/cli.py"]);
+}

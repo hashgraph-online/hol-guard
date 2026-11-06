@@ -145,31 +145,33 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         Returns whether the abandoned row was removed.
         """
 
+        from .native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
         from .native_policy_snapshot_constants import NativePolicySnapshotError
 
-        plan = self._authority_plan(
-            "rollback_plan",
-            key=key,
-            revision=revision,
-            snapshot_digest=snapshot_digest,
-            now=_now(),
-            own_transition_digest=own_transition_digest,
-        )
+        fields: dict[str, object] = {
+            "revision": revision,
+            "snapshot_digest": snapshot_digest,
+            "own_transition_digest": own_transition_digest,
+        }
+        plan = self._authority_plan("rollback_plan", key=key, now=_now(), **fields)
         if plan["outcome"] != "abandon":
             return False
         try:
-            with self._connect() as connection:
-                _ = self._apply_resumed_transition(connection, "abandon", revision + 1, current=None, key=key)
-                _ = connection.execute(
-                    "delete from extension_control_authority_proof "
-                    "where transition_revision = ? and consumed_at is null",
-                    (revision + 1,),
-                )
-        except (ExtensionControlAuthorityError, NativePolicySnapshotError):
             # Readers holding only a shared lease cannot mutate; explicit
             # recovery remains available.
+            self._invalidate_native_extension_control_policy()
+            # The resident decides again inside the transaction that removes
+            # the row, so nothing changes between the verdict and the write.
+            reply = self._extension_control_authority_op(
+                "roll_back", key=key, anchor_json=self._read_anchor_json(), now=_now(), **fields
+            )
+        except (
+            ExtensionControlAuthorityError,
+            NativePolicySnapshotError,
+            NativeCommandControlAuthorityUnavailableError,
+        ):
             return False
-        return True
+        return reply.get("rolled_back") is True
 
     def list_extension_control_authority_history(
         self,

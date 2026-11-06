@@ -40,6 +40,7 @@ def _commit(store: Path, statement: str, *values: object) -> None:
 
 
 _RUST_OPS = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/extension_control_authority_op"
+_WRITER_SOURCES = frozenset({"writes.rs"})
 
 
 def _wire(store: Path, *, op: str = "read", allow_migration: bool = False, request_id: str = "r1") -> dict[str, object]:
@@ -159,7 +160,7 @@ def test_unsettled_replies_always_go_back_to_the_resident(tmp_path: Path, payloa
     assert memo.lookup(_wire(store))[1] is None
 
 
-@pytest.mark.parametrize("op", ["commit_plan", "resume_plan", "rollback_plan", "unknown"])
+@pytest.mark.parametrize("op", ["commit_plan", "resume_plan", "rollback_plan", "restore", "roll_back", "unknown"])
 def test_a_writer_plan_is_never_kept(tmp_path: Path, op: str) -> None:
     store = _store(tmp_path)
     _keep(_wire(store, op=op), {"plan": {"outcome": "prepare"}})
@@ -189,7 +190,9 @@ def test_epoch_watches_every_table_the_resident_authority_ops_read() -> None:
 
     read: set[str] = set()
     for source in sorted(_RUST_OPS.glob("*.rs")):
-        if source.name.endswith("tests.rs"):
+        # Writer ops apply their own verdicts and are never kept, so what
+        # only they touch needs no trigger.
+        if source.name.endswith("tests.rs") or source.name in _WRITER_SOURCES:
             continue
         for literal in re.findall(r'"((?:[^"\\]|\\.)*)"', source.read_text(encoding="utf-8")):
             read.update(re.findall(r"(?i)\b(?:from|join)\s+([a-z_][a-z0-9_]*)", literal))

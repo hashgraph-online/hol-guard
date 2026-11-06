@@ -320,7 +320,9 @@ fn scores(seen: Vec<Seen>, files: usize, terms: usize, phrases: usize) -> Vec<Sc
 
 /// Which of the prompt's `named` files `relative` is, if any. A name with a
 /// folder claims its own path first, so `cli.py` cannot take the place of
-/// `packages/z/cli.py`; a bare name matches that file name in any folder.
+/// `packages/z/cli.py`; a bare name matches that file name in any folder. A
+/// name that ends with the whole relative path is the same file written out
+/// in full, as a traceback prints `/home/me/project/src/app/cli.py`.
 fn named_as(relative: &str, named: &[String]) -> Option<usize> {
     let name = relative.rsplit('/').next().unwrap_or(relative);
     let lower = relative.to_lowercase();
@@ -328,9 +330,11 @@ fn named_as(relative: &str, named: &[String]) -> Option<usize> {
     named
         .iter()
         .position(|wanted| {
+            let wanted = wanted.to_lowercase();
             wanted.contains('/')
-                && (relative.eq_ignore_ascii_case(wanted)
-                    || lower.ends_with(&format!("/{}", wanted.to_lowercase())))
+                && (lower == wanted
+                    || lower.ends_with(&format!("/{wanted}"))
+                    || wanted.ends_with(&format!("/{lower}")))
         })
         .or_else(|| {
             named
