@@ -113,15 +113,18 @@ pub(super) fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
     // below covers both spellings, so the rewritten word carries no reach the
     // tilde does not already have.
     let destination = destination?;
-    let destination = match super::directory_targets::home_variable::tilde_spelling(destination) {
-        Some(spelling) => std::borrow::Cow::Owned(spelling),
-        None => std::borrow::Cow::Borrowed(destination),
-    };
+    let destination =
+        match super::super::directory_targets::home_variable::tilde_spelling(destination) {
+            Some(spelling) => std::borrow::Cow::Owned(spelling),
+            None => std::borrow::Cow::Borrowed(destination),
+        };
     if !valid_destination_text(&destination) {
         return None;
     }
     // A quoted or escaped `~` stays a literal directory name.
-    if destination.starts_with('~') && !super::directory_targets::home_targets_unquoted(segment) {
+    if destination.starts_with('~')
+        && !super::super::directory_targets::home_targets_unquoted(segment)
+    {
         return None;
     }
     // With neither a reference nor `--detach` Git checks out `HEAD` and names
