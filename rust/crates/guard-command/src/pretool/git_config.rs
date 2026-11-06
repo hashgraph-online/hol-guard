@@ -477,6 +477,24 @@ fn probe(
     // Refusing the whole reply here instead would turn one undecodable value
     // anywhere in the configuration into an unanswered probe, which an
     // explicit allow settles -- and a monitor or pager beside it would run.
+    //
+    // A key is different. Two subsection names that differ only in bytes that
+    // do not decode read as one key once the reply is decoded, so an empty
+    // value under the second would hide a helper set under the first. Git's
+    // own key match leaves such a key out of the reply under a UTF-8 locale,
+    // so this stands for the hosts whose locale lets it through. A key
+    // written with no value carries Git's implicit true, which the reply
+    // spells by leaving the value off the record. Neither is a question the
+    // probe never asked, so both are read as a helper that was found.
+    let records = output.split(|byte| *byte == 0);
+    for record in records.filter(|record| !record.is_empty()) {
+        let Some(separator) = record.iter().position(|byte| *byte == b'\n') else {
+            return Some(false);
+        };
+        if std::str::from_utf8(&record[..separator]).is_err() {
+            return Some(false);
+        }
+    }
     let output = String::from_utf8_lossy(&output);
     let output: &str = &output;
     let options = remaining

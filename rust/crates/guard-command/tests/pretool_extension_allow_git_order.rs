@@ -373,3 +373,29 @@ fn an_allowed_read_whose_configuration_names_a_monitor_still_waits_for_review() 
         );
     }
 }
+
+/// A setting written with no value carries Git's implicit true, and the reply
+/// spells it by leaving the value off the record. Reading that record as a
+/// question the probe never asked would hand the whole reply to an explicit
+/// allow, and the monitor configured beside it would run.
+#[test]
+fn an_allowed_read_whose_valueless_setting_hides_a_monitor_still_waits() {
+    let (root, _cleanup) = checkout("valueless-monitor", false);
+    std::fs::write(
+        root.join(".gitconfig"),
+        "[log]\n\tshowSignature\n[core]\n\tfsmonitor = /tmp/watch\n",
+    )
+    .unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
