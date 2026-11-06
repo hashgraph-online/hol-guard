@@ -327,15 +327,33 @@ fn every_literal_is_a_label(text: &[u8]) -> bool {
     while at < text.len() {
         let quote = text[at];
         if !matches!(quote, b'"' | b'\'' | b'`') {
-            // A trailing comment is prose. An apostrophe in `don't` is not an
-            // unclosed literal, so reading on would reject a line whose code
-            // holds nothing but labels.
-            if text[at..].starts_with(b"//") || text[at..].starts_with(b"/*") {
+            // A line comment is prose to the end of the line. An apostrophe in
+            // `don't` is not an unclosed literal, so reading on would reject a
+            // line whose code holds nothing but labels.
+            if text[at..].starts_with(b"//") {
                 return true;
             }
-            // Joined pieces spell out one value between them, so none of them
-            // is a label however short each piece is on its own.
-            if quote == b'+' {
+            // A block comment is prose too, but code can follow it, so the
+            // scan resumes after it closes.
+            if text[at..].starts_with(b"/*") {
+                let Some(end) = text[at + 2..].windows(2).position(|pair| pair == b"*/") else {
+                    return true;
+                };
+                at += end + 4;
+                continue;
+            }
+            // Pieces joined by `+` spell out one value between them, so none
+            // of them is a label however short each piece is on its own. A
+            // `+` beside anything else is ordinary arithmetic.
+            if quote == b'+'
+                && (matches!(
+                    text[..at].trim_ascii_end().last(),
+                    Some(b'"' | b'\'' | b'`')
+                ) || matches!(
+                    text[at + 1..].trim_ascii_start().first(),
+                    Some(b'"' | b'\'' | b'`')
+                ))
+            {
                 return false;
             }
             at += 1;
