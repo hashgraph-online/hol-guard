@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 
 use super::layers::{layers_to_json, layers_to_values};
 use super::records::{
-    parse_anchor, private_hash, verify_record, Phase, CATALOG_MANIFEST_PURPOSE, SNAPSHOT_PURPOSE,
+    parse_anchor, private_hash, verify_record, CATALOG_MANIFEST_PURPOSE, SNAPSHOT_PURPOSE,
     TRANSITION_PURPOSE,
 };
 use super::tests::{anchor, catalog, local, run, Home, AT, KEY};
@@ -33,40 +33,6 @@ fn writer(home: &Home, op: &str) -> ExtensionControlAuthorityRequestV1 {
     ExtensionControlAuthorityRequestV1 {
         now: Some(NOW.to_owned()),
         ..home.request(op, &catalog('a'))
-    }
-}
-
-#[test]
-fn a_sealed_anchor_reads_back_as_the_anchor_it_names() {
-    let home = Home::new();
-    let digest = catalog('d');
-    let request = ExtensionControlAuthorityRequestV1 {
-        revision: Some(3),
-        snapshot_digest: Some(digest.clone()),
-        phase: Some("anchored".to_owned()),
-        ..home.request("seal_anchor", &catalog('a'))
-    };
-    let sealed = run(&request)["anchor_json"].as_str().unwrap().to_owned();
-    let parsed = parse_anchor(&sealed, &KEY).unwrap();
-    assert_eq!(
-        (parsed.revision, parsed.snapshot_digest, parsed.phase),
-        (3, digest, Phase::Anchored)
-    );
-    for bad in [
-        ExtensionControlAuthorityRequestV1 {
-            phase: Some("finished".to_owned()),
-            ..request.clone()
-        },
-        ExtensionControlAuthorityRequestV1 {
-            revision: Some(-1),
-            ..request.clone()
-        },
-        ExtensionControlAuthorityRequestV1 {
-            snapshot_digest: Some("short".to_owned()),
-            ..request.clone()
-        },
-    ] {
-        assert_eq!(refusal(&run(&bad)), "invalid authority anchor");
     }
 }
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import sqlite3
 import sys
 from collections.abc import Generator
@@ -39,6 +40,7 @@ from .store_base import (
 )
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 
+_LOGGER = logging.getLogger(__name__)
 _KEY_REF_SUFFIX = ":authentication-key"
 _ANCHOR_REF_SUFFIX = ":anchor"
 _MAX_TRANSITION_ID_LENGTH = 256
@@ -151,21 +153,22 @@ class _ExtensionControlAuthoritySupportMixin:
         return anchor_from_wire(reply.get("anchor"))
 
     def _write_and_verify_anchor(self, anchor: AuthorityAnchor, *, key: bytes) -> None:
-        sealed = self._extension_control_authority_op(
-            "seal_anchor",
+        """Have the resident write an anchor the store has earned, then mirror it."""
+
+        reply = self._extension_control_authority_op(
+            "write_anchor",
             key=key,
+            anchor_json=self._read_anchor_json(),
             revision=anchor.revision,
             snapshot_digest=anchor.snapshot_digest,
             phase=anchor.phase.value,
-        ).get("anchor_json")
+        )
+        sealed = reply.get("anchor_json")
         if not isinstance(sealed, str):
             raise ExtensionControlAuthorityError("invalid extension control anchor seal")
-        encoded = sealed
-        self._secret_store().set_secret(self._anchor_ref(), encoded)
-        observed = self._secret_store().get_secret(self._anchor_ref())
-        if observed != encoded:
-            raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
-        self._export_last_good_authority(anchor)
+        self._mirror_resident_anchor(sealed)
+        if reply.get("last_good_exported") is False:
+            _LOGGER.warning("Guard could not refresh the extension-control last-good export.")
 
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store

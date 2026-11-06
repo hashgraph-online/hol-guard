@@ -15,9 +15,9 @@
 //! next step -- the checks a commit, bootstrap, catalog migration or
 //! last-good restore must pass, the records it seals, and whether a prepared
 //! transition is resumed, committed or abandoned -- and the caller performs
-//! that step under the exclusive authority lease. `seal_anchor` and
-//! `seal_manifest` seal the anchor and catalog manifest records it stores,
-//! and `seal_managed_revision` and `seal_managed_activation` the managed
+//! that step under the exclusive authority lease. `write_anchor` writes an
+//! anchor the store has earned into the credential vault, `seal_manifest`
+//! seals the catalog manifest record the caller stores, and `seal_managed_revision` and `seal_managed_activation` the managed
 //! controls publication epoch and activation. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
@@ -73,7 +73,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
     /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
-    /// `seal_anchor`, `seal_manifest`, `seal_managed_revision`,
+    /// `write_anchor`, `seal_manifest`, `seal_managed_revision`,
     /// `seal_managed_activation` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
@@ -122,7 +122,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `validate_chain`: the committed head to validate up to.
     /// `resume_plan`: the prepared transition to resume.
     /// `rollback_plan`: the committed head the prepared transition sits on.
-    /// `seal_anchor`: the revision the anchor pins.
+    /// `write_anchor`: the revision the anchor pins.
     /// `seal_managed_revision`: the managed publication epoch to seal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<i64>,
@@ -134,7 +134,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// already given up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub own_transition_digest: Option<String>,
-    /// `seal_anchor`: `prepared`, `anchored` or `committed`.
+    /// `write_anchor`: `anchored` or `committed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,
     /// The caller's clock, as Python's `datetime.now(timezone.utc).isoformat()`

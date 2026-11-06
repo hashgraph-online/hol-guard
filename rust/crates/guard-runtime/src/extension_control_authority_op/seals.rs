@@ -50,30 +50,6 @@ pub(super) fn anchor_json(anchor: &Anchor, key: &[u8]) -> Res<String> {
     canonical(&json!({ "record": record, "digest": digest, "mac": mac }))
 }
 
-/// `seal_anchor`: the anchor the caller writes to the credential store.
-pub(super) fn seal_anchor_op(
-    request: &ExtensionControlAuthorityRequestV1,
-    key: Option<&[u8]>,
-) -> Res<Value> {
-    let key = require_key(key)?;
-    let (Some(revision), Some(snapshot_digest), Some(phase)) = (
-        request.revision.filter(|revision| *revision >= 0),
-        request
-            .snapshot_digest
-            .as_deref()
-            .filter(|digest| digest.chars().count() == 64),
-        request.phase.as_deref().and_then(Phase::parse),
-    ) else {
-        return Err(tampered("invalid authority anchor"));
-    };
-    let anchor = Anchor {
-        revision,
-        snapshot_digest: snapshot_digest.to_owned(),
-        phase,
-    };
-    Ok(json!({ "anchor_json": anchor_json(&anchor, key)? }))
-}
-
 /// `seal_manifest`: the record `_write_catalog_manifest` stores for the
 /// current catalog's trusted target manifest.
 pub(super) fn seal_manifest_op(
