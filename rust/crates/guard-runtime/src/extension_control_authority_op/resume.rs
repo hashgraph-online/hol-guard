@@ -170,9 +170,15 @@ impl Ctx<'_> {
         self.write_anchor(&sealed)?;
         // Best effort, as in `_export_last_good_authority`.
         let _ = self.export_last_good(&anchor);
-        if self.request.migration_record.is_none() {
-            immediate(self.connection, || self.queue_change_event(&row))?;
-        }
+        // A retry's proof is spent only once its committed anchor is written,
+        // so a retry that fails before then can be sent again.
+        immediate(self.connection, || {
+            self.settle_retry_proof(revision)?;
+            if self.request.migration_record.is_none() {
+                self.queue_change_event(&row)?;
+            }
+            Ok(())
+        })?;
         Ok(json!({
             "resumed": {
                 "revision": revision,
@@ -290,7 +296,6 @@ impl Ctx<'_> {
                 return Ok(Applied::Current(row));
             }
         }
-        self.settle_retry_proof(revision)?;
         Ok(Applied::Committed(row))
     }
 
