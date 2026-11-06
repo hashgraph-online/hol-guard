@@ -9,8 +9,11 @@
 //! shape it does not reproduce byte for byte; the caller then leaves the
 //! reason unlinked.
 
+use std::sync::LazyLock;
+
 use base64ct::{Base64UrlUnpadded, Encoding};
 use hmac::{Hmac, Mac};
+use regex::Regex;
 use sha2::Sha256;
 
 use crate::guard_store_json::py_strip;
@@ -27,6 +30,30 @@ pub(crate) const OPEN_GUARD: &str = "Open HOL Guard to approve or keep this bloc
 pub(crate) const SIGNED_LINK_UNAVAILABLE: &str =
     "HOL Guard could not create a signed approval link; open Inbox from Guard on this device, then retry.";
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
+
+static GUARD_TOKEN_FRAGMENT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)#guard-token=[A-Za-z0-9_~%+-]+(?:\.[A-Za-z0-9_~%+-]+)*")
+        .expect("guard token pattern compiles")
+});
+
+static HANDOFF_CODE: LazyLock<Regex> = LazyLock::new(|| {
+    // Ends where `carries_handoff_link` ends a code: at punctuation, space
+    // or the end of the reason, never mid-path.
+    Regex::new(r"(/requests/[0-9a-f]{32})/[0-9]{1,12}-[0-9a-f]{32}([^A-Za-z0-9/_-]|$)")
+        .expect("approval handoff pattern compiles")
+});
+
+/// True when `text` holds a short signed `/requests/<id>/<expires>-<mac>` link.
+pub(crate) fn has_handoff_code(text: &str) -> bool {
+    HANDOFF_CODE.is_match(text)
+}
+
+/// `text` with every link's session fragment and short code removed, so two
+/// copies of a reason that differ only in their signature compare equal.
+pub(crate) fn strip_review_link_codes(text: &str) -> String {
+    let unfragmented = GUARD_TOKEN_FRAGMENT.replace_all(text, "");
+    HANDOFF_CODE.replace_all(&unfragmented, "$1$2").into_owned()
+}
 
 /// `canonical_harness` (`hook_fail_closed.py`).
 pub(crate) fn canonical_harness(harness: &str) -> String {

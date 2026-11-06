@@ -6,16 +6,14 @@
 //! order, the effects the transport runs and the answer it writes. It is pure:
 //! the transport supplies `acked_recording_only` only when asked.
 
-use std::sync::LazyLock;
-
 use guard_contracts::{
     normalize_guard_action, CopilotArtifactFactsV1, CopilotEffectV1, CopilotPlanV1,
     CopilotSettleInputsV1, CopilotToolDecisionV1, GuardAction,
 };
-use regex::Regex;
 use serde_json::{json, Map, Value};
 
 use crate::hook_decision_compose::edge_floor;
+use crate::native_review_link::{has_handoff_code, strip_review_link_codes};
 
 const NO_SAVED_DECISION: &str = "approval_reuse_no_saved_decision";
 const ACKED_FACT: &str = "acked_recording_only";
@@ -25,18 +23,6 @@ const SAFE_ALTERNATIVE_GUIDANCE: &str = "This action remains blocked. Continue w
      the task, explain the limitation.";
 const OPEN_GUARD_MARKER: &str = "open hol guard to approve";
 const DEFAULT_HOOK_REASON: &str = "HOL Guard flagged this tool call for review.";
-
-static GUARD_TOKEN_FRAGMENT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)#guard-token=[A-Za-z0-9_~%+-]+(?:\.[A-Za-z0-9_~%+-]+)*")
-        .expect("guard token pattern compiles")
-});
-
-static HANDOFF_CODE: LazyLock<Regex> = LazyLock::new(|| {
-    // Ends where `carries_handoff_link` ends a code: at punctuation, space
-    // or the end of the reason, never mid-path.
-    Regex::new(r"(/requests/[0-9a-f]{32})/[0-9]{1,12}-[0-9a-f]{32}([^A-Za-z0-9/_-]|$)")
-        .expect("approval handoff pattern compiles")
-});
 
 #[derive(Clone, Copy, PartialEq)]
 enum Stage {
@@ -461,12 +447,11 @@ fn join_hook_reason(values: &[&str]) -> String {
     }
     let tokenized = messages.iter().find(|message| {
         let lower = message.to_lowercase();
-        (lower.contains("guard-token=") || HANDOFF_CODE.is_match(message))
+        (lower.contains("guard-token=") || has_handoff_code(message))
             && lower.contains(OPEN_GUARD_MARKER)
     });
     if let Some(replacement) = tokenized.cloned() {
-        let unfragmented = GUARD_TOKEN_FRAGMENT.replace_all(&replacement, "");
-        let untokenized = HANDOFF_CODE.replace_all(&unfragmented, "$1$2").into_owned();
+        let untokenized = strip_review_link_codes(&replacement);
         let mut merged: Vec<String> = Vec::new();
         let mut used_replacement = false;
         for message in &messages {
