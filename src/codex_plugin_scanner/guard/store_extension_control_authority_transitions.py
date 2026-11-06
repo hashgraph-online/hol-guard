@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.extension_control_authority import (
@@ -26,6 +26,9 @@ from .store_extension_control_authority_support import (
     _row_int,
     _row_str,
 )
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 _RESUMED_OUTCOMES = frozenset({"commit_pending", "mark_committed", "finish"})
 
@@ -175,7 +178,7 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         from .native_store_policy import encode_key
 
         require_exclusive_command_control_mutation_lease(self.guard_home)
-        pack_key = encode_key(_key(self))
+        pack_key = encode_key(_key(cast("GuardStore", self)))
         with contextlib.ExitStack() as transport:
             evidence: object = None
             floor_moved = False
@@ -211,7 +214,11 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         sealed = reply.get("anchor_json")
         if not isinstance(sealed, str):
             raise ExtensionControlAuthorityError("invalid extension control anchor seal")
-        self._mirror_resident_anchor(sealed)
+        # The row is committed; an unrecorded anchor is finished on the next read.
+        try:
+            self._mirror_resident_anchor(sealed)
+        except Exception as exc:
+            raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
         resumed = self._read_extension_control_authority_locked(str(resumed_head["catalog_digest"]))
         if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
             raise ExtensionControlAuthorityError("idempotent transition recovery failed")

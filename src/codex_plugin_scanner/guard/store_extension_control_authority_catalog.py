@@ -167,9 +167,11 @@ class ExtensionControlAuthorityCatalogMixin:
             "migrate",
             key=key,
             **request,
+            # An absent downgrade is omitted, as the resident re-encodes it
+            # when it binds the reply to this request.
             migration_record={
                 "provenance": described,
-                "downgraded_from": downgraded_from,
+                **({"downgraded_from": downgraded_from} if downgraded_from is not None else {}),
                 "retired_target_ids": list(retired_targets),
             },
         )
