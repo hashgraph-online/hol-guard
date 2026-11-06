@@ -91,12 +91,21 @@ pub(crate) fn split(text: &str) -> Option<Parts> {
         .is_some_and(|value| crate::pretool::executable_basename(value) == "git");
     let (destination, moved) = crate::pretool::worktree_add::destination(add)?;
     // A `-C` moves where a relative checkout lands, but not where `cd` goes.
-    if !is_git || (moved && !std::path::Path::new(destination).is_absolute()) {
+    if !is_git || (moved && !std::path::Path::new(destination.as_ref()).is_absolute()) {
         return None;
     }
+    // The add's destination is read in its `~` spelling, so the `cd` operand
+    // is read the same way before the two are compared: `$HOME/x` in both
+    // places names one directory, and the screen below covers both spellings.
+    let entered = cd.arguments.first().map(|argument| {
+        crate::pretool::directory_targets::home_variable::tilde_spelling(argument)
+            .map_or(std::borrow::Cow::Borrowed(argument.as_str()), |spelling| {
+                std::borrow::Cow::Owned(spelling)
+            })
+    });
     if cd.executable.as_deref() != Some("cd")
         || cd.arguments.len() != 1
-        || cd.arguments[0] != destination
+        || entered.as_deref() != Some(destination.as_ref())
         // The add's parser takes only an unquoted `~`; a quoted one in the
         // `cd` would name a literal directory instead.
         || (destination.starts_with('~')

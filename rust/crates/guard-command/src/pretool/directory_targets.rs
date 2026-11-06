@@ -5,6 +5,8 @@
 //! proved only when every backslash in its segment survives the shell, and
 //! only in the exact spelling of its canonical path.
 
+#[path = "directory_targets_home_variable.rs"]
+pub(crate) mod home_variable;
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
 #[path = "directory_targets_tmp_alias.rs"]
@@ -39,6 +41,17 @@ pub(crate) fn safe_directory_target(target: &str) -> bool {
 }
 
 pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<String> {
+    // `$HOME` and `${HOME}` name the directory `~` names, and reach the shell
+    // the same way. `home_targets_unquoted` has already turned back a segment
+    // that keeps the spelling literal, so the proof below is the tilde's own.
+    let spelled;
+    let value = match home_variable::tilde_spelling(value) {
+        Some(spelling) => {
+            spelled = spelling;
+            spelled.as_str()
+        }
+        None => value,
+    };
     if context.home_dir.is_none() || context.cwd.is_none() || !safe_directory_target(value) {
         return None;
     }
@@ -207,16 +220,18 @@ pub(crate) fn drive_targets_quoted(segment: &crate::CommandSegmentV1) -> bool {
         || !shell_alters_backslash(&segment.text)
 }
 
-/// Whether every argument that begins with `~` reaches the program after the
-/// shell expands it to home, as the path proofs assume. A quoted or escaped
-/// `~` stays a literal relative path that names a different directory, so a
-/// segment that spells one is refused rather than proved against home.
+/// Whether every argument that names home reaches the program after the shell
+/// expands it, as the path proofs assume. A quoted or escaped `~`, and an
+/// equally quoted or escaped `$HOME`, stay literal relative paths that name a
+/// different directory, so a segment that spells one is refused rather than
+/// proved against home.
 pub(crate) fn home_targets_unquoted(segment: &crate::CommandSegmentV1) -> bool {
-    !segment
+    (!segment
         .arguments
         .iter()
         .any(|argument| argument.starts_with('~'))
-        || !shell_keeps_tilde_literal(&segment.text)
+        || !shell_keeps_tilde_literal(&segment.text))
+        && home_variable::home_variables_expand(segment)
 }
 
 /// Whether a `~`-spelled executable reaches the shell as the home path the

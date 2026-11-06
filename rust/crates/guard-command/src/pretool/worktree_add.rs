@@ -29,7 +29,9 @@ struct WorktreeAdd<'a> {
     chdir: Option<&'a str>,
     /// `None` for the detached form, which creates no branch.
     branch: Option<&'a str>,
-    destination: &'a str,
+    /// The destination as Git receives it, with a `$HOME` or `${HOME}` head
+    /// written as the `~` the directory proofs already read.
+    destination: std::borrow::Cow<'a, str>,
     reference: Option<&'a str>,
     /// Neither `-b` nor `--detach`: Git checks out the local branch the
     /// reference names when one exists, and detaches otherwise.
@@ -214,7 +216,7 @@ pub(super) fn outside_home_reason(
         return None;
     }
     let home = std::fs::canonicalize(Path::new(context.home_dir?)).ok()?;
-    let supplied = Path::new(spec.destination);
+    let supplied = Path::new(spec.destination.as_ref());
     let target = if supplied.is_absolute() {
         supplied.to_path_buf()
     } else {
@@ -351,7 +353,7 @@ fn planned_checkout<'a>(
         None => None,
     };
     let destination = fresh_destination(
-        spec.destination,
+        &spec.destination,
         super::PathContext {
             cwd: chdir_cwd.as_deref().or(context.cwd),
             ..context
@@ -383,7 +385,9 @@ pub(in crate::pretool) fn planned(
 
 /// The checkout a `git worktree add` segment creates, as the proof reads it,
 /// and whether a `-C` moves where a relative checkout lands.
-pub(in crate::pretool) fn destination(segment: &CommandSegmentV1) -> Option<(&str, bool)> {
+pub(in crate::pretool) fn destination(
+    segment: &CommandSegmentV1,
+) -> Option<(std::borrow::Cow<'_, str>, bool)> {
     parse(segment).map(|spec| (spec.destination, spec.chdir.is_some()))
 }
 
@@ -460,7 +464,17 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
             _ => return None,
         }
     }
-    let destination = destination.filter(|value| valid_destination_text(value))?;
+    // `$HOME` and `${HOME}` name the directory `~` names. The quoting screen
+    // below covers both spellings, so the rewritten word carries no reach the
+    // tilde does not already have.
+    let destination = destination?;
+    let destination = match super::directory_targets::home_variable::tilde_spelling(destination) {
+        Some(spelling) => std::borrow::Cow::Owned(spelling),
+        None => std::borrow::Cow::Borrowed(destination),
+    };
+    if !valid_destination_text(&destination) {
+        return None;
+    }
     // A quoted or escaped `~` stays a literal directory name.
     if destination.starts_with('~') && !super::directory_targets::home_targets_unquoted(segment) {
         return None;
@@ -471,7 +485,7 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
     // keeps review; the proof reads the name Git would write.
     match branch {
         Some(value) if detach || !valid_branch_name(value) => return None,
-        None if !detach && reference.is_none() && !implied_branch(destination) => return None,
+        None if !detach && reference.is_none() && !implied_branch(&destination) => return None,
         _ => {}
     }
     // A bare name such as `main` or `feat/x` is accepted in every form.
