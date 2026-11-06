@@ -114,6 +114,88 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
         ]
     });
 
+/// Options that change only how a manager reports its work, never which bytes
+/// it installs or where they land. The approval binding drops them so a saved
+/// allow for `uv sync --frozen` still covers `uv sync -q --frozen`.
+static PRESENTATION_OPTIONS: &[&str] = &[
+    "--no-ansi",
+    "--no-color",
+    "--no-progress",
+    "--quiet",
+    "--silent",
+    "--verbose",
+    "-q",
+    "-qq",
+    "-qqq",
+    "-v",
+    "-vv",
+    "-vvv",
+];
+
+/// Inline-valued forms of the same reporting options.
+static PRESENTATION_VALUE_PREFIXES: &[&str] = &[
+    "--color=",
+    "--log-level=",
+    "--loglevel=",
+    "--progress=",
+    "--verbosity=",
+];
+
+/// Verbs that hand the rest of the command line to another program. A `-v`
+/// after one of these belongs to that program, where it can mean anything
+/// (`grep -v` inverts the match), so those commands keep their exact spelling.
+static DOWNSTREAM_PROGRAM_VERBS: &[(&str, &[&str])] = &[
+    ("npm", &["exec", "x"]),
+    ("pnpm", &["dlx", "exec"]),
+    ("yarn", &["dlx", "exec"]),
+    ("pipx", &["run"]),
+    ("uv", &["run", "tool"]),
+];
+
+/// Managers that are themselves a runner for another program.
+static DOWNSTREAM_PROGRAM_MANAGERS: &[&str] = &["bunx", "npx", "pnpx", "uvx"];
+
+fn is_presentation_option(token: &str) -> bool {
+    PRESENTATION_OPTIONS.contains(&token)
+        || PRESENTATION_VALUE_PREFIXES
+            .iter()
+            .any(|prefix| token.starts_with(prefix))
+}
+
+/// Drop reporting-only options from a package manager's arguments.
+///
+/// `arguments` is the command line after the executable, the way
+/// `PackageExecutionContext` passes it to the launch identity. The result feeds
+/// the approval binding only: the review card still shows the command exactly
+/// as it was typed. Returns the arguments unchanged for an unknown manager, for
+/// a runner that executes another program, and for everything after a bare
+/// `--`.
+pub fn strip_manager_presentation_arguments(manager: &str, arguments: &[String]) -> Vec<String> {
+    let key = manager_key(manager);
+    if DOWNSTREAM_PROGRAM_MANAGERS.contains(&key.as_str()) || manager_config(&key).is_none() {
+        return arguments.to_vec();
+    }
+    let downstream = DOWNSTREAM_PROGRAM_VERBS
+        .iter()
+        .find(|(name, _)| *name == key)
+        .map_or(&[] as &[&str], |(_, verbs)| *verbs);
+    let mut stripped: Vec<String> = Vec::with_capacity(arguments.len());
+    let mut in_manager_options = true;
+    for token in arguments {
+        if in_manager_options {
+            if token == "--" {
+                in_manager_options = false;
+            } else if downstream.contains(&token.as_str()) {
+                return arguments.to_vec();
+            } else if is_presentation_option(token) {
+                continue;
+            }
+        }
+        stripped.push(token.clone());
+    }
+    stripped
+}
+
 fn manager_config(name: &str) -> Option<&'static GlobalOptionConfig> {
     let key = manager_key(name);
     MANAGER_GLOBAL_OPTIONS
@@ -261,6 +343,77 @@ mod tests {
     fn bare_tokens_under_two_passthrough() {
         let got = strip_package_manager_global_options(&t(&["npm"]));
         assert_eq!(got, t(&["npm"]));
+    }
+
+    #[test]
+    fn a_quiet_spelling_binds_like_the_loud_one() {
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "uv",
+                &t(&["sync", "-q", "--frozen", "--extra", "dev"])
+            ),
+            t(&["sync", "--frozen", "--extra", "dev"]),
+        );
+    }
+
+    #[test]
+    fn installation_affecting_options_are_kept() {
+        let args = t(&[
+            "sync",
+            "--frozen",
+            "--group",
+            "ci-test",
+            "--no-install-project",
+            "--python",
+            "3.12",
+        ]);
+        assert_eq!(strip_manager_presentation_arguments("uv", &args), args);
+    }
+
+    #[test]
+    fn inline_reporting_values_are_dropped() {
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "npm",
+                &t(&["install", "--loglevel=silly", "--no-progress", "lodash"])
+            ),
+            t(&["install", "lodash"]),
+        );
+    }
+
+    #[test]
+    fn a_runner_keeps_its_programs_own_flags() {
+        let uvx = t(&["ruff", "check", "-q", "src"]);
+        assert_eq!(strip_manager_presentation_arguments("uvx", &uvx), uvx);
+        let uv_run = t(&["run", "ruff", "check", "-q", "src"]);
+        assert_eq!(strip_manager_presentation_arguments("uv", &uv_run), uv_run);
+        let npm_exec = t(&["exec", "--", "eslint", "-q"]);
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &npm_exec),
+            npm_exec
+        );
+    }
+
+    #[test]
+    fn nothing_after_a_bare_separator_is_touched() {
+        assert_eq!(
+            strip_manager_presentation_arguments("npm", &t(&["install", "-q", "--", "-v"])),
+            t(&["install", "--", "-v"]),
+        );
+    }
+
+    #[test]
+    fn an_unknown_manager_is_left_alone() {
+        let args = t(&["install", "-q", "ripgrep"]);
+        assert_eq!(strip_manager_presentation_arguments("cargo", &args), args);
+    }
+
+    #[test]
+    fn a_manager_alias_is_resolved_before_stripping() {
+        assert_eq!(
+            strip_manager_presentation_arguments("pip3", &t(&["install", "-q", "requests"])),
+            t(&["install", "requests"]),
+        );
     }
 
     #[test]
