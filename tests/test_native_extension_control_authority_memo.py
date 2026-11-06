@@ -41,7 +41,16 @@ def _commit(store: Path, statement: str, *values: object) -> None:
 
 _RUST_OPS = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/extension_control_authority_op"
 _WRITER_SOURCES = frozenset(
-    {"commit.rs", "migrate.rs", "pack_finish.rs", "pack_reserve.rs", "reset.rs", "resume.rs", "writes.rs"}
+    {
+        "commit.rs",
+        "migrate.rs",
+        "pack_finish.rs",
+        "pack_reserve.rs",
+        "policy_clear.rs",
+        "reset.rs",
+        "resume.rs",
+        "writes.rs",
+    }
 )
 
 
