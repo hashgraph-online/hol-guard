@@ -21,6 +21,7 @@ import os
 import shutil
 import sys
 import tempfile
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -637,6 +638,18 @@ def test_mcp_connectors_are_set_up_before_they_are_reviewed(
     fixture, worker = gate_environment
     failure = mcp_failure(case, *replay(case, fixture, worker.store))
     assert failure is None, f"{failure}: {case.case_id}"
+
+
+def test_every_case_has_an_id_of_its_own() -> None:
+    """A shared id hides one of the two cases.
+
+    The pending maps, the shard plan and every report key off the id, and the
+    harness expansion builds `<id>@<harness>` from it, so two cases that share
+    an id and a harness answer to one key. Whichever is read last wins.
+    """
+    counted = Counter(entry["id"] for entry in _DOCUMENT["cases"])
+    repeated = sorted(case_id for case_id, count in counted.items() if count > 1)
+    assert not repeated, repeated
 
 
 def test_pending_fix_entries_name_real_benign_cases() -> None:
