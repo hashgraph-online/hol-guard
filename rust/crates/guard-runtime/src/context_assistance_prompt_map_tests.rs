@@ -53,36 +53,42 @@ fn mapped_text(list: &[(&str, &str)], terms: &[(&str, bool, usize)]) -> Option<S
         &files(list),
         &looking_for(terms),
         &Asked::default(),
-        &[],
         later(),
     )
     .map(|rendered| rendered.text)
 }
 
-/// The definition that holds the prompt's names comes back whole as the best
-/// match, and the class around it is listed by its lines, so the agent
-/// opens it directly instead of searching for it.
+/// The definition that holds the prompt's names is listed by its lines, and
+/// the class around it with its members' lines, so the agent opens just the
+/// method it needs. No code is pasted.
 #[test]
-fn the_definition_holding_the_prompts_names_is_shown_and_its_class_listed() {
-    let text = mapped_text(
-        &[("src/core.py", CORE)],
-        &[("casesensitive", true, 2), ("choice", false, 30)],
+fn the_definition_holding_the_prompts_names_and_its_class_are_listed() {
+    let terms = looking_for(&[("casesensitive", true, 2), ("choice", false, 30)]);
+    let mapped = map(
+        &files(&[("src/core.py", CORE)]),
+        &terms,
+        &Asked::default(),
+        later(),
     )
     .unwrap();
+    let text = mapped.text;
     assert!(text.starts_with(HEADER), "{text}");
-    let best = text.split("Best match:\n").nth(1).unwrap();
     assert!(
-        best.starts_with("src/core.py (lines 7-9)\n```python\n    def __init__"),
+        text.contains("src/core.py:7-9 def __init__(self, choices, case_sensitive=True):"),
         "{text}"
     );
     assert!(
-        text.contains("src/core.py:4-14 class Choice(ParamType):"),
+        text.contains(
+            "src/core.py:4-14 class Choice(ParamType):\n  members: __init__ 7-9, convert 11-14"
+        ),
         "{text}"
     );
     assert!(!text.contains("def other"), "{text}");
+    assert!(!text.contains("```"), "{text}");
+    assert!(mapped.shown.is_empty());
 }
 
-/// A long function that mentions everything gives way to the short one the
+/// A long function that mentions everything comes after the short one the
 /// prompt names.
 #[test]
 fn a_long_function_that_mentions_the_words_does_not_outrank_the_named_one() {
@@ -96,9 +102,9 @@ fn a_long_function_that_mentions_the_words_does_not_outrank_the_named_one() {
         &[("casesensitive", true, 2), ("choice", true, 3)],
     )
     .unwrap();
-    let best = text.split("Best match:\n").nth(1).unwrap();
-    assert!(best.starts_with("src/short.py (lines 1-2)"), "{text}");
-    assert!(text.contains("src/long.py:1-301 def handle"), "{text}");
+    let short = text.find("src/short.py:1-2 def choice():").unwrap();
+    let long = text.find("src/long.py:1-301 def handle").unwrap();
+    assert!(short < long, "{text}");
 }
 
 /// Source comes first, then a few tests, then docs, and a changelog gives
@@ -150,21 +156,23 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
     );
 }
 
-/// Code this session already has is listed by its lines, not sent again.
+/// A class too long to read whole gives its first line and its members'
+/// lines, the member list cut short past its limit.
 #[test]
-fn a_body_the_session_already_has_is_listed_not_sent_again() {
-    let terms = looking_for(&[("casesensitive", true, 2), ("choice", false, 30)]);
-    let list = files(&[("src/core.py", CORE)]);
-    let first = map(&list, &terms, &Asked::default(), &[], later()).unwrap();
-    assert_eq!(first.shown.len(), 1);
-    let again = map(&list, &terms, &Asked::default(), &first.shown, later()).unwrap();
-    assert!(again.shown.is_empty(), "{}", again.text);
-    assert!(!again.text.contains("Best match"), "{}", again.text);
+fn a_long_class_is_listed_by_its_members() {
+    let mut big = String::from("class Registry:\n");
+    for n in 0..100 {
+        big.push_str(&format!("    def m{n}(self):\n        return {n}\n"));
+    }
+    let text = mapped_text(&[("src/big.py", &big)], &[("registry", true, 2)]).unwrap();
     assert!(
-        again.text.contains("src/core.py:7-9 def __init__"),
-        "{}",
-        again.text
+        text.contains(
+            "src/big.py:1 (201 lines) class Registry:\n  members: m0 2-3, m1 4-5, m2 6-7"
+        ),
+        "{text}"
     );
+    assert!(text.ends_with(", ..."), "{text}");
+    assert!(text.len() <= MAX_MAP_CHARS, "{}", text.len());
 }
 
 /// A plain word in many files places nothing, unless a file read defines it.
@@ -255,13 +263,13 @@ fn a_named_changelog_stays_on_the_map() {
     let changes = "Changes\n=======\n\nUnreleased\n----------\n\n- Fix thing.\n";
     let list = files(&[("CHANGES.rst", changes), ("src/core.py", CORE)]);
     let terms = looking_for(&[("casesensitive", true, 2)]);
-    let unnamed = map(&list, &terms, &Asked::default(), &[], later()).unwrap();
+    let unnamed = map(&list, &terms, &Asked::default(), later()).unwrap();
     assert!(!unnamed.text.contains("CHANGES.rst"), "{}", unnamed.text);
     let asked = Asked {
         docs: false,
         named: vec!["CHANGES.rst".into()],
     };
-    let named = map(&list, &terms, &asked, &[], later()).unwrap();
+    let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(
         named.text.contains("CHANGES.rst:4-7 Unreleased"),
         "{}",
@@ -277,11 +285,11 @@ fn the_map_stops_at_its_deadline() {
         .collect();
     let list = files(&[("src/many.py", &many)]);
     let terms = looking_for(&[("casesensitive", true, 1)]);
-    assert!(map(&list, &terms, &Asked::default(), &[], later()).is_some());
-    assert!(map(&list, &terms, &Asked::default(), &[], Instant::now()).is_none());
+    assert!(map(&list, &terms, &Asked::default(), later()).is_some());
+    assert!(map(&list, &terms, &Asked::default(), Instant::now()).is_none());
 }
 
-/// The map stays within the context limit however much matches.
+/// The map stays within its limit however much matches.
 #[test]
 fn the_map_stays_within_the_context_limit() {
     let mut many = Vec::new();
@@ -294,7 +302,7 @@ fn the_map_stays_within_the_context_limit() {
     }
     let list: Vec<(&str, &str)> = many.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect();
     let text = mapped_text(&list, &[("casesensitive", true, 60)]).unwrap();
-    assert!(text.len() <= MAX_CONTEXT_CHARS, "{}", text.len());
+    assert!(text.len() <= MAX_MAP_CHARS, "{}", text.len());
 }
 
 const ON: &str = "[context_assistance]\nenabled=true\nruntime_id='selected'\n\
@@ -321,18 +329,7 @@ fn prompt_map(home: &Path, root: &Path, prompt: &str) -> Option<String> {
     let quoted = crate::context_assistance_prompt_files::phrases(prompt);
     let found = walk(root, &words, &quoted, &[], Duration::from_secs(5));
     let until = Instant::now() + Duration::from_secs(5);
-    mapped(
-        home,
-        root,
-        "codex",
-        &found,
-        &terms,
-        &quoted,
-        prompt,
-        &[],
-        until,
-    )
-    .map(|r| r.text)
+    mapped(home, root, "codex", &found, &terms, &quoted, prompt, until).map(|r| r.text)
 }
 
 /// From a typed prompt to the map, through the walk and Guard's own read: a
@@ -357,7 +354,8 @@ fn a_prompt_maps_to_allowed_project_code_only() {
     let prompt = "Make `Choice` honour `case_sensitive` when converting values";
     let (home, _project, root) = project(ON, &list);
     let text = prompt_map(home.path(), &root, prompt).unwrap();
-    assert!(text.contains("Best match:\nsrc/core.py (lines "), "{text}");
+    assert!(text.contains("\nsrc/core.py:"), "{text}");
+    assert!(!text.contains("```"), "{text}");
     assert!(
         text.contains("tests/test_core.py:1-2 def test_choice"),
         "{text}"
