@@ -226,6 +226,16 @@ fn an_activation_naming_what_it_may_not_write_is_refused() {
     let mut float = row("float", "cloud-sync");
     float[12] = json!(2.5);
     float_row.rows.push(float);
+    let mut copied_and_sent = activation();
+    copied_and_sent.copy_last_good = true;
+    copied_and_sent.payloads.extend([
+        ("policy_bundle".to_owned(), "{}".to_owned()),
+        ("policy_bundle_last_good".to_owned(), "{}".to_owned()),
+    ]);
+    let copied_without_bundle = ExtensionControlPolicyApplyV1 {
+        copy_last_good: true,
+        ..activation()
+    };
     for invalid in [
         unknown_payload,
         unparsed,
@@ -234,6 +244,8 @@ fn an_activation_naming_what_it_may_not_write_is_refused() {
         local_row,
         short_row,
         float_row,
+        copied_and_sent,
+        copied_without_bundle,
     ] {
         let refused = apply(&home, invalid);
         assert_eq!(refused["fault"], json!("tampered"), "{refused}");
@@ -243,4 +255,29 @@ fn an_activation_naming_what_it_may_not_write_is_refused() {
         );
     }
     assert_eq!(snapshot(&home), before);
+}
+
+#[test]
+fn a_last_good_activation_stores_the_bundle_it_writes_as_last_good() {
+    let home = home();
+    let mut activation = activation();
+    activation.copy_last_good = true;
+    activation.payloads.insert(
+        "policy_bundle".to_owned(),
+        r#"{"bundleHash": "b"}"#.to_owned(),
+    );
+    assert_eq!(apply(&home, activation), json!({ "applied": true }));
+    let (states, _) = snapshot(&home);
+    let stored = |state_key: &str| {
+        states
+            .iter()
+            .find(|(key, _, _)| key == state_key)
+            .map(|(_, payload, _)| payload.clone())
+    };
+    assert_eq!(
+        stored("policy_bundle_last_good"),
+        Some(r#"{"bundleHash": "b"}"#.to_owned())
+    );
+    assert_eq!(stored("policy_bundle"), stored("policy_bundle_last_good"));
+    assert_eq!(stored("managed_controls_last_good"), None);
 }

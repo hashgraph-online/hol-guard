@@ -231,6 +231,10 @@ pub struct ExtensionControlPolicyApplyV1 {
     /// capabilities: the bundle carries no managed controls.
     #[serde(default)]
     pub retire_managed: bool,
+    /// Also stores the bundle and the managed-controls activation it writes
+    /// as their last-good copies, so the request carries each only once.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub copy_last_good: bool,
     /// The remote policy decisions that replace the stored ones, each in
     /// `policy_decisions` column order.
     #[serde(default)]
