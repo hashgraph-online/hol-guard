@@ -20,6 +20,9 @@ GITHUB_LOOKUP_REPO = "example-org/example-repo"
 GITHUB_LOOKUP_QUERY = "is:pr metrics OR analytics"
 GITHUB_METADATA_CASE = "github-metadata-command-reads"
 GITHUB_METADATA_CONTROL = "github-metadata-mutation-control"
+# A directory change carrying an allowed mutation and a read split by `;`, the shape a user
+# who allowed the GitHub extension runs when they merge a pull request and then read it back.
+GITHUB_DIRECTORY_CHANGE_CASE = "github-allow-directory-change-then-merge-with-read-tail"
 GITHUB_STUB_CASES = frozenset(
     {
         GITHUB_REVIEW_CASE,
@@ -28,10 +31,11 @@ GITHUB_STUB_CASES = frozenset(
         GITHUB_LOOKUP_CASE,
         GITHUB_METADATA_CASE,
         GITHUB_METADATA_CONTROL,
+        GITHUB_DIRECTORY_CHANGE_CASE,
     }
 )
 # Cases that run with the GitHub extension and every one of its permissions enabled.
-GITHUB_ENABLED_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_GUARD_NAMED_REPOSITORY_CASE})
+GITHUB_ENABLED_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_GUARD_NAMED_REPOSITORY_CASE, GITHUB_DIRECTORY_CHANGE_CASE})
 METADATA_CALLS = (
     ("cache", "list", "--limit", "5"),
     ("label", "list", "--json", "name"),
@@ -107,6 +111,13 @@ GUARD_NAMED_REPOSITORY_COMMANDS = (
 GUARD_NAMED_REPOSITORY_CALLS = (
     ("api", "--method", "POST", _GUARD_NAMED_RUN),
     ("--hostname", "github.com", "api", "--method", "POST", _GUARD_NAMED_NEXT_RUN),
+)
+# One recorded argv per gh invocation the directory-change command makes, in order. The read
+# after the `;` runs whatever the merge returned, so both argvs prove the whole line reached the
+# stand-in rather than stopping at the merge.
+DIRECTORY_CHANGE_CALLS = (
+    ("pr", "merge", "12", "--repo", "example-org/example-repo", "--squash"),
+    ("pr", "view", "12", "--repo", "example-org/example-repo", "--json", "state,mergedAt"),
 )
 
 
@@ -185,6 +196,9 @@ def github_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     if scenario_id == GITHUB_GUARD_NAMED_REPOSITORY_CASE:
         calls = recorded_gh_calls(workspace)
         return {"github-guard-named-repository-call-exact": calls == list(GUARD_NAMED_REPOSITORY_CALLS)}
+    if scenario_id == GITHUB_DIRECTORY_CHANGE_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-directory-change-calls-exact": calls == list(DIRECTORY_CHANGE_CALLS)}
     if scenario_id == GITHUB_LOOKUP_CASE:
         calls = recorded_gh_calls(workspace)
         return {"github-lookup-ran-once": calls is not None and len(calls) == 1 and _is_lookup_call(calls[0])}

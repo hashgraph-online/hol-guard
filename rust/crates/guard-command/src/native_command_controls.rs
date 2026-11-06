@@ -487,6 +487,14 @@ impl CompiledNativeCommandControls {
         let benign: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
             .into_iter()
             .collect();
+        // A `cd` into a verified directory at the head of a list whose
+        // separators leave the steps after it unproven still reads and
+        // creates nothing. It is held apart from `benign` so the walks below
+        // that decide where a later step writes keep reading the directory
+        // the command started in.
+        let entered: BTreeSet<_> = crate::pretool::leading_cd_segment(command, context)
+            .into_iter()
+            .collect();
         let mut covered = benign.clone();
         for observation in observations {
             if observation.effective_segment_indexes.is_empty() {
@@ -502,7 +510,7 @@ impl CompiledNativeCommandControls {
                 if observation
                     .effective_segment_indexes
                     .iter()
-                    .all(|index| covered.contains(index))
+                    .all(|index| covered.contains(index) || entered.contains(index))
                 {
                     continue;
                 }
@@ -525,6 +533,12 @@ impl CompiledNativeCommandControls {
         covered.extend(crate::pretool::git_reads_after_allowed_steps(
             command, context, &benign, &covered,
         ));
+        // Without the entered directory the rules the user enabled cover
+        // every program in `cd <dir> && gh pr merge 1; gh pr view 1` and the
+        // command keeps a review for the one step nobody doubts. The
+        // extension-wide walk below still starts from a set that excludes it,
+        // so a Git step after the `cd` keeps the review it had.
+        covered.extend(entered.iter().copied());
         // An extension whose every permission the user explicitly enabled
         // covers the programs it watches, including the spellings no rule
         // models. It runs last so it never hides a rule the user left off and
