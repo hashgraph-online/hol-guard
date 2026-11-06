@@ -284,6 +284,7 @@ fn state_may_be_live(state: &crate::resident_state::ResidentState) -> bool {
     })
 }
 
+/// Send within the caller's budget and retain bounded prior recovery diagnostics.
 pub(super) fn client_request_with_deadline(
     state_base: &Path,
     payload: &[u8],
@@ -309,6 +310,7 @@ pub(super) fn client_request_with_deadline(
     })
 }
 
+/// Discover or start a resident, giving failed containment precedence over request errors.
 fn client_request_with_deadline_inner(
     state_base: &Path,
     payload: &[u8],
@@ -424,22 +426,16 @@ fn client_request_with_deadline_inner(
             try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
         })
     });
-    match request_result {
-        Ok(response) => Ok(response),
-        Err(error) => {
-            // Cleanup retries share the request deadline. A failed containment
-            // check must remain visible rather than be hidden by the request error.
-            containment::abort_spawned_managed(
-                &mut spawned,
-                &scope,
-                &digest,
-                generation,
-                &token,
-                overall_deadline,
-            )?;
-            Err(error)
-        }
-    }
+    start_wait::finish_request(request_result, || {
+        containment::abort_spawned_managed(
+            &mut spawned,
+            &scope,
+            &digest,
+            generation,
+            &token,
+            overall_deadline,
+        )
+    })
 }
 
 #[cfg(test)]

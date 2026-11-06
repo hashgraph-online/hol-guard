@@ -296,6 +296,8 @@ pub(super) fn wait_for_matching_stop_containment(
     }
 }
 
+/// Attempt direct-child and authenticated generation cleanup even when one fails.
+/// Unproven containment takes precedence over the caller's original request error.
 pub(super) fn abort_spawned_managed(
     child: &mut SpawnedManaged,
     scope: &Path,

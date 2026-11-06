@@ -23,6 +23,7 @@ pub(in super::super) type SpawnedManaged = Child;
 #[cfg(windows)]
 pub(in super::super) type SpawnedManaged = ManagedChild;
 
+/// Spawn the runtime supervisor in its platform containment unit and hand off auth over stdin.
 pub(in super::super) fn spawn_managed_for_owner(
     state_base: &Path,
     generation: u64,
@@ -108,10 +109,12 @@ pub(in super::super) fn hex_token(token: &[u8]) -> Zeroizing<String> {
     output
 }
 
+/// Read the identifier from the owned child handle, without rediscovering a process.
 fn child_process_id(child: &SpawnedManaged) -> u32 {
     child.id()
 }
 
+/// Clean up the Unix child, reporting failure when group containment cannot be proved.
 #[cfg(not(windows))]
 pub(in super::super) fn terminate_spawned_managed(
     child: &mut SpawnedManaged,
@@ -161,6 +164,7 @@ pub(in super::super) fn terminate_spawned_managed(
         .ok_or_else(|| "native_resident_spawn_containment_failed".to_owned())
 }
 
+/// Terminate through the owned Windows JobObject within the supplied timeout.
 #[cfg(windows)]
 pub(in super::super) fn terminate_spawned_managed(
     child: &mut SpawnedManaged,
@@ -186,6 +190,7 @@ pub(in super::super) fn spawned_has_exited(child: &mut SpawnedManaged) -> Result
     result.map_err(|_| "native_resident_supervisor_wait_failed".to_owned())
 }
 
+/// Snapshot only a still-owned live process; reject unproven Unix descendants after reap.
 pub(super) fn spawned_process_identities(
     child: &mut SpawnedManaged,
 ) -> Result<Vec<ManagedProcessIdentity>, String> {

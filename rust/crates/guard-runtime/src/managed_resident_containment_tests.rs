@@ -2,6 +2,7 @@ use super::*;
 use std::fs;
 use zeroize::Zeroizing;
 
+/// Expired cleanup still reaps the direct child without claiming proof for its group.
 #[test]
 fn abort_reaps_unverified_child_without_claiming_group_containment_after_deadline() {
     let root = std::env::temp_dir().join(format!(
@@ -34,6 +35,7 @@ fn abort_reaps_unverified_child_without_claiming_group_containment_after_deadlin
     fs::remove_dir_all(root).expect("test directory should be removable");
 }
 
+/// The stdin token rendering uses a zeroizing allocation.
 #[test]
 fn the_token_handed_to_a_child_is_cleared_after_the_write() {
     let token = [0x9fu8; crate::AUTH_TOKEN_BYTES];
@@ -47,6 +49,7 @@ fn the_token_handed_to_a_child_is_cleared_after_the_write() {
     let _: &Zeroizing<String> = &rendered;
 }
 
+/// Reaped child handles must not authorize rediscovery of a reused PID.
 #[test]
 fn a_reaped_child_never_adopts_a_replacement_process_identity() {
     let mut child = std::process::Command::new("/bin/false").spawn().unwrap();
@@ -62,6 +65,7 @@ fn a_reaped_child_never_adopts_a_replacement_process_identity() {
     }
 }
 
+/// An unpublished pipe-held descendant prevents a claim of proven containment.
 #[test]
 fn unpublished_descendant_cannot_be_declared_contained_after_supervisor_exit() {
     use std::io::{BufRead, BufReader, Write};
@@ -124,6 +128,7 @@ fn unpublished_descendant_cannot_be_declared_contained_after_supervisor_exit() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A child exiting between snapshot and termination does not prove descendant exit.
 #[test]
 fn exit_after_live_snapshot_does_not_become_successful_tree_containment() {
     use std::process::{Command, Stdio};

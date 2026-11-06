@@ -16,6 +16,22 @@ pub(super) fn wait_for_response(
     })
 }
 
+/// Finish the caller's spawn attempt. Successful replies need no cleanup;
+/// failed replies keep their original error only when cleanup proves containment.
+pub(super) fn finish_request(
+    request_result: Result<Vec<u8>, String>,
+    cleanup: impl FnOnce() -> Result<(), String>,
+) -> Result<Vec<u8>, String> {
+    match request_result {
+        Ok(response) => Ok(response),
+        Err(error) => {
+            cleanup()?;
+            Err(error)
+        }
+    }
+}
+
+/// Poll authenticated discovery and owned-child liveness within the same deadline.
 fn wait_with(
     deadline: Instant,
     mut poll_response: impl FnMut() -> Result<Option<Vec<u8>>, String>,
@@ -46,10 +62,12 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    /// Give polling fixtures enough time to test state transitions rather than scheduler latency.
     fn deadline() -> Instant {
         Instant::now() + Duration::from_secs(30)
     }
 
+    /// An observed exit stops startup on the first unanswered poll.
     #[test]
     fn exited_child_fails_on_first_poll_without_waiting_for_timeout() {
         let mut polls = 0;
@@ -65,6 +83,7 @@ mod tests {
         assert_eq!(polls, 1);
     }
 
+    /// A live child retains the opportunity to publish a response on a later poll.
     #[test]
     fn live_child_can_publish_after_multiple_polls() {
         let mut polls = 0;
@@ -80,6 +99,7 @@ mod tests {
         assert_eq!(polls, 3);
     }
 
+    /// An exit observed after a live probe terminates the startup wait.
     #[test]
     fn child_exit_after_an_initial_live_probe_stops_waiting() {
         let mut probes = 0;
@@ -95,6 +115,7 @@ mod tests {
         assert_eq!(probes, 2);
     }
 
+    /// A live but unresponsive child remains bounded by the original deadline.
     #[test]
     fn live_child_without_a_response_still_times_out() {
         let result = wait_with(
@@ -105,6 +126,7 @@ mod tests {
         assert_eq!(result.unwrap_err(), "native_resident_start_timeout");
     }
 
+    /// An authenticated response wins without requiring this spawn to remain alive.
     #[test]
     fn authenticated_response_wins_over_spawn_exit() {
         let result = wait_with(
@@ -115,6 +137,7 @@ mod tests {
         assert_eq!(result.unwrap(), b"authenticated response");
     }
 
+    /// Neither discovery failure nor unavailable process status is mistaken for readiness.
     #[test]
     fn discovery_and_process_probe_errors_remain_failures() {
         let result = wait_with(
@@ -134,6 +157,7 @@ mod tests {
         );
     }
 
+    /// An expired request performs no additional discovery or child probing.
     #[test]
     fn expired_deadline_does_not_probe_or_send() {
         let result = wait_with(
@@ -144,6 +168,7 @@ mod tests {
         assert_eq!(result.unwrap_err(), "native_resident_start_timeout");
     }
 
+    /// Owned-handle probing distinguishes a waiting child from one that has exited.
     #[cfg(unix)]
     #[test]
     fn process_probe_distinguishes_live_child_from_successful_exit() {
@@ -165,9 +190,10 @@ mod tests {
         );
     }
 
+    /// Exercise the production result/cleanup path and assert its final Unix caller error.
     #[cfg(unix)]
     #[test]
-    fn exited_child_is_reaped_and_generation_cleanup_still_runs() {
+    fn caller_returns_containment_failure_for_exited_child() {
         let root = std::env::temp_dir().join(format!(
             "hol-guard-start-exit-{}-{}",
             std::process::id(),
@@ -180,11 +206,8 @@ mod tests {
             let mut child = std::process::Command::new("/bin/false").spawn().unwrap();
             // Synchronize the fixture, avoiding a scheduler-dependent exit race.
             assert!(!child.wait().unwrap().success());
-            assert_eq!(
-                wait_for_response(&mut child, deadline(), || Ok(None)).unwrap_err(),
-                "native_resident_managed_exit_failed"
-            );
-            assert_eq!(
+            let request_result = wait_for_response(&mut child, deadline(), || Ok(None));
+            let result = finish_request(request_result, || {
                 containment::abort_spawned_managed(
                     &mut child,
                     scope,
@@ -192,11 +215,38 @@ mod tests {
                     1,
                     &[0; crate::AUTH_TOKEN_BYTES],
                     deadline(),
-                ),
+                )
+            });
+            assert_eq!(
+                result,
                 Err("native_resident_spawn_containment_failed".to_owned())
             );
             assert!(child.try_wait().unwrap().is_some());
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A proven cleanup preserves the request error and executes exactly once.
+    #[test]
+    fn caller_preserves_original_failure_when_cleanup_succeeds() {
+        let mut cleanups = 0;
+        let result = finish_request(
+            Err("native_resident_managed_exit_failed".to_owned()),
+            || {
+                cleanups += 1;
+                Ok(())
+            },
+        );
+        assert_eq!(result.unwrap_err(), "native_resident_managed_exit_failed");
+        assert_eq!(cleanups, 1);
+    }
+
+    /// A valid response must not tear down the resident that supplied it.
+    #[test]
+    fn caller_returns_success_without_cleanup() {
+        let result = finish_request(Ok(b"authenticated response".to_vec()), || {
+            panic!("successful requests must not clean up the resident")
+        });
+        assert_eq!(result.unwrap(), b"authenticated response");
     }
 }
