@@ -144,7 +144,7 @@ fn defined(text: &str, words: &[String]) -> usize {
 /// The mark that closes a docstring or block comment `line` leaves open. A
 /// block comment opens only at the start of a line, so a `/*` inside a
 /// string such as a glob, or at the end of a line comment, opens nothing.
-fn opened(line: &str) -> Option<&'static str> {
+pub(crate) fn opened(line: &str) -> Option<&'static str> {
     let comment = line.trim_start().strip_prefix("/*");
     if comment.is_some_and(|rest| !rest.contains("*/")) {
         return Some("*/");
@@ -155,7 +155,7 @@ fn opened(line: &str) -> Option<&'static str> {
 }
 
 /// A line that opens a function, type or top-level value definition.
-fn definition(line: &str) -> bool {
+pub(crate) fn definition(line: &str) -> bool {
     let top_level = !line.starts_with(char::is_whitespace);
     let mut rest = line.trim_start();
     while let Some(after) = MODIFIERS
@@ -169,7 +169,7 @@ fn definition(line: &str) -> bool {
 }
 
 /// Whether `path` names a prose file.
-fn prose(path: &Path) -> bool {
+pub(crate) fn prose(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| PROSE.contains(&extension.to_ascii_lowercase().as_str()))
@@ -240,6 +240,38 @@ pub(crate) fn quick_excerpts(
         }
     }
     (parts, names)
+}
+
+/// The whole text of each of `found` that passes the checks
+/// `quick_excerpts` applies, in order, reading at most `limit` files and
+/// stopping at `until`.
+pub(crate) fn screened_texts(
+    home: &Path,
+    workspace: &Path,
+    app: &str,
+    found: &[String],
+    limit: usize,
+    until: Instant,
+) -> Vec<(String, String)> {
+    let Some(root) = screened(home, workspace, app) else {
+        return Vec::new();
+    };
+    let chosen = kept_to(home, root.path(), app);
+    let mut texts = Vec::new();
+    let allowed = found
+        .iter()
+        .filter(|relative| chosen.as_ref().is_none_or(|files| files.contains(relative)));
+    for relative in allowed {
+        if Instant::now() >= until || texts.len() >= limit {
+            break;
+        }
+        let Some(file) = stamp(&root, relative).and_then(|_| root.read(relative).ok()) else {
+            continue;
+        };
+        let text: String = file.documents.iter().map(|doc| doc.text.as_str()).collect();
+        texts.push((relative.clone(), text));
+    }
+    texts
 }
 
 /// The files picked in the dashboard for `root`, which CIGAR uses for every
