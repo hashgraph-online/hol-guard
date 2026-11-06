@@ -1769,8 +1769,11 @@ fn node_option_rejection_mode(value: &str) -> bool {
     )
 }
 
+/// A valued flag's name and the check its value has to pass.
+type BoundNodeOption = (&'static str, fn(&str) -> bool);
+
 /// Valued `NODE_OPTIONS` flags bound the same way, with the values accepted.
-const NODE_OPTIONS_BOUND_VALUES: &[(&str, fn(&str) -> bool)] = &[
+const NODE_OPTIONS_BOUND_VALUES: &[BoundNodeOption] = &[
     ("--disable-warning", node_option_warning_code),
     ("--dns-result-order", node_option_dns_order),
     ("--max-http-header-size", node_option_digits),
