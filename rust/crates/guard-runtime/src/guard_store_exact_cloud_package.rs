@@ -49,11 +49,14 @@ fn allows(decision: &Value, request_id: &str, artifact_id: &str, artifact_hash: 
 /// The waited allow is bound to its request, artifact and hash, so it
 /// outranks a broader row the ordinary lookup returned, such as the
 /// package-request family rule that queued the request for review. A block
-/// saved for this artifact still wins.
+/// or a sandbox requirement saved for this artifact still wins: answering a
+/// review does not lift a restriction the review did not raise.
 fn outranks(ordinary: Option<&Map<String, Value>>) -> bool {
     ordinary.is_none_or(|row| {
-        row.get("action").and_then(Value::as_str) != Some("block")
-            || row.get("artifact_id").and_then(Value::as_str) == Some(PACKAGE_REQUEST_FAMILY)
+        !matches!(
+            row.get("action").and_then(Value::as_str),
+            Some("block" | "sandbox-required")
+        ) || row.get("artifact_id").and_then(Value::as_str) == Some(PACKAGE_REQUEST_FAMILY)
     })
 }
 

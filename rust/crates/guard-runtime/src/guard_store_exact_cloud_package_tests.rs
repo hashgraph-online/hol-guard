@@ -223,7 +223,7 @@ fn peek_over(connection: &Connection, ordinary: Value) -> Value {
 }
 
 #[test]
-fn the_allow_outranks_a_family_rule_row_but_not_a_block_saved_for_the_artifact() {
+fn the_allow_outranks_a_family_rule_row_but_not_a_restriction_saved_for_the_artifact() {
     let connection = connection();
     insert_row(&connection, EXACT_CLOUD_INTEGRITY_PURPOSE);
     let family = |action: &str| {
@@ -233,7 +233,7 @@ fn the_allow_outranks_a_family_rule_row_but_not_a_block_saved_for_the_artifact()
             "source": "policy-bundle",
         })
     };
-    for action in ["block", "require-reapproval"] {
+    for action in ["block", "sandbox-required", "require-reapproval"] {
         assert_eq!(
             peek_over(&connection, family(action))["request_id"],
             "req-1",
@@ -250,5 +250,11 @@ fn the_allow_outranks_a_family_rule_row_but_not_a_block_saved_for_the_artifact()
         peek_over(&connection, saved("allow"))["request_id"],
         "req-1"
     );
-    assert!(peek_over(&connection, saved("block")).is_null());
+    assert_eq!(
+        peek_over(&connection, saved("require-reapproval"))["request_id"],
+        "req-1"
+    );
+    for action in ["block", "sandbox-required"] {
+        assert!(peek_over(&connection, saved(action)).is_null(), "{action}");
+    }
 }
