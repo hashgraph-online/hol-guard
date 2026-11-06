@@ -232,6 +232,7 @@ impl Ctx<'_> {
                 return Ok(Applied::Abandoned);
             }
             Resume::CommitPending => {
+                self.check_retry_proof_owner(revision)?;
                 let reserved = journal
                     && query_row(
                         self.connection,
@@ -297,6 +298,27 @@ impl Ctx<'_> {
             }
         }
         Ok(Applied::Committed(row))
+    }
+
+    /// Refuses a retry whose proof is already reserved for another row before
+    /// anything commits, so the refusal leaves the snapshot where it was. The
+    /// proof is still only spent after the anchor is written.
+    fn check_retry_proof_owner(&self, revision: i64) -> Res<()> {
+        let Some(retry) = &self.request.retry_proof else {
+            return Ok(());
+        };
+        let owner = query_row(
+            self.connection,
+            "select transition_revision from extension_control_authority_proof
+             where proof_id_hash = ?",
+            params![retry.proof_hash],
+        )?;
+        if let Some(owner) = owner {
+            if row_int(&owner, "transition_revision")? != revision {
+                return Err(tampered("extension control authority proof state conflict"));
+            }
+        }
+        Ok(())
     }
 
     /// Records a retry's proof as consumed by the row at `revision`: inserted
