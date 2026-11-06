@@ -73,6 +73,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
     /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
+    /// `queue_change`,
     /// `write_anchor`, `seal_manifest`, `seal_managed_revision`,
     /// `seal_managed_activation` or `anchor`.
     pub op: String,
@@ -123,6 +124,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `resume_plan`: the prepared transition to resume.
     /// `rollback_plan`: the committed head the prepared transition sits on.
     /// `write_anchor`: the revision the anchor pins.
+    /// `queue_change`: the committed head whose change event is queued.
     /// `seal_managed_revision`: the managed publication epoch to seal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<i64>,

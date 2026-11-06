@@ -16,8 +16,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final, cast
 
-from .edge_events import build_policy_event
-from .extension_control_events import extension_control_change_payload
 from .native_extension_control import NativeExtensionControlError, compose_control_layers
 from .native_extension_control_authority import anchor_from_wire
 from .runtime.extension_control_authority import (
@@ -25,7 +23,6 @@ from .runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    layers_from_json,
 )
 from .runtime.extension_control_contract import (
     ControlLayerKind,
@@ -280,31 +277,6 @@ class _ExtensionControlAuthoritySupportMixin:
     def _validate_serialized_layers(layers_json: str) -> None:
         if len(layers_json.encode("utf-8")) > _MAX_SERIALIZED_LAYERS_BYTES:
             raise ExtensionControlAuthorityError("extension control layers exceed storage limit")
-
-    def _queue_extension_control_change_event(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        revision: int,
-        previous_revision: int,
-        layers_json: str,
-        occurred_at: str,
-    ) -> None:
-        layers = layers_from_json(layers_json)
-        self._add_guard_event_v1(
-            connection,
-            build_policy_event(
-                policy_key=f"extension-controls:{revision}",
-                occurred_at=occurred_at,
-                device_id=None,
-                workspace_id=self._cloud_workspace_id_from_connection(connection),
-                payload=extension_control_change_payload(
-                    revision=revision,
-                    previous_revision=previous_revision,
-                    layers=layers,
-                ),
-            ),
-        )
 
     def _degraded_view(self, catalog_digest: str) -> ExtensionControlAuthorityView:
         health = (
