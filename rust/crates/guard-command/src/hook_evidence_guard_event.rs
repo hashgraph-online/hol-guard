@@ -4,10 +4,13 @@
 //! does. It takes only the events named here, so a journal entry cannot put
 //! any other event into the log.
 
+use std::num::NonZeroU32;
+
 use serde_json::{json, Map, Value};
 
 use super::{
-    _timestamp_is_utc_aware, uuid4_hex, write_canonical_json_with_limit,
+    _timestamp_is_utc_aware, store_refused, uuid4_hex, write_canonical_json_with_limit,
+    EvidenceRecord, EvidenceWorker, PersistOutcome, RuntimeHookEvidenceWriter,
     MAX_SERIALIZED_RECORD_BYTES, SAFE_IDENTIFIER,
 };
 
@@ -97,5 +100,53 @@ impl GuardEventRecord {
             payload_bytes: 0,
         }
         .checked()
+    }
+}
+
+impl RuntimeHookEvidenceWriter {
+    /// Queue a timeline event for the local event log. False when the event
+    /// is not one this writer takes or the queue is full.
+    pub fn submit_guard_event(
+        &self,
+        event_name: &str,
+        payload: Map<String, Value>,
+        occurred_at: &str,
+    ) -> bool {
+        let Some(record) = GuardEventRecord::new(event_name, payload, occurred_at) else {
+            return false;
+        };
+        let record = EvidenceRecord::GuardEvent(record);
+        let mut state = self.lock_state();
+        if state.stopping
+            || state.records.len() >= self.max_records
+            || state.queued_bytes + record.payload_bytes() > self.max_bytes
+        {
+            state.dropped += 1;
+            state.degraded = true;
+            return false;
+        }
+        state.queued_bytes += record.payload_bytes();
+        state.records.push_back(record);
+        state.accepted += 1;
+        self.condition.1.notify_one();
+        true
+    }
+}
+
+impl EvidenceWorker {
+    /// Save a queued timeline event to the local event log.
+    fn persist_guard_event(&self, record: &GuardEventRecord) -> PersistOutcome {
+        let _timeout_guard = self.deps.sqlite_timeout.sqlite_timeout_override(
+            NonZeroU32::new((self.sqlite_timeout_seconds * 1000.0).ceil().max(1.0) as u32)
+                .unwrap_or(NonZeroU32::MIN),
+        );
+        match self.store.record_guard_event(
+            &record.event_name,
+            &record.payload,
+            &record.occurred_at,
+        ) {
+            Ok(()) => PersistOutcome::Done,
+            Err(error) => store_refused(&error),
+        }
     }
 }

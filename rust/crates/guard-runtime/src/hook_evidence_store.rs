@@ -417,6 +417,9 @@ impl EvidenceStoreApi for NativeEvidenceStore {
             "occurred_at".to_owned(),
             Value::String(occurred_at.to_owned()),
         );
+        // The writer replays its journal after a crash, which can hold an
+        // event the store already saved.
+        args.insert("once".to_owned(), Value::Bool(true));
         self.call("hook-evidence-guard-event", "add_event", args)?;
         Ok(())
     }
