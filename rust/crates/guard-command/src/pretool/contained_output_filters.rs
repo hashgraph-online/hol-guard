@@ -140,11 +140,6 @@ fn stdin_arguments(arguments: &[String], switches: &str) -> bool {
         }
         if options_done || !argument.starts_with('-') {
             operands += 1;
-            // The first operand is the script when no `-e` gave one; a
-            // second operand is a file, which the count below refuses.
-            if operands == 1 && expressions == 0 && !sed_script::text_filter_script(argument) {
-                return false;
-            }
             continue;
         }
         if argument == "--" {
@@ -152,10 +147,7 @@ fn stdin_arguments(arguments: &[String], switches: &str) -> bool {
             continue;
         }
         if argument == "-e" {
-            let Some(script) = arguments.get(index) else {
-                return false;
-            };
-            if !sed_script::text_filter_script(script) {
+            if index >= arguments.len() {
                 return false;
             }
             index += 1;
@@ -272,6 +264,11 @@ fn sed_arguments(arguments: &[String]) -> bool {
         }
         if options_done || !argument.starts_with('-') {
             operands += 1;
+            // The first operand is the script when no `-e` gave one; a
+            // second operand is a file, which the count below refuses.
+            if operands == 1 && expressions == 0 && !sed_script::text_filter_script(argument) {
+                return false;
+            }
             continue;
         }
         if argument == "--" {
@@ -279,7 +276,10 @@ fn sed_arguments(arguments: &[String]) -> bool {
             continue;
         }
         if argument == "-e" {
-            if index >= arguments.len() {
+            let Some(script) = arguments.get(index) else {
+                return false;
+            };
+            if !sed_script::text_filter_script(script) {
                 return false;
             }
             index += 1;
