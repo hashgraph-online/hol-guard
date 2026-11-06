@@ -277,7 +277,7 @@ fn repository_configuration_cannot_start_programs() {
 
 #[cfg(unix)]
 #[test]
-fn a_configured_filter_leaves_out_the_working_tree_and_a_partial_clone_everything() {
+fn a_configured_filter_leaves_out_the_working_tree() {
     let repo = Repo::new();
     let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
     repo.write("src/core.py", &CORE.replace("return 1", "return 5"));
@@ -287,8 +287,51 @@ fn a_configured_filter_leaves_out_the_working_tree_and_a_partial_clone_everythin
     let text = repo.changes(Some(&base)).unwrap();
     assert!(!text.contains("Uncommitted:"), "{text}");
     assert!(text.contains("+    return 5"), "{text}");
-    repo.git(&["config", "remote.origin.promisor", "true"]);
-    assert_eq!(repo.changes(Some(&base)), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_partial_clone_shows_what_is_on_disk_and_never_fetches() {
+    let source = Repo::new();
+    let base = source.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    // Still checked out, so its blob is on disk, under two that are not.
+    source.write("src/kept.py", "KEPT = 1\n");
+    source.commit("add kept");
+    source.write("src/old.py", "OLD = 1\n");
+    source.commit("add old");
+    source.git(&["rm", "-q", "src/old.py"]);
+    source.commit("drop old");
+    source.git(&["config", "uploadpack.allowFilter", "true"]);
+    let clone = Repo {
+        root: tempfile::tempdir().unwrap(),
+        home: tempfile::tempdir().unwrap(),
+    };
+    let url = format!("file://{}", source.path().display());
+    clone.git(&["clone", "-q", "--filter=blob:none", &url, "."]);
+    // Fetching the blob `drop old` removed would run this program.
+    let marker = clone.home.path().join("fetched");
+    let remote = format!("ext::sh -c touch% {}", marker.display());
+    clone.git(&["config", "remote.origin.url", &remote]);
+    clone.git(&["config", "protocol.allow", "always"]);
+    clone.git(&["config", "protocol.ext.allow", "always"]);
+    clone.write("src/core.py", &CORE.replace("return 1", "return 7"));
+    clone.commit("seven");
+    clone.write("src/core.py", &CORE.replace("return 1", "return 8"));
+    let text = clone.changes(Some(&base)).unwrap();
+    assert!(
+        text.contains("Uncommitted:") && text.contains("+    return 8"),
+        "{text}"
+    );
+    assert!(
+        text.contains("seven") && text.contains("+    return 7"),
+        "{text}"
+    );
+    assert!(!text.contains("OLD = 1"), "{text}");
+    assert!(
+        text.contains("add kept") && text.contains("+KEPT = 1"),
+        "an older commit on disk still shows: {text}"
+    );
+    assert!(!marker.exists(), "a missing object was fetched");
 }
 
 #[cfg(unix)]
