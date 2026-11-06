@@ -377,14 +377,24 @@ fn points_output_at_a_protected_file(arguments: &[String]) -> bool {
 /// `Some(Some(path))` carries the value in the argument itself,
 /// `Some(None)` means the option is there and the next word carries its
 /// value, and `None` means the argument is not an output option at all.
+///
+/// Git's own option parser lets short flags travel in one cluster, so
+/// `git format-patch -no ../outside` writes exactly where `-n -o ../outside`
+/// would. The letter is therefore read wherever it sits in a single-dash
+/// run, not only at its head; a cluster the verb refuses outright fails
+/// before it writes anything, so reading one as an output option costs
+/// nothing.
 fn output_option_value(argument: &str, short_writes: bool) -> Option<Option<&str>> {
     if let Some(rest) = argument.strip_prefix("--out") {
         return Some(rest.split_once('=').map(|(_, value)| value));
     }
     if short_writes {
-        if let Some(rest) = argument.strip_prefix("-o") {
-            return Some((!rest.is_empty()).then_some(rest));
-        }
+        let cluster = argument
+            .strip_prefix('-')
+            .filter(|rest| !rest.starts_with('-'))?;
+        let position = cluster.find('o')?;
+        let rest = &cluster[position + 'o'.len_utf8()..];
+        return Some((!rest.is_empty()).then_some(rest));
     }
     None
 }
@@ -465,6 +475,11 @@ mod tests {
             "archive -o ~/out.tar HEAD",
             "archive -o $DEST/out.tar HEAD",
             "format-patch -o .git/hooks HEAD~1",
+            // Git reads a clustered short flag exactly as the separate
+            // spelling, so `-no DIR` writes where `-n -o DIR` would.
+            "format-patch -no ../outside HEAD~1",
+            "format-patch -sno .git/hooks HEAD~1",
+            "format-patch -no../outside HEAD~1",
             "archive --output",
         ] {
             assert!(
@@ -481,6 +496,8 @@ mod tests {
             "archive -oout.tar HEAD",
             "archive --output=snapshot.tar HEAD",
             "format-patch -o patches HEAD~1",
+            "format-patch -no patches HEAD~1",
+            "format-patch -nopatches HEAD~1",
             "diff --output=hook",
             "ls-files -o --exclude-standard",
             "push -o ci.skip origin main",
