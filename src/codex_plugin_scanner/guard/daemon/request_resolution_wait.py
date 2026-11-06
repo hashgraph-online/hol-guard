@@ -7,10 +7,16 @@ A decision this daemon commits ends the wait at once through the store's
 review-event wake. A decision written by another process raises no wake in this
 one, so the request is read again on a short interval as well, and such a
 decision is seen no later than a polling hook would have seen it.
+
+A held read keeps one of the daemon's request slots for as long as it waits,
+so only a few are held at once. Beyond that a read is answered immediately,
+and its hook falls back to polling, leaving the remaining slots for hook
+evaluations and decisions.
 """
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from urllib.parse import parse_qs
@@ -20,6 +26,10 @@ from ..store import GuardStore
 
 MAX_RESOLUTION_WAIT_SECONDS = 1.0
 RESOLUTION_RECHECK_SECONDS = 0.2
+MAX_HELD_RESOLUTION_READS = 8
+
+_MAX_RESOLUTION_WAIT_MS = int(MAX_RESOLUTION_WAIT_SECONDS * 1000)
+_held_reads = threading.BoundedSemaphore(MAX_HELD_RESOLUTION_READS)
 
 
 def requested_resolution_wait_seconds(query: str) -> float:
@@ -32,7 +42,7 @@ def requested_resolution_wait_seconds(query: str) -> float:
         wait_ms = int(values[-1])
     except ValueError:
         return 0.0
-    return min(max(wait_ms, 0) / 1000, MAX_RESOLUTION_WAIT_SECONDS)
+    return min(max(wait_ms, 0), _MAX_RESOLUTION_WAIT_MS) / 1000
 
 
 def wait_for_request_resolution(
@@ -47,6 +57,21 @@ def wait_for_request_resolution(
 
     if timeout_seconds <= 0 or approval.get("status") != "pending":
         return approval
+    if not _held_reads.acquire(blocking=False):
+        return approval
+    try:
+        return _wait_while_pending(store, request_id, approval, timeout_seconds, monotonic)
+    finally:
+        _held_reads.release()
+
+
+def _wait_while_pending(
+    store: GuardStore,
+    request_id: str,
+    approval: dict[str, object],
+    timeout_seconds: float,
+    monotonic: Callable[[], float],
+) -> dict[str, object] | None:
     signal = review_event_wake_signal(store.path)
     deadline = monotonic() + timeout_seconds
     current: dict[str, object] | None = approval

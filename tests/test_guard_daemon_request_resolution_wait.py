@@ -39,6 +39,7 @@ def test_wait_query_is_bounded_and_defaults_to_no_wait() -> None:
     assert requested_resolution_wait_seconds("wait_ms=-5") == 0.0
     assert requested_resolution_wait_seconds("wait_ms=250") == 0.25
     assert requested_resolution_wait_seconds("wait_ms=60000") == wait_module.MAX_RESOLUTION_WAIT_SECONDS
+    assert requested_resolution_wait_seconds("wait_ms=" + "9" * 400) == wait_module.MAX_RESOLUTION_WAIT_SECONDS
 
 
 def test_a_decision_committed_in_the_daemon_ends_the_wait_at_once(tmp_path: Path, monkeypatch) -> None:
@@ -119,3 +120,33 @@ def test_no_wait_and_settled_requests_answer_immediately(tmp_path: Path) -> None
     settled = {**approval, "status": "resolved"}
     assert wait_for_request_resolution(store, "req-immediate", settled, 5.0) is settled
     assert store.reads == 1
+
+
+def test_reads_beyond_the_held_limit_answer_at_once(tmp_path: Path, monkeypatch) -> None:
+    # Every held read keeps a daemon request slot, so the rest are answered
+    # immediately and their hooks poll instead.
+    monkeypatch.setattr(wait_module, "_held_reads", threading.BoundedSemaphore(1))
+    store = _ScriptedStore(tmp_path / "guard.db", "req-limit")
+    approval = store.get_approval_request("req-limit")
+    assert approval is not None
+    assert wait_module._held_reads.acquire(blocking=False)
+    try:
+        started = time.monotonic()
+        result = wait_for_request_resolution(store, "req-limit", approval, 5.0)
+        assert time.monotonic() - started < 0.5
+    finally:
+        wait_module._held_reads.release()
+
+    assert result is approval
+    assert store.reads == 1
+    # The slot is free again once the held read ends.
+    monkeypatch.setattr(wait_module, "RESOLUTION_RECHECK_SECONDS", 0.01)
+    clock = [0.0]
+
+    def monotonic() -> float:
+        clock[0] += 0.3
+        return clock[0]
+
+    wait_for_request_resolution(store, "req-limit", approval, 1.0, monotonic=monotonic)
+    assert wait_module._held_reads.acquire(blocking=False)
+    wait_module._held_reads.release()

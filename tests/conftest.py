@@ -29,6 +29,7 @@ pytest_plugins = [
     "tests.native_object_runtime",
     "tests.native_resident_teardown",
     "tests.optional_command_catalog_fixtures",
+    "tests.network_trust_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -148,16 +149,6 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for module in (installed_bundle, object_native):
         monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
-
-
-@pytest.fixture(autouse=True)
-def _fresh_default_ssl_context() -> Iterator[None]:
-    """Keep a reused TLS context from crossing tests that stub trust sources."""
-    from codex_plugin_scanner.guard.mdm.network_trust import reset_default_ssl_context_cache
-
-    reset_default_ssl_context_cache()
-    yield
-    reset_default_ssl_context_cache()
 
 
 @pytest.fixture(autouse=True)
