@@ -264,6 +264,17 @@ const OUTSIDE_THE_ALLOW: &[&str] = &[
     // Runs a further Git command this contract never read.
     "git for-each-repo --config=maintenance.repo gc",
     "git submodule--helper list",
+    // Runs the program named on its own command line, once per unmerged path.
+    "git merge-index sh -a",
+    "git merge-index ./merge-driver -a",
+    // Writes where no floor here reads the destination.
+    "git checkout-index --prefix=../outside/ --all",
+    "git checkout-index --prefix=.git/hooks/ --all",
+    "git bundle create ../snapshot.bundle --all",
+    "git pack-objects ../outside/pack",
+    "git mailsplit -o../outside",
+    // The `init` template and destination floors never see this spelling.
+    "git init-db --template=templates fresh",
 ];
 
 /// Allowing Git in full answers for Git's own work, not for whatever program
