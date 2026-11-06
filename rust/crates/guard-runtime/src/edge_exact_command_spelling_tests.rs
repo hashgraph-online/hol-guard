@@ -119,20 +119,24 @@ fn quoted_spaces_are_kept_and_read_as_cloud_saves_them() {
     let command = "git  commit -m 'two  words'";
     assert!(has(command, "git commit -m 'two  words'"));
     assert!(has(command, "git commit -m 'two words'"));
-    assert!(!has(
+    assert!(has(
         "(git commit -m 'two  words')",
         "git commit -m 'two words'"
     ));
 }
 
 #[test]
-fn a_line_too_long_or_deep_is_not_complete() {
+fn a_line_too_long_is_not_complete() {
     assert!(!spellings(&"x".repeat(MAX_COMMAND_BYTES + 1)).complete);
-    let mut deep = "npm test".to_owned();
-    for _ in 0..=MAX_DEPTH {
-        deep = format!("bash -c {}", quote(&deep));
+}
+
+#[test]
+fn nested_inline_scripts_list_the_inner_step() {
+    let mut nested = "npm publish".to_owned();
+    for _ in 0..4 {
+        nested = format!("bash -c {}", quote(&nested));
     }
-    assert!(!spellings(&deep).complete);
+    assert!(has(&nested, "npm publish"), "{nested}");
 }
 
 fn quote(text: &str) -> String {
