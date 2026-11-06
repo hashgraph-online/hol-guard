@@ -1695,14 +1695,19 @@ fn node_runtime_entrypoint_identity(
     launch_cwd: &Path,
     launch_env: Option<&Value>,
 ) -> Value {
-    // NODE_OPTIONS injects a caller-controlled `-r`/`-e` preamble ahead of
-    // the script argv, so any visible value makes the entrypoint unproven.
-    let node_options_nonempty = launch_env
+    // NODE_OPTIONS can inject a caller-controlled `-r`/`--import` preamble
+    // ahead of the script argv, so a visible value makes the entrypoint
+    // unproven. The exception is a value made only of heap-size and
+    // diagnostic flags (`guard_contracts::node_options_inert`): none of them
+    // loads code or reads a file, and agent wrappers commonly export one such
+    // as `--max-old-space-size=12288`. Treating that as unproven gave every
+    // node-script package manager (npm, pnpm, yarn through corepack) a fresh
+    // reuse nonce per launch, so no approval for it could ever be reused.
+    let node_options_unresolved = launch_env
         .and_then(|v| v.get("NODE_OPTIONS"))
         .and_then(|v| v.as_str())
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-    if node_options_nonempty {
+        .is_some_and(|s| !s.is_empty() && !guard_contracts::node_options_inert(s));
+    if node_options_unresolved {
         return unproven_runtime_entrypoint("node-launch", "environment_options_unresolved", None);
     }
     let mut index = 0usize;
