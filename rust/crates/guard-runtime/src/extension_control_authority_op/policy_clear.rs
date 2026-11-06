@@ -24,7 +24,7 @@ use super::resume::immediate;
 use super::writes::open_writer;
 use super::{fault_value, Ctx, STORE_UNAVAILABLE};
 
-const NEGOTIATED_STATE_KEY: &str = "managed_controls_negotiated_capabilities";
+pub(super) const NEGOTIATED_STATE_KEY: &str = "managed_controls_negotiated_capabilities";
 const ACK_STATE_KEY: &str = "policy_bundle_ack";
 /// The `sync_state` keys a clear may write.
 const PAYLOAD_KEYS: [&str; 5] = [
@@ -115,7 +115,7 @@ impl Ctx<'_> {
         Ok(())
     }
 
-    fn state_text(&self, state_key: &str) -> Res<Option<String>> {
+    pub(super) fn state_text(&self, state_key: &str) -> Res<Option<String>> {
         query_row(
             self.connection,
             "select payload_json from sync_state where state_key = ?",

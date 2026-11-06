@@ -46,6 +46,7 @@ _WRITER_SOURCES = frozenset(
         "migrate.rs",
         "pack_finish.rs",
         "pack_reserve.rs",
+        "policy_apply.rs",
         "policy_clear.rs",
         "reset.rs",
         "resume.rs",
