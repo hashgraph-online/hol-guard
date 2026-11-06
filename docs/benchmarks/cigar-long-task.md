@@ -92,6 +92,13 @@ The model, its reasoning level and every harness setting are the same as the con
 - **Codex (`map`):** Guard's prompt hook and its after-tool hook on `Bash`, `Read` and MCP tools.
 - **Claude Code (`claude-ctx`):** the control's settings plus Guard's `UserPromptSubmit` hook only. Each of the 30 prompts in the five runs got the note; no control prompt did.
 
+`arm-init` only makes the controls. The arms with the note were set up by hand:
+
+1. Install the Guard build under test in its own virtualenv. With `HOME` set to a scratch folder, set up context assistance there (`hol-guard context setup-python`, then `hol-guard context install`) and turn it on with workspace documents and agent context. Project scope is automatic, so the bench projects need no grant.
+2. Codex: run Guard's Codex install against the scratch home. In the scratch home's `.codex/config.toml`, keep only the hooks the arm uses and add the control's approval and sandbox settings. Make the arm's `codex_home` a symlink to that `.codex` folder and its `home` a symlink to the scratch home. Codex trusts a hook by a key that includes the resolved path of `config.toml`, so a copied file carries keys for the wrong path and Codex skips the hooks without saying so.
+3. Claude Code: copy the `claude-base` arm and add the `UserPromptSubmit` entry that Guard's Claude Code install writes for the scratch home to its `claude_settings.json`. The hook command must name the scratch Guard home, because Claude Code runs hooks with the real `HOME`.
+4. Before measuring, check one session's transcript for the note on every prompt.
+
 ### Codex (gpt-6-luna, medium reasoning)
 
 | Arm | n | errored | all pass | paid $/run | paid vs base | input $ | raw input | raw vs base | full-price in | cache read | cache write | output | requests | compactions | read chars |
@@ -101,7 +108,7 @@ The model, its reasoning level and every harness setting are the same as the con
 
 The four errored rows are earlier builds and are not counted: two ran with hooks Codex had not trusted, so Guard never ran, and two ran before #7341, when the change note came back empty in blobless clones like this fixture. They are also why "all pass" reads NO; the five counted runs all passed every check.
 
-Requests fell 10%, and in the two runs checked the step after a teammate's commit took three commands, but paid cost rose 3.8%. Per-run paid was $0.042, $0.085, $0.047, $0.050 and $0.052. In the $0.085 run the agent spent 90 requests on the final review step running its own full diff and five experiments, with the same note as the run before it (55 requests); the other four averaged 51.8 requests. Full-price input also rose, from 115k to 145k tokens. That comes from provider cache misses of 4k to 27k tokens at random requests, which show up in every arm: full-price input ranges from 75k to 186k between runs of the same arm. At five runs that noise is as large as the effect.
+Requests fell 10%, and in the two runs checked the step after a teammate's commit took three commands, but paid cost rose 3.8%. Per-run paid was $0.042, $0.085, $0.047, $0.050 and $0.052. The $0.085 run made 90 requests in all. Its final review step ran 302 seconds, against 32 to 136 for its other steps, while the agent ran its own full diff and five experiments. The other four runs averaged 52.0 requests. Full-price input also rose, from 115k to 145k tokens. That comes from provider cache misses of 4k to 27k tokens at random requests, which show up in every arm: full-price input ranges from 75k to 186k between runs of the same arm. At five runs that noise is as large as the effect.
 
 ### Claude Code (claude-haiku-4-5)
 
@@ -112,7 +119,7 @@ Requests fell 10%, and in the two runs checked the step after a teammate's commi
 
 Paid cost fell 23%, with 19% fewer requests and 34% fewer characters of file reads. Per-run paid was $2.80 to $3.40 for the control and $1.93 to $2.87 with the note; four of the five runs with the note cost less than the cheapest control run.
 
-Every run in both arms passed the full suite and two of the three acceptance checks. The third, `t2`, failed two of its four cases in three control runs and in four runs with the note. That is Haiku's limit on this task, as in the shaping round, so the two arms finished the same work.
+Every run in both arms passed the full suite and two of the three acceptance checks. The third, `t2`, failed two of its four cases in three control runs and in four runs with the note. That is Haiku's limit on this task, as in the shaping round. It also means one run with the note passed every check against two control runs, so read the 23% as cost per attempted task, not savings for the same finished work.
 
 One control run is not in the table: in its first attempt the agent's edits made the suite hang, steps two to four each hit the bench's ten-minute limit and no usage row was written. It was run again from a clean copy.
 
