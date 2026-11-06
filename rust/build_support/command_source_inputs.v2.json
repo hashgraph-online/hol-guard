@@ -401,6 +401,7 @@
       "src/pretool/git_config_filters.rs",
       "src/pretool/git_config_home_tests.rs",
       "src/pretool/git_config_pager.rs",
+      "src/pretool/git_config_probe_refusal_tests.rs",
       "src/pretool/git_config_reads.rs",
       "src/pretool/git_config_textconv.rs",
       "src/pretool/git_config_trust.rs",

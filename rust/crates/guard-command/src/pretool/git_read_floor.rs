@@ -309,7 +309,7 @@ fn verdict(
                         read_context,
                         execution_environment,
                     )
-                    && super::git_config::probe_unanswered(
+                    && super::git_config::probe_without_finding(
                         executable,
                         &arguments[index],
                         read_context,
