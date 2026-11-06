@@ -121,16 +121,23 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
                     Inline::No => {}
                 }
             }
-            let (mut found, closed) = steps(text, true);
-            out.complete &= closed;
             // Bash reads `((` as arithmetic only when it parses as one, and
-            // runs `((npm publish); true)` as nested groups. Both readings
-            // are listed; an extra text can only add a match.
+            // runs `((npm publish); true)` as nested groups. A `#` starts a
+            // comment, except inside `${…}` and similar words. Every reading
+            // is listed; an extra text can only add a match. The line is
+            // read through when either comment reading closes its quotes,
+            // since text left in an unclosed quote runs nothing.
+            let (mut found, closed) = steps(text, true, true);
+            let (plain, plain_closed) = steps(text, true, false);
+            out.complete &= closed || plain_closed;
+            let mut readings = vec![plain];
             if text.contains("((") {
-                for step in steps(text, false).0 {
-                    if !found.contains(&step) {
-                        found.push(step);
-                    }
+                readings.push(steps(text, false, true).0);
+                readings.push(steps(text, false, false).0);
+            }
+            for step in readings.into_iter().flatten() {
+                if !found.contains(&step) {
+                    found.push(step);
                 }
             }
             if found.len() == 1 && found[0] == text.trim() {
@@ -252,7 +259,7 @@ fn double_quoted(word: &str) -> String {
 /// without its redirections. Heredoc bodies are skipped up to their closing
 /// line; a body that never closes is read as steps, so nothing after an
 /// unclosed `<<` is hidden.
-fn steps(text: &str, read_arithmetic: bool) -> (Vec<String>, bool) {
+fn steps(text: &str, read_arithmetic: bool, read_comments: bool) -> (Vec<String>, bool) {
     let chars: Vec<char> = text.chars().collect();
     let mut steps = Vec::new();
     let mut current = String::new();
@@ -261,8 +268,7 @@ fn steps(text: &str, read_arithmetic: bool) -> (Vec<String>, bool) {
     let mut arithmetic = 0usize;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
     // A `#` that starts a word comments out the rest of the line, where
-    // quotes and `<<` start nothing. Its text is still split into steps, so a
-    // shell that reads it differently cannot hide a step from the rules.
+    // quotes and `<<` start nothing. Its text is still split into steps.
     let mut comment = false;
     let mut i = 0;
     while i < chars.len() {
@@ -295,7 +301,9 @@ fn steps(text: &str, read_arithmetic: bool) -> (Vec<String>, bool) {
                 current.push(c);
             }
             (None, '#')
-                if arithmetic == 0 && (current.is_empty() || current.ends_with([' ', '\t'])) =>
+                if read_comments
+                    && arithmetic == 0
+                    && (current.is_empty() || current.ends_with([' ', '\t'])) =>
             {
                 comment = true;
                 current.push(c);

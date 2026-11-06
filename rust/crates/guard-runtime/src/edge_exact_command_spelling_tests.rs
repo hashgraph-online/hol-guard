@@ -193,3 +193,9 @@ fn arithmetic_that_lists_itself_is_complete() {
     let read = spellings("(( i++ ))");
     assert!(read.complete);
 }
+
+#[test]
+fn a_hash_inside_an_expansion_is_also_read_as_text() {
+    let command = "(true); echo ${x:- #'}\n<<EOF '}\nEOF\nnpm publish\nEOF";
+    assert!(has(command, "npm publish"), "{command:?}");
+}
