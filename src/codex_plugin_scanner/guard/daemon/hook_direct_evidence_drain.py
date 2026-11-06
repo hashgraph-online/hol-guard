@@ -16,6 +16,12 @@ direct-lane binding only while it runs, so a resident never answers directly
 for a daemon that would leave the evidence behind. A page from a current
 resident also carries its diagnostic hook counts, which go to
 ``hook_direct_counters`` for the daemon log and nowhere else.
+
+The resident records a page's receipts, and the tool activity the binding let
+it record, with its own evidence writer before the page leaves, and marks the
+records it recorded, so this drain submits only what the resident left. A
+store failure that writer reports rides on the page, and the daemon's writer
+client recovers the store from it as it would from its own reply.
 """
 
 from __future__ import annotations
@@ -176,7 +182,9 @@ def _raise_connector_setup_notice(store: object, notice: object) -> None:
 
 
 def _decode_page(
-    output: bytes | None, counters: HookCounterLog | None = None
+    output: bytes | None,
+    counters: HookCounterLog | None = None,
+    on_store_fatal: Callable[[], object] | None = None,
 ) -> tuple[list[object], int, tuple[str, int] | None] | None:
     if not output:
         return None
@@ -195,6 +203,9 @@ def _decode_page(
     if counters is not None and "counters" in page:
         # Diagnostics only; a page from an older resident has none.
         counters.observe_page(epoch, page.get("counters"))
+    if on_store_fatal is not None and isinstance(page.get("store_fatal"), dict):
+        with suppress(Exception):
+            on_store_fatal()
     if through is None:
         return records, remaining, None
     if isinstance(through, bool) or not isinstance(through, int) or through < 1:
@@ -307,10 +318,16 @@ class DirectHookEvidenceDrain:
             )
         except Exception:
             output = None
-        page = _decode_page(output, self._counters)
+        page = _decode_page(output, self._counters, self._recover_writer_store)
         if page is None:
             self.failures += 1
         return page
+
+    def _recover_writer_store(self) -> None:
+        # A writer reply carries the failure, and the client recovers from it.
+        stats = getattr(self._host.activity_writer, "stats", None)
+        if callable(stats):
+            _ = stats()
 
     def _publisher_transport(self) -> tuple[Path, Callable[..., bytes | None]] | None:
         transport = getattr(self._host.policy_snapshot_publisher, "direct_evidence_transport", None)

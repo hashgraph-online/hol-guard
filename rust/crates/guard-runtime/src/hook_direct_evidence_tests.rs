@@ -24,7 +24,7 @@ fn drained_from(
     ack_epoch: Option<&str>,
 ) -> Value {
     let request = request(max_records, ack_through, ack_epoch);
-    serde_json::from_slice(&drain(&request, queue).unwrap()).unwrap()
+    serde_json::from_slice(&drain(&request, queue, None).unwrap()).unwrap()
 }
 
 /// A page from `queue`, acknowledging `ack_through` from the same queue.
@@ -285,7 +285,7 @@ fn a_partly_recorded_record_is_charged_for_the_markers_it_keeps() {
     let queue = DirectEvidenceQueue::default();
     let record = json!({"receipt": {}});
     assert!(queue
-        .try_offer_recorded(record, &["first_recorded", "second_recorded"], |_| 1)
+        .try_offer_recorded(record, &["first_recorded", "second_recorded"], false, |_| 1)
         .is_ok());
     let kept = json!({"receipt": {}, "first_recorded": true});
     let state = queue.state.lock().unwrap();
