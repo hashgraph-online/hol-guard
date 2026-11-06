@@ -56,7 +56,13 @@ fn an_allowed_extension_covers_a_list_that_changes_directory_before_a_sequence()
     // those steps running where the command started. That left the `cd`
     // itself proved by nothing, so a user who had turned on every GitHub
     // permission still got a review for the whole command.
-    let root = tempfile::tempdir().expect("temp root");
+    // A hidden component anywhere in the path fails the read screens every
+    // directory proof runs, and `tempfile`'s default prefix is `.tmp`, so the
+    // fixture names its own root.
+    let root = tempfile::Builder::new()
+        .prefix("guard-directory-allow")
+        .tempdir()
+        .expect("temp root");
     let home = std::fs::canonicalize(root.path()).expect("canonical home");
     let workspace = home.join("workspace");
     let target = home.join("projects").join("polish");
