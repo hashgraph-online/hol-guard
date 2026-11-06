@@ -209,6 +209,7 @@ class ReviewApprover:
         from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 
         from .approval_retry_bash import SCRIPT_RELATIVE, plan, targets_script
+        from .approval_retry_persistent import persistent_consent
 
         request_id = str(row.get("request_id") or "")
         lifecycle = plan(self._scenario_id or "")
@@ -233,6 +234,8 @@ class ReviewApprover:
                     self._lifecycle["once_contention_observed"] = True
             return
         persist_policy = True if lifecycle is not None and lifecycle_target and lifecycle.persist else None
+        if persist_policy is None and persistent_consent(self._scenario_id or "", target):
+            persist_policy = True
         artifact_hash = row.get("artifact_hash") if isinstance(row.get("artifact_hash"), str) else None
         scope_version = row.get("scope_contract_version")
         scope_digest = row.get("scope_contract_digest")
