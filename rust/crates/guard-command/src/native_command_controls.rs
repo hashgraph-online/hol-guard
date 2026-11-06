@@ -525,11 +525,22 @@ impl CompiledNativeCommandControls {
         covered.extend(crate::pretool::git_reads_after_allowed_steps(
             command, context, &benign, &covered,
         ));
+        // A `cd` into a verified directory at the head of a list whose
+        // separators leave the steps after it unproven still reads and
+        // creates nothing. Without it the user's extension-wide Allow covers
+        // every program in `cd <dir> && gh pr merge 1; gh pr view 1` and the
+        // command keeps a review for the one step nobody doubts.
+        let entered_directory: BTreeSet<usize> =
+            crate::pretool::leading_cd_segment(command, context)
+                .into_iter()
+                .collect();
+        covered.extend(entered_directory.iter().copied());
         // An extension whose every permission the user explicitly enabled
         // covers the programs it watches, including the spellings no rule
         // models. It runs last so it never hides a rule the user left off and
         // never changes what the proofs above read.
-        covered.extend(self.fully_allowed_extension_segments(command, &benign, context));
+        let proven: BTreeSet<usize> = benign.union(&entered_directory).copied().collect();
+        covered.extend(self.fully_allowed_extension_segments(command, &proven, context));
         // A Git step that points its own output over `.git` or out of the
         // workspace writes whichever route covered it: a `git log` rule the
         // user enabled reads the verb, not the `--output=.git/config` that
