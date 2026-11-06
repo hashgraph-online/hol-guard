@@ -133,7 +133,7 @@ def extension_control_authority(
 
 
 def _required_feature(op: str) -> str:
-    if op in {"bootstrap", "commit_prepare", "resume", "migrate", "write_manifest"}:
+    if op in {"bootstrap", "commit_prepare", "resume", "migrate", "write_anchor", "write_manifest"}:
         return EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE
     return EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE if op in _WRITE_OPS else EXTENSION_CONTROL_AUTHORITY_FEATURE
 

@@ -151,21 +151,19 @@ class _ExtensionControlAuthoritySupportMixin:
         return anchor_from_wire(reply.get("anchor"))
 
     def _write_and_verify_anchor(self, anchor: AuthorityAnchor, *, key: bytes) -> None:
+        """Have the resident write an anchor the store has earned, then mirror it."""
+
         sealed = self._extension_control_authority_op(
-            "seal_anchor",
+            "write_anchor",
             key=key,
+            anchor_json=self._read_anchor_json(),
             revision=anchor.revision,
             snapshot_digest=anchor.snapshot_digest,
             phase=anchor.phase.value,
         ).get("anchor_json")
         if not isinstance(sealed, str):
             raise ExtensionControlAuthorityError("invalid extension control anchor seal")
-        encoded = sealed
-        self._secret_store().set_secret(self._anchor_ref(), encoded)
-        observed = self._secret_store().get_secret(self._anchor_ref())
-        if observed != encoded:
-            raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
-        self._export_last_good_authority(anchor)
+        self._mirror_resident_anchor(sealed)
 
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store
