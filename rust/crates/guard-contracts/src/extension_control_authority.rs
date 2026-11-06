@@ -344,6 +344,21 @@ pub struct ExtensionControlPackReserveV1 {
     pub security_digest: Option<String>,
     /// Unix seconds the activation is admitted at.
     pub admitted_at: i64,
+    /// The legacy baseline a first activation retains, sealed by the
+    /// resident when the activation slot is still empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<ExtensionControlPackBaselineV1>,
+}
+
+/// The legacy catalog a first command-pack activation retains as its
+/// revision-0 baseline.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPackBaselineV1 {
+    pub program_digest: String,
+    pub catalog_digest: String,
+    pub trust_digest: String,
+    pub recorded_at: String,
 }
 
 impl std::fmt::Debug for ExtensionControlPackReserveV1 {
