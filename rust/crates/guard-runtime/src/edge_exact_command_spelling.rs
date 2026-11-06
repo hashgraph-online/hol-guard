@@ -124,12 +124,13 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
             // Bash reads `((` as arithmetic only when it parses as one, and
             // runs `((npm publish); true)` as nested groups. A `#` starts a
             // comment, except inside `${…}` and similar words. Every reading
-            // is listed; an extra text can only add a match. The line is
-            // read through when either comment reading closes its quotes,
-            // since text left in an unclosed quote runs nothing.
+            // is listed; an extra text can only add a match. A shell can mix
+            // the two comment readings on one line, so a quote either one
+            // leaves open may hide a step: the line is read through only
+            // when both close their quotes.
             let (mut found, closed) = steps(text, true, true);
             let (plain, plain_closed) = steps(text, true, false);
-            out.complete &= closed || plain_closed;
+            out.complete &= closed && plain_closed;
             let mut readings = vec![plain];
             if text.contains("((") {
                 readings.push(steps(text, false, true).0);

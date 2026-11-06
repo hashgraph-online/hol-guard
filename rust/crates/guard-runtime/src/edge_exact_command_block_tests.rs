@@ -182,3 +182,15 @@ fn a_line_too_long_to_read_asks() {
     let untouched = apply(other.path(), &call(&command), Some(NOW), allowed());
     assert_eq!(untouched.minimum_action, "allow");
 }
+
+#[test]
+fn a_line_whose_comments_read_two_ways_asks() {
+    let ruled = home(&[Row {
+        action: "block",
+        ..rule("npm publish")
+    }]);
+    let command = "(true); echo ${x:- #'}\n<<END '}  # '\nnpm publish\nEND";
+    let raised = apply(ruled.path(), &call(command), Some(NOW), allowed());
+    assert_ne!(raised.minimum_action, "allow");
+    validate_pre_tool_result_matrix(&raised).unwrap();
+}

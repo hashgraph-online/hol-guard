@@ -181,11 +181,20 @@ fn a_comment_does_not_start_a_heredoc_or_quote() {
     for command in [
         "(true) # <<EOF\nnpm publish\nEOF",
         "(true) # <<'E O F'\nnpm publish\nE O F",
-        "(true) # it's done\nnpm publish",
     ] {
         assert!(has(command, "npm publish"), "{command:?}");
         assert!(spellings(command).complete, "{command:?}");
     }
+    // A quote only the plain reading opens may be real, so the line asks.
+    let apostrophe = "(true) # it's done\nnpm publish";
+    assert!(has(apostrophe, "npm publish"));
+    assert!(!spellings(apostrophe).complete);
+}
+
+#[test]
+fn mixed_comment_readings_are_not_read_through() {
+    let command = "(true); echo ${x:- #'}\n<<END '}  # '\nnpm publish\nEND";
+    assert!(!spellings(command).complete, "{command:?}");
 }
 
 #[test]
