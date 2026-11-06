@@ -10,6 +10,12 @@ the operator in place. Every later attempt that still asks is granted too, which
 what makes the count the measurement: the saved Always is honoured only when exactly
 one grant covers all three runs. The marker file counts the runs themselves, so an
 agent that stopped after the first attempt cannot pass on the grant count alone.
+
+The package case does the same for an offline ``npm ci`` with the lockfile left
+unchanged, run the way agent wrappers launch it: with a heap-size ``NODE_OPTIONS``
+in the agent's environment. npm is a Node script, so a launch identity that could
+not account for that value changed on every attempt and no Always allow for the
+install could ever be read back. npm's own debug logs count its runs.
 """
 
 from __future__ import annotations
@@ -31,8 +37,46 @@ RUN_LINE = "run = ok"
 CASE_COMMAND = ("git", "config", "--file", "persistent-approval-runs.txt", "--add", "gauntlet.run", "ok")
 EXPECTED_RUNS = 3
 
+PACKAGE_CASE = "approved-retry-persistent-package-install"
+PACKAGE_COMMAND = ("npm", "ci", "--ignore-scripts")
+# What an agent wrapper commonly exports: it sizes the heap and loads no code.
+AGENT_NODE_OPTIONS = "--max-old-space-size=4096"
+NPM_LOGS = "output/npm-logs"
+# Offline, so the empty lockfile installs without a registry, and every run leaves one log.
+_NPMRC = "offline=true\naudit=false\nfund=false\nupdate-notifier=false\nlogs-max=50\nlogs-dir={logs}\n"
+_MANIFEST = '{"name": "fixture", "version": "1.0.0", "private": true}\n'
+_LOCKFILE = (
+    '{"name": "fixture", "version": "1.0.0", "lockfileVersion": 3, "requires": true,'
+    ' "packages": {"": {"name": "fixture", "version": "1.0.0"}}}\n'
+)
+# The package floor that reviews an unchanged install until the user saves a decision.
+PACKAGE_REVIEW_CONFIG = (
+    'mode = "enforce"\nblocked_request_mode = "ask"\nsecurity_level = "custom"\ndefault_action = "warn"\n'
+    'changed_hash_action = "require-reapproval"\nunknown_publisher_action = "review"\n\n[risk_actions]\n'
+    'package_script = "require-reapproval"\npackage_unknown = "require-reapproval"\n'
+    'package_lockfile_drift = "require-reapproval"\n'
+)
+CASES = frozenset({CASE, PACKAGE_CASE})
+_COMMANDS = {CASE: CASE_COMMAND, PACKAGE_CASE: PACKAGE_COMMAND}
+
+
+def case_environment(scenario_id: str) -> dict[str, str]:
+    """Environment the case's agent runs with, on top of the lane's clean one."""
+    if scenario_id == PACKAGE_CASE:
+        return {"NODE_OPTIONS": AGENT_NODE_OPTIONS}
+    return {}
+
+
+def write_package_review_config(guard_home: Path) -> dict[str, Any]:
+    guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (guard_home / "config.toml").write_text(PACKAGE_REVIEW_CONFIG, encoding="utf-8", newline="\n")
+    return {"package_review": True, "blocked_request_mode": "ask", "node_options": AGENT_NODE_OPTIONS}
+
 
 def stage(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
+    if scenario_id == PACKAGE_CASE:
+        _stage_package(workspace, case)
+        return
     if scenario_id != CASE:
         return
     marker = workspace / MARKER
@@ -41,10 +85,30 @@ def stage(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
     case["persistent_approval"] = {"initially_absent": True}
 
 
+def _stage_package(workspace: Path, case: dict[str, Any]) -> None:
+    logs = workspace / NPM_LOGS
+    if logs.exists() or logs.is_symlink() or (workspace / "node_modules").exists():
+        raise FileExistsError("persistent package approval logs must be absent before the case starts")
+    (workspace / ".npmrc").write_text(_NPMRC.format(logs=logs), encoding="utf-8")
+    (workspace / "package.json").write_text(_MANIFEST, encoding="utf-8")
+    (workspace / "package-lock.json").write_text(_LOCKFILE, encoding="utf-8")
+    case["persistent_approval"] = {"initially_absent": True}
+
+
 def collect(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
+    if scenario_id == PACKAGE_CASE:
+        case.setdefault("persistent_approval", {})["runs"] = _npm_runs(workspace / NPM_LOGS)
+        return
     if scenario_id != CASE:
         return
     case.setdefault("persistent_approval", {})["runs"] = _runs(workspace / MARKER)
+
+
+def _npm_runs(logs: Path) -> int:
+    """How many times npm itself ran: it writes one debug log per process."""
+    if logs.is_symlink() or not logs.is_dir():
+        return 0
+    return sum(1 for entry in logs.glob("*-debug-0.log") if entry.is_file() and not entry.is_symlink())
 
 
 def _runs(marker: Path) -> int:
@@ -65,10 +129,10 @@ def _runs(marker: Path) -> int:
     return sum(1 for line in text.splitlines() if line.strip() == RUN_LINE)
 
 
-def targets_case_command(target: str) -> bool:
+def targets_case_command(target: str, scenario_id: str = CASE) -> bool:
     """Whether `target` is this case's own action and nothing else."""
     try:
-        return tuple(shlex.split(target)) == CASE_COMMAND
+        return tuple(shlex.split(target)) == _COMMANDS.get(scenario_id)
     except ValueError:
         return False
 
@@ -80,12 +144,12 @@ def persistent_consent(scenario_id: str, target: str) -> bool:
     stop something else the agent tries, and granting that once keeps the case
     moving without making it look like the approved action was reviewed twice.
     """
-    return scenario_id == CASE and targets_case_command(target)
+    return scenario_id in CASES and targets_case_command(target, scenario_id)
 
 
 def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str]) -> tuple[str, str]:
     """Fail a Guard that asked twice for an action the user already allowed always."""
-    if scenario_id != CASE or outcome[0] != "pass":
+    if scenario_id not in CASES or outcome[0] != "pass":
         return outcome
     evidence = case.get("persistent_approval") or {}
     if evidence.get("initially_absent") is not True:
@@ -97,7 +161,9 @@ def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str])
     rows = grants.get("granted")
     if not isinstance(rows, list):
         return "harness-error", "the lane recorded no approvals at all"
-    covered = [row for row in rows if isinstance(row, dict) and targets_case_command(str(row.get("target") or ""))]
+    covered = [
+        row for row in rows if isinstance(row, dict) and targets_case_command(str(row.get("target") or ""), scenario_id)
+    ]
     if not covered:
         return "harness-error", "the lane recorded no approval for the case's own command"
     if not all(row.get("persist_policy") is True for row in covered):

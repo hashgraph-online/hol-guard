@@ -121,6 +121,17 @@ fn a_code_loading_node_options_still_leaves_the_launch_unproven() {
         "--import=./preload.mjs",
         "--max-old-space-size=8192 --require ./preload.js",
         "--inspect",
+        "--require=./preload.js",
+        "-r ./preload.js",
+        "--loader ./hooks.mjs",
+        "--experimental-loader=./hooks.mjs",
+        "--env-file=.env",
+        "--redirect-warnings=./out.log",
+        "--dns-result-order",
+        "--dns-result-order=./preload.js",
+        "--unhandled-rejections=strict\t--require=./preload.js",
+        "--openssl-legacy-provider=1",
+        "\"--no-warnings\"",
     ] {
         let context = lab.context(Some(value));
         assert!(!context.portable, "{value}");
@@ -132,3 +143,36 @@ fn a_code_loading_node_options_still_leaves_the_launch_unproven() {
     }
 }
 
+#[test]
+fn a_behaviour_only_node_options_is_bound_by_value() {
+    let lab = Lab::new();
+    for value in [
+        "--dns-result-order=ipv4first",
+        "--dns-result-order ipv4first",
+        "--openssl-legacy-provider --max-old-space-size=4096",
+        "--unhandled-rejections=strict --disable-warning=ExperimentalWarning",
+        "--use-system-ca --tls-min-v1.2 --max_http_header_size=32768",
+    ] {
+        let first = lab.context(Some(value));
+        let second = lab.context(Some(value));
+        assert!(first.portable, "{value}: {:?}", first.non_portable_reason);
+        assert_eq!(first.digest, second.digest, "{value}");
+    }
+}
+
+#[test]
+fn a_bound_node_option_value_changes_the_launch_identity() {
+    let lab = Lab::new();
+    let without = executable_digest(&lab.context(None));
+    let ipv4 = executable_digest(&lab.context(Some("--dns-result-order=ipv4first")));
+    let verbatim = executable_digest(&lab.context(Some("--dns-result-order=verbatim")));
+    let spaced = executable_digest(&lab.context(Some("--dns-result-order ipv4first")));
+    let with_heap = executable_digest(&lab.context(Some(
+        "--max-old-space-size=4096 --dns-result-order=ipv4first --no-warnings",
+    )));
+
+    assert_ne!(without, ipv4);
+    assert_ne!(ipv4, verbatim);
+    assert_eq!(ipv4, spaced);
+    assert_eq!(ipv4, with_heap);
+}

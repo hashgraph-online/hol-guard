@@ -1696,20 +1696,132 @@ fn node_runtime_entrypoint_identity(
     launch_env: Option<&Value>,
 ) -> Value {
     // NODE_OPTIONS can inject a caller-controlled `-r`/`--import` preamble
-    // ahead of the script argv, so a visible value makes the entrypoint
-    // unproven. The exception is a value made only of heap-size and
-    // diagnostic flags (`guard_contracts::node_options_inert`): none of them
-    // loads code or reads a file, and agent wrappers commonly export one such
-    // as `--max-old-space-size=12288`. Treating that as unproven gave every
-    // node-script package manager (npm, pnpm, yarn through corepack) a fresh
-    // reuse nonce per launch, so no approval for it could ever be reused.
-    let node_options_unresolved = launch_env
+    // ahead of the script argv, so a value Guard cannot fully classify makes
+    // the entrypoint unproven. Heap-size and diagnostic flags
+    // (`guard_contracts::node_options_inert`) are skipped: none of them loads
+    // code or reads a file, and agent wrappers commonly export one such as
+    // `--max-old-space-size=12288`. A short list of other flags that change
+    // behaviour without loading code is bound by value instead. Treating
+    // either kind as unproven gave every node-script package manager (npm,
+    // pnpm, yarn through corepack) a fresh reuse nonce per launch, so no
+    // approval for it could ever be reused.
+    let node_options = launch_env
         .and_then(|v| v.get("NODE_OPTIONS"))
         .and_then(|v| v.as_str())
-        .is_some_and(|s| !s.is_empty() && !guard_contracts::node_options_inert(s));
-    if node_options_unresolved {
+        .unwrap_or("");
+    let Some(bound_options) = node_options_launch_binding(node_options) else {
         return unproven_runtime_entrypoint("node-launch", "environment_options_unresolved", None);
+    };
+    let mut identity = node_argv_entrypoint_identity(args, launch_cwd);
+    if !bound_options.is_empty() {
+        identity["environment_options"] = json!(bound_options);
     }
+    identity
+}
+
+/// `NODE_OPTIONS` flags that neither load code nor read or write a file but
+/// still change how Node behaves. They are bound into the entrypoint identity
+/// by value, so an approval given under one value is not reused under another.
+const NODE_OPTIONS_BOUND_FLAGS: &[&str] = &[
+    "--abort-on-uncaught-exception",
+    "--disallow-code-generation-from-strings",
+    "--jitless",
+    "--no-addons",
+    "--no-experimental-fetch",
+    "--no-experimental-global-navigator",
+    "--no-experimental-websocket",
+    "--no-network-family-autoselection",
+    "--openssl-legacy-provider",
+    "--pending-deprecation",
+    "--throw-deprecation",
+    "--tls-max-v1.2",
+    "--tls-max-v1.3",
+    "--tls-min-v1.0",
+    "--tls-min-v1.1",
+    "--tls-min-v1.2",
+    "--tls-min-v1.3",
+    "--use-bundled-ca",
+    "--use-openssl-ca",
+    "--use-system-ca",
+    "--zero-fill-buffers",
+];
+
+fn node_option_digits(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 12 && value.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn node_option_warning_code(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+fn node_option_dns_order(value: &str) -> bool {
+    matches!(value, "ipv4first" | "ipv6first" | "verbatim")
+}
+
+fn node_option_rejection_mode(value: &str) -> bool {
+    matches!(
+        value,
+        "none" | "strict" | "throw" | "warn" | "warn-with-error-code"
+    )
+}
+
+/// Valued `NODE_OPTIONS` flags bound the same way, with the values accepted.
+const NODE_OPTIONS_BOUND_VALUES: &[(&str, fn(&str) -> bool)] = &[
+    ("--disable-warning", node_option_warning_code),
+    ("--dns-result-order", node_option_dns_order),
+    ("--max-http-header-size", node_option_digits),
+    (
+        "--network-family-autoselection-attempt-timeout",
+        node_option_digits,
+    ),
+    ("--stack-size", node_option_digits),
+    ("--unhandled-rejections", node_option_rejection_mode),
+];
+
+/// The part of a `NODE_OPTIONS` value that has to match for a launch to
+/// reuse an approval: the bound flags in the order given, with inert flags
+/// left out. `None` when any token could load code, read or write a file, or
+/// is not recognised. Splits on spaces only, as `node_options_inert` does, so
+/// quoting or a tab leaves a token unrecognised rather than reinterpreted.
+fn node_options_launch_binding(value: &str) -> Option<Vec<String>> {
+    let mut bound = Vec::new();
+    let mut tokens = value.split(' ').filter(|token| !token.is_empty());
+    while let Some(token) = tokens.next() {
+        if guard_contracts::node_options_inert(token) {
+            continue;
+        }
+        let (raw_name, inline_value) = match token.split_once('=') {
+            Some((name, value)) => (name, Some(value)),
+            None => (token, None),
+        };
+        if !raw_name.starts_with("--") {
+            return None;
+        }
+        let name = format!("--{}", raw_name[2..].replace('_', "-"));
+        if inline_value.is_none() && NODE_OPTIONS_BOUND_FLAGS.contains(&name.as_str()) {
+            bound.push(name);
+            continue;
+        }
+        let (_, accepts) = NODE_OPTIONS_BOUND_VALUES
+            .iter()
+            .find(|(flag, _)| *flag == name)?;
+        let option_value = match inline_value {
+            Some(value) => value,
+            None => tokens.next()?,
+        };
+        if !accepts(option_value) {
+            return None;
+        }
+        bound.push(format!("{name}={option_value}"));
+    }
+    Some(bound)
+}
+
+fn node_argv_entrypoint_identity(args: &[String], launch_cwd: &Path) -> Value {
     let mut index = 0usize;
     const HARMLESS_FLAGS: &[&str] = &[
         "--abort-on-uncaught-exception",
