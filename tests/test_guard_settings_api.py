@@ -677,3 +677,25 @@ def test_a_settings_approval_is_bound_to_the_exact_settings_saved(
     assert len(subjects) == 3
     assert subjects[0] == subjects[1], "the same change keeps its subject on resubmit"
     assert subjects[0] != subjects[2], "a different change is a different subject"
+
+
+def test_a_confirmed_setup_returns_its_recovery_code_even_if_the_response_cannot_be_encoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.daemon import server_control_pulse
+
+    monkeypatch.setattr(
+        server_control_pulse,
+        "confirm_pulse_enrollment",
+        lambda *_a, **_k: {"pulse_enabled": True, "recovery_code": "rc-once"},
+    )
+    # A settings view json.dumps cannot encode.
+    monkeypatch.setattr(server_control_pulse, "_settings_response_payload", lambda *_a: {"settings": object()})
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    try:
+        status, payload = _raw_post(daemon, "/v1/approval-gate/pulse/confirm", b'{"request_id": "azr_1"}', token=True)
+    finally:
+        daemon.stop()
+    assert status == 200, payload
+    assert payload["pulse_recovery_code"] == "rc-once"
+    assert payload["approval_gate"]["pulse_enabled"] is True

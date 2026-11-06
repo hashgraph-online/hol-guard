@@ -11,6 +11,7 @@ and are never logged or echoed. The one exception is the recovery code that
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 from ..approval_gate import (
@@ -49,15 +50,17 @@ class _ControlPulseRoutes:
     def _write_pulse_confirmed(self, confirmed: dict[str, object]) -> None:
         """Answer a confirmed setup. Pulse is on now and the recovery code exists only here.
 
-        If the full settings response cannot be built, the gate state and the
-        recovery code are still returned, so the user never loses the code.
+        If the full settings response cannot be built or encoded, the gate
+        state the resident returned and the recovery code are sent instead, so
+        the user never loses the code.
         """
         recovery_code = confirmed.pop("recovery_code", None)
         try:
             response = self._pulse_settings_response(dict(confirmed))
+            response["pulse_recovery_code"] = recovery_code
+            json.dumps(response)  # the encoding _write_json uses; a failure falls back below
         except Exception:  # the code must reach the user whatever failed
-            response = {"approval_gate": confirmed}
-        response["pulse_recovery_code"] = recovery_code
+            response = {"approval_gate": confirmed, "pulse_recovery_code": recovery_code}
         self._write_json(response)
 
     def _handle_approval_gate_pulse_route(self, action: str, payload: dict[str, object]) -> None:
