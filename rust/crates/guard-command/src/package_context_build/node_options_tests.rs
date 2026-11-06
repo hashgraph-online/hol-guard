@@ -28,13 +28,9 @@ impl Lab {
         let root = tempfile::tempdir().unwrap();
         let bin = root.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
-        // The interpreter has to be a native binary for the entrypoint to be
-        // read at all; any one stands in for `node` here.
-        let native = ["/usr/bin/true", "/bin/true"]
-            .into_iter()
-            .find(|candidate| Path::new(candidate).is_file())
-            .unwrap();
-        std::fs::copy(native, bin.join("node")).unwrap();
+        // The interpreter has to read as native (no shebang) for the
+        // entrypoint to be read at all. It is hashed, never run.
+        executable(&bin.join("node"), "native node stand-in\n");
         executable(&bin.join("pnpm"), "#!/usr/bin/env node\n// pnpm\n");
         std::fs::create_dir_all(root.path().join("home")).unwrap();
         let workspace = root.path().join("workspace");
