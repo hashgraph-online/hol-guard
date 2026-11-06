@@ -17,6 +17,9 @@
 mod catalog;
 mod chain;
 mod change_event;
+mod command_marker;
+#[cfg(test)]
+mod command_marker_tests;
 mod commit;
 mod earned_anchor;
 mod history;
@@ -137,6 +140,10 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "reset" => return reset::reset_op(request),
         "abandon_bootstrap" => return reset::abandon_bootstrap_op(request),
         "record_migration" => return migration_event::record_migration_op(request),
+        "write_command_marker" => {
+            return Ok(command_marker::write_command_marker_op(request, key)
+                .unwrap_or_else(|code| json!({ "error": code })));
+        }
         _ => return Err(INVALID.to_owned()),
     };
     Ok(outcome.unwrap_or_else(|fault| fault_value(&fault, Vec::new())))
