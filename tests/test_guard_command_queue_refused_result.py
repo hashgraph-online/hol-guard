@@ -83,20 +83,19 @@ def test_fresh_result_refused_after_oauth_refresh_is_dropped(tmp_path: Path, mon
     assert status["pending_result"] is None
 
 
-def test_refused_heartbeat_keeps_the_result_pending(tmp_path: Path, monkeypatch) -> None:
-    """Cloud refusing a heartbeat says nothing about the result, so it is kept."""
+def test_refused_heartbeat_stops_the_job_before_it_runs(tmp_path: Path, monkeypatch) -> None:
+    """The only heartbeat runs before the job, so a refusal leaves no result to keep."""
 
     store = FakeStore(tmp_path / "guard-home")
-    calls = _install_transport(monkeypatch, {"/job-3/heartbeat": [200, 409]})
+    calls = _install_transport(monkeypatch, {"/job-3/heartbeat": [409]})
 
     with pytest.raises(urllib.error.HTTPError):
         command_queue.poll_command_queue_once(store, _context(tmp_path))
 
     state = store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY)
     assert isinstance(state, dict)
-    assert "/job-3/result" not in calls
-    assert state["state"] == "result_pending"
-    assert state["pending_result"]["job"]["id"] == "job-3"
+    assert calls == ["/lease", "/job-3/heartbeat"]
+    assert "pending_result" not in state
 
 
 @pytest.mark.parametrize("statuses", [[409], [401, 409]])

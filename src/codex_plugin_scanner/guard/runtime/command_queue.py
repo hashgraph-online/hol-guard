@@ -461,8 +461,9 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
             }
     payload = _result_payload(item, execution)
     refused: urllib.error.HTTPError | None = None
+    # Posting the result refreshes the job's heartbeat on the server, so a
+    # separate heartbeat here only adds a round trip to every approval.
     try:
-        _heartbeat(auth_context, item)
         refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
     except urllib.error.HTTPError as error:
         if error.code != 401:
@@ -480,7 +481,6 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         state["state"] = "auth_expired"
         _save_state(store, state)
         try:
-            _heartbeat(auth_context, item)
             refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
         except Exception:
             _LOGGER.warning("Guard command result upload failed.")
