@@ -12,7 +12,8 @@ use guard_contracts::{
 };
 
 use crate::native_command_program::{
-    digest_value, packaged_command_program, CommandCandidateIndex, NativeCommandProgram,
+    digest_value, is_deadline_error, packaged_command_program, CommandCandidateIndex,
+    NativeCommandProgram,
 };
 use crate::CanonicalCommandV1;
 
@@ -227,25 +228,53 @@ impl CompiledNativeCommandControls {
             Some(command) => self.observe_command(command, deadline, context, environment),
             None => Ok((NativeCommandObservationBatchV1::default(), None)),
         };
+        // A check that stopped because its deadline passed observed nothing,
+        // which is not the same as a command the controls cannot match. The
+        // evidence field stays one value for both, because consumers pin it;
+        // this flag carries the difference to the floor below.
+        let mut deadline_expired = false;
+        // An administrator disable is a floor the user cannot clear, and a
+        // check that ran out of time cannot show the command falls outside
+        // it. Where anything is disabled, a timeout keeps the block rather
+        // than offering an approval that would override that decision.
+        let admin_disabled =
+            !self.blocked_permissions.is_empty() || !self.blocked_extensions.is_empty();
         let (mut batch, unmodeled) = match observed {
             Ok(observed) => observed,
-            Err(_) => (
-                NativeCommandObservationBatchV1 {
-                    evaluation_error: Some("native_command_evaluation_failed".to_owned()),
-                    ..Default::default()
-                },
-                None,
-            ),
+            Err(error) => {
+                deadline_expired = is_deadline_error(error);
+                (
+                    NativeCommandObservationBatchV1 {
+                        evaluation_error: Some("native_command_evaluation_failed".to_owned()),
+                        ..Default::default()
+                    },
+                    None,
+                )
+            }
         };
         let delegated_floor = if batch.evaluation_error.is_none() {
             match self.delegated_observations(command, tool, packages, &mut batch, deadline) {
                 Ok(action) => action,
-                Err(_) => {
-                    batch = NativeCommandObservationBatchV1 {
-                        evaluation_error: Some("native_command_evaluation_failed".into()),
-                        ..Default::default()
-                    };
-                    "block"
+                Err(error) => {
+                    deadline_expired = is_deadline_error(error);
+                    if deadline_expired {
+                        // The main pass already finished. A disabled rule or a
+                        // critical one it recorded still has to raise the floor
+                        // below, so keep those observations instead of dropping
+                        // them along with the delegated pass.
+                        batch.evaluation_error =
+                            Some("native_command_evaluation_failed".to_owned());
+                    } else {
+                        batch = NativeCommandObservationBatchV1 {
+                            evaluation_error: Some("native_command_evaluation_failed".into()),
+                            ..Default::default()
+                        };
+                    }
+                    if deadline_expired && !admin_disabled {
+                        "review"
+                    } else {
+                        "block"
+                    }
                 }
             }
         } else {
@@ -259,7 +288,7 @@ impl CompiledNativeCommandControls {
         let mut reason = if self.global_block {
             "native_command_control_authority_block"
         } else if batch.evaluation_error.is_some() {
-            "native_command_extension_evaluation_failed"
+            evaluation_error_reason(deadline_expired && !admin_disabled)
         } else if delegated_floor == "block" {
             "native_command_permission_disabled"
         } else {
@@ -398,11 +427,27 @@ impl CompiledNativeCommandControls {
             permission_observations: batch.permission_observations,
             evaluation_error: batch.evaluation_error,
         });
-        if evaluation_error.is_some() && !self.global_block && rank(floor) < rank("block") {
-            floor = "block";
-            reason = "native_command_extension_evaluation_failed";
+        if evaluation_error.is_some() && !self.global_block {
+            // A deadline that ran out leaves Guard unable to show the command
+            // is safe, but it has not shown the command is dangerous either,
+            // and the condition is transient: the same command usually
+            // evaluates fine once the machine is less busy. Settling it at a
+            // review keeps Allow once and Always allow on the card, instead of
+            // a block no approval can clear. Every other evaluation failure
+            // still blocks, and so does a timeout while an administrator has
+            // disabled anything the unfinished check could not rule out.
+            let softened = deadline_expired && !admin_disabled;
+            let error_floor = if softened { "review" } else { "block" };
+            if rank(floor) < rank(error_floor) {
+                floor = error_floor;
+                reason = evaluation_error_reason(softened);
+            }
         }
         strengthen(&mut result, floor, reason);
+        floor::explain_timed_out_review(
+            &mut result,
+            evaluation_error.is_some() && deadline_expired && !admin_disabled && !self.global_block,
+        );
         self.enforce_quarantine(command, tool, &mut result);
         floor::explain_home_redirect(&mut result, command, |probe| {
             self.observe_command(probe, deadline, context, environment)
@@ -587,7 +632,7 @@ mod full_allow;
 mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
-use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
+use floor::{add_authority_repair_hint, evaluation_error_reason, rank, rule_floor, strengthen};
 pub(crate) use unmodeled::{
     bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
     python_stdin, unread_file_interpreter, Handover,
