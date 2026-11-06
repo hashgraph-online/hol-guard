@@ -160,6 +160,9 @@ def input_from_mapping(payload: object) -> ApprovalGateInput | None:
         gate_mapping.get("pulse_request_id")
     )
     wants_pulse = payload.get("approval_gate_pulse") is True or gate_mapping.get("pulse") is True
+    if pulse_request_id is not None:
+        # The YID approval is the proof now; the resident refuses a password or code beside it.
+        password = current_password = totp_code = None
     return ApprovalGateInput(
         password=current_password or password,
         new_password=optional_string(gate_mapping.get("new_password")),

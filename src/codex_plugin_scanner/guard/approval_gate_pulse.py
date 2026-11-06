@@ -91,6 +91,7 @@ def await_pulse_approval(
     *,
     on_status: Callable[[str, dict[str, object]], None] | None = None,
     deadline_seconds: float = _PULSE_DECISION_DEADLINE_SECONDS,
+    now: str | None = None,
 ) -> str:
     """Check every 10 seconds until the YID app answers or the window closes.
 
@@ -107,7 +108,7 @@ def await_pulse_approval(
     while (remaining := deadline - time.monotonic()) > 0:
         time.sleep(min(_PULSE_POLL_INTERVAL_SECONDS, remaining))
         try:
-            status = poll_pulse_approval(guard_home, request_id)
+            status = poll_pulse_approval(guard_home, request_id, now=now)
         except ApprovalGateError as error:
             if error.code not in _PULSE_RETRYABLE_ERRORS:
                 raise
@@ -157,6 +158,8 @@ def _with_pulse(
             or approval_gate_input.pulse_request_id is not None
         ):
             raise
+    # Every call for this action uses the caller's clock, if it gave one.
+    now = _optional_str(kwargs.get("now"))
     request = request_pulse_approval(
         guard_home,
         purpose=pulse_purpose,
@@ -166,6 +169,7 @@ def _with_pulse(
         subject=_optional_str(params.get("subject")),
         session_nonce=_optional_str(params.get("session_nonce")),
         batch_request_ids=approval_gate_input.pulse_batch_request_ids,
+        now=now,
     )
     request_id: str | None = None
     if request.get("status") != "cooldown_covered":
@@ -180,7 +184,7 @@ def _with_pulse(
                     "pulse_decide_by": request.get("decide_by"),
                 },
             )
-        request_id = await_pulse_approval(guard_home, request, on_status=approval_gate_input.pulse_on_status)
+        request_id = await_pulse_approval(guard_home, request, on_status=approval_gate_input.pulse_on_status, now=now)
     retry_input = replace(approval_gate_input, pulse_request_id=request_id, pulse_mode="off", pulse_on_status=None)
     if request_id is not None:
         kwargs = {**kwargs, "timeout_seconds": _PULSE_TIMEOUT_SECONDS}

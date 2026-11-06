@@ -102,7 +102,7 @@ class _ControlPulseRoutes:
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
             return
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             self._write_approval_gate_error(
                 ApprovalGateError("approval_gate_pulse_invalid_request", "The Pulse request is invalid.", status=400)
             )

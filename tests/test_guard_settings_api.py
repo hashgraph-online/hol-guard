@@ -566,3 +566,21 @@ def test_policy_api_rejects_global_allow_without_target(tmp_path: Path) -> None:
     assert status == 400
     assert payload["saved"] is False
     assert payload["error"] == "broad_allow_requires_narrow_scope"
+
+
+def test_an_overflowing_pulse_cooldown_is_an_invalid_request(tmp_path: Path) -> None:
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}/v1/approval-gate/pulse/confirm",
+        # 1e309 parses as infinity, which int() cannot convert.
+        data=b'{"request_id": "azr_1", "cooldown_seconds": 1e309}',
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    try:
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(request, timeout=5)
+    finally:
+        daemon.stop()
+    assert refused.value.code == 400
+    assert json.loads(refused.value.read().decode("utf-8"))["error"] == "approval_gate_pulse_invalid_request"

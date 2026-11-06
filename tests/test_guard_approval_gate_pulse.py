@@ -337,3 +337,107 @@ def test_the_resident_refuses_a_floor_below_medium_or_unknown(tmp_path: Path, fl
             min_tier=floor,
         )
     assert refused.value.code == "approval_gate_pulse_invalid_tier"
+
+
+# Review of #7352.
+
+
+def test_a_daemon_bound_cli_command_waits_for_the_yid_app_and_sends_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.cli.approval_gate_prompt import submit_with_pulse
+
+    monkeypatch.setattr(approval_gate_pulse, "_PULSE_POLL_INTERVAL_SECONDS", 0.0)
+    monkeypatch.setattr(approval_gate, "_approval_gate_native", FakeResident(["pending", "approved"]))
+    sent: list[dict[str, object]] = []
+
+    def daemon(payload: dict[str, object]) -> dict[str, object]:
+        sent.append(payload)
+        if payload.get("approval_pulse_request_id") == "azr_1":
+            return {"proof_id": "p1"}
+        assert payload.get("approval_gate_pulse") is True
+        return {"error": "approval_gate_pulse_pending", "pulse_request_id": "azr_1", "pulse_match_code": "ABC123"}
+
+    original = {"session_nonce": "n", "layers": []}
+    result = submit_with_pulse(tmp_path, daemon, original, ApprovalGateInput(pulse_mode="wait"))
+    assert result == {"proof_id": "p1"}
+    assert len(sent) == 2
+    assert "approval_pulse_request_id" not in sent[0] and "approval_gate_pulse" not in sent[1]
+    assert original == {"session_nonce": "n", "layers": []}, "the caller's payload is not changed"
+
+
+def test_without_pulse_a_daemon_bound_cli_command_is_sent_once(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli.approval_gate_prompt import submit_with_pulse
+
+    sent: list[dict[str, object]] = []
+    submit_with_pulse(tmp_path, lambda p: sent.append(p) or {}, {"approval_password": "pw"}, ApprovalGateInput())
+    assert sent == [{"approval_password": "pw"}]
+
+
+def test_extension_routes_hand_back_the_pulse_request_to_approve() -> None:
+    from codex_plugin_scanner.guard.daemon.extension_control_errors import approval_gate_api_error
+
+    pending = ApprovalGateError(
+        "approval_gate_pulse_pending",
+        "Approve in the YID app.",
+        status=202,
+        details={"pulse_request_id": "azr_1", "pulse_match_code": "ABC123"},
+    )
+    mapped = approval_gate_api_error(pending, status=423, code="approval_required")
+    assert mapped.status == 202
+    assert mapped.to_payload()["error"] == "approval_gate_pulse_pending"
+    assert mapped.to_payload()["pulse_request_id"] == "azr_1"
+    other = approval_gate_api_error(
+        ApprovalGateError("approval_gate_invalid_password", "Wrong password."), status=423, code="approval_required"
+    )
+    assert other.status == 423
+    assert other.to_payload()["error"] == "approval_required", "other refusals are unchanged"
+    assert "pulse_request_id" not in other.to_payload()
+
+
+def test_a_resubmit_with_an_approved_request_drops_the_password() -> None:
+    gate_input = input_from_mapping(
+        {"approval_password": "pw", "approval_totp_code": "123456", "approval_pulse_request_id": "azr_1"}
+    )
+    assert gate_input is not None
+    assert (gate_input.password, gate_input.totp_code, gate_input.pulse_request_id) == (None, None, "azr_1")
+    kept = input_from_mapping({"approval_password": "pw"})
+    assert kept is not None and kept.password == "pw", "without Pulse the password is the proof"
+
+
+def test_every_resident_call_for_one_action_uses_the_callers_clock(tmp_path: Path, resident) -> None:
+    fake = resident(FakeResident(["pending", "approved"]))
+    approval_gate.require_approval_decision(
+        tmp_path,
+        action="allow",
+        scope="workspace",
+        approval_gate_input=ApprovalGateInput(pulse_mode="wait"),
+        now="2026-10-02T00:00:00+00:00",
+    )
+    clocks = {method: kwargs.get("now") for method, kwargs in fake.calls}
+    assert set(clocks) == {"require_approval_decision", "pulse_request", "pulse_poll"}
+    assert set(clocks.values()) == {"2026-10-02T00:00:00+00:00"}
+
+
+def test_the_approval_password_is_sent_as_typed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.cli import approval_pulse_commands as commands
+
+    typed = iter(["  pass with spaces  ", "  yak_key  ", "   "])
+    monkeypatch.setattr(commands.getpass, "getpass", lambda _prompt: next(typed))
+    assert commands._password() == "  pass with spaces  "
+    assert commands._hidden("YID agent key: ") == "yak_key"
+    with pytest.raises(ApprovalGateError):
+        commands._password()
+
+
+@pytest.mark.parametrize("argv", [["--json", "status"], ["status", "--json"]])
+def test_json_works_before_or_after_the_subcommand(argv: list[str]) -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+
+    root = argparse.ArgumentParser()
+    settings = root.add_subparsers(dest="settings_command")
+    add_approval_pulse_parser(settings, lambda parser, **_: None, argparse.ArgumentParser)
+    assert root.parse_args(["approval-pulse", *argv]).json is True
+    assert root.parse_args(["approval-pulse", "status"]).json is False

@@ -6,10 +6,17 @@ import getpass
 import json
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
-from ..approval_gate import ApprovalGateError, ApprovalGateInput, public_config, recent_totp_satisfied
+from ..approval_gate import (
+    ApprovalGateError,
+    ApprovalGateInput,
+    await_pulse_approval,
+    public_config,
+    recent_totp_satisfied,
+)
 
 _DESKTOP_CHILD_ENV = "HOL_GUARD_DESKTOP"
 _PASSWORD_ENV = "HOL_GUARD_APPROVAL_PASSWORD"
@@ -183,3 +190,30 @@ def print_approval_gate_error(error: ApprovalGateError, *, as_json: bool, output
     else:
         print(f"Error: {error}", file=sys.stderr)
     return 4
+
+
+def submit_with_pulse(
+    guard_home: Path,
+    send: Callable[[dict[str, object]], dict[str, object]],
+    payload: dict[str, object],
+    gate_input: ApprovalGateInput | None,
+) -> dict[str, object]:
+    """Send a gated request to the daemon, approving it in the YID app when Pulse is on.
+
+    The daemon cannot wait for the phone, so in Pulse mode the first send asks
+    it for a Pulse request for this exact action (as the dashboard does), this
+    terminal waits for the approval, and the same payload is sent again with
+    the request id. ``payload`` itself is not changed.
+    """
+    if getattr(gate_input, "pulse_mode", "off") != "wait":
+        return send(payload)
+    response = send({**payload, "approval_gate_pulse": True})
+    if response.get("error") != "approval_gate_pulse_pending":
+        return response
+    request = {
+        "request_id": response.get("pulse_request_id"),
+        "match_code": response.get("pulse_match_code"),
+        "decide_by": response.get("pulse_decide_by"),
+    }
+    request_id = await_pulse_approval(guard_home, request, on_status=getattr(gate_input, "pulse_on_status", None))
+    return send({**payload, "approval_pulse_request_id": request_id})

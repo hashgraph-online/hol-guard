@@ -66,7 +66,8 @@ def add_approval_pulse_parser(settings_subparsers, add_common_args, parser_class
     )
     for sub in (status, enroll, disable, recover):
         add_common_args(sub, suppress_defaults=True)
-        sub.add_argument("--json", action="store_true")
+        # Suppressed, so `approval-pulse --json status` keeps the parent's --json.
+        sub.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
 
 def _require_terminal(what: str) -> None:
@@ -77,11 +78,17 @@ def _require_terminal(what: str) -> None:
         )
 
 
-def _hidden(prompt: str) -> str:
-    value = getpass.getpass(prompt).strip()
-    if not value:
+def _hidden(prompt: str, *, strip: bool = True) -> str:
+    entered = getpass.getpass(prompt)
+    if not entered.strip():
         raise ApprovalGateError("approval_gate_required", "No value was entered.")
-    return value
+    # The approval password is sent as typed, like the approval prompt does:
+    # spaces at either end can be part of it.
+    return entered.strip() if strip else entered
+
+
+def _password() -> str:
+    return _hidden("Approval password: ", strip=False)
 
 
 def _enroll(args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
@@ -89,7 +96,7 @@ def _enroll(args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
     gate = public_config(guard_home)
     for line in _SETUP_STEPS:
         print(line, file=sys.stderr)
-    password = _hidden("Approval password: ")
+    password = _password()
     totp_code = _hidden("Authenticator code: ") if gate.totp_enabled else None
     agent_key = _hidden("YID agent key (input hidden): ")
     begun = begin_pulse_enrollment(
@@ -124,7 +131,7 @@ def _disable(guard_home: Path) -> dict[str, object]:
 
 def _recover(guard_home: Path) -> dict[str, object]:
     _require_terminal("Pulse recovery")
-    password = _hidden("Approval password: ")
+    password = _password()
     code = _hidden("Pulse recovery code: ")
     gate = recover_pulse(
         guard_home,
