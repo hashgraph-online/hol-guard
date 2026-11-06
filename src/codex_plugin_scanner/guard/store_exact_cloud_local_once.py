@@ -149,16 +149,20 @@ class StoreExactCloudLocalOnceMixin:
         artifact_id: str,
         artifact_hash: str,
         now: str,
+        ordinary_decision: Mapping[str, object] | None = None,
     ) -> dict[str, object] | None:
         # The resident reads the exact Cloud allow issued for the request this
         # install queued and waited on, bound to the artifact and hash it is
-        # about to run. Without the keyring key there is no authority.
+        # about to run, and only when it outranks the row the ordinary lookup
+        # returned. Without the keyring key there is no authority.
         args: dict[str, object] = {
             "request_id": request_id,
             "artifact_id": artifact_id,
             "artifact_hash": artifact_hash,
             "now": now,
         }
+        if ordinary_decision is not None:
+            args["ordinary_decision"] = dict(ordinary_decision)
         if not _add_exact_cloud_key(self, args):
             return None
         decision = self._native_store_call("peek_waited_exact_cloud_package_allow", args)

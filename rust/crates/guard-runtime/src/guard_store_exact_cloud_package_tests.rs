@@ -213,3 +213,42 @@ fn a_decision_for_another_request_or_with_an_edited_field_is_not_spent() {
 
     assert_eq!(consume_with(&connection, &decision), json!(true));
 }
+
+fn peek_over(connection: &Connection, ordinary: Value) -> Value {
+    let mut args = Map::new();
+    args.insert("artifact_id".into(), json!(ARTIFACT));
+    args.insert("artifact_hash".into(), json!(HASH));
+    args.insert("ordinary_decision".into(), ordinary);
+    peek(connection, &Args(&keyed(args, Some(KEY)))).unwrap()
+}
+
+#[test]
+fn the_allow_outranks_a_family_rule_row_but_not_a_block_saved_for_the_artifact() {
+    let connection = connection();
+    insert_row(&connection, EXACT_CLOUD_INTEGRITY_PURPOSE);
+    let family = |action: &str| {
+        json!({
+            "action": action, "artifact_hash": null, "artifact_id": "family:package-request",
+            "decision_id": 3, "harness": "guard-cli", "owner": "rule-1", "scope": "harness",
+            "source": "policy-bundle",
+        })
+    };
+    for action in ["block", "require-reapproval"] {
+        assert_eq!(
+            peek_over(&connection, family(action))["request_id"],
+            "req-1",
+            "family {action}"
+        );
+    }
+    let saved = |action: &str| {
+        json!({
+            "action": action, "artifact_hash": HASH, "artifact_id": ARTIFACT, "decision_id": 4,
+            "harness": "guard-cli", "scope": "artifact", "source": "approval-gate",
+        })
+    };
+    assert_eq!(
+        peek_over(&connection, saved("allow"))["request_id"],
+        "req-1"
+    );
+    assert!(peek_over(&connection, saved("block")).is_null());
+}

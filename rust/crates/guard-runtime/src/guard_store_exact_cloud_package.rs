@@ -7,8 +7,9 @@
 //! ops let only the waiting install, which names its own request, use it:
 //!
 //! - `peek_waited_exact_cloud_package_allow` returns the verified decision
-//!   when it allows this artifact and hash, and `Null` otherwise. The row is
-//!   already bound to the request's harness, workspace and publisher.
+//!   when it allows this artifact and hash and outranks the row the ordinary
+//!   lookup returned, and `Null` otherwise. The row is already bound to the
+//!   request's harness, workspace and publisher.
 //! - `consume_waited_exact_cloud_package_allow` spends that decision once,
 //!   re-checking it in the write transaction.
 //!
@@ -16,7 +17,7 @@
 //! key reads as no authority.
 
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{StoreError, StoreResult};
@@ -26,6 +27,8 @@ use crate::resident_transport::constant_time_eq;
 
 /// Only a package request's artifact may be answered here.
 const PACKAGE_REQUEST_ARTIFACT: &str = ":package-request:";
+/// The policy-bundle family row saved for every package request.
+const PACKAGE_REQUEST_FAMILY: &str = "family:package-request";
 
 fn canonical_now(args: &Args<'_>) -> StoreResult<String> {
     guard_contracts::canonical_utc_timestamp(args.str("now")?)
@@ -43,11 +46,25 @@ fn allows(decision: &Value, request_id: &str, artifact_id: &str, artifact_hash: 
         && constant_time_eq(stored_hash.as_bytes(), artifact_hash.as_bytes())
 }
 
+/// The waited allow is bound to its request, artifact and hash, so it
+/// outranks a broader row the ordinary lookup returned, such as the
+/// package-request family rule that queued the request for review. A block
+/// saved for this artifact still wins.
+fn outranks(ordinary: Option<&Map<String, Value>>) -> bool {
+    ordinary.is_none_or(|row| {
+        row.get("action").and_then(Value::as_str) != Some("block")
+            || row.get("artifact_id").and_then(Value::as_str) == Some(PACKAGE_REQUEST_FAMILY)
+    })
+}
+
 pub(crate) fn peek(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
     let request_id = args.str("request_id")?;
     let artifact_id = args.str("artifact_id")?;
     let artifact_hash = args.str("artifact_hash")?;
     let now = canonical_now(args)?;
+    if !outranks(args.opt_object("ordinary_decision")?) {
+        return Ok(Value::Null);
+    }
     let Some((key, key_id)) = integrity_material(args)? else {
         return Ok(Value::Null);
     };

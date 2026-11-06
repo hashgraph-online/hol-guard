@@ -127,6 +127,7 @@ Changing any of these produces a new command, and Guard asks again.
 - `rust/crates/guard-runtime/tests/fixtures/hook_direct_saved_decision_vectors.json` (`allow-guard-control`, `allow-package`)
 - `rust/crates/guard-runtime/src/package_policy_resolve_op_tests.rs` (`a_saved_allow_of_any_scope_lets_the_identical_require_reapproval_retry_run`, `a_changed_artifact_is_reviewed_again_whatever_scope_saved_the_allow`)
 - `rust/crates/guard-runtime/src/package_policy_resolve_op_tests.rs` (`a_waited_exact_cloud_allow_lets_the_install_run_once`, `a_waited_exact_cloud_allow_needs_its_resolved_package_request`)
+- `rust/crates/guard-runtime/src/guard_store_exact_cloud_package_tests.rs` (`the_allow_outranks_a_family_rule_row_but_not_a_block_saved_for_the_artifact`)
 - `tests/test_guard_exact_cloud_package_wait.py` (`test_the_install_that_waited_runs_once_and_a_later_retry_is_reviewed_again`, `test_a_family_rule_row_does_not_hide_the_waited_cloud_allow`, `test_a_block_saved_for_the_artifact_still_wins_over_the_waited_cloud_allow`)
 - `tests/test_guard_package_workspace_approval.py` (`test_workspace_package_approval_is_reused_across_linked_worktrees_with_the_same_dependency_graph`)
 - `tests/test_native_review_exact_action_always.py`
