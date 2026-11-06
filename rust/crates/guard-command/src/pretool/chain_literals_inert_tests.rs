@@ -284,6 +284,10 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         // unquoted and the value would be spliced in as code.
         "git commit -m \" \"$(cat <<'EOF'\nx # EOF\nEOF\n)\" \" && id",
         "git commit -m \"a\"\"$(cat <<'EOF'\nsubject\nEOF\n)\"",
+        // The quote that would open the word sits inside an earlier heredoc
+        // body, where the shell reads it as data. The substitution is
+        // unquoted, so its value would be spliced in as code.
+        "cat <<'PRE'\n\"\nPRE\ngit commit -m \" \"$(cat <<'EOF'\nx # EOF\nEOF\n)\" \" && id",
     ] {
         assert_eq!(projected(command), None, "{command}");
     }

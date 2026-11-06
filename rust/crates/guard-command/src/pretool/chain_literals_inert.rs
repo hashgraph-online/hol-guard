@@ -106,7 +106,7 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         if substitution.start < cursor || patterned_word(&patterned, substitution) {
             return None;
         }
-        let (value, judged_text) = match heredoc_value(&chars, substitution) {
+        let (value, judged_text) = match heredoc_value(&chars, &masked, substitution) {
             // The heredoc is the whole of what the `cat` reads, so judging
             // the bare `cat` is judging the command the shell runs.
             Some(value) => (value, "cat".to_owned()),
@@ -173,8 +173,12 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
 /// heredoc inside one is read from the substitution's own text. Everything
 /// outside that heredoc has to be the word `cat` and whitespace, which leaves
 /// nowhere for a second `<<`, a redirect or another command to hide.
-fn heredoc_value(chars: &[char], substitution: &ShellCommandSubstitution) -> Option<String> {
-    if substitution.kind != "dollar" || !double_quoted_word(chars, substitution) {
+fn heredoc_value(
+    chars: &[char],
+    quote_scan: &[char],
+    substitution: &ShellCommandSubstitution,
+) -> Option<String> {
+    if substitution.kind != "dollar" || !double_quoted_word(quote_scan, substitution) {
         return None;
     }
     let inner: String = chars
@@ -222,6 +226,11 @@ fn heredoc_value(chars: &[char], substitution: &ShellCommandSubstitution) -> Opt
 /// Whether the substitution is the whole of one double-quoted word, so its
 /// value stands where the substitution stood and the shell neither splits
 /// nor globs it.
+///
+/// `chars` is the heredoc-masked text, which keeps every character's index.
+/// A quote inside a heredoc body is data the shell never reads as syntax, so
+/// scanning the raw command would carry that quote into the state this walk
+/// tracks and could read an unquoted substitution as a quoted word.
 fn double_quoted_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bool {
     let Some(opens) = substitution.start.checked_sub(1) else {
         return false;
