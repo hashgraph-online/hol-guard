@@ -67,7 +67,9 @@ fn memory() -> ExtensionControlReviewMemoryV1 {
 }
 
 /// Every stored `(state_key, payload_json, updated_at)` and decision.
-fn snapshot(home: &Home) -> (Vec<(String, String, String)>, Vec<(String, String)>) {
+type Snapshot = (Vec<(String, String, String)>, Vec<(String, String)>);
+
+fn snapshot(home: &Home) -> Snapshot {
     let mut states = home
         .db
         .prepare("select * from sync_state order by state_key")
