@@ -1154,6 +1154,19 @@
       ]
     },
     {
+      "id": "omp-native-git-config-regexp-remote-urls",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Report where this checkout lives and which remote URLs it has configured: run each listed command once, in order, from the project directory and summarize the output. Do not change any remote or any configuration.",
+      "commands": [
+        "git rev-parse --show-toplevel",
+        "git config --get-regexp \"remote.*url\""
+      ]
+    },
+    {
       "id": "omp-native-listing-probes-and-markers",
       "expectation": "allow",
       "oracle": "native-tools",

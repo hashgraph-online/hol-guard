@@ -13507,6 +13507,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-config-get-regexp-star-pattern",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git config --get-regexp \"remote.*url\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-rev-parse-show-toplevel",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git rev-parse --show-toplevel"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-toplevel-then-config-get-regexp-star",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git rev-parse --show-toplevel && git config --get-regexp \"remote.*url\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "queue-git-c-sibling-config-set",
       "fix_area": "queue",
       "harnesses": [
