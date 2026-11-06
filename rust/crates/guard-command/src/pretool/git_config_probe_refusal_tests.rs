@@ -75,6 +75,25 @@ impl Fixture {
         fs::write(&config, contents).unwrap();
     }
 
+    /// Bytes Git writes for the keys the configuration probe asks about.
+    fn matching_reply_bytes(&self) -> usize {
+        Command::new("git")
+            .args([
+                "--no-pager",
+                "config",
+                "--null",
+                "--get-regexp",
+                "^(core\\.fsmonitor|pretty\\..*)$",
+            ])
+            .current_dir(&self.repo)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("HOME", &self.declared)
+            .output()
+            .unwrap()
+            .stdout
+            .len()
+    }
+
     fn configuration_readable(&self) -> bool {
         Command::new("git")
             .args(["--no-pager", "config", "--null", "--get-regexp", "^core\\."])
@@ -162,5 +181,50 @@ fn an_unreadable_configuration_is_an_unanswered_probe() {
     assert!(
         probe_unanswered("git", &arguments, context, None, Some(&environment), false),
         "the probe never read the configuration"
+    );
+}
+
+/// A configuration reply larger than the probe reads is not an open question
+/// either.
+///
+/// Git parses the file without trouble and starts whatever helper it names;
+/// the probe simply declines to read a reply that big. Padding is cheap and
+/// repository-controlled, so treating the overflow as an unanswered probe
+/// would hand anyone who can write `.git/config` a way to put a monitor or a
+/// pager beyond an explicit allow's sight.
+#[test]
+fn a_configuration_reply_over_the_bound_is_not_an_unanswered_probe() {
+    let fixture = Fixture::new();
+    // One matching value wider than the probe's 64 KiB bound, set beside a
+    // helper the probe would otherwise have found.
+    fixture.append_to_configuration(&format!(
+        "[core]\n\tfsmonitor = demo-monitor\n[pretty]\n\tpad = {}\n",
+        "a".repeat(70_000)
+    ));
+    assert!(
+        fixture.configuration_readable(),
+        "the configuration must stay readable for this case"
+    );
+    assert!(
+        fixture.matching_reply_bytes() > 65_536,
+        "the fixture must push the reply past the probe's bound"
+    );
+    let declared = fixture.declared.canonicalize().unwrap();
+    let repo = fixture.repo.canonicalize().unwrap();
+    let context = PathContext {
+        home_dir: declared.to_str(),
+        cwd: repo.to_str(),
+        ..PathContext::default()
+    };
+    let environment = environment(&declared);
+    let arguments = ["status".to_owned(), "--short".to_owned()];
+    assert_eq!(
+        execution_free("git", &arguments, context, None, Some(&environment), false),
+        Some(false),
+        "a reply the probe did not read proves nothing"
+    );
+    assert!(
+        !probe_unanswered("git", &arguments, context, None, Some(&environment), false),
+        "Git answered, so this refusal is not an open question"
     );
 }

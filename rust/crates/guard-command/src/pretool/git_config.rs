@@ -525,7 +525,7 @@ fn probe(
         .env("HOME", git_home)
         .env("USERPROFILE", git_home);
     let mut query = super::git_probe::copy_command(&command)?;
-    let (status, output) = super::git_probe::output(
+    let bounded = super::git_probe::output_bounded(
         query
         .args([
             "--no-pager",
@@ -536,7 +536,20 @@ fn probe(
         ])
 ,
         deadline, CONFIG_LIMIT,
-    )?;
+    );
+    let (status, output) = match bounded {
+        super::git_probe::Bounded::Completed(status, output) => (status, output),
+        // Git read the configuration without trouble and simply wrote more
+        // than this probe reads. That is not an unasked question: a helper
+        // can be set beside enough padding to push the reply over the bound,
+        // so the refusal has to stand on what the configuration holds rather
+        // than become one an explicit allow settles.
+        super::git_probe::Bounded::Overflow => {
+            read_configuration.set(true);
+            return None;
+        }
+        super::git_probe::Bounded::Failed => return None,
+    };
     if !(status.success() || status.code() == Some(1) && output.is_empty()) {
         return None;
     }
