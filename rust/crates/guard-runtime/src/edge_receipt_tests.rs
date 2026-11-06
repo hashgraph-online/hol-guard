@@ -260,7 +260,7 @@ fn queued(queue: &DirectEvidenceQueue) -> Vec<Value> {
         ack_epoch: None,
     };
     let page: Value =
-        serde_json::from_slice(&crate::hook_direct_evidence::drain(&request, queue).unwrap())
+        serde_json::from_slice(&crate::hook_direct_evidence::drain(&request, queue, None).unwrap())
             .unwrap();
     page["records"].as_array().unwrap().clone()
 }
@@ -363,7 +363,7 @@ fn a_receipt_the_writer_refuses_leaves_the_record_unmarked() {
     let queue = DirectEvidenceQueue::default();
     let record = json!({"harness": "claude-code", "receipt": {}});
     assert!(queue
-        .try_offer_recorded(record.clone(), &[DIRECT_RECEIPT_RECORDED], |_| 0)
+        .try_offer_recorded(record.clone(), &[DIRECT_RECEIPT_RECORDED], false, |_| 0)
         .is_ok());
     // The page still says the drain must not cite the receipt.
     let mut expected = record;
@@ -378,7 +378,7 @@ fn a_receipt_is_not_recorded_for_a_record_the_queue_refuses() {
     record["padding"] = json!("x".repeat(crate::hook_direct_evidence::MAX_RECORD_BYTES));
     let recorded = std::cell::Cell::new(false);
     assert!(queue
-        .try_offer_recorded(record, &[DIRECT_RECEIPT_RECORDED], |_| {
+        .try_offer_recorded(record, &[DIRECT_RECEIPT_RECORDED], false, |_| {
             recorded.set(true);
             1
         })

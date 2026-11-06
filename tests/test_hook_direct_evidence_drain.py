@@ -352,3 +352,18 @@ def test_a_drained_prompt_records_only_its_receipt_and_capture(tmp_path: Path, h
     # The daemon records no command activity for a prompt.
     assert host.activity_writer.activity == []
     assert host.post_tool_activity == []
+
+
+def test_a_store_failure_on_the_page_reaches_the_writer_client(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    asked: list[str] = []
+    host.activity_writer.stats = lambda: asked.append("stats")  # pyright: ignore[reportAttributeAccessIssue]
+    body = json.loads(_page([_record(receipt_recorded=True)], 0, through=1))
+    body["store_fatal"] = {"id": "f1", "code": "native_guard_store_corrupt"}
+    output = json.dumps(body).encode()
+    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: output))
+
+    assert drain.drain_once() is False
+    assert asked == ["stats"]
+    assert drain.recorded == 1
+    assert host.activity_writer.receipts == []

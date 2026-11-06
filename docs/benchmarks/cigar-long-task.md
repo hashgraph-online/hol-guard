@@ -79,3 +79,50 @@ The Codex times include running the wrapped command itself, so they are an upper
 ### Gate G1
 
 G1 asks for paid -25% on both Codex and Claude Code with every check passing. Measured: Codex +7.9%, Claude Code -1.7%. Both miss by more than ten points with the shaping and re-read levers in place, so this track stops here, as the plan requires. Compaction was not added. Raising the cut on tool output further would not change this: on both harnesses the bill is driven by how many requests a session makes and how much fixed context each one re-reads, and a tool hook can change neither.
+
+## Prompt context
+
+Runs made on 2026-11-06 with a pre-release build of #7341 (3.60.0a22), same fixture, task, models and prices as above. This round changes what the agent is told, not what tools return. Guard's prompt hook adds a short note to each prompt:
+
+- where the code the prompt is about lives, as `path:line` pointers labeled with the enclosing definition;
+- for prompts about changes ("a teammate pushed", "review", "what broke"), the uncommitted diff and each commit since the session's first prompt, newest first, before the pointers. Git runs offline with no user config, and changed files pass Guard's secret screen first.
+
+The model, its reasoning level and every harness setting are the same as the control. Only the hooks differ:
+
+- **Codex (`map`):** Guard's prompt hook and its after-tool hook on `Bash`, `Read` and MCP tools.
+- **Claude Code (`claude-ctx`):** the control's settings plus Guard's `UserPromptSubmit` hook only. Each of the 30 prompts in the five runs got the note; no control prompt did.
+
+`arm-init` only makes the controls. The arms with the note were set up by hand:
+
+1. Install the Guard build under test in its own virtualenv. With `HOME` set to a scratch folder, set up context assistance there (`hol-guard context setup-python`, then `hol-guard context install`) and turn it on with workspace documents and agent context. Project scope is automatic, so the bench projects need no grant.
+2. Codex: run Guard's Codex install against the scratch home. In the scratch home's `.codex/config.toml`, keep only the hooks the arm uses and add the control's approval and sandbox settings. Make the arm's `codex_home` a symlink to that `.codex` folder and its `home` a symlink to the scratch home. Codex trusts a hook by a key that includes the resolved path of `config.toml`, so a copied file carries keys for the wrong path and Codex skips the hooks without saying so.
+3. Claude Code: copy the `claude-base` arm and add the `UserPromptSubmit` entry that Guard's Claude Code install writes for the scratch home to its `claude_settings.json`. The hook command must name the scratch Guard home, because Claude Code runs hooks with the real `HOME`.
+4. Before measuring, check one session's transcript for the note on every prompt.
+
+### Codex (gpt-6-luna, medium reasoning)
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | input $ | raw input | raw vs base | full-price in | cache read | cache write | output | requests | compactions | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base | 5 | 0 | yes | 0.0533 | +0.0% | 0.0449 | 3,456,946 | +0.0% | 115,147 | 3,341,798 | 0 | 16,755 | 66.0 | 0.0 | 112,911 |
+| map | 5 | 4 | NO | 0.0553 | +3.8% | 0.0462 | 3,312,160 | -4.2% | 145,261 | 3,166,899 | 0 | 18,203 | 59.6 | 0.0 | 119,069 |
+
+The four errored rows are earlier builds and are not counted: two ran with hooks Codex had not trusted, so Guard never ran, and two ran before #7341, when the change note came back empty in blobless clones like this fixture. They are also why "all pass" reads NO; the five counted runs all passed every check.
+
+Requests fell 10%, and in the two runs checked the step after a teammate's commit took three commands, but paid cost rose 3.8%. Per-run paid was $0.042, $0.085, $0.047, $0.050 and $0.052. The $0.085 run made 90 requests in all. Its final review step ran 302 seconds, against 32 to 136 for its other steps, while the agent ran its own full diff and five experiments. The other four runs averaged 52.0 requests. Full-price input also rose, from 115k to 145k tokens. That comes from provider cache misses of 4k to 27k tokens at random requests, which show up in every arm: full-price input ranges from 75k to 186k between runs of the same arm. At five runs that noise is as large as the effect.
+
+### Claude Code (claude-haiku-4-5)
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | input $ | raw input | raw vs base | full-price in | cache read | cache write | output | requests | compactions | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-base | 5 | 0 | NO | 3.1286 | +0.0% | 2.7938 | 23,745,231 | +0.0% | 1,768 | 23,523,619 | 219,844 | 66,963 | 219.2 | 1.0 | 181,451 |
+| claude-ctx | 5 | 0 | NO | 2.4102 | -23.0% | 2.1320 | 18,037,774 | -24.0% | 1,436 | 17,864,255 | 172,082 | 55,638 | 178.0 | 0.2 | 118,872 |
+
+Paid cost fell 23%, with 19% fewer requests and 34% fewer characters of file reads. Per-run paid was $2.80 to $3.40 for the control and $1.93 to $2.87 with the note; four of the five runs with the note cost less than the cheapest control run.
+
+Every run in both arms passed the full suite and two of the three acceptance checks. The third, `t2`, failed two of its four cases in three control runs and in four runs with the note. That is Haiku's limit on this task, as in the shaping round. It also means one run with the note passed every check against two control runs, so read the 23% as cost per attempted task, not savings for the same finished work.
+
+One control run is not in the table: in its first attempt the agent's edits made the suite hang, steps two to four each hit the bench's ten-minute limit and no usage row was written. It was run again from a clean copy.
+
+### What this shows
+
+On Claude Code, telling the agent where the code is and what changed cut the bill by about a quarter, because sessions made fewer requests and each request re-read less. On Codex the same note cut requests but not the bill at five runs, because Codex sessions are short and cache misses swing the cost more than the saved requests do.

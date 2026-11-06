@@ -15,6 +15,38 @@ pub(super) use cwd::{
     git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
 };
 
+/// The leading `cd <dir>` of a list whose separators leave the steps after it
+/// unproven, as the one segment index it covers.
+///
+/// [`benign_command_segments`] answers nothing at all for such a list: a `;`
+/// after the `cd` means a failed `cd` would leave the rest running in the
+/// directory the command started in, so no step after it can be proved
+/// against the directory the `cd` names. The `cd` is still the first thing
+/// that runs, it runs unconditionally, and a verified target neither reads
+/// nor creates anything. Proving it alone lets an extension the user allowed
+/// cover the programs after it, instead of the whole command keeping a review
+/// for the one step nobody doubts.
+pub(crate) fn leading_cd_segment(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> Vec<usize> {
+    // `cd $((PATH=10))` assigns as it expands, so the step the proof reads as
+    // a directory change also decides what the programs after it run.
+    let assigns = model
+        .segments
+        .first()
+        .is_some_and(|segment| super::shell_arithmetic::arithmetic_assigns(&segment.text));
+    if model.confidence != "exact"
+        || model.path_overridden
+        || !model.wrapper_chain.is_empty()
+        || assigns
+        || cwd::verified_leading_cd_target(model, context).is_none()
+    {
+        return Vec::new();
+    }
+    vec![0]
+}
+
 pub(crate) fn benign_command_segments(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
