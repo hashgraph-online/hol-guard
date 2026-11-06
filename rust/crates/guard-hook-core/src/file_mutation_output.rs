@@ -90,7 +90,10 @@ fn file_mutation_text(request: &NativeHookRequestV1) -> Option<String> {
         let extracted = collect_output_text(value);
         truncated |= extracted.truncated;
         if !extracted.text.is_empty() {
-            parts.push(extracted.text);
+            // The separated form: this text is scanned, never digested. The
+            // allow below records `canonical_observed_output_sha256`, which
+            // hashes the whole result on its own.
+            parts.push(extracted.boundary_text);
         }
     };
     for key in PAYLOAD_OUTPUT_KEYS
