@@ -97,8 +97,13 @@ impl Fixture {
         let declared = self.declared.canonicalize().unwrap();
         let repo = self.repo.canonicalize().unwrap();
         let environment = environment(&declared);
+        // Harnesses the read-only containment route serves answer this
+        // command by running it contained instead of reviewing it, which is
+        // the better outcome and not the one under test. Grok is a harness
+        // that route leaves alone, so the review this fix lowers is the
+        // result the evaluation actually reaches.
         crate::pretool::evaluate_pre_tool_envelope_with_execution_context(
-            "omp",
+            "grok",
             "PreToolUse",
             &serde_json::json!({"tool_name": "bash", "tool_input": {"command": command}}),
             Some(controls),
