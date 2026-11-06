@@ -45,21 +45,28 @@ def require_compatible_extension_control_schema(
 
     Store initialization creates the authority schema and the resident's
     writer ops create what is missing and move the marker forward, so a
-    runtime caller only refuses a marker it does not know. A store with no
-    marker yet has nothing to refuse.
+    runtime caller only refuses a marker it does not know. A database
+    recreated after initialization has lost the tables recovery reads, so
+    that store is initialized again here before the read.
     """
 
-    try:
-        row = cast(
-            object,
-            connection.execute(
-                "select version, checksum from extension_control_schema_migration where singleton = 1"
-            ).fetchone(),
-        )
-    except sqlite3.OperationalError:
-        return True
+    present = cast(
+        object,
+        connection.execute(
+            """select count(*) from sqlite_master where type = 'table'
+            and name in ('extension_control_schema_migration', 'extension_control_authority_snapshot')"""
+        ).fetchone(),
+    )
+    if tuple(cast("tuple[object, ...]", present)) != (2,):
+        return ensure_extension_control_authority_schema(connection, require_compatible=require_compatible)
+    row = cast(
+        object,
+        connection.execute(
+            "select version, checksum from extension_control_schema_migration where singleton = 1"
+        ).fetchone(),
+    )
     if row is None:
-        return True
+        return ensure_extension_control_authority_schema(connection, require_compatible=require_compatible)
     values = tuple(cast("tuple[object, ...]", row))
     if len(values) == 2 and extension_control_schema_marker_is_compatible(values[0], values[1]):
         return True
