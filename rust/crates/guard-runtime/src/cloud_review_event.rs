@@ -58,20 +58,27 @@ fn optional(value: Option<&Value>) -> Result<Value, &'static str> {
 /// Row text a risk level is read from, in the order
 /// `review_contracts._risk_category` reads it.
 const RISK_TEXT_KEYS: [&str; 3] = ["risk_headline", "risk_summary", "policy_action"];
-/// Words naming each level, highest first.
-const RISK_LEVEL_WORDS: [(&str, &[&str]); 3] = [
-    (
-        "high",
-        &["critical", "high", "block", "blocked", "destructive"],
-    ),
+/// Word stems naming each level, highest first. A word names a level when it
+/// is a stem or a stem with one of `RISK_WORD_SUFFIXES`, so "blocked" and
+/// "reviewing" count while "follow" and "highlight" do not. The claim builder
+/// in `review_contracts._risk_category` applies the same rule.
+const RISK_LEVEL_STEMS: [(&str, &[&str]); 3] = [
+    ("high", &["critical", "high", "block", "destructive"]),
     ("medium", &["medium", "review", "reapproval"]),
-    ("low", &["low", "allow", "allowed"]),
+    ("low", &["low", "allow"]),
 ];
+const RISK_WORD_SUFFIXES: [&str; 4] = ["", "s", "ed", "ing"];
+
+fn names_risk_level(word: &str, stems: &[&str]) -> bool {
+    stems.iter().any(|stem| {
+        word.strip_prefix(stem)
+            .is_some_and(|rest| RISK_WORD_SUFFIXES.contains(&rest))
+    })
+}
 
 /// The row's own `risk_category`, or else the level its risk text names. The
 /// local store keeps no risk column, so a Cloud card would otherwise always
-/// read Unknown. Whole words only: "follow" is not "low". A row whose text
-/// names no level sends null and stays Unknown.
+/// read Unknown. A row whose text names no level sends null and stays Unknown.
 fn risk_category(item: &Map<String, Value>) -> Result<Value, &'static str> {
     if let Some(category) = text(item.get("risk_category"))? {
         return Ok(Value::String(category));
@@ -85,8 +92,8 @@ fn risk_category(item: &Map<String, Value>) -> Result<Value, &'static str> {
             .split(|c: char| !c.is_ascii_alphanumeric())
             .filter(|word| !word.is_empty())
             .collect();
-        for (level, names) in RISK_LEVEL_WORDS {
-            if words.iter().any(|word| names.contains(word)) {
+        for (level, stems) in RISK_LEVEL_STEMS {
+            if words.iter().any(|word| names_risk_level(word, stems)) {
                 return Ok(Value::String(level.to_owned()));
             }
         }

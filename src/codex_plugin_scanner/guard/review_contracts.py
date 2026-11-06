@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -160,15 +161,28 @@ def _capability_category(request_row: dict[str, object]) -> str:
     return "tool-call"
 
 
+_RISK_LEVEL_STEMS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("high", ("critical", "high", "block", "destructive")),
+    ("medium", ("medium", "review", "reapproval")),
+    ("low", ("low", "allow")),
+)
+_RISK_WORD_SUFFIXES = ("", "s", "ed", "ing")
+
+
 def _risk_category(request_row: dict[str, object]) -> str:
+    """The level the row's risk text names, highest first, else unknown.
+
+    A word names a level when it is a stem or a stem with one of
+    ``_RISK_WORD_SUFFIXES``: "blocked" counts, "follow" and "highlight" do not.
+    The Rust Cloud Review event builder applies the same rule, so the claim and
+    the event agree on one request's level.
+    """
+
     for key in ("risk_headline", "risk_summary", "policy_action"):
-        value = (_non_empty_string(request_row.get(key)) or "").lower()
-        if any(token in value for token in ("critical", "high", "block", "destructive")):
-            return "high"
-        if any(token in value for token in ("medium", "review", "reapproval")):
-            return "medium"
-        if any(token in value for token in ("low", "allow")):
-            return "low"
+        words = re.split(r"[^a-z0-9]+", (_non_empty_string(request_row.get(key)) or "").lower())
+        for level, stems in _RISK_LEVEL_STEMS:
+            if any(word == stem + suffix for word in words for stem in stems for suffix in _RISK_WORD_SUFFIXES):
+                return level
     return "unknown"
 
 

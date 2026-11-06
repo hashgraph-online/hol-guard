@@ -171,6 +171,16 @@ fn the_risk_category_comes_from_the_row_when_the_store_has_no_column() {
         ),
         Value::Null
     );
+    // Inflected stems count; words that only contain a stem do not.
+    assert_eq!(
+        with(json!({"risk_headline": "Blocked writes to the keychain"})),
+        "high"
+    );
+    assert_eq!(
+        with(json!({"risk_headline": "Reviewing a follow-up"})),
+        "medium"
+    );
+    assert_eq!(with(json!({"risk_headline": "Allows highlighting"})), "low");
     assert_eq!(category(json!({"request_id": "r6"})), Value::Null);
 }
 
