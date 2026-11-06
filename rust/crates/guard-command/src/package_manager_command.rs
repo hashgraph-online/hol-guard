@@ -110,6 +110,7 @@ static MANAGER_GLOBAL_OPTIONS: LazyLock<Vec<(&'static str, GlobalOptionConfig)>>
                     subcommands: &["add", "pip", "sync"],
                     value_options: &[
                         "--cache-dir",
+                        "--config-file",
                         "--directory",
                         "--index",
                         "--python",
@@ -189,28 +190,46 @@ fn is_presentation_option(config: &GlobalOptionConfig, token: &str) -> bool {
             .any(|prefix| token.starts_with(prefix))
 }
 
-/// The manager's own verb: the first token that is neither an option nor the
-/// value of one. A package named `run` sits after the verb, so looking only at
-/// this position keeps `npm install run` strippable while `npm run build` is
-/// left alone.
-fn manager_verb<'a>(config: &GlobalOptionConfig, arguments: &'a [String]) -> Option<&'a str> {
+/// What reading the manager's own verb found.
+enum ManagerVerb<'a> {
+    /// The first token that is neither an option nor the value of one.
+    Named(&'a str),
+    /// A leading option Guard does not know. Its value, if it takes one,
+    /// cannot be told apart from the verb, so `uv --config-file uv.toml run
+    /// grep -v pattern file` would read `uv.toml` as the verb and miss that
+    /// the rest of the line belongs to `grep`. Nothing after such an option
+    /// is trustworthy, so the caller leaves the command exactly as typed.
+    Unreadable,
+    /// Options only, with no verb at all.
+    Absent,
+}
+
+/// The manager's own verb. A package named `run` sits after the verb, so
+/// looking only at this position keeps `npm install run` strippable while
+/// `npm run build` is left alone.
+fn manager_verb<'a>(config: &GlobalOptionConfig, arguments: &'a [String]) -> ManagerVerb<'a> {
     let mut index = 0;
     while index < arguments.len() {
         let token = arguments[index].as_str();
         if token == "--" {
-            return arguments.get(index + 1).map(String::as_str);
+            return arguments
+                .get(index + 1)
+                .map_or(ManagerVerb::Absent, |verb| ManagerVerb::Named(verb));
         }
         if token.starts_with('-') {
-            index += if config.value_options.contains(&token) {
-                2
-            } else {
-                1
-            };
-            continue;
+            if config.value_options.contains(&token) {
+                index += 2;
+                continue;
+            }
+            if token.contains('=') || is_presentation_option(config, token) {
+                index += 1;
+                continue;
+            }
+            return ManagerVerb::Unreadable;
         }
-        return Some(token);
+        return ManagerVerb::Named(token);
     }
-    None
+    ManagerVerb::Absent
 }
 
 /// Drop reporting-only options from a package manager's arguments.
@@ -233,8 +252,10 @@ pub fn strip_manager_presentation_arguments(manager: &str, arguments: &[String])
         .iter()
         .find(|(name, _)| *name == key)
         .map_or(&[] as &[&str], |(_, verbs)| *verbs);
-    if manager_verb(config, arguments).is_some_and(|verb| downstream.contains(&verb)) {
-        return arguments.to_vec();
+    match manager_verb(config, arguments) {
+        ManagerVerb::Named(verb) if downstream.contains(&verb) => return arguments.to_vec(),
+        ManagerVerb::Unreadable => return arguments.to_vec(),
+        _ => {}
     }
     let mut stripped: Vec<String> = Vec::with_capacity(arguments.len());
     let mut in_manager_options = true;
@@ -445,6 +466,36 @@ mod tests {
             "3.12",
         ]);
         assert_eq!(strip_manager_presentation_arguments("uv", &args), args);
+    }
+
+    #[test]
+    fn an_unknown_leading_option_keeps_the_command_as_typed() {
+        // Guard cannot tell whether `--settings` takes a value, so it cannot
+        // tell the verb from that value either. Reading `uv.toml` as the verb
+        // would hide the `run` behind it and strip `grep`'s own `-v`, letting
+        // one saved approval cover a different command.
+        let hidden_runner = t(&[
+            "--settings",
+            "uv.toml",
+            "run",
+            "grep",
+            "-v",
+            "pattern",
+            "file",
+        ]);
+        assert_eq!(
+            strip_manager_presentation_arguments("uv", &hidden_runner),
+            hidden_runner
+        );
+        // A value option Guard does know still resolves the verb, so an
+        // ordinary install keeps normalizing across quiet and verbose.
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "uv",
+                &t(&["--config-file", "uv.toml", "pip", "install", "-q", "ruff"])
+            ),
+            t(&["--config-file", "uv.toml", "pip", "install", "ruff"]),
+        );
     }
 
     #[test]
