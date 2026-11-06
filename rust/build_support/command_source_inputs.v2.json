@@ -338,6 +338,7 @@
       "src/pretool/directory_read_tmp_alias_tests.rs",
       "src/pretool/directory_read_tools.rs",
       "src/pretool/directory_targets.rs",
+      "src/pretool/directory_targets_home_variable.rs",
       "src/pretool/directory_targets_sibling.rs",
       "src/pretool/directory_targets_tmp_alias.rs",
       "src/pretool/docker_logs.rs",
