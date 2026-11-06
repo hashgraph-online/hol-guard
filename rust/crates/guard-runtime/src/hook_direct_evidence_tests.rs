@@ -1,5 +1,5 @@
 use super::{
-    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, HEADROOM_RECORDS,
+    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, Paged, HEADROOM_RECORDS,
     MAX_QUEUED_RECORDS, MAX_RECORD_BYTES,
 };
 use serde_json::{json, Value};
@@ -156,7 +156,7 @@ fn a_page_passes_over_plain_relay_records_and_the_ack_settles_them() {
     assert!(queue.offer(plain.clone()));
     let peeked = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
     assert_eq!(
-        peeked.records,
+        values(&peeked.records),
         [json!({ "index": 0 }), json!({ "index": 2 })]
     );
     assert_eq!(peeked.remaining, 0);
@@ -179,11 +179,14 @@ fn plain_relay_records_never_leave_an_empty_page_with_more_queued() {
         assert!(queue.offer(json!({ "index": index })));
     }
     let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 2);
-    assert_eq!(page.records, [json!({ "index": 0 }), json!({ "index": 1 })]);
+    assert_eq!(
+        values(&page.records),
+        [json!({ "index": 0 }), json!({ "index": 1 })]
+    );
     assert_eq!(page.remaining, 1);
     let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 2);
     assert_eq!(page.settled, [plain.clone(), plain.clone(), plain]);
-    assert_eq!(page.records, [json!({ "index": 2 })]);
+    assert_eq!(values(&page.records), [json!({ "index": 2 })]);
     assert_eq!(page.remaining, 0);
 }
 
@@ -207,7 +210,7 @@ fn a_receipt_the_resident_could_not_write_is_paged_to_the_daemon() {
     assert_eq!(page.settled, [plain.clone()]);
     queue.unwritten().requeue(page.settled);
     let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 3);
-    assert_eq!(page.records, [plain]);
+    assert_eq!(values(&page.records), [plain]);
     assert!(page.settled.is_empty());
 }
 
@@ -234,7 +237,7 @@ fn a_full_queue_still_takes_back_every_receipt_the_resident_could_not_write() {
         handed_back += page
             .records
             .iter()
-            .filter(|record| **record == plain)
+            .filter(|paged| paged.record == plain)
             .count();
         if page.records.is_empty() {
             break;
@@ -257,7 +260,7 @@ fn a_drain_with_no_store_hands_the_receipt_back_to_the_daemon() {
     loop {
         let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
         if !page.records.is_empty() {
-            assert_eq!(page.records, [plain]);
+            assert_eq!(values(&page.records), [plain]);
             break;
         }
         assert!(
@@ -291,4 +294,8 @@ fn a_partly_recorded_record_is_charged_for_the_markers_it_keeps() {
     let state = queue.state.lock().unwrap();
     assert_eq!(state.records[0].record, kept);
     assert_eq!(state.bytes, serde_json::to_vec(&kept).unwrap().len());
+}
+
+fn values(records: &[Paged]) -> Vec<Value> {
+    records.iter().map(|paged| paged.record.clone()).collect()
 }

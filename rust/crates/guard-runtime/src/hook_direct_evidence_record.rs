@@ -38,7 +38,7 @@ pub(super) fn leftovers(
     let (marks, fatal) =
         crate::hook_evidence_writer_op::record_drained(Path::new(guard_home), source, |writer| {
             let mut marks = Vec::new();
-            for paged in paged.iter().filter(|paged| pending(*paged)) {
+            for paged in paged.iter().filter(|paged| pending(paged)) {
                 let mut recorded = Vec::new();
                 if !flagged(&paged.record, DIRECT_RECEIPT_RECORDED) {
                     let Some(receipt) = paged.record.get("receipt").and_then(Value::as_object)
