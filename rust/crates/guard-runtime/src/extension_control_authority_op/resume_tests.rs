@@ -1,7 +1,7 @@
 //! Pins the resume op: the verdict and its writes in one transaction, then the
 //! committed anchor, the last-good export and the change event.
 
-use guard_contracts::ExtensionControlAuthorityRequestV1;
+use guard_contracts::{ExtensionControlAuthorityRequestV1, ExtensionControlRetryProofV1};
 use rusqlite::params;
 use serde_json::{json, Value};
 
@@ -265,6 +265,96 @@ fn resume_refuses_a_commit_whose_proof_is_already_consumed_or_row_moved() {
         .unwrap();
     let moved = finish_commit(&home, 2, anchored);
     assert_eq!(moved["fault"], json!("tampered"), "{moved}");
+    assert_eq!(
+        count(
+            &home,
+            "select count(*) from extension_control_authority_proof where consumed_at is null"
+        ),
+        1
+    );
+    assert_eq!(count(&home, "select count(*) from guard_cloud_events"), 0);
+}
+
+fn retry(home: &Home, revision: i64, anchor_json: String) -> Value {
+    run(&ExtensionControlAuthorityRequestV1 {
+        anchor_json: Some(anchor_json),
+        revision: Some(revision),
+        now: Some(NOW.to_owned()),
+        retry_proof: Some(ExtensionControlRetryProofV1 {
+            proof_hash: "proof-hash".to_owned(),
+            mutation_digest: "mutation".to_owned(),
+        }),
+        ..home.request("resume", &catalog('a'))
+    })
+}
+
+#[test]
+fn retry_records_its_proof_in_the_transaction_that_commits_its_row() {
+    let home = with_cloud_events(Home::new());
+    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");
+    let reply = retry(&home, 2, anchor(2, &snapshot_digest(&home, 2), "anchored"));
+    assert_eq!(reply["resumed"]["revision"], json!(2), "{reply}");
+    assert_eq!(
+        count(
+            &home,
+            "select count(*) from extension_control_authority_proof \
+             where proof_id_hash = 'proof-hash' and transition_revision = 2 \
+             and consumed_at = '2026-10-21T00:05:00+00:00'"
+        ),
+        1
+    );
+    // A reserved proof is stamped once and keeps its first stamp.
+    let home = with_cloud_events(Home::new());
+    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");
+    reserve_proof(&home, 2);
+    let reply = retry(&home, 2, anchor(2, &snapshot_digest(&home, 2), "anchored"));
+    assert_eq!(reply["resumed"]["revision"], json!(2), "{reply}");
+    let again = retry(&home, 2, anchor(2, &snapshot_digest(&home, 2), "committed"));
+    assert_eq!(again["resumed"]["revision"], json!(2), "{again}");
+    assert_eq!(
+        count(
+            &home,
+            "select count(*) from extension_control_authority_proof \
+             where reserved_at = 't0' and consumed_at = '2026-10-21T00:05:00+00:00'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn retry_releases_its_proof_with_an_abandoned_row() {
+    let home = with_cloud_events(Home::new());
+    let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");
+    reserve_proof(&home, 2);
+    let reply = retry(&home, 2, head);
+    assert_eq!(reply["outcome"], json!("abandon"), "{reply}");
+    assert_eq!(
+        count(
+            &home,
+            "select count(*) from extension_control_authority_proof"
+        ),
+        0
+    );
+}
+
+#[test]
+fn retry_refuses_a_proof_reserved_for_another_row_with_nothing_committed() {
+    let home = with_cloud_events(Home::new());
+    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");
+    reserve_proof(&home, 3);
+    let refused = retry(&home, 2, anchor(2, &snapshot_digest(&home, 2), "anchored"));
+    assert_eq!(refused["fault"], json!("tampered"), "{refused}");
+    assert_eq!(
+        count(
+            &home,
+            "select revision from extension_control_authority_snapshot where singleton = 1"
+        ),
+        1
+    );
     assert_eq!(
         count(
             &home,

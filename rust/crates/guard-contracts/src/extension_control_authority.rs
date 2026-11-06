@@ -149,6 +149,10 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// commit consumes in the same transaction.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proof_hash: Option<String>,
+    /// `resume` from a retry of a commit that found its own prepared row: the
+    /// proof the retry settles in the transaction that applies the verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_proof: Option<ExtensionControlRetryProofV1>,
     /// `history`: how many prior snapshots to list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<i64>,
@@ -257,6 +261,17 @@ impl std::fmt::Debug for ExtensionControlPackFinishV1 {
             .field("legacy_evidence", &self.legacy_evidence.is_some())
             .finish_non_exhaustive()
     }
+}
+
+/// The proof a commit retry settles with the verdict on its own prepared row:
+/// recorded as consumed when the row commits, released when it is abandoned.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlRetryProofV1 {
+    /// The hashed proof identifier the commit plan named.
+    pub proof_hash: String,
+    /// The mutation digest the proof was validated against.
+    pub mutation_digest: String,
 }
 
 /// A staged command-pack activation to reserve with the prepared row, and

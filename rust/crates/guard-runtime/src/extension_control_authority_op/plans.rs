@@ -266,11 +266,17 @@ impl Ctx<'_> {
 
     /// The prepared row at `revision`, what resuming it for its own request
     /// comes to and the command pack it binds; `None` when there is no row.
+    /// A commit retry sends the view it read, so a row that view already
+    /// shows committed comes back `current`, as in `commit_plan`.
     pub(super) fn resume_verdict(&self, revision: i64) -> Res<Option<(Row, Resume, Value)>> {
         let Some(row) = self.pending_transition(revision)? else {
             return Ok(None);
         };
-        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, None)?;
+        let current = match (&self.request.retry_proof, &self.request.view) {
+            (Some(_), Some(_)) => Some(View::from_value(self.request.view.as_ref())?),
+            _ => None,
+        };
+        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, current.as_ref())?;
         Ok(Some((row, outcome, pack)))
     }
 

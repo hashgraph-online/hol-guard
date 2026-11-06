@@ -33,7 +33,7 @@ from .runtime.extension_control_proof import (
     validate_extension_control_proof,
 )
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_pack_digest
+from .store_extension_control_authority_support import _now, _plan_int, _plan_map
 
 # A commit re-reads at most once to roll back another request's abandoned
 # transition and once after abandoning its own; the resident decides each round.
@@ -276,47 +276,31 @@ class ExtensionControlAuthorityCommitMixin:
                     rollback_attempted = True
                     continue
                 # A retry of this request found its own prepared transition.
+                # The resident applies the verdict and settles the proof in
+                # the same transaction.
                 revision = _plan_int(plan, "revision")
-                proof_hash = str(_plan_map(plan, "hashes")["proof"])
-                with self._connect() as connection:
-                    resumed = self._apply_resumed_transition(
-                        connection,
-                        outcome,
-                        revision,
-                        current=current,
-                        key=key,
-                        pack_record_digest=_plan_pack_digest(plan),
-                    )
-                    if resumed is not None:
-                        consumed_at = _now()
-                        if plan.get("proof_recorded") is not True:
-                            consume_extension_control_proof(self.guard_home, proof, mutation)
-                            connection.execute(
-                                """
-                                insert into extension_control_authority_proof (
-                                    proof_id_hash, mutation_digest, transition_revision,
-                                    reserved_at, consumed_at
-                                ) values (?, ?, ?, ?, ?)
-                                """,
-                                (proof_hash, mutation.canonical_digest, revision, consumed_at, consumed_at),
-                            )
-                        else:
-                            connection.execute(
-                                """
-                                update extension_control_authority_proof
-                                set consumed_at = coalesce(consumed_at, ?)
-                                where proof_id_hash = ?
-                                """,
-                                (consumed_at, proof_hash),
-                            )
-                        return resumed
-                    connection.commit()
-                    if plan.get("proof_recorded") is True:
-                        connection.execute(
-                            "delete from extension_control_authority_proof where proof_id_hash = ?",
-                            (proof_hash,),
-                        )
-                        proof_already_consumed = True
+                proof_recorded = plan.get("proof_recorded") is True
+                self._invalidate_native_extension_control_policy()
+                reply = self._resume_extension_control_op(
+                    revision,
+                    key=key,
+                    now=_now(),
+                    view=view_to_wire(current),
+                    retry_proof={
+                        "proof_hash": str(_plan_map(plan, "hashes")["proof"]),
+                        "mutation_digest": mutation.canonical_digest,
+                    },
+                )
+                if reply.get("outcome") == "current":
+                    resumed = current
+                else:
+                    resumed = self._adopt_resumed_transition(reply, revision)
+                if resumed is not None:
+                    if not proof_recorded:
+                        consume_extension_control_proof(self.guard_home, proof, mutation)
+                    return resumed
+                if proof_recorded:
+                    proof_already_consumed = True
                 current = self._read_extension_control_authority_locked(
                     catalog_digest, migration_registry=migration_registry, allow_migration=pack_activation is None
                 )

@@ -1,7 +1,8 @@
 """Applying the resident's verdicts on extension-control transitions.
 
 The resident decides whether a prepared transition is resumed, committed or
-abandoned; this module performs the writes it cannot, under the caller's lease.
+abandoned and writes the result itself; this module asks it under the caller's
+lease and supplies the protected pack state only this process reads.
 """
 
 # pyright: reportAttributeAccessIssue=false, reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownMemberType=false, reportUnknownVariableType=false
@@ -14,20 +15,14 @@ from typing import cast
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.extension_control_authority import (
-    AuthorityAnchor,
     AuthorityHealth,
-    AuthorityPhase,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
 )
 from .store_extension_control_authority_support import (
     _ExtensionControlAuthoritySupportMixin,
     _now,
-    _row_int,
-    _row_str,
 )
-
-_RESUMED_OUTCOMES = frozenset({"commit_pending", "mark_committed", "finish"})
 
 
 def _plan(reply: dict[str, object]) -> dict[str, object]:
@@ -43,87 +38,6 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
 
         reply = self._extension_control_authority_op(op, key=key, anchor_json=self._read_anchor_json(), **fields)
         return _plan(reply)
-
-    def _apply_resumed_transition(
-        self,
-        connection: sqlite3.Connection,
-        outcome: str,
-        revision: int,
-        *,
-        current: ExtensionControlAuthorityView | None,
-        key: bytes,
-        pack_record_digest: str | None = None,
-    ) -> ExtensionControlAuthorityView | None:
-        """Apply the resident's verdict on a prepared transition.
-
-        ``abandon`` removes the prepared row and returns None; every other
-        outcome finishes the transition and returns the view it left.
-        ``pack_record_digest`` is the pack record the resident found the
-        authenticated transition binds.
-        """
-
-        self._invalidate_native_extension_control_policy()
-        return self._finish_resumed_transition(
-            connection, outcome, revision, current=current, key=key, pack_record_digest=pack_record_digest
-        )
-
-    def _finish_resumed_transition(
-        self,
-        connection: sqlite3.Connection,
-        outcome: str,
-        revision: int,
-        *,
-        current: ExtensionControlAuthorityView | None,
-        key: bytes,
-        pack_record_digest: str | None = None,
-    ) -> ExtensionControlAuthorityView | None:
-        """``_apply_resumed_transition`` once native readiness is closed."""
-
-        row = connection.execute(
-            "select * from extension_control_authority_transition where revision = ?", (revision,)
-        ).fetchone()
-        if row is None:
-            raise ExtensionControlAuthorityError("idempotent transition state mismatch")
-        if outcome == "abandon":
-            _ = connection.execute("delete from extension_control_authority_transition where revision = ?", (revision,))
-            from .catalog_delivery.activation_journal import abandon
-
-            abandon(connection, revision)
-            return None
-
-        def queue_event() -> None:
-            self._queue_extension_control_change_event(
-                connection,
-                revision=revision,
-                previous_revision=_row_int(row, "previous_revision"),
-                layers_json=_row_str(row, "layers_json"),
-                occurred_at=_row_str(row, "created_at"),
-            )
-
-        if outcome == "current" and current is not None:
-            queue_event()
-            connection.commit()
-            return current
-        if outcome not in _RESUMED_OUTCOMES:
-            raise ExtensionControlAuthorityError("invalid extension control authority plan")
-        if outcome == "commit_pending":
-            self._commit_pending_transition(connection, row, pack_record_digest)
-        elif outcome == "mark_committed":
-            _ = connection.execute(
-                "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-                (AuthorityPhase.COMMITTED.value, _now(), revision),
-            )
-        connection.commit()
-        self._write_and_verify_anchor(
-            AuthorityAnchor(revision, _row_str(row, "snapshot_digest"), AuthorityPhase.COMMITTED),
-            key=key,
-        )
-        queue_event()
-        connection.commit()
-        resumed = self._read_extension_control_authority_locked(_row_str(row, "catalog_digest"))
-        if resumed.health is not AuthorityHealth.PROTECTED or resumed.revision != revision:
-            raise ExtensionControlAuthorityError("idempotent transition recovery failed")
-        return resumed
 
     def _resume_transition(
         self, connection: sqlite3.Connection, revision: int, *, key: bytes
@@ -303,33 +217,3 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             if not isinstance(history, list):
                 raise ExtensionControlAuthorityError("invalid extension control history")
             return cast(list[dict[str, object]], history)
-
-    def _commit_pending_transition(
-        self, connection: sqlite3.Connection, row: sqlite3.Row, pack_record_digest: str | None
-    ) -> None:
-        self._validate_serialized_layers(_row_str(row, "layers_json"))
-        from .catalog_delivery.activation_journal import finish
-
-        finish(self, connection, row, expected_pack=pack_record_digest)
-        _ = connection.execute(
-            """
-            update extension_control_authority_snapshot
-            set revision = ?, catalog_digest = ?, layers_json = ?, previous_digest = snapshot_digest,
-                snapshot_json = ?, snapshot_digest = ?, snapshot_mac = ?, committed_at = ?
-            where singleton = 1 and revision = ?
-            """,
-            (
-                _row_int(row, "revision"),
-                _row_str(row, "catalog_digest"),
-                _row_str(row, "layers_json"),
-                _row_str(row, "snapshot_json"),
-                _row_str(row, "snapshot_digest"),
-                _row_str(row, "snapshot_mac"),
-                _row_str(row, "created_at"),
-                _row_int(row, "previous_revision"),
-            ),
-        )
-        _ = connection.execute(
-            "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-            (AuthorityPhase.COMMITTED.value, _now(), _row_int(row, "revision")),
-        )
