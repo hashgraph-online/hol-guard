@@ -362,3 +362,28 @@ fn scripts_an_install_hook_can_reach_still_ask_again() {
         assert_ne!(plain.digest, lab.context(&checkout, "bun").digest, "{hook}");
     }
 }
+
+#[test]
+fn config_an_install_hook_reads_still_asks_again() {
+    let lab = Lab::new();
+    let checkout = lab.clone("app", &[("origin", "https://example.test/team/app.git")]);
+    write(&checkout, "bun.lock", BUN_LOCK);
+    let configured = |port: &str| {
+        PACKAGE_JSON.replacen('{', &format!("{{\"config\": {{\"port\": \"{port}\"}},"), 1)
+    };
+    write(&checkout, "package.json", &configured("8080"));
+    let unhooked = lab.context(&checkout, "bun");
+    write(&checkout, "package.json", &configured("9090"));
+    assert_eq!(unhooked.digest, lab.context(&checkout, "bun").digest);
+
+    let hooked = |port: &str| {
+        configured(port).replace(
+            "\"next dev\"",
+            "\"next dev\", \"postinstall\": \"node setup.js\"",
+        )
+    };
+    write(&checkout, "package.json", &hooked("8080"));
+    let before = lab.context(&checkout, "bun");
+    write(&checkout, "package.json", &hooked("9090"));
+    assert_ne!(before.digest, lab.context(&checkout, "bun").digest);
+}

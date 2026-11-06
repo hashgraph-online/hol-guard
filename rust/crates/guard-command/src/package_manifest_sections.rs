@@ -136,12 +136,17 @@ fn package_json_sections(payload: &[u8]) -> Option<OMap> {
             sections.insert(key, value.clone());
         }
     }
+    // An install hook can run any other script by name and reads `config`
+    // through `npm_package_config_*`, so both stay bound while a hook exists.
     if let Some(OValue::Map(scripts)) = parsed.get("scripts") {
         if scripts
             .iter()
             .any(|(key, _)| LIFECYCLE_NAMES.contains(&key))
         {
             sections.insert("scripts", OValue::Map(scripts.clone()));
+            if let Some(config) = parsed.get("config") {
+                sections.insert("config", config.clone());
+            }
         }
     }
     Some(sections)
