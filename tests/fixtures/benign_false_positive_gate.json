@@ -52492,7 +52492,7 @@
       "requires_sandbox": true
     },
     {
-      "id": "session-git-commit-heredoc-message",
+      "id": "session-git-commit-substituted-heredoc-message",
       "fix_area": "shell",
       "harnesses": [
         "omp",
