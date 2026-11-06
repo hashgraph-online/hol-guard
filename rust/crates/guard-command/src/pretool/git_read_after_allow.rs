@@ -303,7 +303,18 @@ fn ref_read(
 /// segment benign.
 pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
     let arguments = &segment.arguments;
-    git_segment(segment) && (preserves_tree(arguments) || writes_nothing(arguments))
+    git_segment(segment)
+        && !points_output_at_a_file(arguments)
+        && (preserves_tree(arguments) || writes_nothing(arguments))
+}
+
+/// Whether `segment` is a Git step that writes its output to a file it names.
+///
+/// A read that writes is not a read. An extension-wide Allow answers for what
+/// Git itself reads, so a step that points its output at a path of its own
+/// choosing keeps the review it had, whether or not anything runs after it.
+pub(crate) fn git_step_names_an_output_file(segment: &crate::CommandSegmentV1) -> bool {
+    git_segment(segment) && points_output_at_a_file(&segment.arguments)
 }
 
 /// Whether a Git step, wherever its global options route it, writes nothing a
@@ -313,26 +324,37 @@ fn writes_nothing(arguments: &[String]) -> bool {
     let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
         return false;
     };
-    if arguments[index..]
-        .iter()
-        .any(|argument| names_an_output_file(argument))
-    {
-        return false;
-    }
     arguments
         .get(index)
         .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
 }
 
-/// Whether an argument points a step's output at a file of its own choosing.
+/// Verbs that read a short `-o` as the file to write.
+///
+/// Everywhere else the same letter means something that writes nothing:
+/// `git ls-files -o` lists untracked files and `git push -o` carries a push
+/// option to the remote, so refusing `-o` outright would stop ordinary work.
+const SHORT_OUTPUT_VERBS: &[&str] = &["archive", "bundle", "format-patch"];
+
+/// Whether a step points its output at a file of its own choosing.
 ///
 /// Git's diff options reach every verb that can show a diff, so `log`, `show`,
 /// `whatchanged` and `rev-list` all take `--output=<file>` and write wherever
 /// it points -- over `.git/config` or a hook a later step runs. Git resolves
 /// any unambiguous long-option abbreviation, so every spelling from `--out`
-/// up is refused, as is a short `-o` whichever verb reads it.
-fn names_an_output_file(argument: &str) -> bool {
-    argument.starts_with("--out") || argument.starts_with("-o")
+/// up is refused; the short form is refused for the verbs that read it as the
+/// output file.
+fn points_output_at_a_file(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    let Some(operation) = arguments.get(index).map(String::as_str) else {
+        return false;
+    };
+    let short_writes = SHORT_OUTPUT_VERBS.contains(&operation);
+    arguments.iter().skip(index + 1).any(|argument| {
+        argument.starts_with("--out") || (short_writes && argument.starts_with("-o"))
+    })
 }
 
 #[cfg(test)]
@@ -364,13 +386,39 @@ mod tests {
             "diff --output=hook",
             "archive -o out.tar HEAD",
             "config a.b c",
-            // Git's diff options reach every verb that shows a diff.
+        ] {
+            assert!(!super::writes_nothing(&words(command)), "{command}");
+        }
+    }
+
+    #[test]
+    fn a_read_that_names_an_output_file_is_not_a_read() {
+        // Git's diff options reach every verb that shows a diff, and the
+        // short form is the output file for the verbs that package a tree.
+        for command in [
             "log -1 --output=.git/config",
             "show --output .git/hooks/pre-commit HEAD",
             "whatchanged --out=.git/config",
             "rev-list --output=.git/config HEAD",
+            "diff --output=hook",
+            "archive -o out.tar HEAD",
+            "format-patch -o .git/hooks HEAD~1",
         ] {
-            assert!(!super::writes_nothing(&words(command)), "{command}");
+            assert!(super::points_output_at_a_file(&words(command)), "{command}");
+        }
+        // The same letter means something that writes nothing here, and a
+        // long option that merely starts with the same letters names no file.
+        for command in [
+            "ls-files -o --exclude-standard",
+            "push -o ci.skip origin main",
+            "status --short --branch",
+            "log --oneline -5",
+            "log --one-line",
+        ] {
+            assert!(
+                !super::points_output_at_a_file(&words(command)),
+                "{command}"
+            );
         }
     }
 

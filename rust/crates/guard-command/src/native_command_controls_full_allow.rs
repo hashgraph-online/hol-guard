@@ -35,6 +35,11 @@ impl super::CompiledNativeCommandControls {
     /// reset can replace the program, configuration or bind-mounted file a
     /// later step runs; segments after such a step keep the review they had.
     ///
+    /// A step that points its own output at a file it names is left out of the
+    /// coverage as well as ending the walk. `git log --output=.git/config`
+    /// reads a verb the extension models, but what it does is write, and an
+    /// answer about Git's reads never covers that.
+    ///
     /// This widens coverage, not the floors around it: `fixed_command_floor`,
     /// `protected_checkout_destination`, the caller's bounded and
     /// sensitive-target checks and every floor Rust raises after the controls
@@ -65,6 +70,7 @@ impl super::CompiledNativeCommandControls {
         for (index, segment) in command.segments.iter().enumerate() {
             let watches_this_segment = watched
                 .contains(&crate::command_compatibility::basename(segment))
+                && !crate::pretool::git_step_names_an_output_file(segment)
                 && crate::command_compatibility::segment_settles_uncertainty(segment, context);
             if watches_this_segment {
                 covered.insert(index);
