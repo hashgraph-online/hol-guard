@@ -20,6 +20,9 @@ GITHUB_LOOKUP_REPO = "example-org/example-repo"
 GITHUB_LOOKUP_QUERY = "is:pr metrics OR analytics"
 GITHUB_METADATA_CASE = "github-metadata-command-reads"
 GITHUB_METADATA_CONTROL = "github-metadata-mutation-control"
+# A directory change carrying an allowed mutation and a read split by `;`, the shape a user
+# who allowed the GitHub extension runs when they merge a pull request and then read it back.
+GITHUB_DIRECTORY_CHANGE_CASE = "github-allow-directory-change-then-merge-with-read-tail"
 GITHUB_STUB_CASES = frozenset(
     {
         GITHUB_REVIEW_CASE,
@@ -28,10 +31,11 @@ GITHUB_STUB_CASES = frozenset(
         GITHUB_LOOKUP_CASE,
         GITHUB_METADATA_CASE,
         GITHUB_METADATA_CONTROL,
+        GITHUB_DIRECTORY_CHANGE_CASE,
     }
 )
 # Cases that run with the GitHub extension and every one of its permissions enabled.
-GITHUB_ENABLED_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_GUARD_NAMED_REPOSITORY_CASE})
+GITHUB_ENABLED_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_GUARD_NAMED_REPOSITORY_CASE, GITHUB_DIRECTORY_CHANGE_CASE})
 METADATA_CALLS = (
     ("cache", "list", "--limit", "5"),
     ("label", "list", "--json", "name"),
