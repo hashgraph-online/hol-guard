@@ -1368,7 +1368,8 @@ fn git_read_settled_by_allow(
         execution_environment,
     ) {
         super::git_read_floor::AllowableReview::None => false,
-        super::git_read_floor::AllowableReview::EarlierSteps(steps) => {
+        super::git_read_floor::AllowableReview::EarlierSteps(steps)
+        | super::git_read_floor::AllowableReview::UnansweredProbe(steps) => {
             super::git_read_after_allow::allow_settles_read_order(
                 model,
                 &steps,
@@ -1377,7 +1378,6 @@ fn git_read_settled_by_allow(
                 execution_environment,
             )
         }
-        super::git_read_floor::AllowableReview::UnansweredProbe => true,
     };
     answerable
         && controls.explicit_allow_covers_command(

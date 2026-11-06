@@ -42,7 +42,7 @@ pub(super) fn unsettled_steps_before_reads(
 ) -> Option<Vec<usize>> {
     match verdict(model, context, deadline, execution_environment) {
         Verdict::Unsettled(steps) => Some(steps),
-        Verdict::Clear | Verdict::Review(_) => None,
+        Verdict::Clear | Verdict::Review(_) | Verdict::UnansweredProbe(_) => None,
     }
 }
 
@@ -57,8 +57,10 @@ pub(super) enum AllowableReview {
     /// steps, by index into the model, kept that proof from carrying over.
     EarlierSteps(Vec<usize>),
     /// A Git read was left unproven by a probe that could not answer. The
-    /// allow says to run the read as this checkout configures it.
-    UnansweredProbe,
+    /// allow says to run the read as this checkout configures it, so long as
+    /// these earlier steps, by index into the model, leave the configuration
+    /// the read is allowed to run under alone.
+    UnansweredProbe(Vec<usize>),
 }
 
 /// The part of this floor's verdict an explicit user allow may settle.
@@ -70,7 +72,10 @@ pub(super) fn allowable_review(
 ) -> AllowableReview {
     match verdict(model, context, deadline, execution_environment) {
         Verdict::Unsettled(steps) => AllowableReview::EarlierSteps(steps),
-        Verdict::Review(ReviewCause::UnansweredProbe) => AllowableReview::UnansweredProbe,
+        Verdict::UnansweredProbe(steps) => AllowableReview::UnansweredProbe(steps),
+        Verdict::Review(ReviewCause::UnansweredProbe) => {
+            AllowableReview::UnansweredProbe(Vec::new())
+        }
         Verdict::Clear | Verdict::Review(ReviewCause::Other) => AllowableReview::None,
     }
 }
@@ -88,6 +93,11 @@ enum Verdict {
     Review(ReviewCause),
     /// Only the order failed: these earlier steps, by index into the model.
     Unsettled(Vec<usize>),
+    /// A probe that could not answer left a Git read unproven, and these
+    /// earlier steps, by index into the model, were not proven to leave the
+    /// configuration that read runs under alone. An allow for the read
+    /// answers the probe, but only where it also settles those steps.
+    UnansweredProbe(Vec<usize>),
 }
 
 /// Why a Git read needs review.
@@ -115,6 +125,8 @@ impl Verdict {
             Self::Clear => None,
             Self::Review(cause) => Some(cause),
             Self::Unsettled(_) => Some(ReviewCause::Other),
+            Self::UnansweredProbe(steps) if steps.is_empty() => Some(ReviewCause::UnansweredProbe),
+            Self::UnansweredProbe(_) => Some(ReviewCause::Other),
         }
     }
 
@@ -445,7 +457,6 @@ fn verdict(
                 Some(ReviewCause::Other) => ReviewCause::Other,
                 _ => cause,
             });
-            continue;
         }
         // Only inspection operations have a configuration proof to
         // invalidate. Other Git operations retain their own native
@@ -454,11 +465,18 @@ fn verdict(
             unsettled.extend((0..index).filter(|prior| !settled(*prior, segment)));
         }
     }
-    if let Some(cause) = refused {
-        return Verdict::Review(cause);
-    }
     unsettled.sort_unstable();
     unsettled.dedup();
+    // An allow that answers an unanswered probe runs the read as this
+    // checkout configures it, so the steps before it must be proven to leave
+    // that configuration alone. Carrying them out keeps a `git config` write
+    // ahead of the read from riding the allow.
+    if let Some(cause) = refused {
+        return match cause {
+            ReviewCause::Other => Verdict::Review(ReviewCause::Other),
+            ReviewCause::UnansweredProbe => Verdict::UnansweredProbe(unsettled),
+        };
+    }
     if unsettled.is_empty() {
         Verdict::Clear
     } else {
