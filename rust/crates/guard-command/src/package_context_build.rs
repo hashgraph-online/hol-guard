@@ -20,6 +20,8 @@ use crate::package_execution_context::{
     PackageExecutionContextComponent, PACKAGE_EXECUTION_CONTEXT_VERSION,
 };
 
+#[cfg(test)]
+mod checkout_reuse_tests;
 mod configuration;
 mod configuration_names;
 mod dependency;
@@ -27,9 +29,11 @@ mod executable;
 #[cfg(test)]
 mod executable_tests;
 mod fs;
+mod manifest_sections;
 mod ports;
 mod repository;
 
+pub use manifest_sections::install_section_bytes;
 pub use ports::{NativePorts, Ports};
 
 use fs::{ContextFiles, Fs, ResolveError};

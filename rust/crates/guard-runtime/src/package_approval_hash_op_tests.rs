@@ -2,7 +2,9 @@
 //! approval-hash path before it was deleted. Their policy digests were later
 //! recomputed when bundle and feed revisions left the policy context,
 //! reasons were reduced to their codes, and the matched rule and advisories
-//! left it.
+//! left it. The `manifests_and_lockfiles` content digest was recomputed when
+//! `package.json` and `pyproject.toml` hashes came to bind only their install
+//! sections.
 
 use super::*;
 use guard_contracts::PackageApprovalHashRequestV1;
@@ -439,4 +441,61 @@ fn a_quiet_spelling_keeps_the_whole_package_approval_key() {
         "wrapper_resolution": {"reuse_nonce": "n1", "status": "unproven"},
     }));
     assert_ne!(unbound, loud);
+}
+
+fn manifest_vector(package_json: &str, lockfile: &str) -> Value {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let mut vector = vectors
+        .into_iter()
+        .find(|vector| vector["name"] == "manifests_and_lockfiles")
+        .unwrap();
+    vector["workspace_files"] = json!({
+        "package.json": package_json,
+        "package-lock.json": lockfile,
+        "sub/package.json": "{\"name\":\"b\"}",
+    });
+    vector
+}
+
+/// A saved approval holds while the lockfile and the install sections of the
+/// manifest do: a release version bump or a new `dev` script lapsed it before.
+#[test]
+fn manifest_edits_outside_install_sections_keep_the_saved_approval() {
+    const LOCK: &str =
+        "{\"lockfileVersion\":3,\"packages\":{\"node_modules/left-pad\":{\"version\":\"1.3.0\"}}}";
+    const MANIFEST: &str = "{\"name\":\"a\",\"version\":\"1.0.0\",\"scripts\":{\"dev\":\"next dev\"},\"dependencies\":{\"left-pad\":\"1.3.0\"}}";
+    let saved = context_token(&manifest_vector(MANIFEST, LOCK), "manifest-saved");
+
+    let bumped = MANIFEST
+        .replace("\"1.0.0\"", "\"1.1.0\"")
+        .replace("\"next dev\"", "\"next dev --turbo\",\"lint\":\"eslint .\"");
+    let current = context_token(&manifest_vector(&bumped, LOCK), "manifest-bumped");
+    assert_eq!(
+        crate::context_digest::validate_context_tokens(&saved, &current),
+        None
+    );
+
+    for (name, manifest, lockfile) in [
+        (
+            "manifest-dependency",
+            MANIFEST.replace("\"1.3.0\"", "\"1.3.1\""),
+            LOCK.to_owned(),
+        ),
+        (
+            "manifest-hook",
+            MANIFEST.replace("\"next dev\"", "\"next dev\",\"postinstall\":\"node x.js\""),
+            LOCK.to_owned(),
+        ),
+        (
+            "manifest-lockfile",
+            MANIFEST.to_owned(),
+            LOCK.replace("1.3.0", "1.3.1"),
+        ),
+    ] {
+        let current = context_token(&manifest_vector(&manifest, &lockfile), name);
+        assert!(
+            crate::context_digest::validate_context_tokens(&saved, &current).is_some(),
+            "{name}"
+        );
+    }
 }

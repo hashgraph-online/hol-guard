@@ -12,17 +12,9 @@ use super::configuration_names::{
     user_configuration_paths, JS_MANAGERS,
 };
 use super::fs::{ContextFiles, Fs, MAX_CONFIG_FILE_BYTES, MAX_TREE_FILES};
+use super::manifest_sections::{manifest_digest, LIFECYCLE_NAMES};
 use super::ports::Ports;
 use super::{object, text, BuildError, Built};
-
-const LIFECYCLE_NAMES: &[&str] = &[
-    "install",
-    "postinstall",
-    "preinstall",
-    "prepare",
-    "prepublish",
-    "prepublishOnly",
-];
 
 pub(super) struct ConfigurationInput<'a> {
     pub(super) workspace: &'a str,
@@ -170,8 +162,15 @@ fn append_optional_config(
     for captures in env_reference_regex().captures_iter(&content) {
         collected.referenced.insert(captures[1].to_owned());
     }
+    // A `pyproject.toml` configures the manager only through its install
+    // sections; the rest of the file changes with every release.
+    let digest = if PyPath::new(path).name() == "pyproject.toml" {
+        manifest_digest(path, &normalized)
+    } else {
+        sha256_hex(&normalized)
+    };
     let entry = Entry {
-        digest: sha256_hex(&normalized),
+        digest,
         path: format!("{label}/{}", PyPath::new(path).name()),
     };
     match bucket {

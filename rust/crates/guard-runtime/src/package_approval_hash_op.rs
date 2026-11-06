@@ -18,6 +18,7 @@ use guard_command::effect_decision::GuardAction;
 use guard_command::launch_identity::package_request_launch_identity_material;
 use guard_command::local_supply_chain::stable_digest_hex;
 use guard_command::package_approval::{package_approval_identity, PackageApprovalIdentityInput};
+use guard_command::package_context_build::install_section_bytes;
 use guard_command::package_execution_context::{
     PackageExecutionContext, PackageExecutionContextComponent, PACKAGE_EXECUTION_CONTEXT_VERSION,
 };
@@ -144,6 +145,27 @@ fn hash_existing_paths(workspace: &Path, relative_paths: &[String]) -> Vec<Value
             }
             let payload = std::fs::read(resolved).ok()?;
             Some(Value::String(stable_digest_hex(&payload)))
+        })
+        .collect()
+}
+
+/// Manifests bind only what decides an install: a release version bump or a
+/// new `dev` script in `package.json` must not lapse a saved approval while
+/// the lockfile holds. A manifest that does not parse binds its bytes.
+fn hash_existing_manifests(workspace: &Path, relative_paths: &[String]) -> Vec<Value> {
+    relative_paths
+        .iter()
+        .filter_map(|relative| {
+            let resolved = resolve_path_within_workspace(workspace, relative)?;
+            if !resolved.is_file() {
+                return None;
+            }
+            let payload = std::fs::read(resolved).ok()?;
+            let digest = match install_section_bytes(relative, &payload) {
+                Some(sections) => stable_digest_hex(sections.as_bytes()),
+                None => stable_digest_hex(&payload),
+            };
+            Some(Value::String(digest))
         })
         .collect()
 }
@@ -345,7 +367,7 @@ fn artifact_hash(
         content.insert("lockfile_paths".to_owned(), json!(lockfile_paths));
         content.insert(
             "manifest_hashes".to_owned(),
-            Value::Array(hash_existing_paths(workspace, &manifest_paths)),
+            Value::Array(hash_existing_manifests(workspace, &manifest_paths)),
         );
         content.insert(
             "lockfile_hashes".to_owned(),
