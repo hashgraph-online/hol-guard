@@ -62,6 +62,7 @@
       "src/command_compatibility/git_allow_scope.rs",
       "src/command_compatibility/git_fetch.rs",
       "src/command_compatibility/git_hooks_path.rs",
+      "src/command_compatibility/git_inline_config.rs",
       "src/command_compatibility/github.rs",
       "src/command_compatibility/github_api.rs",
       "src/command_compatibility/github_options.rs",

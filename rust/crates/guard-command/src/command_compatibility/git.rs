@@ -6,11 +6,13 @@ mod git_allow_scope;
 mod git_fetch;
 #[path = "git_hooks_path.rs"]
 mod git_hooks_path;
+#[path = "git_inline_config.rs"]
+mod git_inline_config;
 pub(crate) use git_allow_scope::{
     repository_routes_verified, runs_configured_program, subcommand_settles_uncertainty,
 };
-use git_hooks_path::hooks_path_names_no_hooks;
 pub(crate) use git_hooks_path::rooted_hooks_inert;
+use git_inline_config::inline_setting_is_inert;
 
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
@@ -414,19 +416,7 @@ fn routed_with_route<'a>(
         }
         if argument == "-c" {
             let (key, value) = arguments.get(index + 1)?.split_once('=')?;
-            let boolean = value.to_ascii_lowercase();
-            let safe = match key.to_ascii_lowercase().as_str() {
-                "core.fsmonitor" => matches!(boolean.as_str(), "false" | "0" | "no" | "off"),
-                "core.hookspath" => {
-                    inspection && hooks_path_names_no_hooks(value, context.cwd, arguments)
-                }
-                "core.quotepath" => matches!(
-                    boolean.as_str(),
-                    "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off"
-                ),
-                _ => false,
-            };
-            if !safe {
+            if !inline_setting_is_inert(key, value, inspection, context, arguments) {
                 return None;
             }
             index += 2;
