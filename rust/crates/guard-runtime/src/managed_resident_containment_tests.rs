@@ -48,3 +48,14 @@ fn the_token_handed_to_a_child_is_cleared_after_the_write() {
     assert!(rendered.starts_with("9f9f"));
     let _: &Zeroizing<String> = &rendered;
 }
+
+#[test]
+fn a_reaped_child_never_adopts_a_replacement_process_identity() {
+    let mut child = std::process::Command::new("/bin/false").spawn().unwrap();
+    assert!(!child.wait().unwrap().success());
+    // Once reaped, this PID is eligible for reuse, even by this runtime. The
+    // cleanup snapshot must contain no identity sampled from that PID. This
+    // invariant does not depend on forcing the OS to reuse a particular PID.
+    assert!(spawned_process_identities(&mut child).unwrap().is_empty());
+    assert!(spawned_process_identities(&mut child).unwrap().is_empty());
+}

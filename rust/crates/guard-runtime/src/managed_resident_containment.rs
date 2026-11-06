@@ -442,6 +442,36 @@ pub(super) fn wait_for_matching_stop_containment(
     }
 }
 
+/// Observe the owned child handle, never a possibly reused process ID.
+pub(super) fn spawned_has_exited(child: &mut SpawnedManaged) -> Result<bool, String> {
+    #[cfg(not(windows))]
+    let result = child.try_wait().map(|status| status.is_some());
+    #[cfg(windows)]
+    let result = match child.wait_success_with_timeout(Duration::ZERO) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::TimedOut => Ok(false),
+        Err(error) => Err(error),
+    };
+    result.map_err(|_| "native_resident_supervisor_wait_failed".to_owned())
+}
+
+fn spawned_process_identities(
+    child: &mut SpawnedManaged,
+) -> Result<Vec<ManagedProcessIdentity>, String> {
+    // Startup polling may already have reaped this child. Never sample that
+    // PID again: it could now identify an unrelated process of this runtime.
+    // When still live, its unreaped handle keeps the PID bound while sampled.
+    if spawned_has_exited(child)? {
+        return Ok(Vec::new());
+    }
+    let process_id = child_process_id(child);
+    Ok(vec![ManagedProcessIdentity {
+        process_id,
+        start_marker: process_start_marker(process_id).ok(),
+        runtime_digest: runtime_digest().ok(),
+    }])
+}
+
 pub(super) fn abort_spawned_managed(
     child: &mut SpawnedManaged,
     scope: &Path,
@@ -454,12 +484,7 @@ pub(super) fn abort_spawned_managed(
     // request expires. Only its retry/grace waits share the request budget;
     // process and filesystem calls can still exceed it.
     let cleanup_deadline = overall_deadline.min(Instant::now() + super::MANAGED_STOP_TIMEOUT);
-    let process_id = child_process_id(child);
-    let known_processes = [ManagedProcessIdentity {
-        process_id,
-        start_marker: process_start_marker(process_id).ok(),
-        runtime_digest: runtime_digest().ok(),
-    }];
+    let known_processes = spawned_process_identities(child);
     let termination = terminate_spawned_managed(
         child,
         cleanup_deadline.saturating_duration_since(Instant::now()),
@@ -470,10 +495,11 @@ pub(super) fn abort_spawned_managed(
         digest,
         generation,
         token,
-        &known_processes,
+        known_processes.as_deref().unwrap_or(&[]),
         cleanup_deadline,
     );
-    termination
+    known_processes
+        .and(termination)
         .and(containment)
         .map_err(|_| "native_resident_spawn_containment_failed".to_owned())
 }

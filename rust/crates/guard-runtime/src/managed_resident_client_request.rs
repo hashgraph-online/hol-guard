@@ -4,6 +4,9 @@ use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[path = "managed_resident_start_wait.rs"]
+mod start_wait;
+
 use super::handoff_record::Retirement;
 use super::{containment, handoff, handoff_record, lease, restart_budget, CLIENT_RETRY_DELAY};
 use crate::resident_diagnostics::{note, observe, Phase};
@@ -416,16 +419,10 @@ fn client_request_with_deadline_inner(
         Ok((generation, token, spawned))
     })?;
     let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
-    let request_result = observe(Phase::ClientSpawnWait, || loop {
-        if Instant::now() >= deadline {
-            break Err("native_resident_start_timeout".to_owned());
-        }
-        match try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure) {
-            Ok(Some(response)) => break Ok(response),
-            Ok(None) => {}
-            Err(error) => break Err(error),
-        }
-        thread::sleep(CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())));
+    let request_result = observe(Phase::ClientSpawnWait, || {
+        start_wait::wait_for_response(&mut spawned, deadline, || {
+            try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
+        })
     });
     match request_result {
         Ok(response) => Ok(response),
