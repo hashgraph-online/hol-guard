@@ -75,7 +75,6 @@ def extension_control_authority(
     op: str,
     key: bytes | None,
     store: GuardStore | None = None,
-    timeout_seconds: float = _TIMEOUT_SECONDS,
     **fields: object,
 ) -> dict[str, object]:
     """The resident's answer to ``op``; raises on an outage or a fault.
@@ -90,6 +89,27 @@ def extension_control_authority(
     material as the caller.
     """
 
+    return _authority_request(
+        store_path=store_path,
+        guard_home=guard_home,
+        op=op,
+        key=key,
+        store=store,
+        timeout_seconds=_TIMEOUT_SECONDS,
+        fields=fields,
+    )
+
+
+def _authority_request(
+    *,
+    store_path: Path,
+    guard_home: Path,
+    op: str,
+    key: bytes | None,
+    store: GuardStore | None,
+    timeout_seconds: float,
+    fields: Mapping[str, object],
+) -> dict[str, object]:
     wire: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"extension-control-authority-{uuid4().hex}",
@@ -145,14 +165,14 @@ def write_private_state(
     """
 
     guard_home = Path(store.guard_home)
-    reply = extension_control_authority(
+    reply = _authority_request(
         store_path=guard_home / "guard.db",
         guard_home=guard_home,
         op="write_private_state",
         key=None,
         store=store,
         timeout_seconds=timeout_seconds,
-        state={"name": name, "content_b64": base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")},
+        fields={"state": {"name": name, "content_b64": base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")}},
     )
     error = reply.get("error")
     if error is not None:
