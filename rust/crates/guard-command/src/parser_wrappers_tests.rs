@@ -2,7 +2,7 @@
 
 use crate::{parse_command, CommandModelRequestV1};
 
-fn parse(command: &str) -> crate::CanonicalCommandV1 {
+pub(super) fn parse(command: &str) -> crate::CanonicalCommandV1 {
     parse_command(&CommandModelRequestV1 {
         command: command.to_owned(),
         dialect: "posix".to_owned(),
@@ -97,80 +97,6 @@ fn an_operator_outside_the_script_keeps_the_wrapper_path() {
         super::inline_shell_script("sh -c 'gh pr view 12 > /tmp/out'"),
         Some("gh pr view 12 > /tmp/out".to_owned()),
     );
-}
-
-#[test]
-fn inert_option_letters_keep_the_script_the_whole_command() {
-    for command in [
-        "bash -ec 'npm test'",
-        "bash -e -c 'npm test'",
-        "bash -eu -c 'npm test'",
-        "bash -euxc 'npm test'",
-        // `-c` takes the next word wherever it sits in the bundle.
-        "bash -ce 'npm test'",
-        "sh -x -c 'npm test'",
-        // `-o` with a name that leaves the script's words as written.
-        "bash -o pipefail -c 'npm test'",
-        "bash -euo pipefail -c 'npm test'",
-        "bash -eu -o pipefail -c 'npm test'",
-        "bash -o errexit -o nounset -c 'npm test'",
-        "sh -o noclobber -ec 'npm test'",
-        // Startup files bash would skip anyway for a `-c` script.
-        "bash --norc -c 'npm test'",
-        "bash --noprofile --norc -euo pipefail -c 'npm test'",
-    ] {
-        assert_eq!(
-            super::inline_shell_script(command).as_deref(),
-            Some("npm test"),
-            "{command}"
-        );
-    }
-}
-
-#[test]
-fn an_option_the_shell_reads_differently_keeps_the_wrapper_path() {
-    for command in [
-        // A login or interactive shell reads startup files first, so the
-        // script is not the whole command.
-        "bash -lc 'npm test'",
-        "bash -l -c 'npm test'",
-        "bash -ic 'npm test'",
-        // zsh reads `~/.zshenv` whatever option it is given.
-        "zsh -c 'npm test'",
-        "zsh -ec 'npm test'",
-        // The script arrives on stdin, or an option changes how the
-        // script's words expand or parse.
-        "bash -s -c 'npm test'",
-        "bash -o noglob -c 'npm test'",
-        "bash -o posix -c 'npm test'",
-        "bash -O extglob -c 'npm test'",
-        "bash +o pipefail -c 'npm test'",
-        // `-o` needs its name as the next word, and `-c` in the same
-        // bundle leaves which word is which to the shell.
-        "bash -o -c 'npm test'",
-        "bash -oc pipefail 'npm test'",
-        "bash -oe pipefail -c 'npm test'",
-        // bash reads a long option only before the short ones, and these
-        // read a startup file or change the shell.
-        "bash -e --norc -c 'npm test'",
-        "bash --login -c 'npm test'",
-        "bash --rcfile ./rc -c 'npm test'",
-        "bash --posix -c 'npm test'",
-        "bash -- -c 'npm test'",
-        // Only bash reads `pipefail` and these long options; the other
-        // shells stop with an error and never run the script.
-        "dash --norc -c 'npm test'",
-        "sh --noprofile -c 'npm test'",
-        "ash --noprofile -c 'npm test'",
-        "dash -o pipefail -c 'npm test'",
-        "sh -euo pipefail -c 'npm test'",
-        // No `-c` at all, and no script to model.
-        "bash -e 'npm test'",
-        "bash -ec",
-        "bash -ec ''",
-    ] {
-        assert!(super::inline_shell_script(command).is_none(), "{command}");
-    }
 }
 
 #[test]
