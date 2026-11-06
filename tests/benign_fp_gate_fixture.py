@@ -521,8 +521,9 @@ def build_fixture(root: Path) -> BenignFixture:
             _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
     # The package store and build cache a pnpm install leaves in `app-portal`.
     # Agents list them to see which manager ran and whether a cache is warm.
+    # The tree itself is installed with the checkout, so only the store entry
+    # and the cache are written here.
     portal = org / "app-portal"
-    _node_package(portal, "vitest", _NODE_PACKAGES["vitest"])
     store_entry = f"vitest@{_NODE_PACKAGES['vitest']}"
     _write(
         portal / "node_modules" / ".pnpm" / store_entry / "node_modules" / "vitest" / "package.json",
