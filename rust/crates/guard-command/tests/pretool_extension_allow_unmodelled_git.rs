@@ -273,6 +273,11 @@ const OUTSIDE_THE_ALLOW: &[&str] = &[
     "git bundle create ../snapshot.bundle --all",
     "git pack-objects ../outside/pack",
     "git mailsplit -o../outside",
+    "git fast-export --export-marks=../outside/marks --all",
+    "git fast-export --export-marks=.git/hooks/pre-commit --all",
+    "git read-tree --index-output=../outside/index HEAD",
+    "git commit-graph write --object-dir=../outside",
+    "git multi-pack-index --object-dir=/tmp/outside write",
     // The `init` template and destination floors never see this spelling.
     "git init-db --template=templates fresh",
 ];

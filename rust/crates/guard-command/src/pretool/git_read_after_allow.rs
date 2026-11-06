@@ -361,15 +361,69 @@ fn points_output_at_a_protected_file(arguments: &[String]) -> bool {
     let short_writes = SHORT_OUTPUT_VERBS.contains(&operation);
     let rest = arguments.get(index + 1..).unwrap_or_default();
     rest.iter().enumerate().any(|(position, argument)| {
-        match output_option_value(argument, short_writes) {
-            None => false,
-            Some(Some(value)) => !output_target_is_inert(value),
-            Some(None) => rest
-                .get(position + 1)
-                .map(String::as_str)
-                .is_none_or(|value| !output_target_is_inert(value)),
-        }
+        let (value, names_a_file) = match output_option_value(argument, short_writes) {
+            Some(value) => (value, true),
+            None => match verb_destination_value(operation, argument) {
+                Some((value, names_a_file)) => (value, names_a_file),
+                None => return false,
+            },
+        };
+        let target = match value {
+            Some(value) => Some(value),
+            None => rest.get(position + 1).map(String::as_str),
+        };
+        target.is_none_or(|target| {
+            if names_a_file {
+                !output_target_is_inert(target)
+            } else {
+                !output_target_is_placed(target)
+            }
+        })
     })
+}
+
+/// Long options that name where one verb writes, beside the `--output` every
+/// diff-showing verb takes.
+///
+/// `git fast-export --export-marks=<file>` and
+/// `git read-tree --index-output=<file>` write a file wherever they are
+/// pointed, which is the same escape `git archive -o` keeps its review for.
+/// `--object-dir` moves the files `git commit-graph write` and
+/// `git multi-pack-index write` produce into another directory.
+///
+/// The flag says whether the value names a file Git chooses nothing about. A
+/// directory Git writes its own fixed names into cannot become the
+/// configuration, hook or attribute file a later step runs under, so
+/// `--object-dir .git/objects` -- the ordinary spelling -- stays inside the
+/// Allow, and only a path that leaves the workspace keeps its review.
+const VERB_DESTINATION_OPTIONS: &[(&str, &str, bool)] = &[
+    ("commit-graph", "object-dir", false),
+    ("fast-export", "export-marks", true),
+    ("multi-pack-index", "object-dir", false),
+    ("read-tree", "index-output", true),
+];
+
+/// The destination a verb-specific long option points at, as
+/// [`output_option_value`] reports one, with whether it names a file.
+///
+/// Git resolves any unambiguous long-option abbreviation, so every spelling
+/// from the first letter up is read as that option.
+fn verb_destination_value<'a>(
+    operation: &str,
+    argument: &'a str,
+) -> Option<(Option<&'a str>, bool)> {
+    let long = argument.strip_prefix("--")?;
+    let (name, attached) = match long.split_once('=') {
+        Some((name, value)) => (name, Some(value)),
+        None => (long, None),
+    };
+    if name.is_empty() {
+        return None;
+    }
+    VERB_DESTINATION_OPTIONS
+        .iter()
+        .find(|(verb, option, _)| *verb == operation && option.starts_with(name))
+        .map(|(_, _, names_a_file)| (attached, *names_a_file))
 }
 
 /// The file a single argument points Git's output at, when it is that option.
@@ -410,6 +464,16 @@ fn output_option_value(argument: &str, short_writes: bool) -> Option<Option<&str
 /// it keeps its review. A value Guard cannot place, because it is absent,
 /// home-relative or still carries a shell expansion, is treated the same way.
 fn output_target_is_inert(target: &str) -> bool {
+    output_target_is_placed(target)
+        && !target
+            .split(['/', '\\'])
+            .any(|component| component.starts_with(".git"))
+}
+
+/// Whether Guard can place a destination below the workspace. A path that
+/// climbs out of it, or one that is absolute, home-relative, drive-rooted or
+/// still carries a shell expansion, lands where Guard read nothing.
+fn output_target_is_placed(target: &str) -> bool {
     if target.is_empty() || target.starts_with('-') || target.starts_with('~') {
         return false;
     }
@@ -419,9 +483,7 @@ fn output_target_is_inert(target: &str) -> bool {
     if target.len() > 1 && target.as_bytes()[1] == b':' {
         return false;
     }
-    !target
-        .split(['/', '\\'])
-        .any(|component| component == ".." || component.starts_with(".git"))
+    !target.split(['/', '\\']).any(|component| component == "..")
 }
 
 #[cfg(test)]
@@ -504,6 +566,50 @@ mod tests {
             "status --short --branch",
             "log --oneline -5",
             "log --one-line",
+        ] {
+            assert!(
+                !super::points_output_at_a_protected_file(&words(command)),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_destination_option_outside_the_workspace_is_not_a_read() {
+        // These verbs write where the option points, so the same rule that
+        // holds `git archive -o ../out.tar` holds them.
+        for command in [
+            "fast-export --export-marks=../outside/marks --all",
+            "fast-export --export-marks ../outside/marks --all",
+            "fast-export --export-marks=.git/hooks/pre-commit --all",
+            "fast-export --export=/tmp/marks --all",
+            "read-tree --index-output=../outside/index HEAD",
+            "read-tree --index-output=.git/config HEAD",
+            "commit-graph write --object-dir=../outside",
+            "commit-graph write --object-dir ../outside",
+            "multi-pack-index --object-dir=/tmp/objects write",
+            "fast-export --export-marks",
+        ] {
+            assert!(
+                super::points_output_at_a_protected_file(&words(command)),
+                "{command}"
+            );
+        }
+        // The ordinary spellings. `git commit-graph` and
+        // `git multi-pack-index` write their own fixed names, so a directory
+        // inside the repository replaces no hook or configuration file, and
+        // the option name belongs to one verb only.
+        for command in [
+            "fast-export --export-marks=marks --all",
+            "fast-export --all",
+            "read-tree --index-output=tmp-index HEAD",
+            "read-tree -m -u HEAD",
+            "commit-graph write",
+            "commit-graph write --object-dir=.git/objects",
+            "commit-graph write --object-dir .git/objects",
+            "multi-pack-index --object-dir=.git/objects write",
+            "log --export-marks=../outside/marks",
+            "fast-export --reencode=yes --all",
         ] {
             assert!(
                 !super::points_output_at_a_protected_file(&words(command)),
