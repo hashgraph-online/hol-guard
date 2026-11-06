@@ -151,13 +151,20 @@ def test_the_install_that_waited_runs_once_and_a_later_retry_is_reviewed_again(
     workspace.mkdir()
     store = connected_exact_review_store(tmp_path)
     config = _package_policy_config(guard_home=store.guard_home, workspace_dir=workspace)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    launches = tmp_path / "npm-launches.txt"
+    npm = fake_bin / "npm"
+    npm.write_text(f"#!/bin/sh\nprintf 'launch\\n' >> '{launches}'\n", encoding="utf-8")
+    npm.chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake_bin))
 
-    def check(now: str, waited: tuple[str, ...] = ()) -> tuple[dict[str, object], int]:
+    def check(now: str, waited: tuple[str, ...] = (), *, dry_run: bool = True) -> tuple[dict[str, object], int]:
         result = build_package_protect_payload(
             command=["npm", "install", "guard-proof"],
             store=store,
             workspace_dir=workspace,
-            dry_run=True,
+            dry_run=dry_run,
             now=now,
             config=config,
             unsafe_raw_output=False,
@@ -192,42 +199,25 @@ def test_the_install_that_waited_runs_once_and_a_later_retry_is_reviewed_again(
     assert isinstance(evaluation, dict)
     assert evaluation["reasons"][0]["code"] == "saved_package_approval"
 
-    # Running it spends the allow: the claim the resolver asks for consumes it.
-    now = "2026-07-17T00:02:00Z"
-    authority = local_supply_chain_module._build_package_protect_authority(  # pyright: ignore[reportPrivateUsage]
-        command=["npm", "install", "guard-proof"],
-        store=store,
-        workspace_dir=workspace,
-        now=now,
-        config=config,
-        additional_current_action=None,
-        additional_policy_context=None,
-    )
-    assert authority is not None
-    claimed = local_supply_chain_module._resolve_stored_package_policy_override(  # pyright: ignore[reportPrivateUsage]
-        authority.evaluation,
-        store=store,
-        artifact=authority.artifact,
-        artifact_hash=authority.artifact_hash,
-        workspace_dir=workspace,
-        now=now,
-        execution_context=authority.execution_context,
-        current_action=authority.current_action,
-        claim_saved_approval=True,
-        waited_request_ids=("pkg-cloud-flow",),
-    )
-    assert claimed.claim_disposition == "consumed"
-    assert claimed.evaluation.reasons[0]["code"] == "saved_package_approval"
+    assert launches.exists() is False
+
+    # The install that waited runs, and running it spends the allow.
+    ran, ran_rc = check("2026-07-17T00:02:00Z", ("pkg-cloud-flow",), dry_run=False)
+    assert ran_rc == 0
+    assert ran["executed"] is True
+    assert launches.read_text(encoding="utf-8").splitlines() == ["launch"]
     assert (
         store.peek_waited_exact_cloud_package_allow(
             request_id="pkg-cloud-flow",
             artifact_id=str(receipt["artifact_id"]),
             artifact_hash=str(receipt["artifact_hash"]),
-            now=now,
+            now="2026-07-17T00:02:00Z",
         )
         is None
     )
 
-    # Once spent, even the request's own name no longer lets it run.
-    _, again_rc = check("2026-07-17T00:03:00Z", ("pkg-cloud-flow",))
+    # Once spent, even the request's own name no longer launches it.
+    again, again_rc = check("2026-07-17T00:03:00Z", ("pkg-cloud-flow",), dry_run=False)
     assert again_rc == 2
+    assert again["executed"] is False
+    assert launches.read_text(encoding="utf-8").splitlines() == ["launch"]

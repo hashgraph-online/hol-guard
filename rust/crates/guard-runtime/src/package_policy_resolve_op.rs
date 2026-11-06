@@ -253,8 +253,9 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     let approval_request = request.approval_request.as_ref();
     let legacy_local_approval =
         decision.is_some_and(|row| is_legacy_package_local_approval(row, approval_request));
-    let waited_exact_cloud_approval =
-        decision.is_some_and(|row| is_waited_exact_cloud_package_approval(row, approval_request));
+    let waited_exact_cloud_approval = decision.is_some_and(|row| {
+        is_waited_exact_cloud_package_approval(row, approval_request, &request.artifact_id)
+    });
     let fresh_local_approval = decision
         .is_some_and(|row| is_fresh_artifact_approval(row, approval_request))
         || legacy_local_approval

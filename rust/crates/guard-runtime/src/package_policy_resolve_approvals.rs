@@ -54,16 +54,19 @@ pub(super) fn is_durable_exact_artifact_approval(
 
 /// The exact Cloud allow a waiting install read for its own request. Only the
 /// install that queued the request asks for it, so a later retry never sees
-/// one; the request must be the resolved package request it answers.
+/// one; the allow must name the artifact being resolved, and the request must
+/// be the resolved package request it answers.
 pub(super) fn is_waited_exact_cloud_package_approval(
     decision: &Map<String, Value>,
     request: Option<&Value>,
+    artifact_id: &str,
 ) -> bool {
     let Some(request_id) = non_empty_text(decision, "request_id") else {
         return false;
     };
     if !(text_is(decision, "authority_kind", "exact-cloud")
         && text_is(decision, "action", "allow")
+        && text_is(decision, "artifact_id", artifact_id)
         && non_empty_text(decision, "approval_id").is_some())
     {
         return false;
