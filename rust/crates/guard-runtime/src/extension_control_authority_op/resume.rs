@@ -15,6 +15,12 @@
 //! transaction as the row; a lifecycle floor that has not moved yet, or legacy
 //! evidence the link needs, comes back owed with nothing written.
 //!
+//! A commit retry that found its own prepared row resumes it here as well,
+//! naming its proof (`retry_proof`): the proof is recorded as consumed in the
+//! transaction that applies a committed verdict, released with an abandoned
+//! row, and a row the retry's view already shows committed only queues its
+//! change event.
+//!
 //! A catalog migration that activates a command pack is finished here too:
 //! the request carries its `migration_record`, the migration event is recorded
 //! in the transaction that commits the row, and no change event is queued, as
@@ -62,6 +68,9 @@ enum Applied {
     PackOwed(Value),
     /// The row and snapshot are committed; the anchor and event are owed.
     Committed(Row),
+    /// The retry's view already shows the row committed; its proof is
+    /// settled and its change event queued.
+    Current(Row),
 }
 
 pub(super) fn resume_op(
@@ -141,6 +150,15 @@ impl Ctx<'_> {
                 owed["outcome"] = json!("commit_pending");
                 return Ok(owed);
             }
+            Applied::Current(row) => {
+                return Ok(json!({
+                    "resumed": {
+                        "revision": revision,
+                        "catalog_digest": row_str(&row, "catalog_digest")?,
+                    },
+                    "outcome": "current",
+                }));
+            }
             Applied::Committed(row) => row,
         };
         let anchor = Anchor {
@@ -152,9 +170,15 @@ impl Ctx<'_> {
         self.write_anchor(&sealed)?;
         // Best effort, as in `_export_last_good_authority`.
         let _ = self.export_last_good(&anchor);
-        if self.request.migration_record.is_none() {
-            immediate(self.connection, || self.queue_change_event(&row))?;
-        }
+        // A retry's proof is spent only once its committed anchor is written,
+        // so a retry that fails before then can be sent again.
+        immediate(self.connection, || {
+            self.settle_retry_proof(revision)?;
+            if self.request.migration_record.is_none() {
+                self.queue_change_event(&row)?;
+            }
+            Ok(())
+        })?;
         Ok(json!({
             "resumed": {
                 "revision": revision,
@@ -188,6 +212,15 @@ impl Ctx<'_> {
                 if removed != 1 {
                     return Err(tampered(STATE_MISMATCH));
                 }
+                if let Some(retry) = &self.request.retry_proof {
+                    self.connection
+                        .execute(
+                            "delete from extension_control_authority_proof
+                             where proof_id_hash = ? and transition_revision = ?",
+                            params![retry.proof_hash, revision],
+                        )
+                        .map_err(store_fault)?;
+                }
                 if journal {
                     self.connection
                         .execute(
@@ -199,6 +232,7 @@ impl Ctx<'_> {
                 return Ok(Applied::Abandoned);
             }
             Resume::CommitPending => {
+                self.check_retry_proof_owner(revision)?;
                 let reserved = journal
                     && query_row(
                         self.connection,
@@ -254,9 +288,66 @@ impl Ctx<'_> {
             }
             Resume::MarkCommitted => self.mark_committed(revision)?,
             Resume::Finish => {}
-            Resume::Current => return Err(tampered("invalid extension control authority plan")),
+            Resume::Current => {
+                if self.request.retry_proof.is_none() {
+                    return Err(tampered("invalid extension control authority plan"));
+                }
+                self.settle_retry_proof(revision)?;
+                self.queue_change_event(&row)?;
+                return Ok(Applied::Current(row));
+            }
         }
         Ok(Applied::Committed(row))
+    }
+
+    /// Refuses a retry whose proof is already reserved for another row before
+    /// anything commits, so the refusal leaves the snapshot where it was. The
+    /// proof is still only spent after the anchor is written.
+    fn check_retry_proof_owner(&self, revision: i64) -> Res<()> {
+        let Some(retry) = &self.request.retry_proof else {
+            return Ok(());
+        };
+        let owner = query_row(
+            self.connection,
+            "select transition_revision from extension_control_authority_proof
+             where proof_id_hash = ?",
+            params![retry.proof_hash],
+        )?;
+        if let Some(owner) = owner {
+            if row_int(&owner, "transition_revision")? != revision {
+                return Err(tampered("extension control authority proof state conflict"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Records a retry's proof as consumed by the row at `revision`: inserted
+    /// when the plan found it unrecorded, stamped once when it was reserved.
+    fn settle_retry_proof(&self, revision: i64) -> Res<()> {
+        let Some(retry) = &self.request.retry_proof else {
+            return Ok(());
+        };
+        let now = self
+            .request
+            .now
+            .as_deref()
+            .ok_or_else(|| tampered("invalid extension control resume request"))?;
+        let settled = self
+            .connection
+            .execute(
+                "insert into extension_control_authority_proof (
+                    proof_id_hash, mutation_digest, transition_revision, reserved_at, consumed_at
+                 ) values (?, ?, ?, ?, ?)
+                 on conflict(proof_id_hash) do update
+                 set consumed_at = coalesce(consumed_at, excluded.consumed_at)
+                 where transition_revision = excluded.transition_revision",
+                params![retry.proof_hash, retry.mutation_digest, revision, now, now],
+            )
+            .map_err(store_fault)?;
+        if settled != 1 {
+            return Err(tampered("extension control authority proof state conflict"));
+        }
+        Ok(())
     }
 
     fn mark_committed(&self, revision: i64) -> Res<()> {
