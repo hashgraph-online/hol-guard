@@ -204,3 +204,24 @@ def test_the_record_of_woken_requests_stays_bounded(tmp_path: Path, monkeypatch)
     # req-a was evicted by req-c, so its later read wakes again.
     assert signal.generation() == before + 4
     assert len(wait_module._woken_requests) == 2
+
+
+def test_a_first_read_wakes_delivery_even_when_every_held_slot_is_busy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(wait_module, "_held_reads", threading.BoundedSemaphore(1))
+    store = _ScriptedStore(tmp_path / "guard.db", "req-busy-wake")
+    signal = review_event_wake_signal(store.path)
+    approval = store.get_approval_request("req-busy-wake")
+    assert approval is not None
+    assert wait_module._held_reads.acquire(blocking=False)
+    try:
+        before = signal.generation()
+        started = time.monotonic()
+        result = wait_for_request_resolution(store, "req-busy-wake", approval, 5.0)
+        elapsed = time.monotonic() - started
+    finally:
+        wait_module._held_reads.release()
+
+    # The read is answered at once, yet the sync worker still hears about it.
+    assert result == approval
+    assert elapsed < 1.0
+    assert signal.generation() == before + 1
