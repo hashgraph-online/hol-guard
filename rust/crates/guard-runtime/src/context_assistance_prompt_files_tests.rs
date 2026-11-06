@@ -1,4 +1,5 @@
 use super::*;
+use crate::context_assistance_prompt_words::MAX_TERMS;
 
 fn app(root: &Path) -> PathBuf {
     let project = root.join("todo-app");
@@ -79,6 +80,7 @@ fn a_color_change_finds_the_header_and_its_styles_only() {
         &project,
         &terms("add a color to the header"),
         &[],
+        &[],
         WALK_BUDGET,
     );
     assert_eq!(found[0], "src/components/Header.tsx", "{found:?}");
@@ -117,6 +119,7 @@ fn tests_that_quote_the_request_give_way_to_the_source() {
         &project,
         &terms("add a color to the header"),
         &[],
+        &[],
         WALK_BUDGET,
     );
     assert_eq!(
@@ -127,6 +130,7 @@ fn tests_that_quote_the_request_give_way_to_the_source() {
     let asked = candidates(
         &project,
         &terms("fix the header color tests"),
+        &[],
         &[],
         WALK_BUDGET,
     );
@@ -139,6 +143,7 @@ fn tests_that_quote_the_request_give_way_to_the_source() {
     let only_tests = candidates(
         &project,
         &terms("add a color to the header"),
+        &[],
         &[],
         WALK_BUDGET,
     );
@@ -156,6 +161,7 @@ fn no_time_left_means_no_walk() {
         &project,
         &terms("add a color to the header"),
         &[],
+        &[],
         Duration::ZERO
     )
     .is_empty());
@@ -166,11 +172,12 @@ fn an_empty_folder_or_unrelated_prompt_adds_nothing() {
     let (_dir, root) = canonical();
     let empty = root.join("fresh");
     fs::create_dir(&empty).unwrap();
-    assert!(candidates(&empty, &terms("build a to-do app"), &[], WALK_BUDGET).is_empty());
+    assert!(candidates(&empty, &terms("build a to-do app"), &[], &[], WALK_BUDGET).is_empty());
     let project = app(&root);
     assert!(candidates(
         &project,
         &terms("write a haiku about winter"),
+        &[],
         &[],
         WALK_BUDGET
     )
@@ -188,7 +195,7 @@ fn files_git_ignores_never_become_candidates() {
     fs::write(project.join("src/notes/local/header.md"), "header\n").unwrap();
     fs::write(project.join("src/notes/.gitignore"), "local/\n").unwrap();
     fs::write(project.join(".gitignore"), "*.log\nsrc/private/\n").unwrap();
-    let found = candidates(&project, &terms("the header"), &[], WALK_BUDGET);
+    let found = candidates(&project, &terms("the header"), &[], &[], WALK_BUDGET);
     assert!(
         found.contains(&"src/notes/header.md".to_owned()),
         "{found:?}"
@@ -210,7 +217,7 @@ fn a_linked_folder_is_never_walked() {
     fs::create_dir(&outside).unwrap();
     fs::write(outside.join("header.ts"), "header\n").unwrap();
     std::os::unix::fs::symlink(&outside, project.join("linked")).unwrap();
-    let found = candidates(&project, &terms("the header"), &[], WALK_BUDGET);
+    let found = candidates(&project, &terms("the header"), &[], &[], WALK_BUDGET);
     assert!(
         found.iter().all(|path| !path.starts_with("linked")),
         "{found:?}"
@@ -284,7 +291,7 @@ fn rare_words_and_quoted_text_outrank_common_words_repeated() {
     )
     .unwrap();
     let prompt = "The confirm dialog's default cancel button should say \"Never mind\" instead of \"Cancel\".";
-    let found = candidates(&project, &terms(prompt), &phrases(prompt), WALK_BUDGET);
+    let found = candidates(&project, &terms(prompt), &phrases(prompt), &[], WALK_BUDGET);
     assert_eq!(
         found.first().map(String::as_str),
         Some("src/confirm-dialog.tsx"),
@@ -302,7 +309,7 @@ fn a_file_with_only_the_quoted_text_still_counts() {
         "export const LABEL = 'zq';\n// Ok, got it\n",
     )
     .unwrap();
-    let found = candidates(&project, &[], &["ok, got it".to_owned()], WALK_BUDGET);
+    let found = candidates(&project, &[], &["ok, got it".to_owned()], &[], WALK_BUDGET);
     assert_eq!(found, ["src/strings.ts"]);
 }
 
@@ -314,4 +321,168 @@ fn unmatched_quotes_are_scanned_in_one_pass() {
     assert!(started.elapsed() < Duration::from_secs(1));
     let far = format!("\"{}\" and \"keep this\"", "x".repeat(200));
     assert_eq!(phrases(&far), ["keep this"]);
+}
+
+#[test]
+fn names_written_like_code_come_before_plain_words() {
+    let prompt = "Users keep asking for this. When the choice prompt shows the list of values \
+                  for an option, matching should honor case_sensitive the same way IntRange \
+                  honors clamp, and `click.Choice` should say so. Run `pytest -x tests/test_basic.py` \
+                  and add a note to CHANGES.rst.";
+    let found = terms(prompt);
+    assert_eq!(found.len(), MAX_TERMS, "{found:?}");
+    assert_eq!(
+        found[..6],
+        [
+            "casesensitive",
+            "case",
+            "sensitive",
+            "intrange",
+            "click",
+            "choice"
+        ],
+        "{found:?}"
+    );
+    // The command line is how to check the work, and a file name brings its
+    // name, not its extension.
+    for left_out in ["pytest", "testbasic", "rst"] {
+        assert!(
+            !found.contains(&left_out.to_owned()),
+            "{left_out} in {found:?}"
+        );
+    }
+    assert!(asks_for_tests(&found), "{found:?}");
+    assert_eq!(named(prompt), ["CHANGES.rst"]);
+    assert_eq!(
+        named("see src/app/cli.py, then ../../etc/hosts.txt and docs/usage.rst."),
+        ["src/app/cli.py", "docs/usage.rst"]
+    );
+}
+
+#[test]
+fn named_files_lead_and_big_modules_and_rst_docs_count() {
+    let (_dir, root) = canonical();
+    let project = root.join("cli");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(project.join("src/cli")).unwrap();
+    fs::create_dir_all(project.join("docs")).unwrap();
+    // A main module past 64 KiB, where the option code lives.
+    let mut core =
+        String::from("class Option:\n    def __init__(self, case_sensitive=True):\n        pass\n");
+    while core.len() < 120 * 1024 {
+        core.push_str("def helper(value):\n    return value\n");
+    }
+    fs::write(project.join("src/cli/core.py"), core).unwrap();
+    fs::write(
+        project.join("src/cli/utils.py"),
+        "def echo(text):\n    print(text)\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("docs/options.rst"),
+        "Options\n=======\n\nChoice options take ``case_sensitive``.\n",
+    )
+    .unwrap();
+    fs::write(
+        project.join("CHANGES.rst"),
+        "Version 2.0\n-----------\n\n-   Unreleased.\n",
+    )
+    .unwrap();
+    let prompt = "Make Option honor case_sensitive for choices and add an entry to CHANGES.rst.";
+    let found = candidates(
+        &project,
+        &terms(prompt),
+        &phrases(prompt),
+        &named(prompt),
+        WALK_BUDGET,
+    );
+    assert_eq!(
+        found.first().map(String::as_str),
+        Some("CHANGES.rst"),
+        "{found:?}"
+    );
+    for wanted in ["src/cli/core.py", "docs/options.rst"] {
+        assert!(
+            found.contains(&wanted.to_owned()),
+            "{wanted} not in {found:?}"
+        );
+    }
+    assert!(!found.contains(&"src/cli/utils.py".to_owned()), "{found:?}");
+}
+
+#[test]
+fn a_bare_file_name_matches_that_file_in_any_folder_shortest_path_first() {
+    let (_dir, root) = canonical();
+    let project = root.join("named");
+    for dir in ["tests", "a/b/tests"] {
+        fs::create_dir_all(project.join(dir)).unwrap();
+        fs::write(
+            project.join(dir).join("test_options.py"),
+            "def test_x():\n    pass\n",
+        )
+        .unwrap();
+    }
+    fs::create_dir_all(project.join("c/d/e")).unwrap();
+    fs::write(
+        project.join("c/d/e/test_options.py"),
+        "def test_y():\n    pass\n",
+    )
+    .unwrap();
+    let found = candidates(
+        &project,
+        &[],
+        &[],
+        &named("fix test_options.py"),
+        WALK_BUDGET,
+    );
+    assert_eq!(
+        found,
+        ["tests/test_options.py", "a/b/tests/test_options.py"]
+    );
+}
+
+#[test]
+fn pasted_code_still_counts_but_command_lines_do_not() {
+    let traceback =
+        "It fails:\n```\nTraceback (most recent call last):\n  File \"src/app/cli.py\", \
+                     line 3, in main\n```\nfix it";
+    assert_eq!(named(traceback), ["src/app/cli.py"]);
+    let found = terms("Fix `case_sensitive = False` in the prompt");
+    assert_eq!(found[0], "casesensitive", "{found:?}");
+    assert!(named("run `pytest -x tests/test_basic.py` after").is_empty());
+}
+
+#[test]
+fn a_named_path_is_not_taken_by_a_bare_name_for_the_same_file() {
+    let (_dir, root) = canonical();
+    let project = root.join("paths");
+    for dir in ["a", "b", "packages/z"] {
+        fs::create_dir_all(project.join(dir)).unwrap();
+        fs::write(project.join(dir).join("cli.py"), "def main():\n    pass\n").unwrap();
+    }
+    let found = candidates(
+        &project,
+        &[],
+        &[],
+        &named("Compare `cli.py` with `packages/z/cli.py`"),
+        WALK_BUDGET,
+    );
+    assert_eq!(found, ["a/cli.py", "b/cli.py", "packages/z/cli.py"]);
+}
+
+#[test]
+fn a_traceback_path_written_out_in_full_names_the_project_file() {
+    let (_dir, root) = canonical();
+    let project = root.join("traced");
+    fs::create_dir_all(project.join("src/app")).unwrap();
+    for file in ["cli.py", "core.py"] {
+        fs::write(
+            project.join("src/app").join(file),
+            "def main():\n    pass\n",
+        )
+        .unwrap();
+    }
+    let prompt = "It fails:\n```\n  File \"/home/me/traced/src/app/cli.py\", line 3\n```";
+    let found = candidates(&project, &[], &[], &named(prompt), WALK_BUDGET);
+    assert_eq!(found, ["src/app/cli.py"]);
 }
