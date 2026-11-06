@@ -277,3 +277,88 @@ fn remote_urls_reduce_to_host_and_path() {
     assert_eq!(normal("file:///srv/git/repo.git/"), "/srv/git/repo");
     assert_eq!(normal("../repo"), "../repo");
 }
+
+#[test]
+fn relative_local_origins_name_the_repository_beside_each_checkout() {
+    let lab = Lab::new();
+    let first = lab.clone("a/app", &[("origin", "../upstream")]);
+    let second = lab.clone("b/app", &[("origin", "../upstream")]);
+    let linked = lab.worktree(&first, "linked");
+    for checkout in [&first, &second, &linked] {
+        python_project(checkout, PYPROJECT);
+    }
+
+    let primary = lab.context(&first, "uv");
+    assert_eq!(
+        changed(&primary, &lab.context(&second, "uv")),
+        ["repository_identity"]
+    );
+    assert_eq!(primary.digest, lab.context(&linked, "uv").digest);
+}
+
+#[test]
+fn pyproject_build_and_entry_point_settings_still_ask_again() {
+    let lab = Lab::new();
+    let checkout = lab.clone("app", &[("origin", "https://example.test/team/app.git")]);
+    let hooked = format!("{PYPROJECT}\n[tool.hatch.build.hooks.custom]\npath = \"hook.py\"\n");
+    python_project(&checkout, &hooked);
+    let before = lab.context(&checkout, "uv");
+
+    python_project(&checkout, &hooked.replace("hook.py", "other_hook.py"));
+    assert_ne!(before.digest, lab.context(&checkout, "uv").digest);
+
+    let scripts = hooked.replace(
+        "[tool.ruff]",
+        "[project.scripts]\napp = \"app:main\"\n\n[tool.ruff]",
+    );
+    python_project(&checkout, &scripts);
+    assert_ne!(before.digest, lab.context(&checkout, "uv").digest);
+}
+
+#[test]
+fn a_variable_named_only_outside_install_sections_keeps_the_context() {
+    let lab = Lab::new();
+    let checkout = lab.clone("app", &[("origin", "https://example.test/team/app.git")]);
+    python_project(&checkout, PYPROJECT);
+    let before = lab.context(&checkout, "uv");
+
+    python_project(
+        &checkout,
+        &PYPROJECT.replace("line-length = 100", "line-length = 100 # see ${EDITOR}"),
+    );
+    assert_eq!(
+        changed(&before, &lab.context(&checkout, "uv")),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn scripts_an_install_hook_can_reach_still_ask_again() {
+    let lab = Lab::new();
+    let checkout = lab.clone("app", &[("origin", "https://example.test/team/app.git")]);
+    let hooked = PACKAGE_JSON.replace(
+        "\"next dev\"",
+        "\"next dev\", \"postinstall\": \"npm run setup\", \"setup\": \"node a.js\"",
+    );
+    write(&checkout, "package.json", &hooked);
+    write(&checkout, "bun.lock", BUN_LOCK);
+    let before = lab.context(&checkout, "bun");
+
+    write(
+        &checkout,
+        "package.json",
+        &hooked.replace("node a.js", "node b.js"),
+    );
+    assert_ne!(before.digest, lab.context(&checkout, "bun").digest);
+
+    write(&checkout, "package.json", PACKAGE_JSON);
+    let plain = lab.context(&checkout, "bun");
+    for hook in ["preprepare", "postprepare", "dependencies"] {
+        let added = PACKAGE_JSON.replace(
+            "\"next dev\"",
+            &format!("\"next dev\", \"{hook}\": \"node c.js\""),
+        );
+        write(&checkout, "package.json", &added);
+        assert_ne!(plain.digest, lab.context(&checkout, "bun").digest, "{hook}");
+    }
+}

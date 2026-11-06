@@ -4,8 +4,13 @@
 //! the whole `package.json` or `pyproject.toml` made it lapse on edits that
 //! install nothing different: a release version bump, a new `dev` script, a
 //! linter setting. Only the sections below reach the resolver, the build
-//! backend or an install hook, so only they are digested. A manifest that
-//! cannot be parsed is digested whole, as before.
+//! backend or an install hook, so only they are digested. Where a section
+//! might reach an install, it stays: every script once any install hook is
+//! present, since a hook can run another script by name, and every `[tool]`
+//! table except the linters and test runners listed below, since a build
+//! backend reads its own. A manifest that cannot be parsed is digested whole,
+//! as before. The execution context
+//! (Unix only) and the approval hash (every platform) both read it from here.
 
 use crate::codex_output_py::PyPath;
 use crate::hook_adapter_value::{parse_python_json, OMap, OValue};
@@ -13,11 +18,16 @@ use crate::launch_identity_common::sha256_hex;
 
 /// Lifecycle scripts a package manager runs on install. Other scripts only run
 /// when someone asks for them by name.
-pub(super) const LIFECYCLE_NAMES: &[&str] = &[
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) const LIFECYCLE_NAMES: &[&str] = &[
+    "dependencies",
     "install",
+    "pnpm:devPreinstall",
     "postinstall",
+    "postprepare",
     "preinstall",
     "prepare",
+    "preprepare",
     "prepublish",
     "prepublishOnly",
 ];
@@ -46,9 +56,34 @@ const PACKAGE_JSON_SECTIONS: &[&str] = &[
 const PYPROJECT_PROJECT_KEYS: &[&str] = &[
     "dependencies",
     "dynamic",
+    "entry-points",
+    "gui-scripts",
     "name",
     "optional-dependencies",
     "requires-python",
+    "scripts",
+];
+
+/// `[tool]` tables read only by linters, formatters, type checkers and test
+/// runners. No package manager or build backend reads them; every other
+/// `[tool]` table is kept.
+const INERT_TOOL_TABLES: &[&str] = &[
+    "bandit",
+    "basedpyright",
+    "black",
+    "codespell",
+    "coverage",
+    "docformatter",
+    "interrogate",
+    "isort",
+    "mypy",
+    "pydocstyle",
+    "pylint",
+    "pyright",
+    "pytest",
+    "ruff",
+    "ty",
+    "vulture",
 ];
 
 /// `[tool.poetry]` keys that describe the published package, not what installs.
@@ -69,7 +104,8 @@ const POETRY_METADATA_KEYS: &[&str] = &[
 
 /// The digest a manifest file contributes: its install-relevant sections when
 /// it is a `package.json` or `pyproject.toml` that parses, else its bytes.
-pub(super) fn manifest_digest(path: &str, payload: &[u8]) -> String {
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) fn manifest_digest(path: &str, payload: &[u8]) -> String {
     match install_section_bytes(path, payload) {
         Some(sections) => sha256_hex(sections.as_bytes()),
         None => sha256_hex(payload),
@@ -101,14 +137,11 @@ fn package_json_sections(payload: &[u8]) -> Option<OMap> {
         }
     }
     if let Some(OValue::Map(scripts)) = parsed.get("scripts") {
-        let mut lifecycle = OMap::new();
-        for (key, value) in scripts.iter() {
-            if LIFECYCLE_NAMES.contains(&key) {
-                lifecycle.insert(key, value.clone());
-            }
-        }
-        if !lifecycle.is_empty() {
-            sections.insert("scripts", OValue::Map(lifecycle));
+        if scripts
+            .iter()
+            .any(|(key, _)| LIFECYCLE_NAMES.contains(&key))
+        {
+            sections.insert("scripts", OValue::Map(scripts.clone()));
         }
     }
     Some(sections)
@@ -128,16 +161,15 @@ fn pyproject_sections(payload: &[u8]) -> Option<OMap> {
     }
     if let Some(toml::Value::Table(tool)) = parsed.get("tool") {
         let mut tools = OMap::new();
-        if let Some(uv) = tool.get("uv") {
-            tools.insert("uv", toml_value(uv)?);
-        }
-        match tool.get("poetry") {
-            Some(toml::Value::Table(poetry)) => {
-                let kept = pick(poetry, |key| !POETRY_METADATA_KEYS.contains(&key))?;
-                tools.insert("poetry", OValue::Map(kept));
+        for (name, value) in tool {
+            match (name.as_str(), value) {
+                (name, _) if INERT_TOOL_TABLES.contains(&name) => {}
+                ("poetry", toml::Value::Table(poetry)) => {
+                    let kept = pick(poetry, |key| !POETRY_METADATA_KEYS.contains(&key))?;
+                    tools.insert("poetry", OValue::Map(kept));
+                }
+                (name, value) => tools.insert(name, toml_value(value)?),
             }
-            Some(other) => tools.insert("poetry", toml_value(other)?),
-            None => {}
         }
         if !tools.is_empty() {
             sections.insert("tool", OValue::Map(tools));

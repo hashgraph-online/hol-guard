@@ -29,11 +29,9 @@ mod executable;
 #[cfg(test)]
 mod executable_tests;
 mod fs;
-mod manifest_sections;
 mod ports;
 mod repository;
 
-pub use manifest_sections::install_section_bytes;
 pub use ports::{NativePorts, Ports};
 
 use fs::{ContextFiles, Fs, ResolveError};

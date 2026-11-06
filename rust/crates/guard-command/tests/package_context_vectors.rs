@@ -10,8 +10,9 @@
 //! Second, so that a saved approval holds in any checkout while the lockfile
 //! does: the repository material names the normalized `origin` URLs (else
 //! every remote's, else the common Git directory) in place of the common Git
-//! directory plus every remote URL, and `package.json` and `pyproject.toml`
-//! entries digest only their install sections. Each scenario
+//! directory plus every remote URL, with a relative local URL resolved against
+//! the directory holding the common Git directory, and `package.json` and
+//! `pyproject.toml` entries digest only their install sections. Each scenario
 //! materialises a file tree in a scratch directory, runs the Rust build over
 //! it with replay ports, and requires the same digest, components and
 //! non-portable reason, plus the same ordered log of native hook calls (digest

@@ -7,8 +7,8 @@ use crate::codex_output_py::{py_strip, PyPath};
 use crate::hook_adapter_value::OValue;
 
 use super::fs::{ContextFiles, Fs, ResolveError, MAX_DEPENDENCY_FILE_BYTES};
-use super::manifest_sections::manifest_digest;
 use super::{object, string_items, string_value, text, BuildError, Built};
+use crate::package_manifest_sections::manifest_digest;
 
 fn default_dependency_paths(manager: &str, kind: &str) -> &'static [&'static str] {
     let normalized = py_strip(manager).to_lowercase();

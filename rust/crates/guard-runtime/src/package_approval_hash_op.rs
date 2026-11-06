@@ -18,11 +18,11 @@ use guard_command::effect_decision::GuardAction;
 use guard_command::launch_identity::package_request_launch_identity_material;
 use guard_command::local_supply_chain::stable_digest_hex;
 use guard_command::package_approval::{package_approval_identity, PackageApprovalIdentityInput};
-use guard_command::package_context_build::install_section_bytes;
 use guard_command::package_execution_context::{
     PackageExecutionContext, PackageExecutionContextComponent, PACKAGE_EXECUTION_CONTEXT_VERSION,
 };
 use guard_command::package_intent_common::resolve_path_within_workspace;
+use guard_command::package_manifest_sections::install_section_bytes;
 use guard_command::supply_chain_package_eval::LOCKFILE_PARSER_VERSION;
 use guard_contracts::{
     ContextDigestComponentsV1, PackageApprovalHashRequestV1, SupplyChainEvalResultV1,

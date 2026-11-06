@@ -68,10 +68,11 @@ fn identify(fs: &Fs, files: &mut ContextFiles, marker: &str) -> Built<OValue> {
     let common_dir = resolve_git_common_dir(fs, files, &git_dir)?;
     let config = PyPath::new(&common_dir).join("config").to_string();
     let remotes = git_remote_urls(fs, files, &config)?;
+    let base = PyPath::new(&common_dir).parent().to_string();
     let names = |urls: &BTreeSet<String>| {
         OValue::List(
             urls.iter()
-                .map(|url| normalized_remote_url(url))
+                .map(|url| remote_identity(url, &base))
                 .collect::<BTreeSet<_>>()
                 .iter()
                 .map(|url| text(url))
@@ -86,6 +87,29 @@ fn identify(fs: &Fs, files: &mut ContextFiles, marker: &str) -> Built<OValue> {
         return Ok(object(vec![("remote_urls", names(&all))]));
     }
     Ok(object(vec![("common_git_dir", text(&common_dir))]))
+}
+
+/// A remote as it identifies the repository. A local path written relative
+/// (`../upstream`) names a different repository beside every checkout, so it
+/// is resolved against the directory holding the common Git directory: linked
+/// worktrees still agree, while `../upstream` next to `/a/app` and next to
+/// `/b/app` do not.
+fn remote_identity(raw: &str, base: &str) -> String {
+    let url = py_strip(raw);
+    if url.starts_with('/') || url.contains("://") || scp_like(url).is_some() {
+        return normalized_remote_url(url);
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for part in base.split('/').chain(url.split('/')) {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            part => parts.push(part),
+        }
+    }
+    normalized_remote_url(&format!("/{}", parts.join("/")))
 }
 
 /// One remote URL reduced to the host and path it names: credentials, port,
