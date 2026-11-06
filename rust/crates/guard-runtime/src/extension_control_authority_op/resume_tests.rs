@@ -289,7 +289,7 @@ fn retry(home: &Home, revision: i64, anchor_json: String) -> Value {
 }
 
 #[test]
-fn retry_records_its_proof_in_the_transaction_that_commits_its_row() {
+fn retry_records_its_proof_once_its_committed_anchor_is_written() {
     let home = with_cloud_events(Home::new());
     home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
     home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");

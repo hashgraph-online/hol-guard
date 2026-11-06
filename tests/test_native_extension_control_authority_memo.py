@@ -40,7 +40,7 @@ def _commit(store: Path, statement: str, *values: object) -> None:
 
 
 _RUST_OPS = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/extension_control_authority_op"
-_WRITER_SOURCES = frozenset({"commit.rs", "migrate.rs", "resume.rs", "writes.rs"})
+_WRITER_SOURCES = frozenset({"commit.rs", "migrate.rs", "pack_finish.rs", "pack_reserve.rs", "resume.rs", "writes.rs"})
 
 
 def _wire(store: Path, *, op: str = "read", allow_migration: bool = False, request_id: str = "r1") -> dict[str, object]:

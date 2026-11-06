@@ -183,6 +183,7 @@
       "src/native_command_controls.rs",
       "src/native_command_controls_admission.rs",
       "src/native_command_controls_floor.rs",
+      "src/native_command_controls_full_allow.rs",
       "src/native_command_controls_mcp.rs",
       "src/native_command_controls_precedence.rs",
       "src/native_command_controls_risk.rs",
