@@ -36,8 +36,10 @@ pub(super) fn execution_free(
 /// What one configuration proof found, before an unanswered probe is
 /// collapsed into a refusal. The two refusals are different questions: a
 /// helper the probe read out of the configuration is a program Guard cannot
-/// see, while a probe that could not answer leaves the read unproven without
-/// having found anything against it.
+/// see, while a probe that never read the configuration leaves the read
+/// unproven without having found anything against it. A probe that read the
+/// configuration and only then could not finish belongs with the first of
+/// those: whatever it already found stands.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Raw {
     /// Not a read this probe models. Another floor decides it.
@@ -45,8 +47,14 @@ enum Raw {
     /// The probe read the configuration. `true` where the read starts no
     /// configured pager, diff driver, textconv or filter helper.
     Answered(bool),
-    /// The probe could not answer, so nothing is proven either way.
+    /// The probe never read the configuration, so nothing is proven either
+    /// way and nothing was found against the read.
     Unanswered,
+    /// The probe read the configuration and then could not finish proving
+    /// the read inert. A helper may already be configured, so this refusal
+    /// stands on what the probe found rather than on a question it never
+    /// asked.
+    Unproven,
 }
 
 /// [`execution_free`] while paging is proved under `pager_operation` instead
@@ -73,14 +81,21 @@ pub(super) fn execution_free_paging(
         Raw::NotModelled => None,
         Raw::Answered(proven) => Some(proven),
         // An unanswered probe proves nothing, and an unproven read is refused.
-        Raw::Unanswered => Some(false),
+        Raw::Unanswered | Raw::Unproven => Some(false),
     }
 }
 
-/// Whether this read's refusal came from a probe that could not answer rather
-/// than from a helper the probe found configured. Only meaningful where
-/// [`execution_free`] answered `Some(false)`. Both go through one probe memo,
-/// so asking this after that call starts no second Git process.
+/// Whether this read's refusal came from a probe that never read the
+/// configuration, rather than from what the probe found once it had it. Only
+/// meaningful where [`execution_free`] answered `Some(false)`. Both go
+/// through one probe memo, so asking this after that call starts no second
+/// Git process.
+///
+/// A probe that read the configuration and only then could not finish -- an
+/// attribute query that failed while a filter is configured, a repository
+/// inspection cut short -- is not an unanswered probe. A helper may already
+/// be configured there, so that refusal is not an open question an explicit
+/// allow can settle.
 pub(super) fn probe_unanswered(
     executable: &str,
     arguments: &[String],
@@ -285,8 +300,19 @@ fn raw_paging(
     // into a refusal for those two would withdraw a proof they already hold,
     // so it leaves that proof standing and settles nothing instead.
     let keeps_its_own_proof = matches!(operation, "rev-parse" | "ls-files");
+    // Whether the probe got an answer out of the configuration, which is what
+    // tells its two refusals apart. A real executable has no NUL, so this key
+    // cannot collide with the probe's own.
+    let configuration_key = (
+        format!("{executable}\0{pager_operation}\0configuration"),
+        arguments.to_vec(),
+        context.home_dir.map(str::to_owned),
+        context.cwd.map(str::to_owned),
+        stdout_piped,
+    );
+    let read_configuration = std::cell::Cell::new(false);
     let answer = super::git_probe::memoized(key, || {
-        probe(
+        let answer = probe(
             executable,
             arguments,
             remaining,
@@ -297,11 +323,19 @@ fn raw_paging(
             context,
             deadline,
             execution_environment,
-        )
+            &read_configuration,
+        );
+        // Recorded beside the probe's own answer so a later proof served from
+        // the memo still knows which of the two refusals this was.
+        super::git_probe::memoized(configuration_key.clone(), || Some(read_configuration.get()));
+        answer
     });
+    let read_configuration =
+        read_configuration.get() || super::git_probe::proven(&configuration_key);
     match answer {
         Some(proven) => Raw::Answered(proven),
         None if keeps_its_own_proof => Raw::NotModelled,
+        None if read_configuration => Raw::Unproven,
         None => Raw::Unanswered,
     }
 }
@@ -371,6 +405,7 @@ fn probe(
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    read_configuration: &std::cell::Cell<bool>,
 ) -> Option<bool> {
     let Paging {
         operation: pager_operation,
@@ -470,6 +505,10 @@ fn probe(
     if !(status.success() || status.code() == Some(1) && output.is_empty()) {
         return None;
     }
+    // The configuration is in hand from here. Every refusal below rests on
+    // what the probe read or on a check it could not finish against what it
+    // read, not on a question it never asked.
+    read_configuration.set(true);
     // Git spells configuration keys in ASCII, so a value whose bytes are not
     // text never hides the key it belongs to. Reading the reply lossily keeps
     // every helper key in view: a helper whose value did not decode is read
@@ -801,3 +840,7 @@ pub(super) fn enabled_boolean(value: &str) -> bool {
 #[cfg(all(test, unix))]
 #[path = "git_config_home_tests.rs"]
 mod home_tests;
+
+#[cfg(all(test, unix))]
+#[path = "git_config_probe_refusal_tests.rs"]
+mod probe_refusal_tests;
