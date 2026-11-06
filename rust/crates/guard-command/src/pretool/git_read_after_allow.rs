@@ -292,6 +292,32 @@ fn ref_read(
         && super::segment_proof::exact_safe_segment_with_context(model, segment, true, context)
 }
 
+/// Whether `segment` leaves what a later step runs as Guard read it.
+///
+/// A Git step that rewrites tracked files can replace the program, the
+/// configuration or the bind-mounted file a later step starts, so coverage
+/// that reads a whole extension as allowed stops at it. Only a Git step whose
+/// verb rewrites nothing is answered here; every other program -- `ln`, `cp`,
+/// `mv`, `tee`, `gh pr checkout` -- can replace the same files without Guard
+/// modelling how, so it ends the walk unless the caller already proved that
+/// segment benign.
+pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
+    let arguments = &segment.arguments;
+    git_segment(segment) && (preserves_tree(arguments) || writes_nothing(arguments))
+}
+
+/// Whether a Git step, wherever its global options route it, writes nothing a
+/// later step reads. A global option the shared Git parser does not know
+/// leaves the subcommand unknown, so the step does not qualify.
+fn writes_nothing(arguments: &[String]) -> bool {
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    arguments
+        .get(index)
+        .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{preserves_tree, REF_READS};
@@ -346,30 +372,4 @@ mod tests {
             assert!(!preserves_tree(&words(command)), "{command}");
         }
     }
-}
-
-/// Whether `segment` leaves what a later step runs as Guard read it.
-///
-/// A Git step that rewrites tracked files can replace the program, the
-/// configuration or the bind-mounted file a later step starts, so coverage
-/// that reads a whole extension as allowed stops at it. Only a Git step whose
-/// verb rewrites nothing is answered here; every other program -- `ln`, `cp`,
-/// `mv`, `tee`, `gh pr checkout` -- can replace the same files without Guard
-/// modelling how, so it ends the walk unless the caller already proved that
-/// segment benign.
-pub(crate) fn step_preserves_later_programs(segment: &crate::CommandSegmentV1) -> bool {
-    let arguments = &segment.arguments;
-    git_segment(segment) && (preserves_tree(arguments) || writes_nothing(arguments))
-}
-
-/// Whether a Git step, wherever its global options route it, writes nothing a
-/// later step reads. A global option the shared Git parser does not know
-/// leaves the subcommand unknown, so the step does not qualify.
-fn writes_nothing(arguments: &[String]) -> bool {
-    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
-        return false;
-    };
-    arguments
-        .get(index)
-        .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
 }
