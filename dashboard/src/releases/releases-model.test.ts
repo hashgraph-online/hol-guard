@@ -14,7 +14,10 @@ import {
   changeCountLabel,
   installedRelease,
   installedStanding,
+  holReleaseUrl,
   isRetryable,
+  readsOnHol,
+  trimmedNote,
   isWhatsNewDismissed,
   openingSlug,
   normalizeVersionLabel,
@@ -309,6 +312,21 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   // hol.org for an archive Guard was told not to read.
   assert.match(failureCopy("disabled").title, /turned off on this device/);
   assert.match(failureCopy("disabled").body, /Nothing on hol.org is affected/);
+  // A release Guard declined to display is still published: say where to read
+  // it, and do not tell the reader hol.org failed to serve it.
+  assert.match(failureCopy("unreadable").body, /Read it on hol.org/);
+  assert.doesNotMatch(failureCopy("unreadable").body, /could not serve/);
+  assert.match(failureCopy("session").title, /signed session/);
+}
+
+// A trimmed list says how much is shown; a complete one says nothing.
+{
+  assert.equal(trimmedNote(1000, 1250, "changes"), "Showing the first 1,000 of 1,250 changes.");
+  assert.equal(trimmedNote(980, 980, "changes"), null);
+  assert.equal(trimmedNote(3, undefined, "contributors"), null, "older Guard builds send no total");
+  assert.equal(holReleaseUrl("v3.59.0"), "https://hol.org/guard/releases/v3.59.0");
+  assert.equal(holReleaseUrl("../x"), "https://hol.org/guard/releases");
+  assert.equal(holReleaseUrl(null), "https://hol.org/guard/releases");
 }
 
 // A retry button is only offered where pressing it could change the answer.
@@ -318,6 +336,10 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   assert.equal(isRetryable("disabled"), false, "the switch stays off however often it is pressed");
   assert.equal(isRetryable("unsupported"), false);
   assert.equal(isRetryable("not-found"), false);
+  assert.equal(isRetryable("unreadable"), false, "the same document comes back on every retry");
+  assert.equal(isRetryable("session"), true, "reconnecting re-mints the window's session");
+  assert.equal(readsOnHol("unreadable"), true);
+  assert.equal(readsOnHol("unavailable"), false);
 }
 
 // The archive and the installed version are separate reads. When the installed

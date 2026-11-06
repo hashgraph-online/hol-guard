@@ -26,15 +26,23 @@ pub const RELEASE_INDEX_SCHEMA: &str = "guard-release-client-index/v1";
 pub const RELEASE_DETAIL_SCHEMA: &str = "guard-release-detail/v1";
 
 /// Upstream bytes accepted in one projection (the adapter bounds its own read).
-const MAX_BODY_BYTES: usize = 262_144;
+/// Large stable releases publish documents near half a megabyte, so the cap
+/// leaves room for growth while the projected frame stays well inside the
+/// resident response limit.
+const MAX_BODY_BYTES: usize = 1_048_576;
 /// Maximum upstream JSON nesting depth accepted by the validator.
 const MAX_JSON_DEPTH: usize = 12;
 /// Releases carried by one index page (mirrors the portal page-size cap).
 const MAX_RELEASES: usize = 50;
-/// Change items rendered for one release.
-const MAX_CHANGES: usize = 200;
-/// Credited contributors rendered for one release.
-const MAX_ROSTER: usize = 500;
+/// Change items rendered for one release. Longer lists are trimmed, not
+/// refused: the projection reports the upstream total so the page can say so.
+const MAX_CHANGES: usize = 1_000;
+/// Credited contributors rendered for one release, trimmed the same way.
+const MAX_ROSTER: usize = 1_000;
+/// Longest published release notes rendered inline. Longer notes are left
+/// out (the summary and itemised changes still render) instead of failing
+/// the whole release.
+const MAX_SOURCE_NOTES_CHARS: usize = 100_000;
 /// Downloadable assets rendered for one release.
 const MAX_ASSETS: usize = 50;
 const MAX_URL_CHARS: usize = 2_048;
@@ -271,9 +279,11 @@ fn project_source_notes(object: &Map<String, Value>) -> Result<Value, FeedError>
         return Ok(Value::Null);
     }
     let notes = notes.as_object().ok_or(FeedError::Payload)?;
-    let text = field_str(notes, "text")
-        .and_then(|text| multi_line(text, 20_000))
-        .ok_or(FeedError::Payload)?;
+    let text = field_str(notes, "text").ok_or(FeedError::Payload)?;
+    if text.chars().count() > MAX_SOURCE_NOTES_CHARS {
+        return Ok(Value::Null);
+    }
+    let text = multi_line(text, MAX_SOURCE_NOTES_CHARS).ok_or(FeedError::Payload)?;
     Ok(json!({
         "scope": enum_value(notes, "scope", &["exact_release", "train_overview"])?,
         "text": text,
@@ -342,27 +352,23 @@ fn project_detail(parsed: &Value) -> Result<Value, FeedError> {
         .get("changes")
         .and_then(Value::as_array)
         .ok_or(FeedError::Payload)?;
-    if changes.len() > MAX_CHANGES {
-        return Err(FeedError::Payload);
-    }
-    let mut projected_changes = Vec::with_capacity(changes.len());
-    for change in changes {
+    let mut projected_changes = Vec::with_capacity(changes.len().min(MAX_CHANGES));
+    for change in changes.iter().take(MAX_CHANGES) {
         projected_changes.push(project_change_item(change)?);
     }
     projected.insert("changes".to_owned(), Value::Array(projected_changes));
+    projected.insert("changesTotal".to_owned(), json!(changes.len()));
 
     let roster = document
         .get("roster")
         .and_then(Value::as_array)
         .ok_or(FeedError::Payload)?;
-    if roster.len() > MAX_ROSTER {
-        return Err(FeedError::Payload);
-    }
-    let mut projected_roster = Vec::with_capacity(roster.len());
-    for entry in roster {
+    let mut projected_roster = Vec::with_capacity(roster.len().min(MAX_ROSTER));
+    for entry in roster.iter().take(MAX_ROSTER) {
         projected_roster.push(project_roster_entry(entry)?);
     }
     projected.insert("roster".to_owned(), Value::Array(projected_roster));
+    projected.insert("rosterTotal".to_owned(), json!(roster.len()));
 
     let mut projected_assets = Vec::new();
     if let Some(assets) = document.get("assets") {
@@ -427,3 +433,7 @@ fn evaluate_release_feed_frame(request: &ReleaseFeedProjectRequest) -> Result<Va
 #[cfg(test)]
 #[path = "release_feed_op_tests.rs"]
 mod release_feed_op_tests;
+
+#[cfg(test)]
+#[path = "release_feed_large_tests.rs"]
+mod release_feed_large_tests;

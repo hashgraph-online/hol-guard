@@ -485,3 +485,19 @@ const detail: ReleaseDetail = {
 }
 
 console.log("releases-ui.test.tsx passed");
+
+// A release longer than Guard shows says so and points at the full list,
+// instead of the whole page failing to load.
+{
+  const trimmed = renderToStaticMarkup(
+    createElement(ReleaseDetailPanel, {
+      detail: { ...detail, slug: "v3.59.0", changesTotal: 1250, rosterTotal: detail.roster.length },
+    }),
+  );
+  assert.match(trimmed, /Showing the first 2 of 1,250 changes\./);
+  assert.match(trimmed, /href="https:\/\/hol.org\/guard\/releases\/v3.59.0"/);
+  assert.ok(!trimmed.includes("contributors."), "a complete roster carries no note");
+
+  const whole = renderToStaticMarkup(createElement(ReleaseDetailPanel, { detail }));
+  assert.ok(!whole.includes("Showing the first"), "a release shown in full carries no note");
+}
