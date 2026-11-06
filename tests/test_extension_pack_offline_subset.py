@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
 )
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.native_activation_support import subset_store
+from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
 
 KEY = b"offline-subset-authority-fixture"
@@ -93,7 +94,7 @@ def test_subset_writes_schema6_and_keeps_schema5_readable(delivery, monkeypatch)
     store._get_policy_integrity_secret_from_store = protected._get_policy_integrity_secret_from_store
     draft = activation_transition.stage(previous, subset, verifier_key=KEY, store=store, now=10000)
     with hold_command_control_authority_lock(store.guard_home), connection:
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
+        write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
     marker = connection.execute("select version,checksum from extension_control_schema_migration").fetchone()
     assert marker["version"] == 6
     assert extension_control_schema_marker_is_compatible(*marker)
@@ -107,4 +108,4 @@ def test_subset_writes_schema6_and_keeps_schema5_readable(delivery, monkeypatch)
         connection,
         pytest.raises(NativePolicySnapshotError, match="conflict"),
     ):
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
+        write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
