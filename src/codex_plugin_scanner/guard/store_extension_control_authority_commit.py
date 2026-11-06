@@ -18,10 +18,7 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
     layers_to_json,
 )
-from .runtime.extension_control_contract import (
-    ControlLayerKind,
-    ExtensionControlLayer,
-)
+from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
 from .runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlEnrollmentProof,
