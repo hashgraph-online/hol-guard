@@ -109,6 +109,7 @@ def lease_next_job(
     queue_request: Callable[[LeaseOptions], dict[str, object]],
     exact_route_failure: Callable[[HTTPError], None] | None = None,
     exact_route_success: Callable[[], None] | None = None,
+    observe_response: Callable[[dict[str, object]], object] | None = None,
 ) -> dict[str, object] | None:
     generic = generic_operations(operations)
     if EXACT_CLOUD_REVIEW_OPERATION in operations:
@@ -129,6 +130,8 @@ def lease_next_job(
                 raise ValueError("cloud_review_protocol_upgrade_required")
             if exact_route_success is not None:
                 exact_route_success()
+            if observe_response is not None:
+                observe_response(exact_response)
             item = _mapping(exact_response.get("item"))
             if item:
                 if item.get("protocolVersion") != EXACT_CLOUD_REVIEW_PROTOCOL_VERSION:
@@ -136,7 +139,10 @@ def lease_next_job(
                 return exact_transport_job(item)
     if not generic:
         return None
-    item = _mapping(queue_request({"operations": generic, "wait_ms": wait_ms}).get("item"))
+    queue_response = queue_request({"operations": generic, "wait_ms": wait_ms})
+    if observe_response is not None:
+        observe_response(queue_response)
+    item = _mapping(queue_response.get("item"))
     return item or None
 
 
