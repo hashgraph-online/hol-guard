@@ -462,7 +462,7 @@ fn delegated_deadline_failure_is_not_an_administrator_disable() {
         &[],
         Some(Instant::now() - std::time::Duration::from_secs(1)),
     );
-    assert_eq!(result.minimum_action, "block");
+    assert_eq!(result.minimum_action, "review");
     assert_eq!(result.decision, "deny");
     let evidence = result.command_extensions.as_ref().unwrap();
     assert_eq!(
@@ -473,13 +473,13 @@ fn delegated_deadline_failure_is_not_an_administrator_disable() {
     assert_eq!(evidence.binding.observation_count, 0);
     assert_eq!(
         result.reason_code,
-        "native_command_extension_evaluation_failed"
+        "native_command_extension_evaluation_timed_out"
     );
-    assert_eq!(result.reason, super::floor::EXPIRED_DEADLINE_REASON);
+    assert_eq!(result.reason, super::floor::TIMED_OUT_REVIEW_REASON);
 }
 
 #[test]
-fn expired_extension_deadline_fail_closes_a_proven_benign_command() {
+fn expired_extension_deadline_asks_about_a_proven_benign_command() {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -509,14 +509,17 @@ fn expired_extension_deadline_fail_closes_a_proven_benign_command() {
         intrinsic,
         Some(Instant::now() - std::time::Duration::from_secs(1)),
     );
-    assert_eq!(result.minimum_action, "block");
+    // A deadline that ran out inspected nothing, so Guard asks instead of
+    // deciding: a review keeps Allow once and Always allow on the card, where
+    // a block leaves ordinary work with no approval that can clear it.
+    assert_eq!(result.minimum_action, "review");
     assert!(!result.explicitly_benign);
     assert_eq!(result.decision, "deny");
     assert_eq!(
         result.reason_code,
-        "native_command_extension_evaluation_failed"
+        "native_command_extension_evaluation_timed_out"
     );
-    assert_eq!(result.reason, super::floor::EXPIRED_DEADLINE_REASON);
+    assert_eq!(result.reason, super::floor::TIMED_OUT_REVIEW_REASON);
 }
 
 #[test]
