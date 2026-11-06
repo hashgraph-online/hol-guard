@@ -247,6 +247,18 @@ impl PolicySnapshotStore {
         })
     }
 
+    /// The store source the bound daemon's evidence writer runs with, when
+    /// that daemon drains the evidence queue. The drain starts the writer
+    /// with it to record what direct answers left behind.
+    pub(crate) fn direct_lane_writer_source(&self) -> Option<String> {
+        self.direct_lane.lock().ok().and_then(|binding| {
+            binding
+                .as_ref()
+                .filter(|binding| binding.evidence_drain == Some(true))
+                .and_then(|binding| binding.review.review_oauth_source.clone())
+        })
+    }
+
     /// Admission of a settled workspace alone, with its binding.
     #[cfg(all(test, unix))]
     pub(crate) fn admit_direct_hook(
