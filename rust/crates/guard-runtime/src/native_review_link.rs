@@ -272,6 +272,11 @@ fn with_review_url(
         }
         _ => review_url.to_owned(),
     };
+    // A short link already in the reason stays as written; prefixing a fresh
+    // code onto it would leave a two-code path the daemon cannot redeem.
+    if carries_handoff_link(stripped, review_url) {
+        return Some(stripped.to_owned());
+    }
     if live_url != review_url && stripped.contains(review_url) {
         return Some(stripped.replacen(review_url, &live_url, 1));
     }
@@ -401,7 +406,7 @@ pub(crate) fn native_review_reason(
         return Some(py_strip(&format!("{without} {SIGNED_LINK_UNAVAILABLE}")).to_owned());
     };
     let signed_url = browser_url(&link, token, APPROVAL_CENTER_SURFACE, now_micros)?;
-    if stripped.contains(&signed_url) {
+    if stripped.contains(&signed_url) || carries_handoff_link(stripped, approval_url) {
         return Some(stripped.to_owned());
     }
     if stripped.contains(approval_url) {

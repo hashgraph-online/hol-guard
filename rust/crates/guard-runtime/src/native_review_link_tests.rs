@@ -233,3 +233,21 @@ fn only_an_exact_short_code_counts_as_an_already_signed_link() {
         assert!(!carries_handoff_link(&unsigned, url), "{unsigned}");
     }
 }
+
+#[test]
+fn a_reason_that_already_has_a_short_link_is_not_signed_twice() {
+    let earlier = format!("{HANDOFF_REVIEW_URL}/1800000100-7c3d07b3dee665161df59cb58f93bcdf");
+    let reason = format!("Review this. Open HOL Guard: {earlier}.");
+    let later = 1_800_000_000 * 1_000_000;
+    for harness in ["codex", "claude-code"] {
+        let signed = native_review_reason(
+            harness,
+            &reason,
+            HANDOFF_REVIEW_URL,
+            Some("vector-auth"),
+            later,
+        )
+        .expect("reason");
+        assert_eq!(signed, reason, "{harness}");
+    }
+}
