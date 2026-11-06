@@ -1756,7 +1756,7 @@
   },
   {
    "file": "rust/crates/guard-runtime/src/policy_store_persistence.rs",
-   "item": "fn read_private_json -- non-Unix block",
+   "item": "fn read_private_file -- non-Unix block",
    "verdict": "windows-equivalent",
    "note": "Opens the snapshot read-only without the POSIX open flags; the file is under the account's own private state root.",
    "cfg": "not(unix)",

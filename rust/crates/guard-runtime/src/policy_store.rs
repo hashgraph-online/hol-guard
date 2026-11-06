@@ -87,6 +87,7 @@ use approval_v4_authority::ApprovalV4Authority;
 pub(crate) use policy_store_approval::ApprovalPolicyFence;
 use policy_store_authority::*;
 use policy_store_persistence::*;
+pub(crate) use policy_store_persistence::{persist_private_bytes, read_private_file};
 pub(crate) use policy_store_validation::read_verifier_key;
 use policy_store_validation::validate_private_directory;
 
