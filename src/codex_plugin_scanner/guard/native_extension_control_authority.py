@@ -14,6 +14,7 @@ exception the Python store used to raise for it.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from collections.abc import Mapping
@@ -132,6 +133,28 @@ def extension_control_authority(
     return payload
 
 
+def write_private_state(store: GuardStore, name: str, payload: bytes) -> str | None:
+    """Have the resident publish one native runtime authority file.
+
+    The resident writes ``payload`` atomically under ``name`` and reads it back
+    byte for byte. Returns ``None`` once written, or the code it refused with.
+    """
+
+    reply = extension_control_authority(
+        store_path=Path(store.path),
+        guard_home=Path(store.guard_home),
+        op="write_private_state",
+        key=None,
+        state={"name": name, "content_b64": base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")},
+    )
+    error = reply.get("error")
+    if error is not None:
+        return str(error)
+    if reply.get("written") is not True:
+        raise NativeExtensionControlAuthorityUnavailableError()
+    return None
+
+
 def _required_feature(op: str) -> str:
     if op in {
         "abandon_bootstrap",
@@ -148,6 +171,7 @@ def _required_feature(op: str) -> str:
         "write_anchor",
         "write_command_marker",
         "write_manifest",
+        "write_private_state",
     }:
         return EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE
     return EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE if op in _WRITE_OPS else EXTENSION_CONTROL_AUTHORITY_FEATURE

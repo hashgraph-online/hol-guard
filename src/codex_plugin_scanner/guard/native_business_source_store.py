@@ -42,8 +42,8 @@ from .native_business_source_retention import (
 from .native_command_control_authority_io import (
     hold_command_control_authority_lock,
     read_private_state,
-    write_private_state,
 )
+from .native_extension_control_authority import write_private_state as write_native_private_state
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _strict_json_loads_v3,
@@ -150,9 +150,13 @@ def _refuse_native_business_floor_without_source(store: GuardStore, key: bytes) 
 
 def _write_private(store: GuardStore, name: str, wire: bytes, limit: int, deadline: float) -> None:
     _remaining(deadline)
-    write_private_state(store.guard_home, name, wire, limit)
-    if read_private_state(store.guard_home, name, limit) != wire:
+    if not wire or len(wire) > limit:
+        raise _error("native_business_source_installation_write_failed")
+    error = write_native_private_state(store, name, wire)
+    if error == "native_private_state_write_mismatch":
         raise _error("native_business_source_installation_write_mismatch")
+    if error is not None:
+        raise _error("native_business_source_installation_write_failed")
     _remaining(deadline)
 
 
