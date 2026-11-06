@@ -125,12 +125,12 @@ fn an_activation_replaces_the_remote_decisions_and_writes_its_state() {
     assert_eq!(
         states,
         [
+            ("policy".to_owned(), "{}".to_owned(), NOW.to_owned()),
             (
                 CHECKPOINT.to_owned(),
                 r#"{"sequence": 2}"#.to_owned(),
                 NOW.to_owned()
             ),
-            ("policy".to_owned(), "{}".to_owned(), NOW.to_owned()),
         ]
     );
     assert_eq!(
