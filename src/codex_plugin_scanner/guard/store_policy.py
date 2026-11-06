@@ -33,9 +33,9 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from .runtime.extension_control_contract import ControlLayerKind
-from .store_custom_extension_continuity import CustomExtensionContinuityMutation
+from .store_custom_extension_continuity import CustomExtensionContinuityMutation, mutation_wire
+from .store_local_cli_schema import ensure_local_cli_schema
 from .store_policy_activation_preflight import (
-    apply_continuity_rejection,
     continuity_activation_rejection,
     encoded_policy_activation_payloads,
     policy_checkpoint_rejection,
@@ -79,6 +79,26 @@ POLICY_LOOKUP_MEMORY_FEATURE = "policy-decision-lookup-memory-v1"
 # ``portable_workspace`` or ``evidence_binding`` to a runtime without it.
 PORTABLE_COMPOSITION_LOOKUP_FEATURE = "policy-decision-lookup-portable-composition-v1"
 _RESIDENT_VERDICT_ATTEMPTS = 6
+# The ``sync_state`` values an activation decides from. The resident writes
+# the activation only while each still holds the text read here.
+_ACTIVATION_OBSERVED_KEYS = (
+    "policy_bundle_acceptance_checkpoint",
+    "runtime_session_summary",
+    "policy_bundle_ack",
+    MANAGED_CONTROLS_ACTIVE_STATE_KEY,
+    MANAGED_CONTROLS_REVISION_STATE_KEY,
+)
+_CONTINUITY_CHANGED = "custom_extension_continuity_changed_during_activation"
+
+
+class _PolicyActivationChangedError(Exception):
+    """A value the activation decided from moved before the resident wrote it."""
+
+
+class _PolicyActivationNotAppliedError(Exception):
+    """The resident answered without writing the activation."""
+
+
 _DEGRADED_AUTHORITY_REVISION = -1
 
 
@@ -289,6 +309,8 @@ class StorePolicyMixin:
         for _attempt in range(_RESIDENT_VERDICT_ATTEMPTS):
             try:
                 return self._apply_policy_bundle_authority_attempt(*args, verdicts=verdicts, **kwargs)
+            except _PolicyActivationChangedError:
+                continue
             except ResidentVerdictRequiredError as required:
                 try:
                     verdicts.fill(required)
@@ -376,7 +398,6 @@ class StorePolicyMixin:
         with self._extension_control_authority_lock(), self._connect() as connection:
             require_current(self, _key(cast("GuardStore", self)), activation_digest)
             self._invalidate_native_extension_control_policy()
-            connection.execute("begin immediate")
             managed_base_authority = self._read_extension_control_authority_locked(
                 registry.catalog_digest,
             )
@@ -386,7 +407,20 @@ class StorePolicyMixin:
                 negotiated_capabilities=managed_controls_negotiated_capabilities,
             )
             if continuity_rejection is not None:
-                return reject(continuity_rejection, connection)
+                return reject(continuity_rejection)
+            if custom_extension_continuity is not None:
+                ensure_local_cli_schema(connection)
+                connection.commit()
+            # A read transaction, not a write lock: the resident writes the
+            # activation only while the snapshot and every observed value are
+            # still the ones read here, and otherwise this attempt runs again.
+            connection.execute("begin")
+            observed: dict[str, str | None] = {}
+            for state_key in _ACTIVATION_OBSERVED_KEYS:
+                observed_row = connection.execute(
+                    "select payload_json from sync_state where state_key = ?", (state_key,)
+                ).fetchone()
+                observed[state_key] = None if observed_row is None else str(observed_row["payload_json"])
             authority_row = connection.execute(
                 "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()
@@ -537,10 +571,6 @@ class StorePolicyMixin:
                         self._seal_managed_revision(managed_revision, key=managed_authority_key),
                         allow_nan=False,
                     )
-                connection.execute(
-                    "delete from sync_state where state_key in (?, ?)",
-                    (MANAGED_CONTROLS_ACTIVE_STATE_KEY, MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY),
-                )
             published_authority = None
             if managed_controls_policy is not None or managed_controls_publish is not None:
                 assert managed_base_authority is not None
@@ -566,31 +596,49 @@ class StorePolicyMixin:
                     raise
                 except (json.JSONDecodeError, TypeError, ValueError):
                     return reject("managed_controls_delivery_ack_invalid", connection)
-            continuity_rejection = apply_continuity_rejection(
-                connection,
-                custom_extension_continuity,
-                boundary=self._custom_extension_continuity_transaction_boundary,
-            )
-            if continuity_rejection is not None:
-                return reject(continuity_rejection, connection)
-            self._replace_remote_policy_rows_locked(connection, rows)
-            for state_key, payload_json in encoded_payloads.items():
-                connection.execute(
-                    """
-                    insert into sync_state (state_key, payload_json, updated_at)
-                    values (?, ?, ?)
-                    on conflict(state_key) do update set
-                      payload_json = excluded.payload_json,
-                      updated_at = excluded.updated_at
-                    """,
-                    (state_key, payload_json, normalized_now),
+            connection.rollback()
+            if managed_controls_delivery is None:
+                # Only a managed delivery decides from these two.
+                del observed["runtime_session_summary"], observed["policy_bundle_ack"]
+            # The resident hashes the request as it decodes it, so an absent
+            # base is omitted rather than sent as null.
+            policy_apply: dict[str, object] = {
+                **(
+                    {}
+                    if managed_base_snapshot is None
+                    else {"base_revision": managed_base_snapshot[0], "base_snapshot_digest": managed_base_snapshot[1]}
+                ),
+                "observed": observed,
+                "payloads": encoded_payloads,
+                "retire_managed": managed_controls_policy is None,
+                "rows": [list(row) for row in rows],
+            }
+            if custom_extension_continuity is not None:
+                policy_apply["continuity"] = mutation_wire(custom_extension_continuity)
+            authority_key = managed_authority_key or self._authority_key(required=False)
+            reply: dict[str, object] = {}
+
+            def commit() -> None:
+                reply.update(
+                    self._extension_control_authority_op(
+                        "apply_policy", key=authority_key, now=normalized_now, policy_apply=policy_apply
+                    )
                 )
-            if managed_controls_publish is not None:
-                assert published_authority is not None
-                managed_controls_publish(
-                    published_authority,
-                    connection.commit,
-                )
+                if reply.get("applied") is not True:
+                    raise _PolicyActivationNotAppliedError
+
+            try:
+                if managed_controls_publish is None:
+                    commit()
+                else:
+                    assert published_authority is not None
+                    managed_controls_publish(published_authority, commit)
+            except _PolicyActivationNotAppliedError:
+                if reply.get("changed") is True:
+                    raise _PolicyActivationChangedError from None
+                if reply.get("rejected") != _CONTINUITY_CHANGED:
+                    raise ExtensionControlAuthorityError("invalid policy activation reply") from None
+                return reject(_CONTINUITY_CHANGED)
         persisted_acknowledgement = json.loads(encoded_payloads["policy_bundle_ack"])
         return persisted_acknowledgement if isinstance(persisted_acknowledgement, dict) else None
 

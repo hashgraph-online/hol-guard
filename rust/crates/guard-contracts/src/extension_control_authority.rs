@@ -18,8 +18,9 @@
 //! that step under the exclusive authority lease. `write_anchor` writes an
 //! anchor the store has earned into the credential vault, and
 //! `seal_managed_revision` and `seal_managed_activation` seal the managed
-//! controls publication epoch and activation, and `clear_policy` removes the
-//! cached remote policy authority. When a read finds work only a writer may do --
+//! controls publication epoch and activation, `apply_policy` activates a
+//! verified policy bundle and `clear_policy` removes the cached remote
+//! policy authority. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
 //! `action` naming that work and the authenticated inputs it needs. The caller
@@ -74,7 +75,7 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
     /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
-    /// `queue_change`, `clear_policy`, `write_anchor`,
+    /// `queue_change`, `apply_policy`, `clear_policy`, `write_anchor`,
     /// `seal_managed_revision`, `seal_managed_activation` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
@@ -187,6 +188,43 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `clear_policy`: the remote policy authority a clear removes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_clear: Option<ExtensionControlPolicyClearV1>,
+    /// `apply_policy`: the verified policy bundle an activation writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_apply: Option<ExtensionControlPolicyApplyV1>,
+}
+
+/// `apply_policy_bundle_authority`. The caller verifies the bundle, seals the
+/// managed state and encodes every payload first; the resident writes them
+/// in one transaction only while the authority snapshot and each
+/// `sync_state` value the caller read are unchanged.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlPolicyApplyV1 {
+    /// The authority snapshot the caller read; both absent when there was
+    /// none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_revision: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_snapshot_digest: Option<String>,
+    /// The `sync_state` text the caller read, by key; `None` when the key
+    /// was absent.
+    #[serde(default)]
+    pub observed: BTreeMap<String, Option<String>>,
+    /// The `sync_state` payloads the activation writes, as JSON text by key.
+    #[serde(default)]
+    pub payloads: BTreeMap<String, String>,
+    /// Removes the managed-controls activation and its negotiated
+    /// capabilities: the bundle carries no managed controls.
+    #[serde(default)]
+    pub retire_managed: bool,
+    /// The remote policy decisions that replace the stored ones, each in
+    /// `policy_decisions` column order.
+    #[serde(default)]
+    pub rows: Vec<Vec<Value>>,
+    /// The custom-extension continuity the activation carries, as the
+    /// `apply_custom_extension_continuity` store method takes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuity: Option<serde_json::Map<String, Value>>,
 }
 
 /// `clear_policy_bundle_authority`. Without `managed_revision` the resident
