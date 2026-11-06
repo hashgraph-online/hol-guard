@@ -750,14 +750,13 @@ def test_poll_once_leases_heartbeats_executes_and_posts_result(
         },
     )
     assert calls[1] == ("POST", "/job-1/heartbeat", {"leaseId": "lease-1"})
-    assert calls[2] == ("POST", "/job-1/heartbeat", {"leaseId": "lease-1"})
-    assert calls[3][0:2] == ("POST", "/job-1/result")
-    assert calls[3][2]["status"] == "succeeded"
-    assert calls[3][2]["leaseId"] == "lease-1"
+    assert calls[2][0:2] == ("POST", "/job-1/result")
+    assert calls[2][2]["status"] == "succeeded"
+    assert calls[2][2]["leaseId"] == "lease-1"
+    assert len(calls) == 3
     assert "machineInstallationId" not in calls[0][2]
     assert "machineInstallationId" not in calls[1][2]
     assert "machineInstallationId" not in calls[2][2]
-    assert "machineInstallationId" not in calls[3][2]
 
 
 def test_executor_app_remove_never_uses_local_daemon_client(
