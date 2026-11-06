@@ -125,8 +125,39 @@ fn browser_url(
     surface: &str,
     now_micros: i64,
 ) -> Option<String> {
+    if surface == APPROVAL_CENTER_SURFACE {
+        if let Some(short) = handoff_url(link.url, auth_token, now_micros) {
+            return Some(short);
+        }
+    }
     let token = session_token(auth_token, surface, now_micros)?;
     Some(format!("{}#guard-token={token}", link.url))
+}
+
+const HANDOFF_VERSION: &str = "guard-approval-link.v1";
+const HANDOFF_TTL_SECONDS: i64 = 12 * 60 * 60;
+const HANDOFF_MAC_BYTES: usize = 16;
+
+/// `build_approval_handoff_url`: `<origin>/requests/<id>/<expires>-<mac>` for
+/// a bare request link. Agents relay this whole; they drop the long session
+/// fragment. The daemon checks the MAC and redirects to the signed page.
+fn handoff_url(url: &str, auth_token: &str, now_micros: i64) -> Option<String> {
+    let request_id = crate::desktop_review_link::approval_request_id(url)?;
+    let rest = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))?;
+    let (_, path) = rest.split_once('/')?;
+    if path.strip_prefix("requests/") != Some(request_id) {
+        return None;
+    }
+    let expires = now_micros
+        .div_euclid(1_000_000)
+        .checked_add(HANDOFF_TTL_SECONDS)?;
+    let mut mac = <Hmac<Sha256>>::new_from_slice(auth_token.as_bytes()).ok()?;
+    mac.update(format!("{HANDOFF_VERSION}\n{request_id}\n{expires}").as_bytes());
+    let digest = mac.finalize().into_bytes();
+    let code = hex::encode(digest.get(..HANDOFF_MAC_BYTES)?);
+    Some(format!("{url}/{expires}-{code}"))
 }
 
 fn py_space(character: char) -> bool {

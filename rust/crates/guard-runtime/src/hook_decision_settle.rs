@@ -31,6 +31,11 @@ static GUARD_TOKEN_FRAGMENT: LazyLock<Regex> = LazyLock::new(|| {
         .expect("guard token pattern compiles")
 });
 
+static HANDOFF_CODE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(/requests/[0-9a-f]{32})/[0-9]{1,12}-[0-9a-f]{32}")
+        .expect("approval handoff pattern compiles")
+});
+
 #[derive(Clone, Copy, PartialEq)]
 enum Stage {
     PreToolUse,
@@ -454,12 +459,12 @@ fn join_hook_reason(values: &[&str]) -> String {
     }
     let tokenized = messages.iter().find(|message| {
         let lower = message.to_lowercase();
-        lower.contains("guard-token=") && lower.contains(OPEN_GUARD_MARKER)
+        (lower.contains("guard-token=") || HANDOFF_CODE.is_match(message))
+            && lower.contains(OPEN_GUARD_MARKER)
     });
     if let Some(replacement) = tokenized.cloned() {
-        let untokenized = GUARD_TOKEN_FRAGMENT
-            .replace_all(&replacement, "")
-            .into_owned();
+        let unfragmented = GUARD_TOKEN_FRAGMENT.replace_all(&replacement, "");
+        let untokenized = HANDOFF_CODE.replace_all(&unfragmented, "$1").into_owned();
         let mut merged: Vec<String> = Vec::new();
         let mut used_replacement = false;
         for message in &messages {

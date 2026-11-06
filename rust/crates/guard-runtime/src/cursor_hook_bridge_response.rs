@@ -158,9 +158,13 @@ fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
         return Some(reason.unwrap_or(DEFAULT_BLOCK_REASON).to_owned());
     };
     // The daemon and the resident already link a paused review with a signed
-    // link; signing its raw prefix again would stack a second token fragment.
+    // link (a session fragment, or the short `/<expires>-<mac>` path); signing
+    // its raw prefix again would stack a second token.
     let signed_prefix = format!("{review_url}#guard-token=");
-    if let Some(reason) = reason.filter(|reason| reason.contains(&signed_prefix)) {
+    let short_prefix = format!("{review_url}/");
+    if let Some(reason) =
+        reason.filter(|reason| reason.contains(&signed_prefix) || reason.contains(&short_prefix))
+    {
         return Some(crate::desktop_review_link::with_desktop_link(
             reason.to_owned(),
             guard_home,

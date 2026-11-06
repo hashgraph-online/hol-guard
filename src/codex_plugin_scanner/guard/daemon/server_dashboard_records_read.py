@@ -14,6 +14,7 @@ from ..store_evidence import (
     export_evidence_json,
     list_evidence,
 )
+from .approval_handoff_route import approval_handoff_location
 from .command_activity_api import (
     handle_command_activity_analytics,
     handle_command_activity_diagnostics,
@@ -254,7 +255,21 @@ class _DashboardRecordsReadRoutes:
         if m._is_public_static_path(parsed.path):
             self._write_static_asset(parsed.path.removeprefix("/"))
             return True
+        if self._serve_approval_handoff(parsed.path):
+            return True
         if self._is_dashboard_route(parsed.path):
             self._write_dashboard_shell()
             return True
         return False
+
+    def _serve_approval_handoff(self, path: str) -> bool:
+        location = approval_handoff_location(path, auth_token=self.server.auth_token)
+        if location is None:
+            return False
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return True
