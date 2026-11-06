@@ -3,9 +3,9 @@ use crate::policy_enforcement::validate_pre_tool_result_matrix;
 use guard_contracts::{PreToolActionV1, PreToolOperationV1, PRE_TOOL_ACTION_V1_SCHEMA};
 
 /// 2026-11-01T00:00:00Z.
-const NOW: i64 = 1_793_491_200_000_000;
+pub(super) const NOW: i64 = 1_793_491_200_000_000;
 
-fn result(action_type: PreToolActionTypeV1, minimum_action: &str) -> PreToolResultV1 {
+pub(super) fn result(action_type: PreToolActionTypeV1, minimum_action: &str) -> PreToolResultV1 {
     PreToolResultV1 {
         schema: "guard-pre-tool-result.v1".into(),
         version: 1,
@@ -36,27 +36,27 @@ fn result(action_type: PreToolActionTypeV1, minimum_action: &str) -> PreToolResu
     }
 }
 
-fn call(command: &str) -> Call<'_> {
+pub(super) fn call(command: &str) -> Call<'_> {
     Call {
         commands: vec![command],
         workspace: None,
     }
 }
 
-fn allowed() -> PreToolResultV1 {
+pub(super) fn allowed() -> PreToolResultV1 {
     result(PreToolActionTypeV1::Command, "allow")
 }
 
-struct Row<'a> {
-    harness: &'a str,
-    command: &'a str,
-    action: &'a str,
-    source: &'a str,
-    expires_at: Option<&'a str>,
-    workspace: Option<&'a str>,
+pub(super) struct Row<'a> {
+    pub(super) harness: &'a str,
+    pub(super) command: &'a str,
+    pub(super) action: &'a str,
+    pub(super) source: &'a str,
+    pub(super) expires_at: Option<&'a str>,
+    pub(super) workspace: Option<&'a str>,
 }
 
-fn rule(command: &str) -> Row<'_> {
+pub(super) fn rule(command: &str) -> Row<'_> {
     Row {
         harness: "*",
         command,
@@ -67,7 +67,7 @@ fn rule(command: &str) -> Row<'_> {
     }
 }
 
-fn exact_id(command: &str) -> String {
+pub(super) fn exact_id(command: &str) -> String {
     crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
         command: Some(command),
         artifact_type: Some("shell_command"),
@@ -79,7 +79,7 @@ fn exact_id(command: &str) -> String {
         .clone()
 }
 
-fn home(rows: &[Row<'_>]) -> tempfile::TempDir {
+pub(super) fn home(rows: &[Row<'_>]) -> tempfile::TempDir {
     let home = tempfile::tempdir().unwrap();
     let connection = rusqlite::Connection::open(home.path().join(STORE_FILE_NAME)).unwrap();
     connection
@@ -128,7 +128,12 @@ fn a_cloud_review_rule_asks_before_its_exact_command() {
 #[test]
 fn another_command_runs_as_before() {
     let home = home(&[rule("git status")]);
-    for command in ["git status --short", "git  status", "git status "] {
+    for command in [
+        "git status --short",
+        "echo git status",
+        "git log; echo 'git status'",
+        "git -C status",
+    ] {
         assert_eq!(
             apply(home.path(), &call(command), Some(NOW), allowed()),
             allowed(),
@@ -273,8 +278,30 @@ fn a_local_rule_names_itself() {
 }
 
 #[test]
-fn other_rule_actions_are_left_to_the_daemon() {
-    for action in ["block", "allow", "warn"] {
+fn another_spelling_of_the_command_asks() {
+    let home = home(&[rule("git status")]);
+    for command in [
+        "git  status",
+        "git status ",
+        "git status;",
+        "GIT_PAGER=cat git status",
+        "/usr/bin/git status",
+        "(git status)",
+        "true && git status",
+        "bash -c 'git status'",
+    ] {
+        let raised = apply(home.path(), &call(command), Some(NOW), allowed());
+        assert_eq!(raised.minimum_action, "review", "{command}");
+        assert_eq!(
+            raised.reason_code, "policy_exact_command_review",
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn allow_and_warn_rows_change_nothing() {
+    for action in ["allow", "warn"] {
         let home = home(&[Row {
             action,
             ..rule("git status")
