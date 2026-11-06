@@ -253,7 +253,7 @@ fn only_prose_files_are_changelogs() {
         &[("casesensitive", true, 1)],
     )
     .unwrap();
-    assert!(text.contains("src/history.py (lines 1-2)"), "{text}");
+    assert!(text.contains("src/history.py:1-2 def history_entry():"), "{text}");
 }
 
 /// A changelog the prompt names is on the map with its newest section, even
