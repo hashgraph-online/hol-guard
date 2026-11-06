@@ -224,10 +224,17 @@ fn glob_intersects_contains_family(pattern: &[u8], needle: &[u8], star_consumes:
 fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
     let mut expanded = vec![pattern.to_owned()];
     for _depth in 0..8 {
-        let Some(index) = expanded
-            .iter()
-            .position(|candidate| candidate.contains('{'))
-        else {
+        // A brace with no `}` after it expands to nothing: bash leaves `a{b`
+        // and a search pattern such as `json({ error` as the literal text it
+        // was written as. Reading that shape as a glob nobody could expand
+        // refused every search whose pattern held an unbalanced brace, so a
+        // candidate ends the pass unless one of its braces could still open
+        // an alternative.
+        let Some(index) = expanded.iter().position(|candidate| {
+            candidate
+                .find('{')
+                .is_some_and(|open| candidate[open + 1..].contains('}'))
+        }) else {
             return Some(expanded);
         };
         let candidate = expanded.swap_remove(index);
@@ -478,6 +485,27 @@ mod tests {
         for operand in ["auth.*provider", "token.*expired", "credentials.*load"] {
             assert!(glob_can_select_sensitive_path(operand), "{operand}");
         }
+    }
+
+    /// A brace with nothing to close it expands to nothing, so the word is
+    /// the text it was written as. Searches carry regex braces constantly --
+    /// `json({ error:` and `\d{2` among them -- and reading one as a glob no
+    /// proof could expand sent every such search to review.
+    #[test]
+    fn an_unbalanced_brace_is_literal_text() {
+        for literal in ["json({ error: 'not found', path", "a{b", ".en{v", "\\d{2"] {
+            assert!(!glob_can_select_sensitive_path(literal), "{literal}");
+            assert!(!literal_glob_names_sensitive_path(literal), "{literal}");
+        }
+        // A brace that does close still opens its alternatives, wherever the
+        // unbalanced one sits.
+        for selecting in ["a{b c{.env,x}", "{.env,x} y{z"] {
+            assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
+        }
+        // A path operand is still refused on the wider question: `{.env`
+        // holds the marker's own text, and another proof can clear it.
+        assert!(glob_can_select_sensitive_path("{.env"));
+        assert!(!literal_glob_names_sensitive_path("{.env"));
     }
 
     #[test]
