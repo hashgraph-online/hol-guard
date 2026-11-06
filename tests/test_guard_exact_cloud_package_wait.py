@@ -191,3 +191,43 @@ def test_the_install_that_waited_runs_once_and_a_later_retry_is_reviewed_again(
     evaluation = waited["supply_chain_evaluation"]
     assert isinstance(evaluation, dict)
     assert evaluation["reasons"][0]["code"] == "saved_package_approval"
+
+    # Running it spends the allow: the claim the resolver asks for consumes it.
+    now = "2026-07-17T00:02:00Z"
+    authority = local_supply_chain_module._build_package_protect_authority(  # pyright: ignore[reportPrivateUsage]
+        command=["npm", "install", "guard-proof"],
+        store=store,
+        workspace_dir=workspace,
+        now=now,
+        config=config,
+        additional_current_action=None,
+        additional_policy_context=None,
+    )
+    assert authority is not None
+    claimed = local_supply_chain_module._resolve_stored_package_policy_override(  # pyright: ignore[reportPrivateUsage]
+        authority.evaluation,
+        store=store,
+        artifact=authority.artifact,
+        artifact_hash=authority.artifact_hash,
+        workspace_dir=workspace,
+        now=now,
+        execution_context=authority.execution_context,
+        current_action=authority.current_action,
+        claim_saved_approval=True,
+        waited_request_ids=("pkg-cloud-flow",),
+    )
+    assert claimed.claim_disposition == "consumed"
+    assert claimed.evaluation.reasons[0]["code"] == "saved_package_approval"
+    assert (
+        store.peek_waited_exact_cloud_package_allow(
+            request_id="pkg-cloud-flow",
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+            now=now,
+        )
+        is None
+    )
+
+    # Once spent, even the request's own name no longer lets it run.
+    _, again_rc = check("2026-07-17T00:03:00Z", ("pkg-cloud-flow",))
+    assert again_rc == 2

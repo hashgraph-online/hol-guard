@@ -261,9 +261,12 @@ fn a_waited_exact_cloud_allow_lets_the_install_run_once() {
     assert_eq!(payload["claim_disposition"], json!("consumed"));
 }
 
+/// A named change to the hydrated request.
+type RequestEdit = (&'static str, fn(&mut Value));
+
 #[test]
 fn a_waited_exact_cloud_allow_needs_its_resolved_package_request() {
-    let edits: [(&str, fn(&mut Value)); 6] = [
+    let edits: [RequestEdit; 6] = [
         ("no request row", |r| r["approval_request"] = Value::Null),
         ("another request", |r| {
             r["approval_request"]["request_id"] = json!("req-2")
