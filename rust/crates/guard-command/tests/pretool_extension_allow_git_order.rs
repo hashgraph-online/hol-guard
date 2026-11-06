@@ -313,3 +313,89 @@ fn an_allowed_refresh_that_configures_git_itself_still_waits_for_review() {
         );
     }
 }
+
+/// A home configuration holding a value Git stores as bytes the probe cannot
+/// decode. The `git config` reply is read as one piece of text, so a single
+/// such value leaves the probe with no answer about any setting.
+///
+/// This stands in for every way the probe runs out of answers in a real
+/// session — a query that exhausts its budget part way through a compound, a
+/// Git the host does not trust, a home or working directory the hook cannot
+/// canonicalize, an environment that reaches Git's setup. Those depend on
+/// host timing or host layout; this one reproduces the same state from a
+/// fixture, on every platform, without a race.
+/// A value the probe cannot decode must not hide the rest of the reply. Git
+/// spells configuration keys in ASCII, so an undecodable value is read as a
+/// helper that was found, never as a question the probe never asked: the
+/// monitor sitting beside it keeps its review however much the user allowed.
+#[test]
+fn an_allowed_read_whose_undecodable_configuration_hides_a_monitor_still_waits() {
+    let (root, _cleanup) = checkout("undecodable-monitor", false);
+    let mut configuration = b"[core]\n\texcludesfile = /tmp/".to_vec();
+    configuration.extend_from_slice(&[0xff, 0xfe]);
+    configuration.extend_from_slice(b"/ignore\n\tfsmonitor = /tmp/watch\n");
+    std::fs::write(root.join(".gitconfig"), configuration).unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// The other half. Where the probe did answer and named a program the read
+/// would start, the review is a helper Guard can see, and no Allow settles
+/// it. A file-system monitor runs on the index `git status` refreshes.
+#[test]
+fn an_allowed_read_whose_configuration_names_a_monitor_still_waits_for_review() {
+    let (root, _cleanup) = checkout("fsmonitor", false);
+    std::fs::write(
+        root.join(".gitconfig"),
+        "[core]\n\tfsmonitor = /tmp/watch\n",
+    )
+    .unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// A setting written with no value carries Git's implicit true, and the reply
+/// spells it by leaving the value off the record. Reading that record as a
+/// question the probe never asked would hand the whole reply to an explicit
+/// allow, and the monitor configured beside it would run.
+#[test]
+fn an_allowed_read_whose_valueless_setting_hides_a_monitor_still_waits() {
+    let (root, _cleanup) = checkout("valueless-monitor", false);
+    std::fs::write(
+        root.join(".gitconfig"),
+        "[log]\n\tshowSignature\n[core]\n\tfsmonitor = /tmp/watch\n",
+    )
+    .unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}

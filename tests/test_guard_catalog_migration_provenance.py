@@ -27,7 +27,6 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_extension_control_authority_catalog_events import (
     MIGRATED_EVENT,
     REGRESSED_EVENT,
-    build_catalog_migration_payload,
     migration_provenance,
     recorded_writer_version,
 )
@@ -318,19 +317,7 @@ def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
         writer=True,
         guard_home=tmp_path,
     )
-    _payload, regression = build_catalog_migration_payload(
-        previous_revision=6,
-        revision=7,
-        previous_catalog_digest="catalog-x",
-        catalog_digest="catalog-z",
-        layers=(),
-        retired_targets=("control-a",),
-        provenance=provenance,
-    )
+    described, downgraded_from = provenance
 
-    assert regression == {
-        "previous_writer_version": "3.47.0",
-        "writer_version": "3.45.0",
-        "retired_target_count": 1,
-        "retired_target_ids": ["control-a"],
-    }
+    assert downgraded_from == "3.47.0"
+    assert described["writer_version"] == "3.45.0"

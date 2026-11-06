@@ -234,3 +234,91 @@ fn a_bundle_that_authorizes_nothing_ships_no_identities() {
         Ok(Some((Vec::new(), None)))
     );
 }
+
+fn canonical_bundle(mode: &str, rules: Value) -> Map<String, Value> {
+    json!({
+        "contractVersion": CANONICAL_CONTRACT,
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "managed-policy", "name": "Managed policy", "revision": 0},
+            "spec": {"defaults": {"mode": mode}, "rules": rules},
+        },
+    })
+    .as_object()
+    .unwrap()
+    .clone()
+}
+
+fn allow_command(id: &str, command: &str) -> Value {
+    json!({
+        "id": id,
+        "enabled": true,
+        "effect": "allow",
+        "match": {"commands": [command]},
+        "lifetime": {"mode": "permanent", "expiresAt": null},
+        "provenance": {"source": "cloud", "createdAt": "2026-01-01T00:00:00Z"},
+    })
+}
+
+fn this_device(connection: &Connection) {
+    connection
+        .execute(
+            "insert into guard_devices values ('local-device', 'device-1', 'Workstation')",
+            [],
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_canonical_bundle_authorizes_the_rows_it_compiles_to_for_this_device() {
+    let connection = store();
+    this_device(&connection);
+    let rules = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    let identities = canonical_identities(&connection, &canonical_bundle("prompt", rules)).unwrap();
+    assert!(!identities.is_empty());
+    for identity in &identities {
+        assert_eq!(identity[1], json!("artifact"));
+        assert!(identity[2]
+            .as_str()
+            .unwrap()
+            .starts_with("memory:exact-shell-command:"));
+        assert_eq!(identity[6], json!("allow"));
+        assert_eq!(identity[8], json!("allow-publish"));
+        assert_eq!(identity[9], json!("policy-bundle-canonical"));
+    }
+}
+
+#[test]
+fn a_canonical_bundle_authorizes_nothing_it_does_not_enforce_here() {
+    let connection = store();
+    this_device(&connection);
+    let watched = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("observe", watched)),
+        Some(Vec::new())
+    );
+    let mut elsewhere = allow_command("allow-publish", "npm publish --tag next");
+    elsewhere["match"]["devices"] = json!(["device-2"]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("prompt", json!([elsewhere]))),
+        Some(Vec::new())
+    );
+    let mut v1 = canonical_bundle("prompt", json!([]));
+    v1.remove("contractVersion");
+    assert_eq!(canonical_identities(&connection, &v1), Some(Vec::new()));
+}
+
+#[test]
+fn a_canonical_bundle_without_this_device_or_a_compile_authorizes_nothing() {
+    let connection = store();
+    let rules = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("prompt", rules)),
+        None
+    );
+    this_device(&connection);
+    let mut broken = canonical_bundle("prompt", json!([]));
+    broken["payload"]["spec"] = json!("not a spec");
+    assert_eq!(canonical_identities(&connection, &broken), None);
+}

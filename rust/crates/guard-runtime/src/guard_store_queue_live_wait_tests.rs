@@ -44,6 +44,16 @@ fn queue_with(
     live_wait: Option<(&str, Value)>,
     harness: Option<&str>,
 ) -> (Value, Connection) {
+    queue_through("add_approval_request", tag, name, live_wait, harness)
+}
+
+fn queue_through(
+    method: &str,
+    tag: &str,
+    name: &str,
+    live_wait: Option<(&str, Value)>,
+    harness: Option<&str>,
+) -> (Value, Connection) {
     let vectors: Value = serde_json::from_str(VECTORS).unwrap();
     let scenario = scenario(&vectors, name);
     let home = temp_home(tag);
@@ -70,7 +80,7 @@ fn queue_with(
         request_id: "live-wait".to_owned(),
         store_path: db.to_string_lossy().into_owned(),
         guard_home: home.to_string_lossy().into_owned(),
-        method: "add_approval_request".to_owned(),
+        method: method.to_owned(),
         source: vectors["source"].as_str().unwrap().to_owned(),
         busy_timeout_ms: 5000,
         args,
@@ -290,4 +300,67 @@ fn without_a_live_wait_the_reply_is_the_stored_id() {
     assert_eq!(reply["status"], "ok", "{reply}");
     assert_eq!(reply["payload"], "r-new");
     assert_eq!(resume(&connection, "r-new"), None);
+}
+
+#[test]
+fn a_silent_review_links_the_wait_its_block_holds() {
+    // The default blocked-request mode answers a review with the silent
+    // block. A Codex bridge holds its wait whenever that block links the
+    // approval, so the write links the wait too: approving the row releases
+    // the waiting call instead of letting it time out into a manual retry.
+    let (pid, token) = crate::codex_hook_identity::current_process_identity().unwrap();
+    let facts = json!({
+        "process": {"pid": pid, "startToken": token},
+        "timeout_seconds": 90,
+        "workspace": null,
+    });
+    let (reply, connection) = queue_through(
+        "add_silent_native_review_approval_request",
+        "live-wait-silent",
+        "fresh_native_review",
+        Some(("codex_live_wait_facts", facts)),
+        None,
+    );
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(
+        reply["payload"],
+        json!({"request_id": "r-new", "live_wait": "seeded"})
+    );
+    assert_eq!(
+        operation_requests(&connection, "codex-hook-r-new").as_deref(),
+        Some(r#"["r-new"]"#)
+    );
+    let snapshot: String = connection
+        .query_row(
+            "select continuation_snapshot_json from approval_requests where request_id = 'r-new'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let snapshot: Value = serde_json::from_str(&snapshot).unwrap();
+    assert_eq!(snapshot["capability"], "suspended-response");
+    let events: i64 = connection
+        .query_row(
+            "select count(*) from guard_events where event_name = 'approval.created'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        events, 1,
+        "the silent write keeps its approval.created event"
+    );
+}
+
+#[test]
+fn a_silent_review_without_facts_answers_its_id_alone() {
+    let (reply, _) = queue_through(
+        "add_silent_native_review_approval_request",
+        "live-wait-silent-plain",
+        "fresh_native_review",
+        None,
+        None,
+    );
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"], json!("r-new"));
 }

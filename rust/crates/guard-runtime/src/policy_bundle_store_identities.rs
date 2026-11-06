@@ -11,6 +11,7 @@
 //! A bundle that fails any of them authorizes nothing, so its rows are dropped.
 
 use std::collections::HashSet;
+use std::time::{Duration, Instant};
 
 use guard_contracts::{
     canonical_utc_timestamp, utc_timestamp_micros, PolicyBundleAuthorityRequestV1,
@@ -92,6 +93,55 @@ pub(crate) fn cached_bundle_authority(
         }
     }
     Some((identities, Some(validated)))
+}
+
+/// `contractVersion` of a canonical (v2) policy bundle.
+const CANONICAL_CONTRACT: &str = "guard-policy-bundle.v2";
+/// `source` the store saves a canonical bundle's compiled rules under
+/// (`_build_canonical_policy_bundle_decisions`, `runner.py`).
+const CANONICAL_SOURCE: &str = "policy-bundle-canonical";
+/// The compile budget the payload-hash queries use.
+const COMPILE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The identities of the `policy-bundle-canonical` rows the validated
+/// `bundle` yields for this device, compiled the way the store compiled them
+/// when it saved them: the rule id as owner, the canonical source. A v1
+/// bundle yields none; `None` when the compile or the device cannot be read.
+pub(crate) fn canonical_identities(
+    connection: &Connection,
+    bundle: &Map<String, Value>,
+) -> Option<Vec<Identity>> {
+    if bundle.get("contractVersion").and_then(Value::as_str) != Some(CANONICAL_CONTRACT) {
+        return Some(Vec::new());
+    }
+    let (device_id, device_label) = local_device(connection).ok()??;
+    let device_name = device_display_name(connection, &device_label)?;
+    let input = json!({
+        "bundle": bundle,
+        "device_id": device_id,
+        "device_name": device_name,
+    });
+    let deadline = Instant::now() + COMPILE_TIMEOUT;
+    let Value::Object(mut answer) =
+        guard_command::policy_document::evaluate("compile_bundle", &input, deadline).ok()?
+    else {
+        return None;
+    };
+    let Value::Array(rows) = answer.remove("ok")? else {
+        return None;
+    };
+    let mut seen = HashSet::new();
+    let mut identities = Vec::new();
+    for row in rows {
+        let mut decision = row.get("decision")?.as_object()?.clone();
+        decision.insert("owner".to_owned(), row.get("rule_id")?.clone());
+        decision.insert("source".to_owned(), json!(CANONICAL_SOURCE));
+        let identity = identity(&decision)?;
+        if seen.insert(serde_json::to_string(&identity).ok()?) {
+            identities.push(identity);
+        }
+    }
+    Some(identities)
 }
 
 /// The bundle authority a lookup Python sent no identities for reads

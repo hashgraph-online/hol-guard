@@ -33,6 +33,25 @@ pub(super) fn reset_op(request: &ExtensionControlAuthorityRequestV1) -> Result<V
         .unwrap_or_else(|fault| fault_value(&fault, Vec::new())))
 }
 
+/// `abandon_bootstrap`: removes the revision-0 snapshot a bootstrap committed
+/// before it failed to seal its anchor, so the home reads as unenrolled again
+/// and the next enrollment starts over. A later revision is never touched.
+pub(super) fn abandon_bootstrap_op(
+    request: &ExtensionControlAuthorityRequestV1,
+) -> Result<Value, String> {
+    let Some(connection) = open_writer(request)? else {
+        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    };
+    let removed = connection.execute(
+        "delete from extension_control_authority_snapshot where singleton = 1 and revision = 0",
+        [],
+    );
+    Ok(match removed {
+        Ok(removed) => json!({ "abandoned": removed > 0 }),
+        Err(error) => fault_value(&store_fault(error), Vec::new()),
+    })
+}
+
 /// `dict(row)` as `json.dumps` writes it.
 fn row_json(row: &Row) -> Res<Value> {
     let mut object = Map::new();

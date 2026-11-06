@@ -33,6 +33,22 @@ pub(super) fn execution_free(
     )
 }
 
+/// What one configuration proof found, before an unanswered probe is
+/// collapsed into a refusal. The two refusals are different questions: a
+/// helper the probe read out of the configuration is a program Guard cannot
+/// see, while a probe that could not answer leaves the read unproven without
+/// having found anything against it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Raw {
+    /// Not a read this probe models. Another floor decides it.
+    NotModelled,
+    /// The probe read the configuration. `true` where the read starts no
+    /// configured pager, diff driver, textconv or filter helper.
+    Answered(bool),
+    /// The probe could not answer, so nothing is proven either way.
+    Unanswered,
+}
+
 /// [`execution_free`] while paging is proved under `pager_operation` instead
 /// of the command's own name. A `stash show` diff is still a diff, but it
 /// pages under `pager.stash`.
@@ -45,10 +61,67 @@ pub(super) fn execution_free_paging(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     stdout_piped: bool,
 ) -> Option<bool> {
-    let remaining = crate::command_compatibility::git_inspection_arguments(arguments, context)?;
-    let operation = remaining.first()?.as_str();
+    match raw_paging(
+        executable,
+        arguments,
+        pager_operation,
+        context,
+        deadline,
+        execution_environment,
+        stdout_piped,
+    ) {
+        Raw::NotModelled => None,
+        Raw::Answered(proven) => Some(proven),
+        // An unanswered probe proves nothing, and an unproven read is refused.
+        Raw::Unanswered => Some(false),
+    }
+}
+
+/// Whether this read's refusal came from a probe that could not answer rather
+/// than from a helper the probe found configured. Only meaningful where
+/// [`execution_free`] answered `Some(false)`. Both go through one probe memo,
+/// so asking this after that call starts no second Git process.
+pub(super) fn probe_unanswered(
+    executable: &str,
+    arguments: &[String],
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    stdout_piped: bool,
+) -> bool {
+    raw_paging(
+        executable,
+        arguments,
+        None,
+        context,
+        deadline,
+        execution_environment,
+        stdout_piped,
+    ) == Raw::Unanswered
+}
+
+fn raw_paging(
+    executable: &str,
+    arguments: &[String],
+    pager_operation: Option<&str>,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    stdout_piped: bool,
+) -> Raw {
+    let Some(remaining) =
+        crate::command_compatibility::git_inspection_arguments(arguments, context)
+    else {
+        return Raw::NotModelled;
+    };
+    let Some(operation) = remaining.first().map(String::as_str) else {
+        return Raw::NotModelled;
+    };
     if operation == "stash" && pager_operation.is_none() {
-        return stash_execution_free(
+        // The stash proof runs two reads under two pager keys; it reports one
+        // refusal for both, so an unanswered probe inside it is not told
+        // apart and the whole form keeps its review.
+        return match stash_execution_free(
             executable,
             arguments,
             remaining,
@@ -56,7 +129,10 @@ pub(super) fn execution_free_paging(
             deadline,
             execution_environment,
             stdout_piped,
-        );
+        ) {
+            Some(proven) => Raw::Answered(proven),
+            None => Raw::NotModelled,
+        };
     }
     // `git notes show` hands the note to `git show`, which pages under
     // `pager.show` where `pager.notes` left the choice open, so the proof runs
@@ -66,7 +142,7 @@ pub(super) fn execution_free_paging(
         && super::git_side_record_reads::shows_a_note(&remaining[1..])
     {
         let prove = |pager: &str| {
-            execution_free_paging(
+            raw_paging(
                 executable,
                 arguments,
                 Some(pager),
@@ -76,7 +152,17 @@ pub(super) fn execution_free_paging(
                 stdout_piped,
             )
         };
-        return Some(prove("notes")? && prove("show")?);
+        // A note that already pages under `pager.notes` needs no second
+        // proof, exactly as the short-circuit of the two answers behaved.
+        let pages = match prove("notes") {
+            Raw::Answered(pages) => pages,
+            other => return other,
+        };
+        return if pages {
+            prove("show")
+        } else {
+            Raw::Answered(false)
+        };
     }
     if !matches!(
         operation,
@@ -126,26 +212,26 @@ pub(super) fn execution_free_paging(
             | "check-mailmap"
             | "interpret-trailers"
     ) {
-        return None;
+        return Raw::NotModelled;
     }
     // Other object-read forms can run drivers; their own review floors decide.
     if matches!(operation, "ls-tree" | "cat-file")
         && !super::git_object_reads::read_form(operation, &remaining[1..])
     {
-        return None;
+        return Raw::NotModelled;
     }
     if matches!(operation, "show-ref" | "for-each-ref")
         && !super::git_ref_listings::read_form(operation, &remaining[1..])
     {
-        return None;
+        return Raw::NotModelled;
     }
     if operation == "rev-list" && !super::git_rev_list::read_form(&remaining[1..]) {
-        return None;
+        return Raw::NotModelled;
     }
     if matches!(operation, "blame" | "annotate" | "describe" | "reflog")
         && !super::git_history_reads::read_form(operation, &remaining[1..])
     {
-        return None;
+        return Raw::NotModelled;
     }
     if matches!(
         operation,
@@ -158,28 +244,28 @@ pub(super) fn execution_free_paging(
             | "ls-files"
     ) && !super::git_listing_reads::read_form(operation, &remaining[1..])
     {
-        return None;
+        return Raw::NotModelled;
     }
     if matches!(operation, "bisect" | "notes" | "replace")
         && !super::git_side_record_reads::read_form(operation, &remaining[1..])
     {
-        return None;
+        return Raw::NotModelled;
     }
     // Only the status form prints; every other submodule verb moves work,
     // and the recursive walk reads configuration this probe never saw.
     if operation == "submodule" && !super::git_submodule_reads::read_form(&remaining[1..]) {
-        return None;
+        return Raw::NotModelled;
     }
     // Only the patch check reads; every other apply writes, and its own
     // review decides it.
     if operation == "apply" && !super::git_apply_check::is_check_only(&remaining[1..]) {
-        return None;
+        return Raw::NotModelled;
     }
     // A plain configuration write is no read; its own proof decides it.
     if operation == "config"
         && super::git_config_reads::writes::plain_write(&remaining[1..]).is_some()
     {
-        return None;
+        return Raw::NotModelled;
     }
     let pager_operation = pager_operation.unwrap_or(operation).to_owned();
     // The memo key has no field of its own for which pager this proof uses,
@@ -199,8 +285,8 @@ pub(super) fn execution_free_paging(
     // into a refusal for those two would withdraw a proof they already hold,
     // so it leaves that proof standing and settles nothing instead.
     let keeps_its_own_proof = matches!(operation, "rev-parse" | "ls-files");
-    super::git_probe::memoized(key, || {
-        let answer = probe(
+    let answer = super::git_probe::memoized(key, || {
+        probe(
             executable,
             arguments,
             remaining,
@@ -211,13 +297,13 @@ pub(super) fn execution_free_paging(
             context,
             deadline,
             execution_environment,
-        );
-        match answer {
-            Some(proven) => Some(proven),
-            None if keeps_its_own_proof => None,
-            None => Some(false),
-        }
-    })
+        )
+    });
+    match answer {
+        Some(proven) => Raw::Answered(proven),
+        None if keeps_its_own_proof => Raw::NotModelled,
+        None => Raw::Unanswered,
+    }
 }
 
 /// A printing `git stash` form, proved as the read Git runs for it. `list`
@@ -384,7 +470,33 @@ fn probe(
     if !(status.success() || status.code() == Some(1) && output.is_empty()) {
         return None;
     }
-    let output = std::str::from_utf8(&output).ok()?;
+    // Git spells configuration keys in ASCII, so a value whose bytes are not
+    // text never hides the key it belongs to. Reading the reply lossily keeps
+    // every helper key in view: a helper whose value did not decode is read
+    // as a helper that was found, not as a question the probe never asked.
+    // Refusing the whole reply here instead would turn one undecodable value
+    // anywhere in the configuration into an unanswered probe, which an
+    // explicit allow settles -- and a monitor or pager beside it would run.
+    //
+    // A key is different. Two subsection names that differ only in bytes that
+    // do not decode read as one key once the reply is decoded, so an empty
+    // value under the second would hide a helper set under the first. Git's
+    // own key match leaves such a key out of the reply under a UTF-8 locale,
+    // so this stands for the hosts whose locale lets it through. A key
+    // written with no value carries Git's implicit true, which the reply
+    // spells by leaving the value off the record. Neither is a question the
+    // probe never asked, so both are read as a helper that was found.
+    let records = output.split(|byte| *byte == 0);
+    for record in records.filter(|record| !record.is_empty()) {
+        let Some(separator) = record.iter().position(|byte| *byte == b'\n') else {
+            return Some(false);
+        };
+        if std::str::from_utf8(&record[..separator]).is_err() {
+            return Some(false);
+        }
+    }
+    let output = String::from_utf8_lossy(&output);
+    let output: &str = &output;
     let options = remaining
         .iter()
         .skip(1)

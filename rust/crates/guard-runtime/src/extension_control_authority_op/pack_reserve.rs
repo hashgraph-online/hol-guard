@@ -5,8 +5,9 @@
 //! state it was staged under (the lifecycle floor and the active security
 //! record, which the caller reads from the policy-integrity store) and against
 //! the active slot it extends, then reserved for this row behind a link that
-//! binds it to the row's revision, snapshot and catalog. The caller retains
-//! the legacy baseline and upgrades the schema marker before it asks.
+//! binds it to the row's revision, snapshot and catalog. A first activation
+//! over an empty slot retains the legacy baseline in the same transaction;
+//! the caller upgrades the schema marker before it asks.
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rusqlite::params;
@@ -17,7 +18,7 @@ use super::pack_finish::{
     lifecycle, marker_version, pack, record_request, verified, ACTIVATION_MISSING, BASELINE_SCHEMA,
     CONFLICT, PACK_SCHEMA_VERSIONS, REVISION_INVALID, SCHEMA_INVALID, SCHEMA_V2,
 };
-use super::records::{degraded, query_row, row_int, row_str, store_fault, Fault, Res};
+use super::records::{degraded, query_row, row_int, row_str, store_fault, Fault, Res, Row};
 use super::{Ctx, STORE_UNAVAILABLE};
 use crate::local_store_read::table_exists;
 
@@ -159,12 +160,13 @@ impl Ctx<'_> {
     /// The digest of the active activation the draft extends, or none over a
     /// retained baseline.
     fn active_digest(&self, key_hex: &str) -> Res<Option<String>> {
-        let current = query_row(
-            self.connection,
-            "select * from extension_command_pack_activation where singleton = 1",
-            [],
-        )?
-        .ok_or_else(|| pack(ACTIVATION_MISSING))?;
+        let current = match self.active_row()? {
+            Some(row) => row,
+            None => {
+                self.retain_baseline(key_hex)?;
+                self.active_row()?.ok_or_else(|| pack(ACTIVATION_MISSING))?
+            }
+        };
         let baseline = serde_json::from_str::<Value>(&row_str(&current, "record_json")?)
             .is_ok_and(|value| value.get("schema") == Some(&json!(BASELINE_SCHEMA)));
         if baseline {
@@ -178,6 +180,53 @@ impl Ctx<'_> {
             return Err(pack(REVISION_INVALID));
         }
         Ok(Some(row_str(&current, "record_digest")?))
+    }
+
+    fn active_row(&self) -> Res<Option<Row>> {
+        query_row(
+            self.connection,
+            "select * from extension_command_pack_activation where singleton = 1",
+            [],
+        )
+    }
+
+    /// A first activation over an empty slot retains the legacy catalog it
+    /// replaces as the revision-0 baseline.
+    fn retain_baseline(&self, key_hex: &str) -> Res<()> {
+        let Some(baseline) = self
+            .request
+            .pack_reserve
+            .as_ref()
+            .and_then(|reserve| reserve.baseline.as_ref())
+        else {
+            return Err(pack(ACTIVATION_MISSING));
+        };
+        let sealed = lifecycle(&json!({
+            "kind": "record", "operation": "seal", "purpose": "baseline",
+            "key": key_hex,
+            "payload": {
+                "schema": BASELINE_SCHEMA,
+                "revision": 0,
+                "program_digest": baseline.program_digest,
+                "catalog_digest": baseline.catalog_digest,
+                "trust_digest": baseline.trust_digest,
+            },
+        }))?;
+        let text = |name: &str| sealed[name].as_str().ok_or_else(|| pack(DRAFT_INVALID));
+        self.connection
+            .execute(
+                "insert into extension_command_pack_activation (
+                    singleton, revision, record_json, record_digest, record_mac, recorded_at
+                 ) values (1, 0, ?, ?, ?, ?)",
+                params![
+                    text("record")?,
+                    text("digest")?,
+                    text("mac")?,
+                    baseline.recorded_at
+                ],
+            )
+            .map_err(store_fault)?;
+        Ok(())
     }
 }
 

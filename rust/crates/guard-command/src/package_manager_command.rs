@@ -259,15 +259,30 @@ pub fn strip_manager_presentation_arguments(manager: &str, arguments: &[String])
     }
     let mut stripped: Vec<String> = Vec::with_capacity(arguments.len());
     let mut in_manager_options = true;
-    for token in arguments {
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = &arguments[index];
         if in_manager_options {
-            if token == "--" {
+            if argument == "--" {
                 in_manager_options = false;
-            } else if is_presentation_option(config, token) {
+            } else if config.value_options.contains(&argument.as_str()) {
+                // The word after a value option is that option's value, read
+                // the same way [`manager_verb`] reads it. A value spelled like
+                // a reporting option (`--registry --silent`) has to survive, or
+                // two different command lines share one approval binding.
+                stripped.push(argument.clone());
+                if let Some(value) = arguments.get(index + 1) {
+                    stripped.push(value.clone());
+                }
+                index += 2;
+                continue;
+            } else if is_presentation_option(config, argument) {
+                index += 1;
                 continue;
             }
         }
-        stripped.push(token.clone());
+        stripped.push(argument.clone());
+        index += 1;
     }
     stripped
 }
@@ -613,6 +628,37 @@ mod tests {
             ),
             t(&["--prefix", "exec", "install", "lodash"]),
         );
+    }
+
+    #[test]
+    fn a_global_option_value_spelled_as_a_reporting_flag_survives() {
+        // `--silent` here is the registry npm was told to use, however odd,
+        // not a request to print less. Dropping it would bind this command to
+        // the approval for `npm --registry install lodash`.
+        for (manager, args) in [
+            ("npm", t(&["--registry", "--silent", "install", "lodash"])),
+            ("pip", t(&["--index-url", "--quiet", "install", "requests"])),
+            (
+                "uv",
+                t(&["--config-file", "--verbose", "pip", "install", "x"]),
+            ),
+        ] {
+            assert_eq!(strip_manager_presentation_arguments(manager, &args), args);
+        }
+        // The reporting option itself still goes, wherever it sits.
+        assert_eq!(
+            strip_manager_presentation_arguments(
+                "npm",
+                &t(&["--registry", "--silent", "install", "-q", "lodash"])
+            ),
+            t(&["--registry", "--silent", "install", "lodash"]),
+        );
+    }
+
+    #[test]
+    fn a_value_option_at_the_end_keeps_its_place() {
+        let args = t(&["install", "lodash", "--registry"]);
+        assert_eq!(strip_manager_presentation_arguments("npm", &args), args);
     }
 
     #[test]

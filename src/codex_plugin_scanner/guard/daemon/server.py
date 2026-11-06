@@ -82,6 +82,7 @@ from ..native_directory_trust import (
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter, unreachable_writer_stats
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_process_stop_scope import native_process_stop_scope
 from ..native_resident_client import record_native_resident_client_failure_code
 from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
@@ -3816,11 +3817,14 @@ class GuardDaemonServer:
     def _command_activity_maintenance_loop(self) -> None:
         if self._shutdown_started.is_set():
             return
-        self._maintain_command_activity_best_effort()
-        storage_complete = self._maintain_storage_best_effort()
-        while not self._shutdown_started.wait(3_600 if storage_complete else 5):
+        # Shutdown joins this thread; cancel its native helpers and resident
+        # waits instead of waiting out a maintenance pass.
+        with native_process_stop_scope(self._shutdown_started):
             self._maintain_command_activity_best_effort()
             storage_complete = self._maintain_storage_best_effort()
+            while not self._shutdown_started.wait(3_600 if storage_complete else 5):
+                self._maintain_command_activity_best_effort()
+                storage_complete = self._maintain_storage_best_effort()
 
     def _start_onefile_extraction_reclaim(self) -> None:
         if not getattr(sys, "frozen", False):
