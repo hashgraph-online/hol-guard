@@ -157,14 +157,19 @@ pub(super) fn pre_tool_result(result: &Map<String, Value>, harness: &str, event:
         return false;
     };
     if let Some(extensions) = result.get("command_extensions") {
-        // The floor for an uncertain match is the evaluator's to choose; a
-        // structurally valid receipt only has to keep a failed evaluation off
-        // the allow path. A check that ran out of time settles at a review, so
-        // the agent gets a card with Allow once and Always allow rather than a
-        // block no approval can clear; anything at review or stronger still
-        // asks before the command runs.
+        // A failed evaluation never reaches the allow path, and only one kind
+        // of failure may settle at a review: a check that ran out of time,
+        // which the command layer always names in the reason code. That
+        // review gives the agent a card with Allow once and Always allow
+        // rather than a block no approval can clear. Every other failure, and
+        // anything stronger than a review, still stops the command here.
+        let failed_evaluation_is_reviewable = minimum == "review"
+            && field("reason_code").as_str()
+                == Some("native_command_extension_evaluation_timed_out");
         if validate_native_command_observations(extensions).is_none()
-            || (!extensions["evaluation_error"].is_null() && matches!(minimum, "allow" | "warn"))
+            || (!extensions["evaluation_error"].is_null()
+                && matches!(minimum, "allow" | "warn" | "review")
+                && !failed_evaluation_is_reviewable)
         {
             return false;
         }

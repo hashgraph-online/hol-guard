@@ -199,8 +199,34 @@ fn command_extension_evidence_must_be_bound_and_a_failed_evaluation_must_not_be_
     let failed = extension_evidence(Some("native_command_evaluation_failed"));
     assert!(accepted(&with_floor(failed.clone(), "deny", "block")));
     // A check that ran out of time settles at a review, so the card keeps
-    // Allow once and Always allow. The edge has to carry that result through.
-    assert!(accepted(&with_floor(failed.clone(), "deny", "review")));
+    // Allow once and Always allow. The edge has to carry that result through,
+    // and the command layer names the timeout in the reason code whenever it
+    // does.
+    let reasoned = |evidence: Value, minimum: &str, reason_code: &str| {
+        let mut result = with_floor(evidence, "deny", minimum);
+        result.insert("reason_code".to_owned(), Value::from(reason_code));
+        result
+    };
+    assert!(accepted(&reasoned(
+        failed.clone(),
+        "review",
+        "native_command_extension_evaluation_timed_out"
+    )));
+    // Only a timeout may settle at a review. Any other failed evaluation
+    // arriving at a review is a receipt the command layer does not produce,
+    // so the edge keeps refusing it rather than weakening the floor.
+    assert!(!accepted(&reasoned(
+        failed.clone(),
+        "review",
+        "native_command_extension_evaluation_failed"
+    )));
+    assert!(!accepted(&with_floor(failed.clone(), "deny", "review")));
+    // A stronger floor keeps its own reason: the edge asks nothing of it.
+    assert!(accepted(&reasoned(
+        failed.clone(),
+        "require-reapproval",
+        "native_command_extension_evaluation_failed"
+    )));
     assert!(!accepted(&with_floor(failed.clone(), "allow", "warn")));
     assert!(!accepted(&with_floor(failed, "allow", "allow")));
 
