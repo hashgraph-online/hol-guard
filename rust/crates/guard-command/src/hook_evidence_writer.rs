@@ -104,6 +104,14 @@ pub trait EvidenceStoreApi {
         seen_at: &str,
         proposals: &[ComposioWorkflowProposal],
     ) -> Result<(), io::Error>;
+    /// `store.add_event(event_name, payload, now)` — `Err` = persistence
+    /// failure.
+    fn record_guard_event(
+        &self,
+        event_name: &str,
+        payload: &Map<String, Value>,
+        occurred_at: &str,
+    ) -> Result<(), io::Error>;
     /// `store.record_native_decision_receipt(receipt)` — `Ok(false)` =
     /// deduped/rejected result; `Err` = persistence failure.
     fn record_native_decision_receipt(
@@ -785,6 +793,7 @@ pub enum EvidenceRecord {
     CommandActivity(CommandActivityRecord),
     NativeDecisionReceipt(NativeDecisionReceiptRecord),
     McpDiscovery(McpDiscoveryRecord),
+    GuardEvent(GuardEventRecord),
 }
 
 impl EvidenceRecord {
@@ -794,6 +803,7 @@ impl EvidenceRecord {
             Self::CommandActivity(record) => record.record_id.clone(),
             Self::NativeDecisionReceipt(record) => record.record_id(),
             Self::McpDiscovery(record) => record.record_id.clone(),
+            Self::GuardEvent(record) => record.record_id.clone(),
         }
     }
 
@@ -803,6 +813,7 @@ impl EvidenceRecord {
             Self::CommandActivity(record) => record.payload_bytes,
             Self::NativeDecisionReceipt(record) => record.payload_bytes,
             Self::McpDiscovery(record) => record.payload_bytes,
+            Self::GuardEvent(record) => record.payload_bytes,
         }
     }
 
@@ -812,6 +823,7 @@ impl EvidenceRecord {
             Self::CommandActivity(record) => record.serialized(),
             Self::NativeDecisionReceipt(record) => record.serialized(),
             Self::McpDiscovery(record) => record.serialized(),
+            Self::GuardEvent(record) => record.serialized(),
         }
     }
 
@@ -834,6 +846,9 @@ impl EvidenceRecord {
             }
             Some(EVIDENCE_SCHEMA) => {
                 _command_activity_record_from_json(value).map(Self::CommandActivity)
+            }
+            Some(guard_event::GUARD_EVENT_SCHEMA) => {
+                GuardEventRecord::from_json(value).map(Self::GuardEvent)
             }
             _ => None,
         }
@@ -1656,6 +1671,9 @@ impl EvidenceWorker {
                     EvidenceRecord::NativeDecisionReceipt(receipt_record) => {
                         self.persist_native_decision_receipt(receipt_record)
                     }
+                    EvidenceRecord::GuardEvent(event_record) => {
+                        self.persist_guard_event(event_record)
+                    }
                 };
                 let mut state = self.lock_state();
                 match outcome {
@@ -1988,6 +2006,11 @@ pub use receipt::{
 
 #[path = "hook_evidence_preview.rs"]
 mod preview;
+
+#[path = "hook_evidence_guard_event.rs"]
+mod guard_event;
+
+pub use guard_event::{GuardEventRecord, POLICY_SOURCE_FENCE_WINDOW_EVENT};
 
 pub use preview::{
     build_invocation_preview, build_invocation_preview_from_payload, checked_command_from_payload,

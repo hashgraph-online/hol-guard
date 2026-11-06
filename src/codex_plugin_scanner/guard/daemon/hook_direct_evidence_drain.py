@@ -121,8 +121,10 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     if _hook_harness_is_unmanaged(host, harness):
         # The daemon passes an unmanaged harness through without recording.
         return True
-    # A hook the resident held through a policy update's fence reports its wait.
-    record_direct_fence_wait(host.store, record.get("fence_wait_ms"))
+    # A hook the resident held through a policy update's fence reports its wait,
+    # unless a current resident recorded it with the receipt.
+    if record.get("fence_wait_recorded") is not True:
+        record_direct_fence_wait(host.store, record.get("fence_wait_ms"))
     # Activity may cite only a receipt the store will accept, which the resident checks on its page.
     checked = record.get("receipt_valid") is True
     accepted = dict(receipt) if checked and isinstance(receipt, dict) else None

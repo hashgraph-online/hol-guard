@@ -32,11 +32,19 @@ const READ_BYTES_BUDGET: usize = EVENT_BYTES_LIMIT;
 
 /// `add_event`: append one entry to the local event log. The caller sends the
 /// payload already encoded, so the stored text is exactly what `json.dumps`
-/// wrote.
+/// wrote. With `once`, an entry the log already holds is not added again, so
+/// the hook evidence writer can replay its journal after a crash.
 pub(crate) fn add_event(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
+    let sql = if args.flag("once")? {
+        "insert into guard_events (event_name, payload_json, occurred_at) \
+         select ?1, ?2, ?3 where not exists (select 1 from guard_events \
+         where event_name = ?1 and payload_json = ?2 and occurred_at = ?3)"
+    } else {
+        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)"
+    };
     exec(
         connection,
-        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+        sql,
         &[
             Value::from(args.str("event_name")?),
             Value::from(args.str("payload_json")?),

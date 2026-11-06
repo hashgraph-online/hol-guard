@@ -116,6 +116,13 @@ def test_a_drained_answer_that_waited_out_a_policy_update_leaves_a_window_event(
     assert host.activity_writer.receipts == [RECEIPT]
 
 
+def test_a_fence_wait_the_resident_recorded_leaves_no_second_window_event(tmp_path: Path) -> None:
+    host = _Host(tmp_path, store=_EventStore())
+    assert record_direct_hook_evidence(host, _record(fence_wait_ms=300, fence_wait_recorded=True))
+    assert host.store.events == []  # pyright: ignore[reportAttributeAccessIssue]
+    assert host.activity_writer.receipts == [RECEIPT]
+
+
 def test_a_drained_answer_without_a_wait_leaves_no_window_event(tmp_path: Path) -> None:
     host = _Host(tmp_path, store=_EventStore())
     assert record_direct_hook_evidence(host, _record())

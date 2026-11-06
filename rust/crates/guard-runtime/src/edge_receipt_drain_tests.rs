@@ -110,3 +110,43 @@ fn the_drain_finishes_an_activity_the_answer_left_behind_its_receipt() {
     assert_eq!(activities_accepted(&home), json!(2));
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
 }
+
+#[test]
+fn the_drain_records_a_fence_wait_once_as_the_daemon_window_would() {
+    let home = store_home("drain-records-fence-wait");
+    let store = rusqlite::Connection::open(home.join("guard.db")).unwrap();
+    store
+        .execute_batch(
+            "create table guard_events (event_id integer primary key autoincrement, \
+             event_name text not null, payload_json text not null, occurred_at text not null)",
+        )
+        .unwrap();
+    let (_, edge) = answered(&home, true);
+    let queue = DirectEvidenceQueue::default();
+    let mut record = allowed(&edge);
+    record["fence_wait_ms"] = json!(300);
+    assert!(offer_direct(&queue, &home, record, true));
+    let page = drained(&queue, &home, Some("guard"));
+    assert_eq!(page["records"][0]["fence_wait_recorded"], json!(true));
+    // A page sent again carries the mark and records no second window.
+    let again = drained(&queue, &home, Some("guard"));
+    assert_eq!(again["records"], page["records"]);
+    assert_eq!(receipts_accepted(&home), json!(1));
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+    let rows: Vec<(String, String, String)> = store
+        .prepare("select event_name, payload_json, occurred_at from guard_events")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let [(name, payload, occurred_at)] = rows.as_slice() else {
+        panic!("one window event, got {rows:?}");
+    };
+    assert_eq!(name, "policy_source_fence_window");
+    let payload: Value = serde_json::from_str(payload).unwrap();
+    assert_eq!(payload["ended_at"], json!(occurred_at));
+    assert_eq!(payload["absorbed_calls"], json!(1));
+    assert_eq!(payload["exhausted_calls"], json!(0));
+    assert!(payload["started_at"].as_str().unwrap() < occurred_at.as_str());
+}
