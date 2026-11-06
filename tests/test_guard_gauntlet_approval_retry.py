@@ -45,6 +45,7 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
         "approved-retry-env-prefixed-command",
         "approved-retry-reworded-command",
         "approved-retry-unbindable-command",
+        "approved-retry-persistent-shell-command",
         *BASH_LIFECYCLE_CASES,
         "approved-retry-environment-dump",
         "approved-retry-sourced-toolchain-init",

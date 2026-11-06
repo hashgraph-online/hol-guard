@@ -7,6 +7,8 @@ from __future__ import annotations
 import base64
 import contextlib
 import secrets
+import time
+from collections.abc import Mapping
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
@@ -18,10 +20,7 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
     layers_to_json,
 )
-from .runtime.extension_control_contract import (
-    ControlLayerKind,
-    ExtensionControlLayer,
-)
+from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
 from .runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlEnrollmentProof,
@@ -240,19 +239,22 @@ class ExtensionControlAuthorityCommitMixin:
                 # which omits an absent digest rather than sending null.
                 **({"pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
             }
-            pack_reserve: dict[str, object] = {}
+            reservation: Mapping[str, object] | None = None
             if pack_activation is not None:
                 from .catalog_delivery.activation_journal import reserve_request
 
                 with self._connect() as connection:
-                    pack_reserve["pack_reserve"] = reserve_request(
-                        self, connection, pack_activation, recorded_at=_now()
-                    )
+                    reservation = reserve_request(self, connection, pack_activation, recorded_at=_now())
             proof_already_consumed = False
             rollback_attempted = False
             for _ in range(_MAX_COMMIT_ROUNDS):
                 # The resident prepares the row, reserves the proof and any
                 # staged pack activation in the transaction that plans them.
+                # Each round checks the activation's admission at the time it
+                # reserves, so one that expired since an earlier round is refused.
+                pack_reserve: dict[str, object] = (
+                    {} if reservation is None else {"pack_reserve": {**reservation, "admitted_at": int(time.time())}}
+                )
                 plan = self._authority_plan(
                     "commit_prepare",
                     key=key,

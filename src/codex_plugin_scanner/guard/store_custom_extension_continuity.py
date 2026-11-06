@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .runtime.local_cli_commands import (
     OTHER_COMMAND_ID,
@@ -51,10 +51,19 @@ class CustomExtensionContinuityMutation:
     catalog_change_ids: Mapping[str, str] | None = None
 
 
+_CAPABILITY_ERRORS = frozenset(
+    {"invalid_capabilities", "capabilities_require_cli_surface", "capabilities_require_allowed_grant"}
+)
+
+
 class StoreCustomExtensionContinuityMixin:
     if TYPE_CHECKING:
 
         def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+
+        def _native_store_call(
+            self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
+        ) -> Any: ...
 
     def apply_custom_extension_continuity_transaction(
         self,
@@ -71,35 +80,69 @@ class StoreCustomExtensionContinuityMixin:
         capability_updates: Mapping[str, Mapping[str, str]] | None = None,
         catalog_reviews: Mapping[str, int] | None = None,
     ) -> int:
-        """Commit exact local authority, continuity state, and receipts together."""
+        """Commit exact local authority, continuity state, and receipts together.
+
+        The native store writes all of it in one ``begin immediate``. Payloads
+        and events are encoded here so the stored text is what ``json.dumps``
+        writes.
+        """
 
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
             change_ids = catalog_change_ids(connection, catalog_reviews or {})
-        mutation = CustomExtensionContinuityMutation(
-            expected_revision=expected_revision,
-            authority_updates=tuple(authority_updates),
-            sync_payloads=sync_payloads,
-            events=tuple(events),
-            updated_at=updated_at,
-            sync_preconditions=sync_preconditions or {},
-            observation_preconditions=observation_preconditions or {},
-            provider_updates=provider_updates,
-            catalog_seeds=catalog_seeds,
-            capability_updates=capability_updates,
-            catalog_reviews=catalog_reviews,
-            catalog_change_ids=change_ids,
-        )
-        with self._connect() as connection:
-            _ = connection.execute("begin immediate")
-            return apply_custom_extension_continuity_mutation_locked(
-                connection,
-                mutation,
-                boundary=self._custom_extension_continuity_transaction_boundary,
-            )
+        args: dict[str, object] = {
+            "expected_revision": expected_revision,
+            "updated_at": updated_at,
+            "updates": [
+                {
+                    "cli_id": identity.cli_id,
+                    "identity_hash": identity.identity_hash,
+                    "state": state,
+                    "command_states": dict(command_states),
+                }
+                for identity, state, command_states in authority_updates
+            ],
+            "provider_updates": {
+                cli_id: [list(update) for update in updates] for cli_id, updates in (provider_updates or {}).items()
+            },
+            "capability_updates": {cli_id: dict(choices) for cli_id, choices in (capability_updates or {}).items()},
+            "catalog_reviews": dict(catalog_reviews or {}),
+            "catalog_change_ids": change_ids,
+            "catalog_seeds": {
+                cli_id: [_command_wire(command) for command in commands]
+                for cli_id, commands in (catalog_seeds or {}).items()
+            },
+            "sync_preconditions": dict(sync_preconditions or {}),
+            "observation_preconditions": dict(observation_preconditions or {}),
+            "sync_payloads": {state_key: json.dumps(payload) for state_key, payload in sync_payloads.items()},
+            "events": [[event_name, json.dumps(payload)] for event_name, payload in events],
+        }
+        return _native_grant_write(self, "apply_custom_extension_continuity", args)
 
     def _custom_extension_continuity_transaction_boundary(self, _stage: str) -> None:
-        """Fault-injection seam; production deliberately performs no work here."""
+        """Fault-injection seam for the policy activation path; production does no work here."""
+
+
+def _command_wire(command: LocalCliCommand) -> dict[str, object]:
+    return {
+        "command_id": command.command_id,
+        "name": command.name,
+        "usage": command.usage,
+        "description": command.description,
+        "parent_id": command.parent_id,
+    }
+
+
+def _native_grant_write(store: Any, method: str, args: Mapping[str, object]) -> int:
+    try:
+        revision = store._native_store_call(method, args)
+    except ValueError as error:
+        if str(error) in _CAPABILITY_ERRORS:
+            raise LocalCliCapabilityError(str(error)) from error
+        raise
+    if type(revision) is not int:
+        raise ValueError("invalid local CLI row")
+    return revision
 
 
 def apply_custom_extension_continuity_mutation_locked(
@@ -108,7 +151,11 @@ def apply_custom_extension_continuity_mutation_locked(
     *,
     boundary: Callable[[str], None] = lambda _stage: None,
 ) -> int:
-    """Apply a preflighted mutation inside an existing immediate transaction."""
+    """Apply a preflighted mutation inside an existing immediate transaction.
+
+    Only policy activation still calls this, inside its own Python
+    transaction; ``apply_custom_extension_continuity_transaction`` is native.
+    """
 
     _validate_authority_updates(mutation.authority_updates)
     updated_ids = {identity.cli_id for identity, _, _ in mutation.authority_updates}

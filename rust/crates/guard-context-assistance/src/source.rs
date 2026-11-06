@@ -9,7 +9,9 @@ use sha2::{Digest, Sha256};
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
 
-const MAX_FILE_BYTES: usize = 65_536;
+/// A project's main module can pass 64 KiB; the file is still read whole,
+/// scanned for secrets whole and split into small documents.
+const MAX_FILE_BYTES: usize = 262_144;
 const CHUNK_BYTES: usize = 4_096;
 
 #[derive(Clone)]

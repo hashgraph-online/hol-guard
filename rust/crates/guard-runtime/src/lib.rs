@@ -280,6 +280,7 @@ mod context_assistance_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
 mod context_assistance_prompt_ignore;
+mod context_assistance_prompt_words;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -515,6 +516,7 @@ mod guard_store_connect_effective;
 #[cfg(test)]
 mod guard_store_connect_vectors_tests;
 mod guard_store_connector_context;
+mod guard_store_continuity_write;
 mod guard_store_db;
 mod guard_store_devices;
 mod guard_store_evidence;
