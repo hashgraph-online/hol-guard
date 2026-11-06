@@ -42,6 +42,9 @@ mod policy_clear;
 pub(crate) mod records;
 mod reset;
 mod resume;
+mod schema;
+#[cfg(test)]
+mod schema_tests;
 mod seals;
 #[cfg(test)]
 mod seals_tests;

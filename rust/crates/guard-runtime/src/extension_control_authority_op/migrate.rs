@@ -24,13 +24,11 @@ use serde_json::{json, Value};
 
 use super::chain::MIGRATED_EVENT;
 use super::layers::layers_from_values;
-use super::records::{
-    canonical, degraded, row_int, row_str, store_fault, tampered, Anchor, Phase, Res, Row,
-};
+use super::records::{canonical, row_int, row_str, store_fault, tampered, Anchor, Phase, Res, Row};
 use super::resume::immediate;
 use super::seals::anchor_json;
 use super::writes::open_writer;
-use super::{fault_value, Ctx, STORE_UNAVAILABLE};
+use super::{fault_value, Ctx};
 
 const INVALID_MIGRATION: &str = "invalid extension control catalog migration";
 const REGRESSED_EVENT: &str = "extension_control_authority_catalog_regressed";
@@ -39,8 +37,9 @@ pub(super) fn migrate_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,

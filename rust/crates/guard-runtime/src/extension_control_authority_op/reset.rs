@@ -26,8 +26,9 @@ const RESET_EVENT: &str = "extension_control_authority_reset";
 const INVALID: &str = "invalid extension control reset request";
 
 pub(super) fn reset_op(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     Ok(immediate(&connection, || reset(&connection, request))
         .unwrap_or_else(|fault| fault_value(&fault, Vec::new())))
@@ -39,8 +40,9 @@ pub(super) fn reset_op(request: &ExtensionControlAuthorityRequestV1) -> Result<V
 pub(super) fn abandon_bootstrap_op(
     request: &ExtensionControlAuthorityRequestV1,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let removed = connection.execute(
         "delete from extension_control_authority_snapshot where singleton = 1 and revision = 0",
