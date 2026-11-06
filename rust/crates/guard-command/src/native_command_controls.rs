@@ -449,11 +449,12 @@ impl CompiledNativeCommandControls {
             evaluation_error.is_some() && deadline_expired && !admin_disabled && !self.global_block,
         );
         self.enforce_quarantine(command, tool, &mut result);
-        floor::explain_home_redirect(&mut result, command, |probe| {
+        let evaluates = |probe: &CanonicalCommandV1| {
             self.observe_command(probe, deadline, context, environment)
                 .is_ok_and(|(batch, _)| batch.evaluation_error.is_none())
-        });
-        floor::explain_startup_shell(&mut result, command);
+        };
+        floor::explain_home_redirect(&mut result, command, &evaluates);
+        floor::explain_startup_shell(&mut result, command, &evaluates);
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding

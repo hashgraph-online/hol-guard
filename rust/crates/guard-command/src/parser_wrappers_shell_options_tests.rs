@@ -139,8 +139,10 @@ fn a_refused_shell_offers_plain_dash_c_only_when_guard_reads_it() {
         "bash -ic 'npm test'",
         "zsh -c 'git status'",
         "zsh -lc 'ls'",
+        "bash --rcfile team.rc -c 'ls'",
+        "bash -o posix -c 'ls'",
     ] {
-        assert!(super::refused_inline_shell(command), "{command}");
+        assert!(super::refused_inline_shell(command).is_some(), "{command}");
     }
     for command in [
         // Guard already reads these, so they are reviewed, not refused.
@@ -154,7 +156,12 @@ fn a_refused_shell_offers_plain_dash_c_only_when_guard_reads_it() {
         "fish -c 'ls'",
         "bash script.sh",
         "bash -lc 'ls' arg0",
+        // The last two words are arguments to an earlier script, or follow
+        // the end of the options, so they are no flag and script.
+        "bash -c 'git status' -lc 'ls'",
+        "bash -- -c ls",
+        "bash -o -c ls",
     ] {
-        assert!(!super::refused_inline_shell(command), "{command}");
+        assert_eq!(super::refused_inline_shell(command), None, "{command}");
     }
 }

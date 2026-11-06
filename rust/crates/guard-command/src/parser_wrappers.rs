@@ -362,39 +362,51 @@ pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
     Some(script.clone())
 }
 
-/// Whether this text is only a shell carrying a script under options Guard
-/// does not model, such as a login shell's `-lc`, a `--posix` or any `zsh`,
-/// while the same script under plain `bash -c` is one Guard reads. Those
-/// options run startup files or change how the script's words are read, so
-/// the invocation stays blocked; this only says whether a plain `-c` is a
-/// recovery that would be reviewed instead.
-pub(crate) fn refused_inline_shell(raw: &str) -> bool {
+/// The plain `bash -c` spelling of a shell carrying its script under options
+/// Guard does not model, such as a login shell's `-lc`, a `--posix` or any
+/// `zsh`, when Guard reads that spelling. Those options run startup files or
+/// change how the script's words are read, so the invocation stays blocked;
+/// this only names the spelling a caller may check as a recovery.
+///
+/// The options are walked in order: a `--`, a word that is not an option, or
+/// an earlier `-c` means the last two words are not the flag and its script.
+pub(crate) fn refused_inline_shell(raw: &str) -> Option<String> {
     if raw.len() > crate::MAX_COMMAND_BYTES
         || raw.contains(['$', '`', '\n', '\r'])
         || carries_unquoted_operator(raw)
-    {
-        return false;
-    }
-    let Ok(tokens) = crate::shell_tokens(raw, false) else {
-        return false;
-    };
-    let [shell, options @ .., flag, script] = tokens.as_slice() else {
-        return false;
-    };
-    let readable_shell = INLINE_SHELLS.contains(&shell.as_str()) || shell == "zsh";
-    let carries_flag =
-        flag.len() > 1 && !flag.starts_with("--") && flag.starts_with('-') && flag.contains('c');
-    if !readable_shell
-        || !carries_flag
-        || options
-            .first()
-            .is_some_and(|word| !word.starts_with(['-', '+']))
-        || script.contains('\'')
         || inline_shell_script(raw).is_some()
     {
-        return false;
+        return None;
     }
-    inline_shell_script(&format!("bash -c '{script}'")).is_some()
+    let tokens = crate::shell_tokens(raw, false).ok()?;
+    let [shell, options @ .., flag, script] = tokens.as_slice() else {
+        return None;
+    };
+    if !(INLINE_SHELLS.contains(&shell.as_str()) || shell == "zsh")
+        || !is_short_option(flag)
+        || !flag.contains('c')
+        || script.contains('\'')
+    {
+        return None;
+    }
+    let mut words = options.iter();
+    while let Some(word) = words.next() {
+        let takes_operand = match word.strip_prefix("--") {
+            Some(long) if !long.is_empty() => matches!(long, "rcfile" | "init-file"),
+            Some(_) => return None,
+            None if is_short_option(word) && !word.contains('c') => word.ends_with(['o', 'O']),
+            None => return None,
+        };
+        if takes_operand && words.next().is_none() {
+            return None;
+        }
+    }
+    let plain = format!("bash -c '{script}'");
+    inline_shell_script(&plain).map(|_| plain)
+}
+
+fn is_short_option(word: &str) -> bool {
+    word.len() > 1 && word.starts_with(['-', '+']) && !word.starts_with("--")
 }
 
 /// Whether an operator stands outside the quoting, where the shell reads it as

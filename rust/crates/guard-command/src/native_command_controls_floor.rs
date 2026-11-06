@@ -123,17 +123,29 @@ pub(super) fn explain_expired_deadline(result: &mut PreToolResultV1, deadline: O
 /// A shell carrying its script under a login, interactive or alias-changing
 /// option, or any `zsh`, runs code this text does not hold, so Guard keeps
 /// the block. The agent is told which options did that and offered the plain
-/// `bash -c` spelling, but only when that spelling of the same script is one
-/// Guard reads and reviews.
+/// `bash -c` spelling, but only when `matches` shows Guard evaluates that
+/// spelling of the same script, so the recovery it names is one that works.
 pub(super) fn explain_startup_shell(
     result: &mut PreToolResultV1,
     command: Option<&CanonicalCommandV1>,
+    matches: impl FnOnce(&CanonicalCommandV1) -> bool,
 ) {
-    if result.reason_code == "native_command_extension_evaluation_failed"
-        && command.is_some_and(|command| {
-            crate::parser_wrappers::refused_inline_shell(&command.normalized_text)
-        })
-    {
+    if result.reason_code != "native_command_extension_evaluation_failed" {
+        return;
+    }
+    let Some(command) = command else {
+        return;
+    };
+    let Some(text) = crate::parser_wrappers::refused_inline_shell(&command.normalized_text) else {
+        return;
+    };
+    let probe = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: text,
+        dialect: command.dialect.clone(),
+        transport: command.transport.clone(),
+        extraction_provenance: command.extraction_provenance.clone(),
+    });
+    if probe.is_ok_and(|probe| matches(&probe)) {
         result.reason = STARTUP_SHELL_REASON.to_owned();
     }
 }
