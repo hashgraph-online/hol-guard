@@ -27,6 +27,9 @@ const APPROVAL_REQUEST_ID_KEY: &str = "guardApprovalRequestId";
 const APPROVAL_URL_KEY: &str = "guardApprovalUrl";
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const GET_TIMEOUT_CAP: Duration = Duration::from_millis(1500);
+/// How long the daemon may hold one resolution read open. It stays below
+/// `GET_TIMEOUT_CAP`, so a held read is answered before the bridge gives up.
+const RESOLUTION_WAIT: Duration = Duration::from_millis(1000);
 const FINALIZE_TIMEOUT_CAP: Duration = Duration::from_secs(5);
 const FINALIZE_MAX_ATTEMPTS: usize = 3;
 /// `/requests/`, the fixed segment of `_REQUEST_URL_RE`.
@@ -319,19 +322,31 @@ fn pause(deadline: Instant) {
 
 /// `_poll_resolution(request_id=..., state_path=..., deadline=...)`. The
 /// id is `[A-Za-z0-9_-]`, which `quote(request_id, safe='')` keeps as is.
+///
+/// Each read asks the daemon to hold it open until the request is decided,
+/// for at most `RESOLUTION_WAIT`, so a decision reaches the hook as soon as it
+/// is committed rather than on the next poll. A read the daemon held open has
+/// already waited, and the next one is sent at once; a daemon that ignores
+/// `wait_ms` answers immediately and is polled as before.
 fn poll_resolution(state_path: &Path, request_id: &str, deadline: Instant) -> Option<Action> {
-    let path = format!("/v1/requests/{request_id}");
+    let path = format!(
+        "/v1/requests/{request_id}?wait_ms={}",
+        RESOLUTION_WAIT.as_millis()
+    );
     loop {
         if remaining(deadline) < POLL_INTERVAL {
             return None;
         }
+        let asked = Instant::now();
         let payload = approval_request(state_path, &path, None, capped(deadline, GET_TIMEOUT_CAP));
         if let Ok(Some(payload)) = payload {
             if let Some(action) = resolution_action(&payload) {
                 return Some(action);
             }
         }
-        pause(deadline);
+        if asked.elapsed() < POLL_INTERVAL {
+            pause(deadline);
+        }
     }
 }
 

@@ -151,6 +151,16 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_default_ssl_context() -> Iterator[None]:
+    """Keep a reused TLS context from crossing tests that stub trust sources."""
+    from codex_plugin_scanner.guard.mdm.network_trust import reset_default_ssl_context_cache
+
+    reset_default_ssl_context_cache()
+    yield
+    reset_default_ssl_context_cache()
+
+
+@pytest.fixture(autouse=True)
 def _python_codex_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """Install Codex hooks with the Python bridge argv unless a test opts in.
 
