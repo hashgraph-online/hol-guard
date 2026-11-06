@@ -362,20 +362,33 @@ pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
     Some(script.clone())
 }
 
-/// The words after the one carrying `-c`, when every other option letter in
-/// front of the script is one of [`INERT_SHELL_FLAGS`].
+/// The words after the one carrying `-c`, when every other option in front of
+/// the script is one the shell reads without changing what the script runs.
 ///
 /// `bash -ec 'npm test'`, `bash -ce 'npm test'` and `bash -e -c 'npm test'`
 /// all run the script `bash -c 'npm test'` runs: a bundled word sets each of
 /// its letters, and `-c` takes the script as the next word wherever in the
 /// bundle it sits. `-e` stops the script at its first failure and changes
-/// nothing about which programs the words name. The walk refuses any other
-/// letter, so `-l`, `-i`, `-s` and `-o` keep the paths they have.
+/// nothing about which programs the words name. `-o` takes the next word as
+/// an option name, so `bash -euo pipefail -c 'npm test'` is read only when `o`
+/// ends its bundle and that name is one of [`INERT_SET_OPTIONS`]. `--norc` and
+/// `--noprofile` only skip startup files, and bash reads a long option only in
+/// front of the short ones. The walk refuses anything else, so `-l`, `-i`,
+/// `-s`, `-O` and an `-o` naming any other option keep the paths they have.
 fn carries_script(words: &[String]) -> Option<&[String]> {
     let mut index = 0;
+    let mut short_seen = false;
     loop {
-        let word = words.get(index)?.strip_prefix('-')?;
+        let word = words.get(index)?;
         index += 1;
+        if let Some(long) = word.strip_prefix("--") {
+            if short_seen || !INERT_LONG_OPTIONS.contains(&long) {
+                return None;
+            }
+            continue;
+        }
+        let word = word.strip_prefix('-')?;
+        short_seen = true;
         if word.is_empty() {
             return None;
         }
@@ -386,8 +399,18 @@ fn carries_script(words: &[String]) -> Option<&[String]> {
             ),
             None => (word.to_string(), false),
         };
+        let (flags, names_option) = match flags.strip_suffix('o') {
+            Some(rest) if !closes => (rest, true),
+            _ => (flags.as_str(), false),
+        };
         if !flags.chars().all(|flag| INERT_SHELL_FLAGS.contains(flag)) {
             return None;
+        }
+        if names_option {
+            if !INERT_SET_OPTIONS.contains(&words.get(index)?.as_str()) {
+                return None;
+            }
+            index += 1;
         }
         if closes {
             return Some(&words[index..]);
@@ -399,6 +422,22 @@ fn carries_script(words: &[String]) -> Option<&[String]> {
 /// is or what the shell reads before running it: stop at the first failure,
 /// refuse an unset parameter, and trace what runs.
 const INERT_SHELL_FLAGS: &str = "eux";
+
+/// The names `-o` takes that leave every word of the script as written: fail a
+/// pipeline on any failing step, the long names of `-e`, `-u` and `-x`, echo
+/// each line read, and refuse to overwrite a file through `>`. `noglob`,
+/// `posix` and the rest change how words expand or parse, so they stay out.
+const INERT_SET_OPTIONS: &[&str] = &[
+    "pipefail",
+    "errexit",
+    "nounset",
+    "xtrace",
+    "verbose",
+    "noclobber",
+];
+
+/// The long options that only stop bash reading a startup file.
+const INERT_LONG_OPTIONS: &[&str] = &["norc", "noprofile"];
 
 /// Whether an operator stands outside the quoting, where the shell reads it as
 /// its own word.
@@ -535,6 +574,15 @@ mod tests {
             // `-c` takes the next word wherever it sits in the bundle.
             "bash -ce 'npm test'",
             "sh -x -c 'npm test'",
+            // `-o` with a name that leaves the script's words as written.
+            "bash -o pipefail -c 'npm test'",
+            "bash -euo pipefail -c 'npm test'",
+            "bash -eu -o pipefail -c 'npm test'",
+            "bash -o errexit -o nounset -c 'npm test'",
+            "sh -o noclobber -ec 'npm test'",
+            // Startup files bash would skip anyway for a `-c` script.
+            "bash --norc -c 'npm test'",
+            "bash --noprofile --norc -euo pipefail -c 'npm test'",
         ] {
             assert_eq!(
                 super::inline_shell_script(command).as_deref(),
@@ -555,10 +603,25 @@ mod tests {
             // zsh reads `~/.zshenv` whatever option it is given.
             "zsh -c 'npm test'",
             "zsh -ec 'npm test'",
-            // The script arrives on stdin, or an option takes a value this
-            // walk does not read.
+            // The script arrives on stdin, or an option changes how the
+            // script's words expand or parse.
             "bash -s -c 'npm test'",
-            "bash -o pipefail -c 'npm test'",
+            "bash -o noglob -c 'npm test'",
+            "bash -o posix -c 'npm test'",
+            "bash -O extglob -c 'npm test'",
+            "bash +o pipefail -c 'npm test'",
+            // `-o` needs its name as the next word, and `-c` in the same
+            // bundle leaves which word is which to the shell.
+            "bash -o -c 'npm test'",
+            "bash -oc pipefail 'npm test'",
+            "bash -oe pipefail -c 'npm test'",
+            // bash reads a long option only before the short ones, and these
+            // read a startup file or change the shell.
+            "bash -e --norc -c 'npm test'",
+            "bash --login -c 'npm test'",
+            "bash --rcfile ./rc -c 'npm test'",
+            "bash --posix -c 'npm test'",
+            "bash -- -c 'npm test'",
             // No `-c` at all, and no script to model.
             "bash -e 'npm test'",
             "bash -ec",
