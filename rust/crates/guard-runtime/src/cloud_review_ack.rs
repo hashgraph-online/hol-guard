@@ -24,7 +24,7 @@ const SUCCESS: [&str; 3] = ["accepted", "duplicate", "stale"];
 const KNOWN: [&str; 5] = ["accepted", "duplicate", "stale", "quarantined", "rejected"];
 /// Rejections that name their event so the store can rebase it: a snapshot
 /// that collided, or any event whose sequence Cloud already holds.
-const SEQUENCE_COLLISIONS: [&str; 2] = [
+pub(crate) const SEQUENCE_COLLISIONS: [&str; 2] = [
     "review_event_snapshot_sequence_collision",
     "review_event_sequence_conflict",
 ];

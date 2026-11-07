@@ -327,18 +327,56 @@ def test_recover_review_snapshot_sequences_rebases_any_event_of_a_restored_strea
     assert len(future) == 1 and future[0]["stream_sequence"] == 3795
 
 
-def test_recover_review_snapshot_sequences_keeps_ordinary_events_when_the_stream_is_current(tmp_path) -> None:
+def test_recover_review_snapshot_sequences_keeps_ordinary_events_above_the_cloud_mark(tmp_path) -> None:
     store, binding, before_rows = _seed_restored_stream(tmp_path)
     collisions = _snapshot_collision_ids(before_rows)
-    local_max = max(collisions)
 
-    for acknowledged_through in (0, local_max):
-        assert (
-            store.recover_review_snapshot_sequences(
-                collisions=collisions,
-                acknowledged_through=acknowledged_through,
-                binding=_plain_binding(binding),
-            )
-            == {}
+    assert (
+        store.recover_review_snapshot_sequences(
+            collisions=collisions,
+            acknowledged_through=0,
+            binding=_plain_binding(binding),
         )
+        == {}
+    )
     assert [row["stream_sequence"] for row in _all_events(store)] == sorted(collisions)
+
+
+def test_recover_review_snapshot_sequences_keeps_recovering_a_restored_stream_batch_after_batch(tmp_path) -> None:
+    store, binding, before_rows = _seed_restored_stream(tmp_path)
+    collisions = _snapshot_collision_ids(before_rows)
+    first, second, third = sorted(collisions)
+
+    assert store.recover_review_snapshot_sequences(
+        collisions={first: collisions[first], second: collisions[second]},
+        acknowledged_through=3791,
+        binding=_plain_binding(binding),
+    ) == {first: 3792, second: 3793}
+    # Cloud accepted the first batch, so its mark now covers the rebased events
+    # and the store's own maximum; the rest of the queue still reuses old sequences.
+    assert store.recover_review_snapshot_sequences(
+        collisions={third: collisions[third]},
+        acknowledged_through=3793,
+        binding=_plain_binding(binding),
+    ) == {third: 3794}
+
+
+def test_recover_review_snapshot_sequences_rebases_snapshots_beside_an_ordinary_event_above_the_mark(tmp_path) -> None:
+    store, binding, snapshot_rows = _seed_snapshot_sequence_collisions(tmp_path, acknowledged_through=20)
+    ordinary = next(
+        row
+        for row in _all_events(store)
+        if row["event_type"] == "review.request.created" and int(row["stream_sequence"]) > 20
+    )
+    collisions = _snapshot_collision_ids(snapshot_rows)
+    collisions[int(ordinary["stream_sequence"])] = str(ordinary["event_id"])
+
+    replacements = store.recover_review_snapshot_sequences(
+        collisions=collisions,
+        acknowledged_through=20,
+        binding=_plain_binding(binding),
+    )
+
+    assert replacements == dict(zip(range(34, 57), range(57, 80), strict=True))
+    kept = [row for row in _all_events(store) if row["event_id"] == ordinary["event_id"]]
+    assert [row["stream_sequence"] for row in kept] == [ordinary["stream_sequence"]]

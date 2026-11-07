@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
+use crate::cloud_review_ack::SEQUENCE_COLLISIONS;
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{query_one, text, value_error, StoreError, StoreResult};
 use crate::guard_store_outbox_binding::normalized_binding;
@@ -36,12 +37,6 @@ const BINDING_KEYS: [&str; 4] = [
     "machine_installation_id",
 ];
 
-/// The store rebases a snapshot collision, and any conflicting event once
-/// Cloud's mark shows the local stream was restored from an older copy.
-const SEQUENCE_COLLISIONS: [&str; 2] = [
-    "review_event_snapshot_sequence_collision",
-    "review_event_sequence_conflict",
-];
 const CORRELATION_REQUIRED: &str = "review_event_canonical_correlation_required";
 const CONTINUATION_MISMATCH: &str = "review_continuation_binding_mismatch";
 const RETRY_EXHAUSTED: &str = "review_event_retry_exhausted";
