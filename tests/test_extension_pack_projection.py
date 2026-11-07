@@ -36,6 +36,7 @@ def active(delivery):
     connection.row_factory = sqlite3.Row
     store = SimpleNamespace(
         guard_home=home,
+        path=home / "guard.db",
         _connect=lambda: connection,
         _authority_key=lambda *, required: b"a" * 32,
         _policy_integrity_secret_material=lambda *, create: (b"k" * 32, "test"),

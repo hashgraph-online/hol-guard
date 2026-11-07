@@ -21,6 +21,7 @@ from .agent_configuration import write_agent_configuration
 from .agent_prompt import fixture_authorization
 from .approval_retry_omp import OmpReview
 from .approval_retry_omp import enabled as approval_retry_enabled
+from .approval_retry_persistent import case_environment as approval_persistent_environment
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import (
@@ -304,6 +305,7 @@ def run_case(
             )
             case["guard_extension_sha256"] = digest_file(extension)
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
+            environment.update(approval_persistent_environment(scenario.id))
             if first_contact:
                 environment = realistic_environment(environment, fixture.home)
             if scenario.oracle == "watch-command":

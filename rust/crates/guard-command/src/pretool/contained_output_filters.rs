@@ -43,6 +43,17 @@ const CUT_VALUED: &[&str] = &["-b", "-c", "-f", "-d"];
 /// including a lone `-`, is a file `cat` opens, which `text_filter` refuses.
 const CAT_SWITCHES: &str = "AbeEnstTuv";
 
+#[path = "contained_sed_script.rs"]
+mod sed_script;
+
+/// `sed`'s own switches, none of which names anything to open: `-n` prints
+/// only what the script selects, `-E` and `-r` read the script's patterns as
+/// extended regular expressions, `-s` treats each input separately, `-u`
+/// drops buffering and `-z` separates lines by NUL. `-i` edits a file in
+/// place and `-f` reads the script out of one, so neither is a switch here
+/// and a word spelling either keeps the command's review.
+const SED_SWITCHES: &str = "Enrsuz";
+
 /// Whether `value` is a count small enough to be a filter's bound.
 fn bounded_count(value: &str) -> bool {
     !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
@@ -203,6 +214,12 @@ pub(in crate::pretool) fn rejoined_stage(program: &str, arguments: &[String]) ->
         // `tr` has no file operand at all: it reads standard input whatever it
         // is given, so its operands are the character sets they look like.
         "tr" => true,
+        // `sed` with no file operand reads standard input, and the stage runs
+        // under the sandbox's own shell inside the containment root -- the
+        // same place the same `sed` already runs when no directory change
+        // precedes it. Agents reach for `| sed -n '/BEGIN/,/END/p'` to cut
+        // one block out of a long runner log.
+        "sed" => sed_arguments(arguments),
         _ => false,
     }
 }
@@ -222,6 +239,63 @@ pub(in crate::pretool) fn rejoined_words(program: &str, arguments: &[String]) ->
                 .chars()
                 .any(|character| crate::pretool::sink_peel::ARGUMENT_REJECT.contains(character))
         })
+}
+
+/// Whether `sed <arguments>` reads only standard input: switches from
+/// [`SED_SWITCHES`], `-e SCRIPT` expressions, and one script operand unless
+/// `-e` already gave the script. Any further operand is a file `sed` opens,
+/// and a lone `-` is standard input spelled as one, which the peel cannot
+/// write back.
+///
+/// Counting operands is not enough on its own, because a `sed` script opens
+/// files and runs programs by itself: `r FILE` reads one, `w FILE` writes
+/// one and GNU `e COMMAND` runs a shell. Every script the command carries
+/// therefore goes through [`sed_script::text_filter_script`] as well.
+fn sed_arguments(arguments: &[String]) -> bool {
+    let mut expressions = 0usize;
+    let mut operands = 0usize;
+    let mut options_done = false;
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = arguments[index].as_str();
+        index += 1;
+        if argument == "-" {
+            return false;
+        }
+        if options_done || !argument.starts_with('-') {
+            operands += 1;
+            // The first operand is the script when no `-e` gave one; a
+            // second operand is a file, which the count below refuses.
+            if operands == 1 && expressions == 0 && !sed_script::text_filter_script(argument) {
+                return false;
+            }
+            continue;
+        }
+        if argument == "--" {
+            options_done = true;
+            continue;
+        }
+        if argument == "-e" {
+            let Some(script) = arguments.get(index) else {
+                return false;
+            };
+            if !sed_script::text_filter_script(script) {
+                return false;
+            }
+            index += 1;
+            expressions += 1;
+            continue;
+        }
+        let flags = argument.strip_prefix('-').unwrap_or_default();
+        if flags.is_empty() || !flags.chars().all(|flag| SED_SWITCHES.contains(flag)) {
+            return false;
+        }
+    }
+    if expressions > 0 {
+        operands == 0
+    } else {
+        operands == 1
+    }
 }
 
 /// Whether `arguments` are switches and bounded option values only.

@@ -31,7 +31,7 @@ from .runtime.extension_control_proof import (
     validate_extension_control_enrollment_proof,
     validate_extension_control_proof,
 )
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 from .store_extension_control_authority_support import _now, _plan_int, _plan_map
 
 # A commit re-reads at most once to roll back another request's abandoned
@@ -65,7 +65,7 @@ class ExtensionControlAuthorityCommitMixin:
         if not retained:
             with self._extension_control_authority_lock():
                 with self._connect() as connection:
-                    ensure_extension_control_authority_schema(connection)
+                    require_compatible_extension_control_schema(connection)
                 lifecycle_store.migrate_installed(self, installed)
         from .catalog_delivery.installed_upgrade import migrate_active
 
@@ -230,7 +230,7 @@ class ExtensionControlAuthorityCommitMixin:
             # An unknown schema version must refuse the write by name rather
             # than surface as a generic unavailable authority.
             with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
+                require_compatible_extension_control_schema(connection)
             commit = {
                 "actor_id": actor_id,
                 "idempotency_key": idempotency_key,

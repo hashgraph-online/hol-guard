@@ -277,6 +277,14 @@ evidence; it no longer recomputes the view or compares verdicts. A head the
 resident cannot read, or one whose managed policy has moved, refuses the
 migration with no Python fallback.
 
+Every resident writer op ensures the extension-control authority schema itself
+before it writes (`extension_control_authority_op/schema.rs`): it creates the
+missing tables and epoch triggers, moves the marker forward to the pack schema a
+reservation's record names, and refuses an unknown or forged marker by name. The
+triggers carry the exact text the Python epoch reader digests. Python's runtime
+callers only check the marker, without writing. Store initialization still runs
+the Python schema function.
+
 The inventory URL redaction now comes from the resident.
 `inventory_url_redaction_op` answers a batch of tasks through
 `inventory_redaction::redact_url`, `redact_headers` and

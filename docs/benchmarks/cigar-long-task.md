@@ -79,3 +79,90 @@ The Codex times include running the wrapped command itself, so they are an upper
 ### Gate G1
 
 G1 asks for paid -25% on both Codex and Claude Code with every check passing. Measured: Codex +7.9%, Claude Code -1.7%. Both miss by more than ten points with the shaping and re-read levers in place, so this track stops here, as the plan requires. Compaction was not added. Raising the cut on tool output further would not change this: on both harnesses the bill is driven by how many requests a session makes and how much fixed context each one re-reads, and a tool hook can change neither.
+
+## Prompt context
+
+Runs made on 2026-11-06 with a pre-release build of #7341 (3.60.0a22), same fixture, task, models and prices as above. This round changes what the agent is told, not what tools return. Guard's prompt hook adds a short note to each prompt:
+
+- where the code the prompt is about lives, as `path:line` pointers labeled with the enclosing definition;
+- for prompts about changes ("a teammate pushed", "review", "what broke"), the uncommitted diff and each commit since the session's first prompt, newest first, before the pointers. Git runs offline with no user config, and changed files pass Guard's secret screen first.
+
+The model, its reasoning level and every harness setting are the same as the control. Only the hooks differ:
+
+- **Codex (`map`):** Guard's prompt hook and its after-tool hook on `Bash`, `Read` and MCP tools.
+- **Claude Code (`claude-ctx`):** the control's settings plus Guard's `UserPromptSubmit` hook only. Each of the 30 prompts in the five runs got the note; no control prompt did.
+
+`arm-init` only makes the controls. The arms with the note were set up by hand:
+
+1. Install the Guard build under test in its own virtualenv. With `HOME` set to a scratch folder, set up context assistance there (`hol-guard context setup-python`, then `hol-guard context install`) and turn it on with workspace documents and agent context. Project scope is automatic, so the bench projects need no grant.
+2. Codex: run Guard's Codex install against the scratch home. In the scratch home's `.codex/config.toml`, keep only the hooks the arm uses and add the control's approval and sandbox settings. Make the arm's `codex_home` a symlink to that `.codex` folder and its `home` a symlink to the scratch home. Codex trusts a hook by a key that includes the resolved path of `config.toml`, so a copied file carries keys for the wrong path and Codex skips the hooks without saying so.
+3. Claude Code: copy the `claude-base` arm and add the `UserPromptSubmit` entry that Guard's Claude Code install writes for the scratch home to its `claude_settings.json`. The hook command must name the scratch Guard home, because Claude Code runs hooks with the real `HOME`.
+4. Before measuring, check one session's transcript for the note on every prompt.
+
+### Codex (gpt-6-luna, medium reasoning)
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | input $ | raw input | raw vs base | full-price in | cache read | cache write | output | requests | compactions | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base | 5 | 0 | yes | 0.0533 | +0.0% | 0.0449 | 3,456,946 | +0.0% | 115,147 | 3,341,798 | 0 | 16,755 | 66.0 | 0.0 | 112,911 |
+| map | 5 | 4 | NO | 0.0553 | +3.8% | 0.0462 | 3,312,160 | -4.2% | 145,261 | 3,166,899 | 0 | 18,203 | 59.6 | 0.0 | 119,069 |
+
+The four errored rows are earlier builds and are not counted: two ran with hooks Codex had not trusted, so Guard never ran, and two ran before #7341, when the change note came back empty in blobless clones like this fixture. They are also why "all pass" reads NO; the five counted runs all passed every check.
+
+Requests fell 10%, and in the two runs checked the step after a teammate's commit took three commands, but paid cost rose 3.8%. Per-run paid was $0.042, $0.085, $0.047, $0.050 and $0.052. The $0.085 run made 90 requests in all. Its final review step ran 302 seconds, against 32 to 136 for its other steps, while the agent ran its own full diff and five experiments. The other four runs averaged 52.0 requests. Full-price input also rose, from 115k to 145k tokens. That comes from provider cache misses of 4k to 27k tokens at random requests, which show up in every arm: full-price input ranges from 75k to 186k between runs of the same arm. At five runs that noise is as large as the effect.
+
+### Claude Code (claude-haiku-4-5)
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | input $ | raw input | raw vs base | full-price in | cache read | cache write | output | requests | compactions | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| claude-base | 5 | 0 | NO | 3.1286 | +0.0% | 2.7938 | 23,745,231 | +0.0% | 1,768 | 23,523,619 | 219,844 | 66,963 | 219.2 | 1.0 | 181,451 |
+| claude-ctx | 5 | 0 | NO | 2.4102 | -23.0% | 2.1320 | 18,037,774 | -24.0% | 1,436 | 17,864,255 | 172,082 | 55,638 | 178.0 | 0.2 | 118,872 |
+
+Paid cost fell 23%, with 19% fewer requests and 34% fewer characters of file reads. Per-run paid was $2.80 to $3.40 for the control and $1.93 to $2.87 with the note; four of the five runs with the note cost less than the cheapest control run.
+
+Every run in both arms passed the full suite and two of the three acceptance checks. The third, `t2`, failed two of its four cases in three control runs and in four runs with the note. That is Haiku's limit on this task, as in the shaping round. It also means one run with the note passed every check against two control runs, so read the 23% as cost per attempted task, not savings for the same finished work.
+
+One control run is not in the table: in its first attempt the agent's edits made the suite hang, steps two to four each hit the bench's ten-minute limit and no usage row was written. It was run again from a clean copy.
+
+### Codex, second round (gpt-6-luna, medium reasoning)
+
+The first Codex round differed from the Claude Code one in two ways: the `map` arm also ran Guard's after-tool hook, and five runs were too few against the cache-miss noise. The second round, also on 2026-11-06 with the same build, ran eight runs per arm. The `ctx` arm has Guard's `UserPromptSubmit` hook only, like `claude-ctx`, and four sessions ran at a time.
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | input $ | raw input | raw vs base | full-price in | cache read | cache write | output | requests | compactions | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base | 8 | 0 | yes | 0.0587 | +0.0% | 0.0501 | 3,785,213 | +0.0% | 136,269 | 3,648,944 | 0 | 17,177 | 71.5 | 0.0 | 116,684 |
+| ctx | 8 | 0 | yes | 0.0505 | -14.0% | 0.0424 | 3,113,904 | -17.7% | 125,536 | 2,988,368 | 0 | 16,115 | 64.5 | 0.0 | 109,658 |
+
+All 16 runs passed every check. Per-run paid, sorted, was $0.0491, $0.0524, $0.0544, $0.0581, $0.0588, $0.0590, $0.0615 and $0.0765 for the control, and $0.0365, $0.0433, $0.0465, $0.0503, $0.0507, $0.0533, $0.0565 and $0.0668 with the note. An exact permutation test on the means (see [How the tests were run](#how-the-tests-were-run)) gives p ≈ 0.04 one-sided and ≈ 0.08 two-sided, and a bootstrap 90% interval for the change runs from -24% to -3%. Requests that re-sent more than 3,000 tokens at full price, the cache misses that swamped the first round, averaged 12.4 per control run and 11.0 per run with the note. The saving comes from fewer requests, not from cache luck.
+
+The first round's +3.8% did not hold up. This round does not say whether the after-tool hook or the small sample caused it.
+
+### Oh My Pi (gpt-6-luna, medium thinking)
+
+Oh My Pi 18.12.3 through its `openai-codex` provider, same fixture, task, checks and prices, eight runs per arm, four sessions at a time. The bench script does not drive Oh My Pi, so these runs used a separate local driver:
+
+- Each step starts `omp --mode rpc --model openai-codex/gpt-6-luna --thinking medium --session-dir <per-run folder> --no-lsp --no-extensions -e <extension>`, writes `{"type": "prompt", "message": <step prompt>}` as one line on stdin, and reads events until one has type `session_settled`; steps two to six add `-c` to resume. Print mode (`omp -p`) does not fire the extension's `input` event, so Guard adds no note there.
+- Both arms load Guard's extension once by path, with discovery off (`--no-extensions -e <path>`). The control's copy of the installed extension differs in one setting: both places that send `guard_prompt_context: true` to Guard send `false` instead. Nothing else differs.
+- Usage comes from the session file: one assistant entry per model request, with input, cache reads and output.
+- The driver uses the bench script's fixture copy, teammate commit and per-step checks, so only the harness differs.
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | input $ | raw input | raw vs base | full-price in | cache read | cache write | output | requests | compactions | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| omp-base | 8 | 1 | NO | 0.1347 | +0.0% | 0.1241 | 10,770,036 | +0.0% | 182,036 | 10,588,000 | 0 | 21,237 | 149.8 | 0.0 | 195,790 |
+| omp-ctx | 8 | 0 | yes | 0.1297 | -3.7% | 0.1182 | 9,830,882 | -8.7% | 220,658 | 9,610,224 | 0 | 23,121 | 136.6 | 0.0 | 209,184 |
+
+The errored control row is a run where the model looped on step one, streaming the same text until the driver was stopped. It is not counted, and it is why "all pass" reads NO; it was run again from a clean copy. All 16 counted runs passed every check.
+
+Paid cost fell 3.7%, which is well inside the noise. Per-run paid, sorted, was $0.1001, $0.1001, $0.1021, $0.1076, $0.1312, $0.1611, $0.1796 and $0.1958 for the control, and $0.1017, $0.1203, $0.1209, $0.1222, $0.1264, $0.1339, $0.1369 and $0.1756 with the note. The one-sided permutation p is 0.38 (0.75 two-sided), and the bootstrap 90% interval runs from -19% to +16%. Requests fell 9%, but read output rose 7%. With the note the agent opened the lines it pointed to and still explored on its own, making 55 file reads per run against 52. Full-price input rose 21%, from more provider cache misses in the middle of steps (21.5 per run against 16). On the first request of each step, where the note goes, misses were the same in both arms. Prompts got the note 47 times out of 48. The one miss came when Guard took about three seconds under load and the extension went ahead without it.
+
+An Oh My Pi session cost about 2.3 times a Codex session on the same model: about 150 requests, each re-reading about 70,000 tokens.
+
+### How the tests were run
+
+Both eight-run rounds use the per-run paid costs listed above.
+
+- **Permutation test:** take all 12,870 ways to split the 16 costs into two groups of eight. For each split, compute the mean of one group minus the mean of the other. The one-sided p is the share of splits whose difference is at most the observed one (note minus control). The two-sided p is the share whose absolute difference is at least the observed one.
+- **Bootstrap interval:** resample each arm's eight costs with replacement 20,000 times. Each time, take the ratio of the means minus one. The 5th and 95th percentiles give the 90% interval.
+
+### What this shows
+
+On Claude Code, telling the agent where the code is and what changed cut the bill by about a quarter, because sessions made fewer requests and each request re-read less. On Codex the same note cut the bill by 14% over eight runs a side, again through fewer requests. The first five-run Codex round did not show it. That round also ran the after-tool hook, and Codex cache misses swing the cost of these short sessions by about as much as the saved requests do; these runs do not say which of the two hid the saving. On Oh My Pi the note cut requests a little and did not cut the bill: the agent read more, not less.

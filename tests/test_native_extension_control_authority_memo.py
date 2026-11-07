@@ -50,6 +50,7 @@ _WRITER_SOURCES = frozenset(
         "policy_clear.rs",
         "reset.rs",
         "resume.rs",
+        "schema.rs",
         "writes.rs",
     }
 )

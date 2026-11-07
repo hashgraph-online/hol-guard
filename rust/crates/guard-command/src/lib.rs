@@ -197,6 +197,7 @@ pub mod package_intent_common;
 pub mod package_intent_parser;
 pub mod package_manager_command;
 pub mod package_manifest_diff;
+pub mod package_manifest_sections;
 #[cfg(not(guard_source_bootstrap))]
 mod packaged_blob;
 mod parser_brace_command;

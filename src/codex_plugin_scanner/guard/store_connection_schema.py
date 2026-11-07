@@ -17,6 +17,7 @@ from . import (
     store_review_event_outbox_schema,
     store_storage_gate,
 )
+from .cloud_sync_busy import GuardCloudSyncBusyError
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_deadline_connection import DeadlineConnection
@@ -538,6 +539,7 @@ class StoreConnectionSchemaMixin:
             timeout_seconds=timeout_seconds,
             poll_seconds=_CLOUD_SYNC_LOCK_POLL_SECONDS,
             timeout_message="Timed out waiting for Guard Cloud sync lock.",
+            timeout_error=GuardCloudSyncBusyError,
         ):
             yield
 
@@ -633,6 +635,7 @@ class StoreConnectionSchemaMixin:
         timeout_seconds: float,
         poll_seconds: float,
         timeout_message: str,
+        timeout_error: type[TimeoutError] = TimeoutError,
     ) -> Iterator[None]:
         deadline = time.monotonic() + max(timeout_seconds, 0.0)
         with path.open("a+b") as handle:
@@ -642,7 +645,7 @@ class StoreConnectionSchemaMixin:
                     break
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
-                        raise TimeoutError(timeout_message) from None
+                        raise timeout_error(timeout_message) from None
                     time.sleep(poll_seconds)
             try:
                 yield

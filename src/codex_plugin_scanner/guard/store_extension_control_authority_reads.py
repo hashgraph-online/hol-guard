@@ -25,7 +25,7 @@ from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -310,7 +310,7 @@ class ExtensionControlAuthorityReadsMixin:
         """
 
         with self._connect() as connection:
-            if not ensure_extension_control_authority_schema(connection, require_compatible=False):
+            if not require_compatible_extension_control_schema(connection, require_compatible=False):
                 return self._degraded_view(catalog_digest), None
         try:
             return self._read_through_resident(

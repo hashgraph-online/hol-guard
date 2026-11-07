@@ -14,6 +14,7 @@ exception the Python store used to raise for it.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from collections.abc import Mapping
@@ -88,6 +89,27 @@ def extension_control_authority(
     material as the caller.
     """
 
+    return _authority_request(
+        store_path=store_path,
+        guard_home=guard_home,
+        op=op,
+        key=key,
+        store=store,
+        timeout_seconds=_TIMEOUT_SECONDS,
+        fields=fields,
+    )
+
+
+def _authority_request(
+    *,
+    store_path: Path,
+    guard_home: Path,
+    op: str,
+    key: bytes | None,
+    store: GuardStore | None,
+    timeout_seconds: float,
+    fields: Mapping[str, object],
+) -> dict[str, object]:
     wire: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"extension-control-authority-{uuid4().hex}",
@@ -117,7 +139,7 @@ def extension_control_authority(
             operation="extension_control_authority",
             request=wire,
             guard_home=guard_home,
-            timeout_seconds=_TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
             required_feature=_required_feature(op),
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
@@ -130,6 +152,34 @@ def extension_control_authority(
         raise NativeExtensionControlAuthorityUnavailableError()
     memo.keep(memo_key, payload)
     return payload
+
+
+def write_private_state(
+    store: GuardStore, name: str, payload: bytes, *, timeout_seconds: float = _TIMEOUT_SECONDS
+) -> str | None:
+    """Have the resident publish one native runtime authority file.
+
+    The resident writes ``payload`` atomically under ``name`` and reads it back
+    byte for byte. Returns ``None`` once written, or the code it refused with.
+    ``timeout_seconds`` lets a caller bound the write by its own deadline.
+    """
+
+    guard_home = Path(store.guard_home)
+    reply = _authority_request(
+        store_path=guard_home / "guard.db",
+        guard_home=guard_home,
+        op="write_private_state",
+        key=None,
+        store=store,
+        timeout_seconds=timeout_seconds,
+        fields={"state": {"name": name, "content_b64": base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")}},
+    )
+    error = reply.get("error")
+    if error is not None:
+        return str(error)
+    if reply.get("written") is not True:
+        raise NativeExtensionControlAuthorityUnavailableError()
+    return None
 
 
 def _required_feature(op: str) -> str:
@@ -146,7 +196,9 @@ def _required_feature(op: str) -> str:
         "record_migration",
         "reset",
         "write_anchor",
+        "write_command_marker",
         "write_manifest",
+        "write_private_state",
     }:
         return EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE
     return EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE if op in _WRITE_OPS else EXTENSION_CONTROL_AUTHORITY_FEATURE

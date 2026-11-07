@@ -150,3 +150,78 @@ def test_reads_beyond_the_held_limit_answer_at_once(tmp_path: Path, monkeypatch)
     wait_for_request_resolution(store, "req-limit", approval, 1.0, monotonic=monotonic)
     assert wait_module._held_reads.acquire(blocking=False)
     wait_module._held_reads.release()
+
+
+def test_a_hooks_first_read_of_its_pending_request_wakes_cloud_review_delivery_once(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # The hook's process commits the request, so this daemon's sync worker
+    # hears nothing until the hook asks about it.
+    monkeypatch.setattr(wait_module, "RESOLUTION_RECHECK_SECONDS", 0.01)
+    store = _ScriptedStore(tmp_path / "guard.db", "req-first-read")
+    signal = review_event_wake_signal(store.path)
+    approval = store.get_approval_request("req-first-read")
+    assert approval is not None
+
+    before = signal.generation()
+    wait_for_request_resolution(store, "req-first-read", approval, 0.02)
+    after_first = signal.generation()
+    wait_for_request_resolution(store, "req-first-read", approval, 0.02)
+
+    assert after_first == before + 1
+    assert signal.generation() == after_first
+
+
+def test_reads_that_cannot_need_delivery_do_not_wake_the_sync_worker(tmp_path: Path) -> None:
+    store = _ScriptedStore(tmp_path / "guard.db", "req-quiet")
+    signal = review_event_wake_signal(store.path)
+    approval = store.get_approval_request("req-quiet")
+    assert approval is not None
+    before = signal.generation()
+
+    # A read that asked for no wait is a dashboard read, not a waiting hook.
+    wait_for_request_resolution(store, "req-quiet", approval, 0.0)
+    store.resolve()
+    resolved = store.get_approval_request("req-quiet")
+    assert resolved is not None
+    wait_for_request_resolution(store, "req-quiet", resolved, 0.5)
+
+    assert signal.generation() == before
+
+
+def test_the_record_of_woken_requests_stays_bounded(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(wait_module, "MAX_WOKEN_REQUESTS", 2)
+    monkeypatch.setattr(wait_module, "_woken_requests", wait_module.OrderedDict())
+    signal_path = tmp_path / "guard.db"
+    signal = review_event_wake_signal(signal_path)
+    before = signal.generation()
+    for request_id in ("req-a", "req-b", "req-c", "req-a"):
+        store = _ScriptedStore(signal_path, request_id)
+        approval = store.get_approval_request(request_id)
+        assert approval is not None
+        wait_for_request_resolution(store, request_id, approval, 0.01)
+
+    # req-a was evicted by req-c, so its later read wakes again.
+    assert signal.generation() == before + 4
+    assert len(wait_module._woken_requests) == 2
+
+
+def test_a_first_read_wakes_delivery_even_when_every_held_slot_is_busy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(wait_module, "_held_reads", threading.BoundedSemaphore(1))
+    store = _ScriptedStore(tmp_path / "guard.db", "req-busy-wake")
+    signal = review_event_wake_signal(store.path)
+    approval = store.get_approval_request("req-busy-wake")
+    assert approval is not None
+    assert wait_module._held_reads.acquire(blocking=False)
+    try:
+        before = signal.generation()
+        started = time.monotonic()
+        result = wait_for_request_resolution(store, "req-busy-wake", approval, 5.0)
+        elapsed = time.monotonic() - started
+    finally:
+        wait_module._held_reads.release()
+
+    # The read is answered at once, yet the sync worker still hears about it.
+    assert result == approval
+    assert elapsed < 1.0
+    assert signal.generation() == before + 1

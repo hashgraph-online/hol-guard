@@ -13,7 +13,6 @@ from ..native_command_control_authority_io import require_exclusive_command_cont
 from ..native_command_control_authority_store import _key
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from . import activation_baseline, lifecycle_store
-from .activation_record import SCHEMA_V2
 from .activation_store import directory_for_store
 from .activation_transition import ActivationDraft
 
@@ -25,8 +24,8 @@ class UnverifiablePackTransitionError(NativePolicySnapshotError):
 def reserve_request(store, connection, draft, *, recorded_at, now=None):
     """The ``pack_reserve`` the resident checks ``draft`` against and reserves.
 
-    The schema marker is upgraded here. The resident retains the legacy
-    baseline in an empty slot, authenticates the draft and checks it against
+    The resident moves the schema marker to the pack schema the draft names,
+    retains the legacy baseline in an empty slot, authenticates the draft and checks it against
     the protected floor, the active security scope and the active slot it
     extends.
     """
@@ -35,7 +34,7 @@ def reserve_request(store, connection, draft, *, recorded_at, now=None):
         raise NativePolicySnapshotError("native_command_pack_draft_invalid")
     key = _key(store)
     try:
-        format_v2 = json.loads(draft.data).get("schema") == SCHEMA_V2
+        _ = json.loads(draft.data).get("schema")
     except (AttributeError, ValueError):
         raise NativePolicySnapshotError("native_command_pack_draft_invalid") from None
     baseline = None
@@ -44,10 +43,8 @@ def reserve_request(store, connection, draft, *, recorded_at, now=None):
             raise NativePolicySnapshotError("native_command_pack_baseline_missing")
         baseline = activation_baseline.baseline_request(connection, draft.baseline_metadata, recorded_at=recorded_at)
     from ..native_store_policy import encode_key
-    from ..store_extension_control_authority_schema import ensure_extension_control_authority_schema
     from .active_security import read as read_security
 
-    ensure_extension_control_authority_schema(connection, activate_packs=True, activation_format_v2=format_v2)
     fields = {
         "key_b64": encode_key(key),
         "floor": lifecycle_store.read(store),

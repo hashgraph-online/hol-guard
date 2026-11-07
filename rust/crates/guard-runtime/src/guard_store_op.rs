@@ -477,6 +477,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
+        // One consistent view of the request and the allow issued for it.
+        "peek_waited_exact_cloud_package_allow" => Kind::Snapshot,
+        "consume_waited_exact_cloud_package_allow" => Kind::Write,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
@@ -852,6 +855,12 @@ fn dispatch(
             crate::guard_store_exact_cloud_apply::apply_signed_remote_exact_result(
                 connection, guard_home, args, owner,
             )
+        }
+        "peek_waited_exact_cloud_package_allow" => {
+            crate::guard_store_exact_cloud_package::peek(connection, args)
+        }
+        "consume_waited_exact_cloud_package_allow" => {
+            crate::guard_store_exact_cloud_package::consume(connection, args)
         }
         "record_local_once_approval" => {
             crate::guard_store_local_once_mint::record_local_once_approval(connection, args)

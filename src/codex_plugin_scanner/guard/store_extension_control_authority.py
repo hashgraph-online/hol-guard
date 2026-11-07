@@ -21,7 +21,7 @@ from .store_base import SecretStore
 from .store_extension_control_authority_catalog import ExtensionControlAuthorityCatalogMixin
 from .store_extension_control_authority_commit import ExtensionControlAuthorityCommitMixin
 from .store_extension_control_authority_reads import ExtensionControlAuthorityReadsMixin
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 from .store_extension_control_authority_support import (
     _now,
     _row_int,
@@ -69,7 +69,7 @@ class StoreExtensionControlAuthorityMixin(
                 if restored_view is not None:
                     return restored_view
             with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
+                require_compatible_extension_control_schema(connection)
                 snapshot = connection.execute(
                     "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
                 ).fetchone()
@@ -161,7 +161,7 @@ class StoreExtensionControlAuthorityMixin(
         migration_registry: CommandSafetyExtensionRegistry | None,
     ) -> ExtensionControlAuthorityView | None:
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
             snapshot_missing = (
                 connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
                 is None
@@ -186,7 +186,7 @@ class StoreExtensionControlAuthorityMixin(
 
         warnings: list[str] = []
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
             row = connection.execute(
                 "select layers_json from extension_control_authority_snapshot where singleton = 1"
             ).fetchone()
@@ -228,7 +228,7 @@ class StoreExtensionControlAuthorityMixin(
         if key is None:
             self._secret_store().set_secret(self._key_ref(), base64.urlsafe_b64encode(recovered_key).decode())
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
         # The resident archives every row whose chain cannot be verified and
         # empties the authority in one transaction. The catalog manifests the
         # lost key authenticated cannot be reused under the new one; managed

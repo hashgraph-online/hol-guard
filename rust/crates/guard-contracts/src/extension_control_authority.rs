@@ -77,7 +77,8 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
     /// `bootstrap`, `commit_prepare`, `resume`, `migrate`, `write_manifest`,
     /// `queue_change`, `apply_policy`, `apply_review_memory`, `clear_policy`,
-    /// `write_anchor`, `seal_managed_revision`, `seal_managed_activation` or `anchor`.
+    /// `write_anchor`, `seal_managed_revision`, `seal_managed_activation`,
+    /// `write_command_marker`, `write_private_state` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
     /// when the credential store holds none.
@@ -120,6 +121,10 @@ pub struct ExtensionControlAuthorityRequestV1 {
     /// `managed_activation` / `managed_revision`: the decoded state value.
     /// `managed_activation` checks it against `catalog_digest`, or against
     /// the catalog the state names when that is absent.
+    /// `write_command_marker`: the command-control authority marker to sign,
+    /// without its MAC.
+    /// `write_private_state`: `name`, one of the native runtime authority
+    /// files, and `content_b64`, its exact bytes (base64url, no padding).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<Value>,
     /// `validate_chain`: the committed head to validate up to.

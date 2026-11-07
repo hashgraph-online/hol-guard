@@ -11,10 +11,10 @@ use guard_contracts::{ExtensionControlAuthorityRequestV1, ExtensionControlReview
 use serde_json::{json, Value};
 
 use super::policy_apply::row_values;
-use super::records::{degraded, tampered, Res};
+use super::records::{tampered, Res};
 use super::resume::immediate;
 use super::writes::open_writer;
-use super::{fault_value, Ctx, STORE_UNAVAILABLE};
+use super::{fault_value, Ctx};
 
 /// The `sync_state` keys a memory publish writes.
 const PAYLOAD_KEYS: [&str; 3] = [
@@ -28,8 +28,9 @@ pub(super) fn apply_review_memory_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,

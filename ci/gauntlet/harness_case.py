@@ -21,8 +21,11 @@ from .approval_retry_marker import CASE as APPROVAL_MARKER_CASE
 from .approval_retry_marker import collect as collect_approval_marker
 from .approval_retry_marker import stage as stage_approval_marker
 from .approval_retry_persistent import CASE as APPROVAL_PERSISTENT_CASE
+from .approval_retry_persistent import PACKAGE_CASE as APPROVAL_PERSISTENT_PACKAGE_CASE
+from .approval_retry_persistent import case_environment as approval_persistent_environment
 from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
+from .approval_retry_persistent import write_package_review_config
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
@@ -228,10 +231,14 @@ def run_harness_case(
                 # path has no other way in, because a hard block never queues an approval.
                 # A case whose repeated action is a file-tool call needs the default floor;
                 # the subprocess floor the shell cases raise never reaches a file tool.
-                case["review_policy"] = write_review_config(
-                    guard_home,
-                    file_tool="bash" not in scenario.required_tools,
-                    intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
+                case["review_policy"] = (
+                    write_package_review_config(guard_home)
+                    if scenario.id == APPROVAL_PERSISTENT_PACKAGE_CASE
+                    else write_review_config(
+                        guard_home,
+                        file_tool="bash" not in scenario.required_tools,
+                        intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
+                    )
                 )
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
@@ -290,6 +297,7 @@ def run_harness_case(
             environment = harness_environment(
                 spec, fixture.home, private / "agent", fixture.canary, login_environment, realistic=realistic
             )
+            environment.update(approval_persistent_environment(scenario.id))
             if (
                 scenario.oracle == "blocked-extension"
                 or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES | EXTENSION_ALLOW_CASES

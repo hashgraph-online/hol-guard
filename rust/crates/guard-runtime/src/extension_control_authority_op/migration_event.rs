@@ -15,18 +15,19 @@ use serde_json::{json, Value};
 
 use super::layers::layers_from_json;
 use super::migrate::event_rows;
-use super::records::{degraded, query_row, row_int, row_str, tampered, Res};
+use super::records::{query_row, row_int, row_str, tampered, Res};
 use super::resume::immediate;
 use super::writes::open_writer;
-use super::{fault_value, Ctx, STORE_UNAVAILABLE};
+use super::{fault_value, Ctx};
 
 const INVALID: &str = "invalid extension control migration event request";
 
 pub(super) fn record_migration_op(
     request: &ExtensionControlAuthorityRequestV1,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,
