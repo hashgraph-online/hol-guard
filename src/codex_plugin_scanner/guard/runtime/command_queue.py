@@ -565,12 +565,7 @@ def poll_command_queue_once(
                 "failureMessage": _redacted_error(error),
             }
     if acknowledgement is not None:
-        acknowledgement_error = acknowledgement()
-        if acknowledgement_error is not None:
-            _LOGGER.warning(
-                "Guard Review acknowledgement failed; posting the result: error=%s",
-                _redacted_error(acknowledgement_error),
-            )
+        acknowledgement()
     payload = _result_payload(item, execution)
     refused: urllib.error.HTTPError | None = None
     # Posting the result refreshes the job's heartbeat on the server, so a

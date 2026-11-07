@@ -18,13 +18,17 @@ acknowledgement round trip.
 from __future__ import annotations
 
 import contextvars
+import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
 from ..store import GuardStore
 from .command_capability import AuthorizedCommandJob
+from .command_queue_http import format_redacted_error
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 from .native_workspace_review_queue import is_native_workspace_review_job
+
+_LOGGER = logging.getLogger(__name__)
 
 Authorize = Callable[[GuardStore, dict[str, object]], AuthorizedCommandJob]
 
@@ -61,13 +65,14 @@ def start_command_authorization(
 def start_overlapped_acknowledgement(
     job: dict[str, object],
     acknowledge: Callable[[], None],
-) -> Callable[[], BaseException | None] | None:
+) -> Callable[[], None] | None:
     """Send ``job``'s acknowledgement on a worker thread when it may overlap settlement.
 
     Returns ``None`` when the acknowledgement has to finish before the job
-    runs. Otherwise the returned call waits for the acknowledgement and hands
-    back its failure, if any, without raising: the job has already settled by
-    then, and its result is what tells Cloud how the lease ended.
+    runs. Otherwise the returned call waits for the acknowledgement. A failed
+    acknowledgement is logged rather than raised: the job has already settled
+    by then, and its result is what tells Cloud how the lease ended. Anything
+    that ends the process, such as ``SystemExit``, still ends it.
     """
 
     if not rechecks_authority_on_apply(job):
@@ -77,7 +82,19 @@ def start_overlapped_acknowledgement(
         future = executor.submit(contextvars.copy_context().run, acknowledge)
     finally:
         executor.shutdown(wait=False)
-    return future.exception
+
+    def wait() -> None:
+        error = future.exception()
+        if error is None:
+            return
+        if not isinstance(error, Exception):
+            raise error
+        _LOGGER.warning(
+            "Guard Review acknowledgement failed; posting the result: error=%s",
+            format_redacted_error(error),
+        )
+
+    return wait
 
 
 __all__ = ["rechecks_authority_on_apply", "start_command_authorization", "start_overlapped_acknowledgement"]
