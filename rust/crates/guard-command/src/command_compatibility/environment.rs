@@ -235,10 +235,35 @@ const ENDPOINT_MARKERS: &[&str] = &[
     "URI", "URL",
 ];
 
+/// Ordinary words that hold a marker without naming an endpoint. `REPORT_DIR`
+/// is a directory a test run writes into, not a port, and a bare fragment test
+/// cannot tell the two apart. Each word is blanked before the fragment test, so
+/// a name that carries both (`REPORT_SERVER_URL`) still reads as an endpoint.
+/// Longest first, so `TRANSPORT` is blanked before `PORT` can match inside it.
+const ENDPOINT_MARKER_WORDS: &[&str] = &[
+    "TRANSPORT",
+    "PASSPORT",
+    "REPORTER",
+    "SECURITY",
+    "SUPPORT",
+    "EXPORT",
+    "IMPORT",
+    "REPORT",
+    "GHOST",
+];
+
 /// A setting that redirects where a later program connects.
 pub(crate) fn endpoint_steering_environment_name(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    upper.starts_with("PG") || ENDPOINT_MARKERS.iter().any(|marker| upper.contains(marker))
+    let mut upper = name.to_ascii_uppercase();
+    if upper.starts_with("PG") {
+        return true;
+    }
+    for word in ENDPOINT_MARKER_WORDS {
+        if upper.contains(word) {
+            upper = upper.replace(word, "_");
+        }
+    }
+    ENDPOINT_MARKERS.iter().any(|marker| upper.contains(marker))
 }
 
 /// A setting whose whole effect is a value the command reads for itself:
