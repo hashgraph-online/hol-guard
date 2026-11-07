@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,6 +25,7 @@ from ci.gauntlet.extension_allow_fixtures import (
     extension_allow_checks,
 )
 from ci.gauntlet.git_allow_fixtures import GIT_ALLOW_CASES, GIT_EXTENSION_ID, GIT_ORIGIN_SHAPE_CASES
+from ci.native_runtime import probe_installed_native_extensions
 
 EXECUTED_FLAG = "output/extension-executed.flag"
 
@@ -118,33 +120,45 @@ def test_the_oracle_asks_for_the_worktree_as_well_as_the_executed_flag(tmp_path,
     assert checks["external-extension-allow-worktree-created"] is worktree_present
 
 
-def test_several_extensions_are_committed_from_one_authorization(monkeypatch) -> None:
+def test_several_extensions_are_committed_in_one_layer(monkeypatch) -> None:
     """`provision` accepts a home only at revision 0, so authorizing twice fails.
 
-    Enrolling the control authority is what the first committed layer makes
-    impossible to repeat, and the runner reaches it during setup, before the
-    case's command ever runs.
+    A commit replaces the stored local-admin layers rather than adding to
+    them, so committing one extension at a time would drop the one committed
+    before it and the case would run with the git step unallowed. Both
+    extensions therefore ride in the single layer one authorization commits.
     """
     from ci.gauntlet import extension_adapters
+    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
 
+    git_permission = f"{GIT_EXTENSION_ID}.permission.read"
+    allow_permission = f"{EXTENSION_ALLOW_ID}.permission.manage"
     authorizations: list[object] = []
-    committed: list[tuple[str, tuple[tuple[str, bool], ...]]] = []
+    commits: list[tuple[object, ...]] = []
 
     def authorize(_daemon, guard_home):
         authorizations.append(guard_home)
         return "password"
 
-    def commit(_daemon, _password, extension_id, permissions):
-        committed.append((extension_id, permissions))
-        return len(committed)
+    def commit_controls(_service, _password, controls):
+        commits.append(controls)
+        return len(commits)
 
     monkeypatch.setattr(extension_adapters, "_authorize_extension_controls", authorize)
-    monkeypatch.setattr(extension_adapters, "_commit_extension_controls", commit)
+    monkeypatch.setattr(probe_installed_native_extensions, "commit_controls", commit_controls)
 
     revisions = extension_adapters.configure_each_extension_controls(
-        object(), Path("guard-home"), {GIT_EXTENSION_ID: ["git.read"], EXTENSION_ALLOW_ID: ["ollama.manage"]}
+        SimpleNamespace(_server=SimpleNamespace(extension_control_api=object())),
+        Path("guard-home"),
+        {GIT_EXTENSION_ID: [git_permission], EXTENSION_ALLOW_ID: [allow_permission]},
     )
 
     assert len(authorizations) == 1
-    assert committed == [(GIT_EXTENSION_ID, (("git.read", True),)), (EXTENSION_ALLOW_ID, (("ollama.manage", True),))]
-    assert revisions == {GIT_EXTENSION_ID: 1, EXTENSION_ALLOW_ID: 2}
+    assert len(commits) == 1
+    controls = commits[0]
+    assert [
+        control.target.target_id for control in controls if control.target.kind is ControlTargetKind.PERMISSION
+    ] == [git_permission, allow_permission]
+    assert all(control.state is ControlState.ENABLED for control in controls)
+    # One layer, so one revision: every extension in it lands together.
+    assert revisions == {GIT_EXTENSION_ID: 1, EXTENSION_ALLOW_ID: 1}
