@@ -415,6 +415,7 @@ fn a_secret_in_the_diff_is_left_out_though_the_file_no_longer_has_it() {
 
 /// A commit that also deletes a file shows no diff: the deleted file was
 /// never read, so the screen never saw what it held.
+#[cfg(unix)]
 #[test]
 fn a_commit_deleting_an_unread_file_shows_no_diff() {
     let repo = Repo::new();
@@ -437,6 +438,7 @@ fn a_commit_deleting_an_unread_file_shows_no_diff() {
 }
 
 /// Changes across many files stop at the note's size, and say so.
+#[cfg(unix)]
 #[test]
 fn a_note_about_many_files_stays_bounded() {
     let repo = Repo::new();

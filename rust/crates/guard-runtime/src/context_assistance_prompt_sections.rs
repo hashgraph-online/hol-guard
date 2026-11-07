@@ -165,7 +165,7 @@ pub(super) fn marked_test(lines: &[&str], section: &Section) -> bool {
             let name = attribute
                 .trim_start_matches("#[")
                 .trim_start_matches('@')
-                .split(|c: char| matches!(c, ']' | '(' | ' '))
+                .split([']', '(', ' '])
                 .next()
                 .unwrap_or_default();
             let last = name.rsplit("::").next().unwrap_or_default();
