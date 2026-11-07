@@ -150,3 +150,60 @@ fn the_drain_records_a_fence_wait_once_as_the_daemon_window_would() {
     assert_eq!(payload["exhausted_calls"], json!(0));
     assert!(payload["started_at"].as_str().unwrap() < occurred_at.as_str());
 }
+
+#[cfg(unix)]
+#[test]
+fn the_drain_seals_a_codex_receipt_once_while_the_capture_is_on() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let home = store_home("drain-records-capture");
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let now = crate::binding_capture_op::now_seconds();
+    assert!(crate::binding_capture_fs::initialize_marker(
+        &home,
+        "run-1",
+        now as i64 + 600,
+        None,
+        None,
+        now
+    )
+    .is_some());
+    let payload = json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "pwd"},
+        "tool_use_id": "call-1",
+    });
+    let mut envelope = crate::edge::tests::envelope("PreToolUse", payload.clone());
+    envelope.harness = "codex".to_owned();
+    let edge: GuardHookEdgeResultV2 =
+        serde_json::from_slice(&crate::edge::tests::evaluate_isolated(envelope).unwrap()).unwrap();
+    let mut record = allowed(&edge);
+    record["harness"] = json!("codex");
+    record["payload"] = payload;
+    let queue = DirectEvidenceQueue::default();
+    assert!(offer_direct(&queue, &home, record, true));
+    let page = drained(&queue, &home, Some("guard"));
+    assert_eq!(page["records"][0]["capture_recorded"], json!(true));
+    // A page sent again carries the mark and seals nothing twice.
+    let again = drained(&queue, &home, Some("guard"));
+    assert_eq!(again["records"], page["records"]);
+    let rows = std::fs::read_to_string(home.join("diagnostics/codex-binding-capture.run-1.jsonl"))
+        .unwrap();
+    assert_eq!(rows.lines().count(), 1, "{rows}");
+    assert!(rows.contains("\"route\":\"native_worker\""), "{rows}");
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
+#[test]
+fn the_drain_leaves_a_codex_receipt_uncaptured_while_the_capture_is_off() {
+    let home = store_home("drain-records-capture-off");
+    let (_, edge) = answered(&home, true);
+    let mut record = allowed(&edge);
+    record["harness"] = json!("codex");
+    let queue = DirectEvidenceQueue::default();
+    assert!(offer_direct(&queue, &home, record, true));
+    let records = drained(&queue, &home, Some("guard"))["records"].clone();
+    assert!(records[0].get("capture_recorded").is_none());
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
