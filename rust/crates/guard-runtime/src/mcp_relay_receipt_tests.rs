@@ -204,14 +204,85 @@ fn the_diff_summary_samples_three_changes() {
     assert_eq!(diff_summary(&["a"]), "1 change(s): a");
 }
 
+/// An ask block whose desktop notice the resident raised.
+fn asked(record: Value) -> Value {
+    edited(record, |record| {
+        record["approval"] = json!({
+            "approval_center_url": "http://127.0.0.1:4781/approvals",
+            "review_url": "http://127.0.0.1:4781/approvals/req-1",
+            "request_id": "req-1",
+            "workspace": "/work",
+            "notices": [],
+        });
+    })
+}
+
+#[test]
+fn an_ask_block_writes_the_pending_receipt_with_projected_risk() {
+    let record = asked(edited(
+        record("block", "approval-center-pending", "review"),
+        |record| record["decision"]["risk_categories"] = json!(["decision-only"]),
+    ));
+    let args = composed(&record);
+    assert_eq!(args["receipt"]["approval_source"], "approval_center");
+    assert_eq!(args["receipt"]["user_override"], Value::Null);
+    assert_eq!(args["inventory"]["approved"], false);
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    let projected =
+        crate::mcp_proxy_projection::call_projection(&guard_contracts::McpCallProjectionQueryV1 {
+            tool_name: "run_command".to_owned(),
+            params: record["params"].clone(),
+            risk: super::record::plain(&record).unwrap().queued_risk,
+        })
+        .unwrap();
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        payload["risk_categories"],
+        projected["risk"]["risk_categories"]
+    );
+    assert_ne!(payload["risk_categories"], json!(["decision-only"]));
+}
+
 #[test]
 fn records_the_daemon_owns_are_not_plain() {
     assert!(is_plain(&record("forward", "policy", "allow")));
     assert!(is_plain(&record("block", "policy-block", "block")));
+    assert!(is_plain(&asked(record(
+        "block",
+        "approval-center-pending",
+        "review"
+    ))));
     let not_plain = [
         record("remember", "policy", "allow"),
         record("forward", "policy", "review"),
         record("block", "approval-center-pending", "review"),
+        asked(record("block", "policy-block", "review")),
+        asked(record("forward", "policy", "allow")),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["notices"] = json!([{"request_id": "req-1"}]);
+            },
+        ),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["request_id"] = json!(" ");
+            },
+        ),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["workspace"] = json!(7);
+            },
+        ),
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["approval"]["extra"] = json!(true);
+            },
+        ),
         record("block", "policy-block", "allow"),
         edited(record("forward", "policy", "allow"), |record| {
             record["harness"] = json!("claude-code");

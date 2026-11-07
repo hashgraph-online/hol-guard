@@ -7,13 +7,14 @@
 //! runtime event. For a plain record every input of that receipt is already in
 //! the record, so the resident writes it itself through the same
 //! `record_tool_call_evidence` store operation, once the daemon acknowledges
-//! the page that skipped it. A plain record is a forward, a policy block or a
-//! refused inline prompt whose identity carries its firewall evidence.
+//! the page that skipped it. A plain record is a forward, a policy block, a
+//! refused inline prompt or an ask block whose identity carries its firewall
+//! evidence. The resident raises an ask block's desktop notice itself as soon
+//! as it writes the request, so its receipt is all that is left to write.
 //!
 //! Everything else is still drained to the daemon: a remembered allow writes
 //! the daemon's policy, a safe-alternative block adds an inbox row and an ask
-//! block opens the approval center. The resident raises an ask block's
-//! desktop notice itself as soon as it writes the request.
+//! block whose notice the resident could not read still carries it.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an
@@ -326,10 +327,7 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Map<String
     let config_path = artifact["config_path"].as_str()?;
     let artifact_id = artifact["artifact_id"].as_str()?;
     let signals = strings(&plain.decision["signals"]);
-    let risk_categories: Vec<String> = strings(&plain.decision["risk_categories"])
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
+    let risk_categories = plain.risk_categories()?;
     let (raw_command_text, firewall_evidence) =
         receipt_evidence(guard_home, &plain, stamp, &risk_categories)?;
     let mut scanner_evidence = vec![firewall_evidence];

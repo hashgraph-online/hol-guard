@@ -26,10 +26,11 @@ and blocks on it, so its record carries that request instead of an inbox row:
 the ``approval-center-pending`` block receipt is written here, and then the
 desktop notice and the approval center the proxy raises once the row exists.
 A current resident raises the desktop notice itself as soon as it writes the
-request, and the record carries a notice only when the resident could not read
-it; an older one carries the queued notices for this drain to raise. The
-resident cannot open a browser, so it also carries the workspace the surface
-policy is resolved against.
+request and then writes the receipt too, so this drain sees an ask record only
+when the resident could not read its notice, or from an older resident that
+carries the queued notices for this drain to raise. The resident cannot open a
+browser, so the record also carries the workspace the surface policy is
+resolved against.
 """
 
 from __future__ import annotations

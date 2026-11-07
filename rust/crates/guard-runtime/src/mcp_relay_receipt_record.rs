@@ -2,6 +2,9 @@
 //! and the native decision's checks, as the Python drain's `_decode` and
 //! `_validated_decision` read them.
 
+use guard_contracts::{
+    BrowserMcpArtifactV1, McpCallProjectionQueryV1, McpToolArgumentsV1, McpToolRiskInputV1,
+};
 use serde_json::{Map, Value};
 
 const KIND: &str = "mcp_tool_call";
@@ -19,8 +22,19 @@ const RECORD_KEYS: [&str; 10] = [
     "identity",
     "decision",
 ];
-/// The post-claim check's evidence, the one optional key a plain record has.
+/// The post-claim check's evidence.
 const APPEND_KEY: &str = "evidence_append";
+/// The approval request an ask block was queued on, `_queued_approval`.
+const APPROVAL_KEY: &str = "approval";
+const APPROVAL_KEYS: [&str; 5] = [
+    "approval_center_url",
+    "review_url",
+    "request_id",
+    "workspace",
+    "notices",
+];
+/// An ask block's decision source.
+const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
 const IDENTITY_KEYS: [&str; 4] = [
     "artifact",
     "runtime_private_metadata",
@@ -108,17 +122,45 @@ pub(super) struct Plain<'a> {
     pub(super) firewall: &'a Value,
     pub(super) decision: &'a Map<String, Value>,
     pub(super) append: &'a [Value],
+    /// An ask block's risk input: the proxy projects a queued call with its
+    /// artifact for the receipt's risk categories.
+    pub(super) queued_risk: Option<McpToolRiskInputV1>,
+}
+
+impl Plain<'_> {
+    /// The receipt's risk categories: a queued call's projected ones, else
+    /// the decision's.
+    pub(super) fn risk_categories(&self) -> Option<Vec<String>> {
+        let Some(risk) = &self.queued_risk else {
+            return Some(strings(&self.decision["risk_categories"]));
+        };
+        let projected = crate::mcp_proxy_projection::call_projection(&McpCallProjectionQueryV1 {
+            tool_name: self.tool_name.to_owned(),
+            params: self.params.clone(),
+            risk: Some(risk.clone()),
+        })
+        .ok()?;
+        let categories = projected.get("risk")?.get("risk_categories")?;
+        string_list(categories).then(|| strings(categories))
+    }
 }
 
 pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     let record = record.as_object()?;
     if !RECORD_KEYS.iter().all(|key| record.contains_key(*key))
-        || record
-            .keys()
-            .any(|key| key != APPEND_KEY && !RECORD_KEYS.contains(&key.as_str()))
+        || record.keys().any(|key| {
+            key != APPEND_KEY && key != APPROVAL_KEY && !RECORD_KEYS.contains(&key.as_str())
+        })
     {
         return None;
     }
+    // An ask block whose desktop notice the resident raised; one still
+    // carrying a notice is the daemon's to raise.
+    let queued = match record.get(APPROVAL_KEY) {
+        None => false,
+        Some(approval) if approval_fits(approval) => true,
+        Some(_) => return None,
+    };
     let append = match record.get(APPEND_KEY) {
         None => &[][..],
         Some(Value::Array(items)) if items.iter().all(Value::is_object) => items.as_slice(),
@@ -137,8 +179,8 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         return None;
     }
     let forward = match text("outcome")? {
-        "forward" if FORWARD_ACTIONS.contains(&policy_action) => true,
-        "block" if block_taxonomy(policy_action).is_some() && BLOCK_SOURCES.contains(&source) => {
+        "forward" if !queued && FORWARD_ACTIONS.contains(&policy_action) => true,
+        "block" if block_taxonomy(policy_action).is_some() && block_source_fits(queued, source) => {
             false
         }
         _ => return None,
@@ -169,6 +211,11 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     if !decision_fits(decision) || !arguments_fit(params, &record["arguments"]) {
         return None;
     }
+    let queued_risk = if queued {
+        Some(risk_input(artifact, params, &record["arguments"])?)
+    } else {
+        None
+    };
     Some(Plain {
         harness,
         forward,
@@ -181,6 +228,63 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         firewall,
         decision,
         append,
+        queued_risk,
+    })
+}
+
+/// `_block_source_fits` for a block with no inbox row.
+fn block_source_fits(queued: bool, source: &str) -> bool {
+    if queued {
+        source == APPROVAL_PENDING_SOURCE
+    } else {
+        BLOCK_SOURCES.contains(&source)
+    }
+}
+
+/// `_queued_approval`, with no desktop notice left to raise.
+fn approval_fits(approval: &Value) -> bool {
+    let Some(approval) = exact_object(approval, &APPROVAL_KEYS) else {
+        return false;
+    };
+    let filled = |key: &str| {
+        approval[key]
+            .as_str()
+            .is_some_and(|text| !text.trim().is_empty())
+    };
+    (approval["workspace"].is_string() || approval["workspace"].is_null())
+        && approval["notices"].as_array().is_some_and(Vec::is_empty)
+        && ["approval_center_url", "review_url", "request_id"]
+            .iter()
+            .all(|key| filled(key))
+}
+
+/// `risk_input(artifact, params["arguments"])` with the arguments in the
+/// order the host sent them. Only a mapping's entries keep that order, so
+/// another record whose arguments are an object is left to the daemon.
+fn risk_input(
+    artifact: &Map<String, Value>,
+    params: &Value,
+    arguments: &Value,
+) -> Option<McpToolRiskInputV1> {
+    let arguments = match params.get("arguments") {
+        Some(Value::Object(_)) => match serde_json::from_value(arguments.clone()).ok()? {
+            mapping @ McpToolArgumentsV1::Mapping { .. } => mapping,
+            _ => return None,
+        },
+        Some(Value::String(text)) => McpToolArgumentsV1::Json { text: text.clone() },
+        other => McpToolArgumentsV1::Other {
+            value: other.cloned().unwrap_or(Value::Null),
+        },
+    };
+    Some(McpToolRiskInputV1 {
+        artifact: BrowserMcpArtifactV1 {
+            name: artifact["name"].as_str()?.to_owned(),
+            command: artifact["command"].as_str().map(str::to_owned),
+            metadata: artifact["metadata"].as_object()?.clone(),
+        },
+        arguments,
+        risk_categories: None,
+        summary_code: None,
     })
 }
 
@@ -230,6 +334,19 @@ fn exact_object<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a Map<String, V
     value.as_object().filter(|object| {
         object.len() == keys.len() && keys.iter().all(|key| object.contains_key(*key))
     })
+}
+
+fn strings(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn string_list(value: &Value) -> bool {
