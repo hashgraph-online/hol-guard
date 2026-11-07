@@ -1,8 +1,8 @@
 //! The verdict for a command whose settings a reviewed projection removed.
 //!
 //! Any program may read any name, so a setting that is not inert keeps the
-//! command from settling below review on the host. The read-only profiles
-//! are different: their launchers run the bare program under the restricted
+//! command from settling below review on the host. A contained profile is
+//! different: its launcher runs the bare program under the restricted
 //! environment allowlist, which drops every name it does not forward. A
 //! setting that only carries data (`REPORT_DIR=/tmp/report vitest run`) never
 //! reaches such a run, so the profile chosen for the command without it is
@@ -15,7 +15,16 @@ use guard_contracts::PreToolResultV1;
 
 /// Profiles whose launchers filter the environment through the restricted
 /// allowlist (`restricted_pytest::environment::filter`).
-const FILTERED_PROFILES: [&str; 10] = [
+///
+/// The workspace profile is on this list for the same reason as the read-only
+/// ones, though it may write: `restricted_workspace.run_workspace_contained`
+/// builds its launch environment with that same filter, so a setting the
+/// projection removed does not reach the run there either. Which of these
+/// profiles a host picks for one command varies -- the same sibling build
+/// settles as `node-build-output-v1` on one host and `workspace-contained-v1`
+/// on another -- and leaving the workspace profile off turned that into a
+/// review for the prefixed spelling alone.
+const FILTERED_PROFILES: [&str; 11] = [
     "native_bun_eval_readonly_containment_required",
     "native_git_readonly_containment_required",
     "native_node_build_output_containment_required",
@@ -26,6 +35,7 @@ const FILTERED_PROFILES: [&str; 10] = [
     "native_pytest_readonly_containment_required",
     "native_python_eval_readonly_containment_required",
     "native_vitest_readonly_containment_required",
+    "native_workspace_containment_required",
 ];
 
 const MAX_DATA_CHARS: usize = 512;
