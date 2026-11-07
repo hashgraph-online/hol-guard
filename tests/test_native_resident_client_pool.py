@@ -242,7 +242,8 @@ def test_client_close_can_interrupt_a_blocked_frame_write(tmp_path: Path, monkey
     started = threading.Event()
     result: list[bytes | None] = []
 
-    def fake_start(*, deadline_monotonic: float | None = None) -> bool:
+    def fake_start(*, deadline_monotonic: float | None = None, allow_start: bool = True) -> bool:
+        assert allow_start
         del deadline_monotonic
         object.__setattr__(client, "_process", process)
         return True
@@ -740,7 +741,10 @@ def test_a_diagnostic_restores_the_failure_the_hook_path_left_behind(
     """
 
     class Pool:
-        def request(self, _payload: bytes, *, deadline_monotonic: float, diagnostic: bool = False) -> bytes:
+        def request(
+            self, _payload: bytes, *, deadline_monotonic: float, diagnostic: bool = False, idle_only: bool = False
+        ) -> bytes:
+            assert not idle_only
             client_module._LAST_FAILURE_CODE.set("native_client_pool_exhausted")
             return b"answered"
 

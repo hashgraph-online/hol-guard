@@ -390,6 +390,16 @@ class NativePolicySnapshotDirectLaneAck:
 
         return self._direct_evidence_drain_enabled
 
+    def direct_hook_transport(self) -> tuple[Path, Callable[..., bytes | None]] | None:
+        """Skip optional hook RPCs when this publisher cannot bind a home.
+
+        This is only an eligibility check. Rust still validates the complete
+        binding and may defer; evidence draining does not require this home.
+        """
+        if not self._direct_lane_home_dir():
+            return None
+        return self.direct_evidence_transport()
+
     def direct_evidence_transport(self) -> tuple[Path, Callable[..., bytes | None]] | None:
         """The resident executable and client the evidence drain uses."""
 
@@ -400,16 +410,18 @@ class NativePolicySnapshotDirectLaneAck:
             return None
         client = getattr(self, "_client_request", None)
         if client is None:
-            from .native_resident_client import native_resident_client_ready, native_resident_client_request
+            from .native_resident_client import native_resident_client_ready, native_resident_client_request_if_idle
 
             # The drain polls every 250 ms with a short deadline. A cold start
             # that misses it is aborted and still spends a restart, so a
             # Windows resident that starts slower than the poll deadline trips
             # the restart circuit before the daemon is up. Leave starting the
-            # resident to callers that budget for a spawn.
+            # client to callers that budget for a spawn. Readiness is only an
+            # optimization; the callable must atomically lease an idle stream.
+            # Resident recovery behind a live Rust client remains Rust-owned.
             if not native_resident_client_ready(Path(path), self.guard_home):
                 return None
-            client = native_resident_client_request
+            client = native_resident_client_request_if_idle
         return Path(path), client
 
     def _direct_lane_ack_path(self) -> Path:

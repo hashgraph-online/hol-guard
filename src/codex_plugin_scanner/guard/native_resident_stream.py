@@ -225,9 +225,13 @@ class _PersistentNativeClient:
                     with lock:
                         lines.append(line)
 
-    def _start(self, *, deadline_monotonic: float | None = None) -> bool:
+    def _start(self, *, deadline_monotonic: float | None = None, allow_start: bool = True) -> bool:
         if self._closing:
             return False
+        if not allow_start:
+            # The process may have exited since the pool leased this stream.
+            # Let the pool retire it through its usual containment path.
+            return self._process is not None and self._process.poll() is None
         if self._process is not None:
             if self._process.poll() is None:
                 return True
@@ -357,6 +361,7 @@ class _PersistentNativeClient:
         self,
         *,
         deadline_monotonic: float | None = None,
+        allow_start: bool = True,
     ) -> tuple[subprocess.Popen[bytes], object, Queue[bytes | _StreamFailure]] | None:
         with _hold_until(self._lifecycle_lock, deadline_monotonic) as lifecycle:
             if not lifecycle:
@@ -366,14 +371,15 @@ class _PersistentNativeClient:
                 if not state:
                     self._record_phase_failure("native_client_timed_out", "snapshot_state_lock")
                     return None
-                return self._snapshot_locked(deadline_monotonic=deadline_monotonic)
+                return self._snapshot_locked(deadline_monotonic=deadline_monotonic, allow_start=allow_start)
 
     def _snapshot_locked(
         self,
         *,
         deadline_monotonic: float | None,
+        allow_start: bool = True,
     ) -> tuple[subprocess.Popen[bytes], object, Queue[bytes | _StreamFailure]] | None:
-        if not self._start(deadline_monotonic=deadline_monotonic):
+        if not self._start(deadline_monotonic=deadline_monotonic, allow_start=allow_start):
             self._record_phase_failure(
                 "native_client_timed_out"
                 if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
@@ -388,7 +394,7 @@ class _PersistentNativeClient:
             return None
         return process, stdin, self._responses
 
-    def request(self, payload: bytes, *, deadline_monotonic: float) -> bytes | None:
+    def request(self, payload: bytes, *, deadline_monotonic: float, allow_start: bool = True) -> bytes | None:
         if not payload or len(payload) > _MAX_REQUEST_BYTES:
             self._record_failure("native_client_request_invalid")
             return None
@@ -399,7 +405,7 @@ class _PersistentNativeClient:
             if time.monotonic() >= deadline_monotonic:
                 self._record_phase_failure("native_client_timed_out", "request_deadline")
                 return None
-            snapshot = self._request_snapshot(deadline_monotonic=deadline_monotonic)
+            snapshot = self._request_snapshot(deadline_monotonic=deadline_monotonic, allow_start=allow_start)
             if snapshot is None:
                 return None
             if time.monotonic() >= deadline_monotonic:
