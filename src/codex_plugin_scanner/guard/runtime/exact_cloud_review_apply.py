@@ -125,7 +125,7 @@ def apply_exact_cloud_review(
         if not delegated_admin_mfa:
             if verified_capability is None:
                 raise _reject(store, "cloud_review_capability_missing", now=current)
-            validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability))
+            validate_exact_authority(envelope, oauth, capability_id=_capability_digest(verified_capability, store))
         validate_remote_approval_request_binding(
             envelope=envelope,
             request_row=request,

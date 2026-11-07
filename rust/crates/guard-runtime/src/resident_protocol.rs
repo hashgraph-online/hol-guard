@@ -298,6 +298,7 @@ pub(crate) enum ResidentOperationV1 {
     LocalToolEligibility(LocalToolEligibilityRequestV1),
     LocalToolGrant(LocalToolGrantRequestV1),
     ShellHelpers(crate::shell_helpers_op::ShellHelpersRequest),
+    ExactCloudReview(crate::exact_cloud_review::ExactCloudReviewResidentRequest),
     ApprovalProofDecide(ApprovalProofRequestV1),
     CursorObserverProof(CursorObserverProofRequestV1),
     HookAuthorityState(HookAuthorityStateRequestV1),

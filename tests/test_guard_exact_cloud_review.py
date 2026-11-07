@@ -607,7 +607,7 @@ def test_unavailable_replay_check_rejects_the_exact_job(monkeypatch: pytest.Monk
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.exact_cloud_review._capability_digest",
-        lambda _capability: "cap-1",
+        lambda _capability, _store=None: "cap-1",
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.command_capability._command_job_seen",

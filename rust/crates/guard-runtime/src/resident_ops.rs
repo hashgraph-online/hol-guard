@@ -540,6 +540,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ShellHelpers(request) => {
                 crate::shell_helpers_op::evaluate(&request)
             }
+            ResidentOperationV1::ExactCloudReview(request) => {
+                crate::exact_cloud_review::evaluate_resident_request(request)
+            }
             ResidentOperationV1::ApprovalProofDecide(request) => {
                 crate::approval_proof_op::evaluate_approval_proof_request(&request)
             }

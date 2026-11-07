@@ -21,6 +21,7 @@ from ..review_contracts import (
     remote_approval_uses_workspace_admin_mfa,
 )
 from .exact_cloud_review_diagnostics import enrich_exact_cloud_review_status
+from .exact_cloud_review_resident import resident_exact_cloud_review_answer
 from .time_support import parse_utc_timestamp
 
 if TYPE_CHECKING:
@@ -74,9 +75,12 @@ def _clock(now: str | None) -> str:
     return datetime.now(timezone.utc).isoformat() if now is None else now
 
 
-def _answer(request: dict[str, object]) -> dict[str, object]:
+def _answer(request: dict[str, object], store: GuardStore | None = None) -> dict[str, object]:
     """What the runtime says about the signed consent; it signs and checks it."""
 
+    answer = resident_exact_cloud_review_answer(request, store)
+    if answer is not None:
+        return answer
     from ..mdm.runtime_request import runtime_answer
 
     answer = runtime_answer(_FEATURE, _COMMAND, request, output_limit=1 << 20, timeout_seconds=10.0)
@@ -85,8 +89,8 @@ def _answer(request: dict[str, object]) -> dict[str, object]:
     return answer
 
 
-def _ask(request: dict[str, object], member: str) -> dict[str, object]:
-    answer = _answer(request)
+def _ask(request: dict[str, object], member: str, store: GuardStore | None = None) -> dict[str, object]:
+    answer = _answer(request, store)
     error = answer.get("error")
     if isinstance(error, str):
         raise ExactCloudReviewError(error)
@@ -112,15 +116,15 @@ def _signing_key(store: GuardStore, envelope: object, *, create: bool = False) -
 
 def _sign(store: GuardStore, payload: dict[str, object], *, create_key: bool) -> dict[str, object]:
     request = {"op": "sign", **_signing_key(store, _FOR_SIGNING, create=create_key), "payload": payload}
-    return _ask(request, "envelope")
+    return _ask(request, "envelope", store)
 
 
 def _verify(store: GuardStore, payload: object) -> dict[str, object]:
-    return _ask({"op": "verify", **_signing_key(store, payload), "envelope": payload}, "unsigned")
+    return _ask({"op": "verify", **_signing_key(store, payload), "envelope": payload}, "unsigned", store)
 
 
-def _capability_digest(capability: dict[str, object]) -> str:
-    answer = _answer({"op": "digest", "payload": capability})
+def _capability_digest(capability: dict[str, object], store: GuardStore | None = None) -> str:
+    answer = _answer({"op": "digest", "payload": capability}, store)
     digest = answer.get("digest")
     if not isinstance(digest, str):
         raise ExactCloudReviewError(_UNAVAILABLE)
@@ -240,7 +244,7 @@ def disable_exact_cloud_review(
     except ExactCloudReviewError:
         capability_digest = None
     else:
-        capability_digest = _capability_digest(capability)
+        capability_digest = _capability_digest(capability, store)
     revocation = _sign(
         store,
         {
@@ -287,7 +291,8 @@ def _verified_capability(
             "revocation": store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY),
             "binding": binding,
             "now": _clock(now),
-        }
+        },
+        store,
     )
     error = answer.get("error")
     if error == _BINDING_UNREADABLE and binding_error is not None:
@@ -397,7 +402,7 @@ def authorize_exact_cloud_review_job(
     )
 
     try:
-        identity = _exact_job_identity(job, now=now)
+        identity = _exact_job_identity(job, now=now, store=store)
         payload = job.get("payload")
         native_command = native_workspace_review_payload(payload)
         if native_command is not None:
@@ -435,7 +440,7 @@ def authorize_exact_cloud_review_job(
                     raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
                 if approval.get("grantId") != capability["grantId"]:
                     raise ExactCloudReviewError("remote_exact_job_wrong_grant")
-                if approval.get("capabilityId") != _capability_digest(capability):
+                if approval.get("capabilityId") != _capability_digest(capability, store):
                     raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
         if native_command is None and _command_job_seen(store, identity, now=now):
             raise ExactCloudReviewError("remote_exact_job_replayed")
@@ -459,10 +464,12 @@ def authorize_exact_cloud_review_job(
     )
 
 
-def _exact_job_identity(job: Mapping[str, object], *, now: str | None = None) -> dict[str, object]:
+def _exact_job_identity(
+    job: Mapping[str, object], *, now: str | None = None, store: GuardStore | None = None
+) -> dict[str, object]:
     """The leased job's identity, once the runtime has checked its lease."""
 
-    return _ask({"op": "job", "job": dict(job), "now": _clock(now)}, "identity")
+    return _ask({"op": "job", "job": dict(job), "now": _clock(now)}, "identity", store)
 
 
 from .exact_cloud_review_apply import apply_exact_cloud_review  # noqa: E402, F401

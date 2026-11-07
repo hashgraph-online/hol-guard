@@ -364,3 +364,42 @@ fn unknown_requests_are_refused_and_the_command_is_named() {
     assert!(is_command("exact-cloud-review"));
     assert!(!is_command("exact-cloud-reviews"));
 }
+
+#[test]
+fn the_resident_answers_exactly_like_the_helper() {
+    let inner = json!({"op": "digest", "payload": {"b": 2, "a": 1}});
+    let operation: crate::resident_protocol::ResidentOperationV1 =
+        serde_json::from_value(json!({
+            "operation": "exact_cloud_review",
+            "request": {"schema": RESIDENT_REQUEST_SCHEMA, "request": inner.clone()},
+        }))
+        .expect("resident envelope");
+    let crate::resident_protocol::ResidentOperationV1::ExactCloudReview(request) = operation else {
+        panic!("routed to another operation");
+    };
+    let decoded: Value =
+        serde_json::from_slice(&evaluate_resident_request(request).expect("answer")).unwrap();
+    assert_eq!(decoded["schema"], RESIDENT_RESULT_SCHEMA);
+    assert_eq!(decoded["status"], "ok");
+    assert_eq!(decoded["answer"], ask(inner));
+}
+
+#[test]
+fn the_resident_request_never_prints_its_signing_key() {
+    let request: ExactCloudReviewResidentRequest = serde_json::from_value(json!({
+        "schema": RESIDENT_REQUEST_SCHEMA,
+        "request": {"op": "sign", "key": KEY, "key_id": "key-1", "payload": {}},
+    }))
+    .unwrap();
+    assert!(!format!("{request:?}").contains(KEY));
+}
+
+#[test]
+fn the_resident_refuses_another_schema() {
+    let request: ExactCloudReviewResidentRequest = serde_json::from_value(json!({
+        "schema": "guard-exact-cloud-review-resident-request.v0",
+        "request": {"op": "digest", "payload": {}},
+    }))
+    .unwrap();
+    assert_eq!(evaluate_resident_request(request).unwrap_err(), invalid());
+}
