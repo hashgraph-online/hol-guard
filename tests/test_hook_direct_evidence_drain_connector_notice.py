@@ -77,6 +77,22 @@ def test_a_missing_or_malformed_notice_raises_nothing(
     assert notified == []
 
 
+def test_a_notice_the_resident_raised_is_not_raised_again(
+    tmp_path: Path, notified: list[tuple[object, Mapping[str, object], str]]
+) -> None:
+    store = _Store({"r-1": dict(QUEUED)})
+    host = _Host(tmp_path, store=store)
+    record = _record(
+        connector_setup_notice={"request_id": "r-1", "connector_name": "acme"},
+        connector_notice_raised=True,
+    )
+
+    assert record_direct_hook_evidence(host, record)
+
+    assert store.looked_up == []
+    assert notified == []
+
+
 def test_a_row_the_store_no_longer_holds_raises_nothing(
     tmp_path: Path, notified: list[tuple[object, Mapping[str, object], str]]
 ) -> None:

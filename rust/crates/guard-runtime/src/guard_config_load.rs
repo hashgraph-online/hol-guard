@@ -282,6 +282,31 @@ pub(crate) fn approval_wait_timeout_seconds_under(
     workspace: Option<&Path>,
     source: &ManagedPolicySource,
 ) -> Result<i64, String> {
+    Ok(effective_config(guard_home, workspace, source)?
+        .get("approval_wait_timeout_seconds")
+        .and_then(Value::as_i64)
+        .unwrap_or(120))
+}
+
+/// Effective `desktop_notifications` for an in-process caller, composed as
+/// `approval_wait_timeout_seconds` is.
+pub(crate) fn desktop_notifications(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+) -> Result<bool, String> {
+    Ok(
+        effective_config(guard_home, workspace, &ManagedPolicySource::native())?
+            .get("desktop_notifications")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+    )
+}
+
+fn effective_config(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+    source: &ManagedPolicySource,
+) -> Result<Value, String> {
     let managed =
         effective_managed_policy(&load_managed_policy(source)).map(|policy| ManagedInput {
             settings: policy.settings.clone(),
@@ -294,11 +319,7 @@ pub(crate) fn approval_wait_timeout_seconds_under(
         require_canonical_workspace: false,
         managed,
     };
-    let config = load(&request)?;
-    Ok(config
-        .get("approval_wait_timeout_seconds")
-        .and_then(Value::as_i64)
-        .unwrap_or(120))
+    load(&request)
 }
 
 fn watch_hours(value: Option<&Value>) -> i64 {

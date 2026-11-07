@@ -292,6 +292,8 @@ pub fn isolated_environment(
     const ALLOWED: &[&str] = &[
         "COMSPEC",
         "HOME",
+        // The desktop-notice opt-out the resident drain honours.
+        "HOL_GUARD_DESKTOP_NOTIFICATIONS",
         "HOL_GUARD_NATIVE_DIAGNOSTIC",
         "HOL_GUARD_RESIDENT_TEST_SEAMS",
         "LANG",
@@ -803,6 +805,10 @@ mod tests {
         base.insert("TMPDIR".to_string(), "/tmp".to_string());
         base.insert("HOL_GUARD_RESIDENT_TEST_SEAMS".to_string(), "1".to_string());
         base.insert("HOL_GUARD_NATIVE_DIAGNOSTIC".to_string(), "1".to_string());
+        base.insert(
+            "HOL_GUARD_DESKTOP_NOTIFICATIONS".to_string(),
+            "off".to_string(),
+        );
         base.insert("HOL_GUARD_NATIVE_BINARY".to_string(), "/evil".to_string());
         let env = isolated_environment(&base, None, Path::new("/bundled"));
         assert!(!env.contains_key("HOL_GUARD_NATIVE_BINARY"));
@@ -813,6 +819,11 @@ mod tests {
         assert_eq!(
             env.get("HOL_GUARD_NATIVE_DIAGNOSTIC").map(String::as_str),
             Some("1")
+        );
+        assert_eq!(
+            env.get("HOL_GUARD_DESKTOP_NOTIFICATIONS")
+                .map(String::as_str),
+            Some("off")
         );
         assert!(!env.contains_key("PATH") || cfg!(windows));
         assert!(!env.contains_key("LD_PRELOAD"));
