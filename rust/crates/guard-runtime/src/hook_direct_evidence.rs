@@ -31,7 +31,7 @@
 
 use crate::hook_direct_counters::DirectHookCounters;
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -134,22 +134,15 @@ impl QueueState {
 
     /// Add `markers` to the queued record `seq`, if it is still queued.
     fn mark(&mut self, seq: u64, markers: &[&str]) {
-        self.edit(seq, |fields| {
-            for marker in markers {
-                fields.insert((*marker).to_owned(), Value::Bool(true));
-            }
-        });
-    }
-
-    /// Change the queued record `seq`, if it is still queued.
-    fn edit(&mut self, seq: u64, change: impl FnOnce(&mut Map<String, Value>)) {
         let Some(queued) = self.records.iter_mut().find(|queued| queued.seq == seq) else {
             return;
         };
         let Some(fields) = queued.record.as_object_mut() else {
             return;
         };
-        change(fields);
+        for marker in markers {
+            fields.insert((*marker).to_owned(), Value::Bool(true));
+        }
         let bytes =
             serde_json::to_vec(&queued.record).map_or(queued.bytes, |encoded| encoded.len());
         self.bytes = (self.bytes - queued.bytes).saturating_add(bytes);
@@ -487,7 +480,7 @@ fn checked_receipt(mut record: Value) -> Value {
 }
 
 #[path = "hook_direct_evidence_notice.rs"]
-mod notice;
+pub(crate) mod notice;
 #[path = "hook_direct_evidence_record.rs"]
 mod record;
 #[cfg(test)]

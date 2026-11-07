@@ -2,9 +2,9 @@
 //!
 //! A connector-setup review's answer names the stored row and the CLI, and the
 //! drain raises the notice from the stored row as `notify_connector_setup`
-//! does. An MCP call the relay blocked on an approval request it wrote carries
-//! the persisted fields `_QueuedNotice` reads, and the drain raises each
-//! notice from them as `_notify_pending_approval` does.
+//! does. An MCP call the relay blocks on an approval request it wrote raises
+//! that request's notice as soon as the request is written, from the persisted
+//! fields `_QueuedNotice` reads, as `_notify_pending_approval` does.
 //!
 //! Either way a notice is shown only while desktop notifications are on, once
 //! per request (once per connector: the store answers a request with its first
@@ -27,8 +27,6 @@ use crate::native_review_link::{approval_browser_url, now_micros, APPROVAL_CENTE
 
 /// The drain raised the connector-setup notice this record names.
 pub(super) const NOTICE_RAISED: &str = "connector_notice_raised";
-/// `MCP_TOOL_CALL_EVIDENCE_KIND`: a relayed MCP call's record.
-const MCP_TOOL_CALL_KIND: &str = "mcp_tool_call";
 const BUSY_TIMEOUT_MS: u64 = 250;
 const TITLE: &str = "HOL Guard: a connector needs setup";
 const APPROVAL_TITLE: &str = "HOL Guard needs approval";
@@ -73,21 +71,15 @@ pub(super) struct Shown {
     connector: bool,
 }
 
-/// The notices of an MCP call the resident queued for approval, which the
-/// daemon raised after the call's receipt. A record whose notices were taken
-/// names none.
-pub(super) fn approval_notices(record: &Value) -> Vec<Shown> {
-    if record.get("kind").and_then(Value::as_str) != Some(MCP_TOOL_CALL_KIND) {
-        return Vec::new();
-    }
-    let Some(notices) = record
-        .get("approval")
-        .and_then(|approval| approval.get("notices"))
-        .and_then(Value::as_array)
-    else {
-        return Vec::new();
+/// Raise the notice of the request an MCP call was just blocked on, from the
+/// persisted fields `_QueuedNotice` reads. A notice the daemon could not read
+/// is left to the daemon, and says so by returning `false`.
+pub(crate) fn raise_approval(guard_home: &str, source: &str, notice: &Value) -> bool {
+    let Some(shown) = approval_notice(notice) else {
+        return false;
     };
-    notices.iter().filter_map(approval_notice).collect()
+    raise(guard_home, source, vec![Notice::Approval(shown)]);
+    true
 }
 
 fn approval_notice(notice: &Value) -> Option<Shown> {
@@ -111,18 +103,8 @@ fn approval_notice(notice: &Value) -> Option<Shown> {
     })
 }
 
-/// Take a record's approval notices once the drain raised them, so a page
-/// sent again, or the daemon, raises none.
-pub(super) fn take_approval_notices(record: &mut Map<String, Value>) {
-    if let Some(Value::Object(approval)) = record.get_mut("approval") {
-        if approval.contains_key("notices") {
-            approval.insert("notices".to_owned(), Value::Array(Vec::new()));
-        }
-    }
-}
-
-/// Raise a page's notices one after another on a thread of their own, so
-/// the drain never waits on the notifier.
+/// Raise notices one after another on a thread of their own, so neither the
+/// drain nor a blocked call waits on the notifier.
 pub(super) fn raise(guard_home: &str, source: &str, notices: Vec<Notice>) {
     if notices.is_empty() {
         return;

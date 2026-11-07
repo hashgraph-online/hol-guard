@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::{approval_notices, message, pending, take_approval_notices, Shown};
+use super::{approval_notice, message, pending, Shown};
 
 #[test]
 fn a_connector_notice_reads_as_the_daemon_writes_it() {
@@ -40,13 +40,6 @@ fn a_record_names_its_notice_until_the_drain_raises_it() {
     }
 }
 
-fn asked(notices: Value) -> Value {
-    json!({
-        "kind": "mcp_tool_call",
-        "approval": {"request_id": "req-1", "workspace": null, "notices": notices},
-    })
-}
-
 fn notice(fields: Value) -> Value {
     let mut notice = json!({
         "request_id": "req-1",
@@ -63,33 +56,27 @@ fn notice(fields: Value) -> Value {
     notice
 }
 
-fn subjects(record: &Value) -> Vec<String> {
-    approval_notices(record)
-        .into_iter()
-        .map(|shown| shown.subject)
-        .collect()
+fn subject(notice: &Value) -> Option<String> {
+    approval_notice(notice).map(|shown| shown.subject)
 }
 
 #[test]
 fn an_asked_call_names_its_notice_as_the_daemon_reads_it() {
-    let record = asked(json!([notice(json!({}))]));
     assert_eq!(
-        approval_notices(&record),
-        vec![Shown {
+        approval_notice(&notice(json!({}))),
+        Some(Shown {
             request_id: "req-1".to_owned(),
             harness: "codex".to_owned(),
             workspace: Some("/work".to_owned()),
             approval_url: "http://127.0.0.1:1/approvals/req-1".to_owned(),
             subject: "example-server".to_owned(),
             connector: false,
-        }]
+        })
     );
     let headline = notice(json!({"risk_headline": "Deletes files", "trigger_summary": "rm"}));
     let summary = notice(json!({"risk_headline": "", "trigger_summary": "rm", "workspace": null}));
-    assert_eq!(
-        subjects(&asked(json!([headline, summary]))),
-        ["Deletes files", "rm"]
-    );
+    assert_eq!(subject(&headline).as_deref(), Some("Deletes files"));
+    assert_eq!(subject(&summary).as_deref(), Some("rm"));
 }
 
 #[test]
@@ -100,27 +87,6 @@ fn a_notice_the_daemon_could_not_read_is_left() {
         notice(json!({"workspace": 1})),
         json!("req-1"),
     ] {
-        assert!(approval_notices(&asked(json!([unreadable]))).is_empty());
+        assert_eq!(approval_notice(&unreadable), None);
     }
-    let other = json!({"kind": "hook", "approval": {"notices": [notice(json!({}))]}});
-    assert!(approval_notices(&other).is_empty());
-}
-
-#[test]
-fn a_raised_notice_is_taken_off_its_record() {
-    let mut record = asked(json!([notice(json!({}))]));
-    if let Some(fields) = record.as_object_mut() {
-        take_approval_notices(fields);
-    }
-    assert!(approval_notices(&record).is_empty());
-    assert_eq!(record["approval"]["notices"], json!([]));
-    assert_eq!(
-        record["approval"]["request_id"], "req-1",
-        "the rest is kept"
-    );
-    let mut unasked = json!({"kind": "mcp_tool_call"});
-    if let Some(fields) = unasked.as_object_mut() {
-        take_approval_notices(fields);
-    }
-    assert_eq!(unasked, json!({"kind": "mcp_tool_call"}));
 }
