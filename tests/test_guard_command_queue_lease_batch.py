@@ -327,9 +327,9 @@ def test_partial_batch_stops_leasing_while_an_earlier_worker_is_still_running(tm
     pool._handoff.may_lease = True
 
     pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(_exact_job("job-2"),), more_may_be_ready=False))
-    _join(pool)
     release.set()
     earlier.join(5)
+    _join(pool)
 
     assert not pool._handoff.may_lease
     assert sorted(polls) == ["job-2", "watch"]
