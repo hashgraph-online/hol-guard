@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import contextvars
 import logging
 import urllib.error
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any
 
@@ -15,7 +13,6 @@ from ..store import GuardStore
 from .auto_update import maybe_auto_update
 from .cloud_policy_revision import cloud_policy_store_key, observe_cloud_policy_revision
 from .command_capability import (
-    AuthorizedCommandJob,
     CommandCapabilityError,
     CommandCapabilityUnavailableError,
     audit_command_decision,
@@ -39,6 +36,7 @@ from .command_queue_activation import (
 )
 from .command_queue_auth import resolve_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
+from .command_queue_authorization import start_command_authorization
 from .command_queue_drain import with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
@@ -166,27 +164,6 @@ def _resolve_command_queue_auth_context(
         resolve_auth_context=_resolve_guard_sync_auth_context,
         repair_authorization=repair_guard_cloud_connect_storage,
     )
-
-
-def _start_authorization(store: GuardStore, job: dict[str, object]) -> Callable[[], AuthorizedCommandJob]:
-    """Authorize ``job`` while its acknowledgement is in flight.
-
-    Authorization only reads local state, so it need not wait for the
-    acknowledgement round trip. The job still executes only after both finish.
-    """
-
-    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="guard-command-authorize")
-    try:
-        future = executor.submit(
-            contextvars.copy_context().run,
-            authorize_command_queue_job,
-            store,
-            job,
-            schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
-        )
-    finally:
-        executor.shutdown(wait=False)
-    return future.result
 
 
 def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardStore) -> dict[str, object]:
@@ -397,7 +374,13 @@ def poll_command_queue_once(
             on_exact_review_lease()
         except Exception as error:
             _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
-    authorization = _start_authorization(store, item)
+    authorization = start_command_authorization(
+        store,
+        item,
+        authorize=lambda auth_store, job: authorize_command_queue_job(
+            auth_store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS
+        ),
+    )
     try:
         _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
