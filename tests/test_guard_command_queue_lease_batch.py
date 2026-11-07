@@ -302,6 +302,38 @@ def test_only_one_worker_watches_at_a_time(tmp_path: Path) -> None:
     assert isinstance(pool._take_job(1), command_queue_drain.ReviewWatch)
 
 
+def test_partial_batch_stops_leasing_while_an_earlier_worker_is_still_running(tmp_path: Path) -> None:
+    polls: list[str] = []
+    pool = _recording_pool(tmp_path, polls, threading.Lock())
+    release = threading.Event()
+    earlier = threading.Thread(target=release.wait, daemon=True)
+    earlier.start()
+    pool._threads[0] = earlier
+    pool._handoff.may_lease = True
+
+    pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(_exact_job("job-2"),), more_may_be_ready=False))
+    _join(pool)
+    release.set()
+    earlier.join(5)
+
+    assert not pool._handoff.may_lease
+    assert sorted(polls) == ["job-2", "watch"]
+
+
+def test_a_lane_whose_state_cannot_be_read_keeps_the_handed_job_queued(tmp_path: Path) -> None:
+    pool = _recording_pool(tmp_path, [], threading.Lock())
+    pool._handoff.jobs.append(_exact_job("job-2"))
+
+    def unreadable(_key: str) -> object:
+        raise OSError("locked")
+
+    pool._store.get_sync_payload = unreadable  # type: ignore[method-assign]
+
+    # The worker polls instead, which sends any result it still holds first.
+    assert pool._take_job(0) is None
+    assert [job["id"] for job in pool._handoff.jobs] == ["job-2"]
+
+
 def test_a_drain_lane_batches_with_the_main_workers_limit_until_it_has_its_own(tmp_path: Path) -> None:
     store = FakeStore(tmp_path / "guard-home")
     store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, {"exact_lease_batch_limit": 4}, "2000-01-01T00:00:00+00:00")

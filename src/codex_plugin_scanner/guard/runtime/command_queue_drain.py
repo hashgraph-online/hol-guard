@@ -174,12 +174,12 @@ def review_drain_has_pending_result(store: GuardStore) -> bool:
     return any(_lane_has_pending_result(store, slot) for slot in range(REVIEW_DRAIN_WORKERS))
 
 
-def _lane_has_pending_result(store: GuardStore, slot: int) -> bool:
+def _lane_has_pending_result(store: GuardStore, slot: int, *, unreadable: bool = False) -> bool:
     try:
         payload = store.get_sync_payload(review_drain_lane(slot).state_key)
     except Exception as error:
         _LOGGER.warning("Guard Review drain state unreadable: slot=%s error=%s", slot, type(error).__name__)
-        return False
+        return unreadable
     return isinstance(payload, dict) and isinstance(payload.get("pending_result"), dict)
 
 
@@ -216,7 +216,9 @@ class ReviewDrainPool:
 
         # A lane still holding an unsent result sends it first; a job handed to
         # it now would have nowhere to keep its own result if that upload failed.
-        if _lane_has_pending_result(self._store, slot):
+        # A lane whose state cannot be read is treated the same way: a handed
+        # job skips the pending-result retry and could overwrite that result.
+        if _lane_has_pending_result(self._store, slot, unreadable=True):
             return None
         with self._lock:
             if self._handoff.jobs:
@@ -264,9 +266,10 @@ class ReviewDrainPool:
             if batch is None or batch.more_may_be_ready:
                 self._handoff.may_lease = True
             else:
+                # Cloud returned fewer jobs than asked for, so the queue is
+                # empty; workers finish what they hold and one watches.
                 self._handoff.watch_until = time.monotonic() + REVIEW_WATCH_SECONDS
-                if not self._any_alive():
-                    self._handoff.may_lease = False
+                self._handoff.may_lease = False
             wanted = len(self._threads)
             if not self._handoff.may_lease:
                 watch = self._handoff.watcher is None and self._handoff.watch_until > time.monotonic()
@@ -301,9 +304,6 @@ class ReviewDrainPool:
                 self._threads[slot] = worker
                 started += 1
         return started
-
-    def _any_alive(self) -> bool:
-        return any(thread is not None and thread.is_alive() for thread in self._threads)
 
 
 def with_review_drains(
