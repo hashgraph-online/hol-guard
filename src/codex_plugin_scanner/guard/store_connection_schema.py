@@ -17,6 +17,7 @@ from . import (
     store_review_event_outbox_schema,
     store_storage_gate,
 )
+from .advisory_lock_handoff import process_lock_for
 from .cloud_sync_busy import GuardCloudSyncBusyError
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
@@ -638,20 +639,28 @@ class StoreConnectionSchemaMixin:
         timeout_error: type[TimeoutError] = TimeoutError,
     ) -> Iterator[None]:
         deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        with path.open("a+b") as handle:
-            while True:
+        # Threads of this process queue here first, so a release wakes the
+        # next one at once instead of on its next file-lock poll.
+        process_lock = process_lock_for(path)
+        if not process_lock.acquire(timeout=max(deadline - time.monotonic(), 0.0)):
+            raise timeout_error(timeout_message)
+        try:
+            with path.open("a+b") as handle:
+                while True:
+                    try:
+                        _acquire_advisory_file_lock(handle)
+                        break
+                    except BlockingIOError:
+                        if time.monotonic() >= deadline:
+                            raise timeout_error(timeout_message) from None
+                        time.sleep(poll_seconds)
                 try:
-                    _acquire_advisory_file_lock(handle)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise timeout_error(timeout_message) from None
-                    time.sleep(poll_seconds)
-            try:
-                yield
-            finally:
-                with suppress(OSError):
-                    _release_advisory_file_lock(handle)
+                    yield
+                finally:
+                    with suppress(OSError):
+                        _release_advisory_file_lock(handle)
+        finally:
+            process_lock.release()
 
     def cloud_sync_in_progress(self) -> bool:
         lock_path = self.guard_home / "cloud-sync.lock"

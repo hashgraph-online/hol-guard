@@ -456,46 +456,58 @@ def poll_command_queue_once(
         )
         _save_state(store, state)
         return status(store)
-    auth_context = _resolve_command_queue_auth_context(store)
-    state = _load_state(store)
-    state.update(
-        {
-            "state": "polling",
-            "last_poll_at": _now(),
-            "last_error": None,
-            "last_poll_was_empty": False,
-        }
-    )
-    _save_state(store, state)
-    if leased_item is None and _retry_pending_result(store, auth_context, state):
-        return status(store)
     extras: list[dict[str, object]] = []
-    batch_size = (
-        min(lane_exact_lease_batch_limit(store, state), REVIEW_LEASE_BATCH_SIZE) if on_exact_review_lease else 1
-    )
-    item = leased_item or _lease_job_with_401_retry(
-        store,
-        state,
-        auth_context,
-        max_jobs=batch_size,
-        on_extra_jobs=extras.extend if batch_size > 1 else None,
-    )
-    if item is None:
-        empty_at = _now()
+    batch_size = 1
+    if leased_item is not None:
+        # A handed-over job is already leased. Its few setup reads and writes
+        # share one connection, so they pay one schema load instead of one
+        # per call while the other drain workers contend for the store.
+        with _review_connection_scope(store, leased_item):
+            auth_context = _resolve_command_queue_auth_context(store)
+            state = _load_state(store)
+            state.update({"last_poll_at": _now(), "last_error": None})
+            _record_leased_job(store, state, leased_item)
+        item = leased_item
+    else:
+        auth_context = _resolve_command_queue_auth_context(store)
+        state = _load_state(store)
         state.update(
             {
-                "state": "idle",
-                "last_empty_poll_at": empty_at,
-                "last_poll_at": empty_at,
-                "last_poll_was_empty": True,
+                "state": "polling",
+                "last_poll_at": _now(),
+                "last_error": None,
+                "last_poll_was_empty": False,
             }
         )
         _save_state(store, state)
-        if not _current_lane().is_drain:
-            maybe_auto_update(store, context)
-        return status(store)
-    auth_context = _resolve_command_queue_auth_context(store)
-    _record_leased_job(store, state, item)
+        if _retry_pending_result(store, auth_context, state):
+            return status(store)
+        batch_size = (
+            min(lane_exact_lease_batch_limit(store, state), REVIEW_LEASE_BATCH_SIZE) if on_exact_review_lease else 1
+        )
+        item = _lease_job_with_401_retry(
+            store,
+            state,
+            auth_context,
+            max_jobs=batch_size,
+            on_extra_jobs=extras.extend if batch_size > 1 else None,
+        )
+        if item is None:
+            empty_at = _now()
+            state.update(
+                {
+                    "state": "idle",
+                    "last_empty_poll_at": empty_at,
+                    "last_poll_at": empty_at,
+                    "last_poll_was_empty": True,
+                }
+            )
+            _save_state(store, state)
+            if not _current_lane().is_drain:
+                maybe_auto_update(store, context)
+            return status(store)
+        auth_context = _resolve_command_queue_auth_context(store)
+        _record_leased_job(store, state, item)
     if on_exact_review_lease is not None and uses_exact_transport(item):
         # A Review decision rarely comes alone: a bulk approval queues one
         # job per request. Settle the rest beside this one; this job settles
