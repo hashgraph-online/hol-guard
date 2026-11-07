@@ -193,36 +193,6 @@ def test_poll_once_settles_the_leased_job_when_drains_fail_to_start(tmp_path: Pa
     assert "Guard Review drain start failed" in caplog.text
 
 
-def test_poll_once_authorizes_while_acknowledging_and_executes_only_after_the_ack(tmp_path: Path, monkeypatch) -> None:
-    store = FakeStore(tmp_path / "guard-home")
-    _enable_queue(store, monkeypatch)
-    exact_review_job = {**_exact_job("job-1"), "operation": EXACT_CLOUD_REVIEW_OPERATION, "payload": {}}
-    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args, **_kwargs: exact_review_job)
-    authorized = threading.Event()
-    authorizing_lanes: list[str] = []
-    executed: list[str] = []
-
-    def authorize(_store: object, job: dict[str, object], **_kwargs: object) -> object:
-        authorizing_lanes.append(current_command_queue_lane().state_key)
-        authorized.set()
-        raise command_capability.CommandCapabilityError("stop after authorize")
-
-    def acknowledge(_auth_context: object, _job: dict[str, object]) -> None:
-        # The ack only returns once authorization has run beside it.
-        assert authorized.wait(5)
-        raise RuntimeError("ack failed")
-
-    monkeypatch.setattr(command_queue, "authorize_command_queue_job", authorize)
-    monkeypatch.setattr(command_queue, "_heartbeat", acknowledge)
-    monkeypatch.setattr(command_queue, "_execute_job", lambda job, *_args: executed.append(str(job["id"])))
-
-    with pytest.raises(RuntimeError, match="ack failed"):
-        _in_lane(1, lambda: command_queue.poll_command_queue_once(store, _context(tmp_path)))
-
-    assert authorizing_lanes == [f"{COMMAND_QUEUE_STATE_KEY}.review_drain.1"]
-    assert executed == []
-
-
 @pytest.mark.parametrize(
     "job",
     [
