@@ -240,9 +240,21 @@ def test_a_missed_budget_leaves_no_row_behind_for_the_retry_to_be_judged_on(
         )
 
     quiet = next(c for c in _CASES if c.expect == "quiet" and c.harness == "claude-code" and behaves(c))
-    # A review-by-design case can be contained or routed on a given host and queue nothing at all,
-    # so the stand-in is whichever candidate actually leaves a row behind here.
-    candidates = [c for c in _CASES if c.expect in {"always", "block"} and c.harness == "claude-code" and behaves(c)]
+    # This module replays every case on the same store before this test runs, so a case replayed
+    # again only deduplicates onto the row it already has: its id is in the baseline either way and
+    # the set-aside path would never run. The stand-in therefore carries a trailing comment, which
+    # leaves the command's meaning alone and gives the queue a request it has not seen. A review by
+    # design can still be contained or routed on a given host and queue nothing at all, so the
+    # stand-in is whichever candidate actually adds a request id here.
+    candidates = [
+        c
+        for c in _CASES
+        if c.expect in {"always", "block"}
+        and c.harness == "claude-code"
+        and isinstance(c.tool_input, dict)
+        and isinstance(c.tool_input.get("command"), str)
+        and behaves(c)
+    ]
     answered = worker.review_http_payload
     calls: list[int] = []
     left_behind: list[str] = []
@@ -253,15 +265,20 @@ def test_a_missed_budget_leaves_no_row_behind_for_the_retry_to_be_judged_on(
             return answered(**kwargs)
         before = approval_snapshot(worker.store)
         for candidate in candidates[:12]:
+            payload = _payload(candidate, fixture)
+            tool_input = dict(payload["tool_input"])  # type: ignore[arg-type]
+            tool_input["command"] = f"{tool_input['command']} # interrupted gate attempt"
+            payload["tool_input"] = tool_input
+            payload["tool_call_id"] = f"{candidate.case_id}-interrupted"
             answered(
-                payload=_payload(candidate, fixture),
+                payload=payload,
                 params={},
                 default_harness=candidate.harness,
                 home_dir=fixture.home,
                 guard_home=fixture.guard_home,
                 workspace=fixture.cwd(candidate.cwd),
             )
-            if approval_snapshot(worker.store) != before:
+            if approval_snapshot(worker.store).keys() - before.keys():
                 left_behind.append(candidate.case_id)
                 break
         return {"decision": "deny", "reason_code": EXTENSION_TIMEOUT_REASON}
@@ -269,7 +286,7 @@ def test_a_missed_budget_leaves_no_row_behind_for_the_retry_to_be_judged_on(
     monkeypatch.setattr(worker, "review_http_payload", interrupted_first)
     with pytest.warns(NativeUnavailableRetryWarning):
         result, rows = _replay(quiet, fixture, worker)
-    assert left_behind, "no review-by-design case queued a row for the interrupted attempt to leave behind"
+    assert left_behind, "no review-by-design case added a request id for the interrupted attempt to leave behind"
     assert len(calls) == 2
     assert result.get("reason_code") != EXTENSION_TIMEOUT_REASON
     assert rows == [], f"{quiet.case_id} judged the interrupted attempt's rows: {rows}"
