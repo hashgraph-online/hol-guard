@@ -153,3 +153,27 @@ fn an_install_affecting_option_changes_the_executable_digest() {
 
     assert_ne!(plain, with_extra);
 }
+
+/// Replacing the manager with a byte-identical copy gives it a new inode and
+/// fresh timestamps. The approval context must not notice: `sha256`, `size`
+/// and the resolved path already pin what will run, so a saved package
+/// approval has to survive a reinstall, a corepack refresh or any other atomic
+/// rewrite that leaves the bytes alone.
+#[test]
+fn replacing_the_manager_with_the_same_bytes_keeps_the_executable_digest() {
+    let root = tempfile::tempdir().unwrap();
+    let manager_bin = root.path().join("manager-bin");
+    write_manager(&manager_bin, "#!/bin/sh\n# bun-v1\n");
+
+    let baseline = executable_digest(root.path(), &[&manager_bin]);
+
+    let replacement = root.path().join("bun-replacement");
+    std::fs::write(&replacement, "#!/bin/sh\n# bun-v1\n").unwrap();
+    std::fs::set_permissions(&replacement, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::rename(&replacement, manager_bin.join("bun")).unwrap();
+
+    assert_eq!(baseline, executable_digest(root.path(), &[&manager_bin]));
+
+    write_manager(&manager_bin, "#!/bin/sh\n# bun-v2\n");
+    assert_ne!(baseline, executable_digest(root.path(), &[&manager_bin]));
+}
