@@ -432,6 +432,7 @@
       "src/pretool/git_local_writes_start.rs",
       "src/pretool/git_log_names.rs",
       "src/pretool/git_object_reads.rs",
+      "src/pretool/git_output_target.rs",
       "src/pretool/git_probe.rs",
       "src/pretool/git_probe_repository.rs",
       "src/pretool/git_probe_submodule_tests.rs",
