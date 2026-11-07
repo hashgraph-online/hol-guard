@@ -35,7 +35,8 @@ import logging
 import threading
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -103,6 +104,49 @@ def review_drain_lane(slot: int, *, wait_ms: int = 0) -> CommandQueueLane:
     )
 
 
+class _LaneWriters:
+    """Which drain workers in this process are writing each lane's state.
+
+    A pool stopped by a worker restart does not wait for its drain workers, so
+    an old worker can still be saving an unsent result while a new pool's
+    worker runs the same slot. A worker trusts its own poll's word about its
+    lane only while it was the lane's sole writer from that poll onward.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._count: dict[str, int] = {}
+        self._entries: dict[str, int] = {}
+
+    @contextmanager
+    def writing(self, key: str) -> Iterator[Callable[[], int | None]]:
+        with self._lock:
+            self._count[key] = self._count.get(key, 0) + 1
+            self._entries[key] = self._entries.get(key, 0) + 1
+        try:
+            yield lambda: self._sole_since(key)
+        finally:
+            with self._lock:
+                remaining = self._count[key] - 1
+                if remaining:
+                    self._count[key] = remaining
+                else:
+                    del self._count[key]
+
+    def _sole_since(self, key: str) -> int | None:
+        """A token that changes once another writer enters, or ``None`` while one is live."""
+
+        with self._lock:
+            return self._entries[key] if self._count.get(key) == 1 else None
+
+
+_LANE_WRITERS = _LaneWriters()
+
+
+def _lane_writer_key(store: GuardStore, slot: int) -> str:
+    return f"{getattr(store, 'path', id(store))}#{slot}"
+
+
 def drain_review_jobs(
     store: GuardStore,
     context: HarnessContext,
@@ -111,7 +155,7 @@ def drain_review_jobs(
     stop_event: Any,
     poll_once: PollOnce,
     format_error: Callable[[BaseException], str],
-    take_job: Callable[[int], object] | None = None,
+    take_job: Callable[..., object] | None = None,
     release: Callable[[int], bool] | None = None,
     on_watch_lease: Callable[[ReviewLeaseBatch], object] | None = None,
 ) -> None:
@@ -128,12 +172,46 @@ def drain_review_jobs(
     ``REVIEW_DRAIN_RETRY_DELAYS_SECONDS``; any other state ends the worker.
     """
 
+    with _LANE_WRITERS.writing(_lane_writer_key(store, slot)) as sole_writer:
+        _drain_lane(
+            store,
+            context,
+            slot=slot,
+            stop_event=stop_event,
+            poll_once=poll_once,
+            format_error=format_error,
+            take_job=take_job,
+            release=release,
+            on_watch_lease=on_watch_lease,
+            sole_writer=sole_writer,
+        )
+
+
+def _drain_lane(
+    store: GuardStore,
+    context: HarnessContext,
+    *,
+    slot: int,
+    stop_event: Any,
+    poll_once: PollOnce,
+    format_error: Callable[[BaseException], str],
+    take_job: Callable[..., object] | None,
+    release: Callable[[int], bool] | None,
+    on_watch_lease: Callable[[ReviewLeaseBatch], object] | None,
+    sole_writer: Callable[[], int | None],
+) -> None:
     enter_command_queue_lane(review_drain_lane(slot))
     failures = 0
+    # While no other worker writes this lane, the status this worker's last
+    # poll returned says whether the lane still holds an unsent result.
+    lane_clear = False
+    polled_alone: int | None = None
     while not stop_event.is_set():
-        job = take_job(slot) if take_job is not None else None
+        trusted = lane_clear and polled_alone is not None and sole_writer() == polled_alone
+        job = take_job(slot, lane_clear=trusted) if take_job is not None else None
         if job is STOP_DRAIN:
             return
+        polled_alone = sole_writer()
         try:
             if isinstance(job, dict):
                 status = poll_once(store, context, leased_item=job)
@@ -153,6 +231,7 @@ def drain_review_jobs(
             # goes stale; a result it could not send stays in its state.
             _LOGGER.warning("Guard Review drain poll failed: error=%s", format_error(error))
             status = None
+        lane_clear = status is not None and not isinstance(status.get("pending_result"), dict)
         if status is not None and status.get("state") == "idle":
             if status.get("last_poll_was_empty") is True and (release is None or release(slot)):
                 return
@@ -212,14 +291,19 @@ class ReviewDrainPool:
         with self._lock:
             return bool(self._handoff.jobs)
 
-    def _take_job(self, slot: int) -> object:
-        """A handed-over job for worker ``slot``, ``None`` to poll, a ``ReviewWatch``, or ``STOP_DRAIN``."""
+    def _take_job(self, slot: int, *, lane_clear: bool = False) -> object:
+        """A handed-over job for worker ``slot``, ``None`` to poll, a ``ReviewWatch``, or ``STOP_DRAIN``.
+
+        ``lane_clear`` is the worker's own word, from the status its last poll
+        returned, that its lane holds no unsent result; the lane's state is then
+        not read again before the next job.
+        """
 
         # A lane still holding an unsent result sends it first; a job handed to
         # it now would have nowhere to keep its own result if that upload failed.
         # A lane whose state cannot be read is treated the same way: a handed
         # job skips the pending-result retry and could overwrite that result.
-        if _lane_has_pending_result(self._store, slot, unreadable=True):
+        if not lane_clear and _lane_has_pending_result(self._store, slot, unreadable=True):
             return None
         with self._lock:
             if self._handoff.jobs:
