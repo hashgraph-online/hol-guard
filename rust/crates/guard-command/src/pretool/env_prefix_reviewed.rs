@@ -73,10 +73,17 @@ fn plain_data(name: &str, value: &str) -> bool {
     if super::settings::inert_tool_setting(name, value) {
         return true;
     }
-    !matches!(
-        name.to_ascii_uppercase().as_str(),
-        "NODE_PATH" | "TMPDIR" | "TMP" | "TEMP"
-    ) && !crate::command_compatibility::credential_routing_environment_name(name)
+    // A name the endpoint screen owns decides whose server answers, and the
+    // value test below cannot tell `PORT=3000` from `PORT=99999` or
+    // `PORT=db.example.test:5432`. `inert_tool_setting` above already answered
+    // for the port numbers a run may carry, so what reaches here is a value
+    // that family does not accept and the contained launcher must not drop.
+    !crate::command_compatibility::environment::endpoint_steering_environment_name(name)
+        && !matches!(
+            name.to_ascii_uppercase().as_str(),
+            "NODE_PATH" | "TMPDIR" | "TMP" | "TEMP"
+        )
+        && !crate::command_compatibility::credential_routing_environment_name(name)
         && !forwarded(name)
         && value.len() <= MAX_DATA_CHARS
         && !value.starts_with('-')
