@@ -47,7 +47,7 @@ from .command_queue_state import (
 )
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 
-REVIEW_DRAIN_WORKERS = 3
+REVIEW_DRAIN_WORKERS = 7
 # The main worker's job plus one handed to each drain worker.
 REVIEW_LEASE_BATCH_SIZE = 1 + REVIEW_DRAIN_WORKERS
 STOP_DRAIN: Final = object()
