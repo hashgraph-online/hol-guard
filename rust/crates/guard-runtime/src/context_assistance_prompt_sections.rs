@@ -13,11 +13,16 @@ pub(super) struct Section {
 }
 
 pub(super) fn sections(path: &str, lines: &[&str]) -> Vec<Section> {
-    if prose(Path::new(path)) {
+    if headed(path) {
         headed_sections(lines)
     } else {
         code_sections(lines)
     }
+}
+
+/// Whether `path` is a prose file, split by headings, not definitions.
+pub(super) fn headed(path: &str) -> bool {
+    prose(Path::new(path))
 }
 
 /// Each definition in a code file, from its decorators to the last line
@@ -106,6 +111,11 @@ fn indent(line: &str) -> usize {
 
 /// The name a definition line gives, spelled as `terms` spells words.
 fn defined_name(line: &str) -> Option<String> {
+    written_name(line).map(|name| term_form(&name))
+}
+
+/// The name a definition line gives, as the code writes it.
+pub(super) fn written_name(line: &str) -> Option<String> {
     let mut words = line.split_whitespace().skip_while(|word| {
         matches!(
             *word,
@@ -128,7 +138,49 @@ fn defined_name(line: &str) -> Option<String> {
         .chars()
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
-    (!name.is_empty()).then(|| term_form(&name))
+    (!name.is_empty()).then_some(name)
+}
+
+/// The line `section` opens with, past its decorators and attributes.
+pub(super) fn opening<'a>(lines: &[&'a str], section: &Section) -> &'a str {
+    lines
+        .get(section.start - 1..section.end.min(lines.len()))
+        .unwrap_or_default()
+        .iter()
+        .map(|line| line.trim())
+        .find(|line| !decorates(line))
+        .unwrap_or_default()
+}
+
+/// The definitions directly inside `outer` (a class's methods, an impl's
+/// functions), each with its name as written and its lines. A later one
+/// replaces an earlier one of the same name, so overloads count once.
+pub(super) fn members(
+    sections: &[Section],
+    lines: &[&str],
+    outer: &Section,
+) -> Vec<(String, usize, usize)> {
+    let inside = |inner: &Section, around: &Section| {
+        around.start <= inner.start
+            && inner.end <= around.end
+            && (around.start, around.end) != (inner.start, inner.end)
+    };
+    let mut found: Vec<(String, usize, usize)> = Vec::new();
+    for section in sections.iter().filter(|section| inside(section, outer)) {
+        let nested = sections
+            .iter()
+            .any(|other| inside(other, outer) && inside(section, other));
+        let Some(name) = written_name(opening(lines, section)) else {
+            continue;
+        };
+        if nested {
+            continue;
+        }
+        found.retain(|(seen, _, _)| *seen != name);
+        found.push((name, section.start, section.end));
+    }
+    found.sort_by_key(|(_, start, _)| *start);
+    found
 }
 
 /// Each section of a prose file, from its heading to the next one: a

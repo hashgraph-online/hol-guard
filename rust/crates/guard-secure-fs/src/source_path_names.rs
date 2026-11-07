@@ -21,6 +21,9 @@ pub(super) const SOURCE_EXTENSIONS: &[&str] = &[
     "c", "cc", "cpp", "css", "go", "h", "hpp", "html", "java", "js", "jsx", "json", "md", "mjs",
     "py", "rs", "sh", "toml", "ts", "tsx", "yaml", "yml",
 ];
+/// Prose formats a project writes docs and changelogs in besides Markdown,
+/// readable as project context but not counted as source by command checks.
+pub(super) const DOCUMENT_EXTENSIONS: &[&str] = &["adoc", "markdown", "mdx", "rst", "txt"];
 pub(super) const BENIGN_SOURCE_DOTFILES: &[&str] = &[".nvmrc", ".worktrees"];
 /// Ordinary project config files. They are benign only as the final path
 /// component, so a directory spelled `.gitignore/` opens no hidden tree.
