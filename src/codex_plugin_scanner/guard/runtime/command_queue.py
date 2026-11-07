@@ -57,6 +57,7 @@ from .command_queue_state import (
     COMMAND_QUEUE_ENABLED_ENV,
     COMMAND_QUEUE_LEASE_WAIT_MS_ENV,  # noqa: F401 - public compatibility export
     COMMAND_QUEUE_STATE_KEY,  # noqa: F401 - public compatibility export
+    command_queue_brief_status,
     command_queue_lease_payload,
     default_command_context,  # noqa: F401 - public compatibility export
     lane_exact_lease_batch_limit,
@@ -334,13 +335,17 @@ def poll_command_queue_once(
     *,
     on_exact_review_lease: Callable[[ReviewLeaseBatch], object] | None = None,
     leased_item: dict[str, object] | None = None,
+    brief_status: bool = False,
 ) -> dict[str, object]:
     """Settle one command job: lease it, or take ``leased_item`` already leased.
 
     With ``on_exact_review_lease``, an exact Review lease may return further
     jobs leased in the same response; they go to the callback to settle on
     drain workers. ``leased_item`` is how a drain worker settles one of them.
+    ``brief_status`` returns only the lane's queue state, for the daemon loops.
     """
+
+    status = command_queue_brief_status if brief_status else command_queue_status
 
     # A drain lane only starts beside a main poll that passed the full check,
     # and its lease scope already requires a ready Review keyring.
@@ -355,7 +360,7 @@ def poll_command_queue_once(
             }
         )
         _save_state(store, state)
-        return command_queue_status(store)
+        return status(store)
     auth_context = _resolve_command_queue_auth_context(store)
     state = _load_state(store)
     state.update(
@@ -368,7 +373,7 @@ def poll_command_queue_once(
     )
     _save_state(store, state)
     if leased_item is None and _retry_pending_result(store, auth_context, state):
-        return command_queue_status(store)
+        return status(store)
     extras: list[dict[str, object]] = []
     batch_size = (
         min(lane_exact_lease_batch_limit(store, state), REVIEW_LEASE_BATCH_SIZE) if on_exact_review_lease else 1
@@ -393,7 +398,7 @@ def poll_command_queue_once(
         _save_state(store, state)
         if not _current_lane().is_drain:
             maybe_auto_update(store, context)
-        return command_queue_status(store)
+        return status(store)
     auth_context = _resolve_command_queue_auth_context(store)
     _record_leased_job(store, state, item)
     if on_exact_review_lease is not None and uses_exact_transport(item):
@@ -537,7 +542,7 @@ def poll_command_queue_once(
         raise
     if refused is not None:
         drop_refused_result(store, state, item, refused, save_state=_save_state)
-        return command_queue_status(store)
+        return status(store)
     state.pop("active_job", None)
     state.pop("pending_result", None)
     state.update({"state": "idle", "last_result_at": _now(), "last_poll_was_empty": False})
@@ -549,7 +554,7 @@ def poll_command_queue_once(
         reason=str(payload.get("status") or "unknown"),
     )
     _LOGGER.info("Guard command completed.")
-    return command_queue_status(store)
+    return status(store)
 
 
 def command_queue_loop(
@@ -564,7 +569,11 @@ def command_queue_loop(
         stop_event=stop_event,
         enabled=command_queue_should_poll,
         poll_once=with_review_drains(
-            store, context, stop_event=stop_event, poll_once=poll_command_queue_once, format_error=_redacted_error
+            store,
+            context,
+            stop_event=stop_event,
+            poll_once=partial(poll_command_queue_once, brief_status=True),
+            format_error=_redacted_error,
         ),
         load_state=_load_state,
         save_state=_save_state,

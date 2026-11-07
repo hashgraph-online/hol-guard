@@ -436,3 +436,17 @@ def test_main_poll_restarts_drains_for_a_job_still_waiting(tmp_path: Path, monke
     poll(store, _context(tmp_path))
 
     assert starts == [None]
+
+
+def test_daemon_poll_reports_only_the_queue_state(tmp_path: Path, monkeypatch) -> None:
+    def no_full_status(_store: object) -> dict[str, object]:
+        raise AssertionError("the daemon loop does not read the full status")
+
+    monkeypatch.setattr(command_queue, "command_queue_status", no_full_status)
+    monkeypatch.setattr(command_queue, "command_queue_should_poll", lambda _store: False)
+
+    status = command_queue.poll_command_queue_once(
+        FakeStore(tmp_path / "guard-home"), _context(tmp_path), brief_status=True
+    )
+
+    assert status == {"state": "disabled", "last_error": None, "last_poll_was_empty": False, "pending_result": None}

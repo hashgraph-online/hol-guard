@@ -208,6 +208,22 @@ def command_queue_status(
     }
 
 
+def command_queue_brief_status(store: GuardStore) -> dict[str, object]:
+    """The lane's queue state alone, for the daemon's own loops between jobs.
+
+    The full status also reports capability, Cloud Review and grant details.
+    Building it costs a native round trip per job, and the loops read none of it.
+    """
+
+    state = load_command_queue_state(store)
+    return {
+        "state": state.get("state", "idle"),
+        "last_error": state.get("last_error"),
+        "last_poll_was_empty": bool(state.get("last_poll_was_empty")),
+        "pending_result": state.get("pending_result"),
+    }
+
+
 def repair_command_queue_state(store: GuardStore) -> dict[str, object]:
     state = load_command_queue_state(store)
     repaired: list[str] = []
@@ -275,6 +291,7 @@ __all__ = [
     "COMMAND_QUEUE_STATE_KEY",
     "CommandQueueLane",
     "clear_exact_route_failure",
+    "command_queue_brief_status",
     "command_queue_enabled",
     "command_queue_lease_payload",
     "command_queue_now",
