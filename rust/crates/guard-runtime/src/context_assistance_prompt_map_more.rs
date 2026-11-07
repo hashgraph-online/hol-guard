@@ -107,11 +107,16 @@ pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
 }
 
 /// The doc sections that hold the most of `words`, rarer words counting for
-/// more and a word in the heading twice.
+/// more, a word in every section for next to nothing, and a word in the heading
+/// twice. A project with a docs folder documents its features there, so its
+/// top-level files, a README or CONTRIBUTING, are left out.
 pub(super) fn docs(files: &[File], words: &[String]) -> Vec<String> {
     let mut held: Vec<(&File, usize, BTreeSet<String>, BTreeSet<String>)> = Vec::new();
     let mut count = 0;
-    for file in files.iter().filter(|file| file.kind == Kind::Doc) {
+    let doc = |file: &&File| file.kind == Kind::Doc;
+    let foldered = files.iter().filter(doc).any(|file| file.path.contains('/'));
+    let listed = |file: &&File| !foldered || file.path.contains('/');
+    for file in files.iter().filter(doc).filter(listed) {
         for (at, section) in file.sections.iter().enumerate() {
             if section.end - section.start >= MAX_DOC_SECTION {
                 continue;
@@ -140,7 +145,7 @@ pub(super) fn docs(files: &[File], words: &[String]) -> Vec<String> {
             .iter()
             .filter(|(_, _, body, _)| body.contains(word))
             .count();
-        (1.0 + count / holding.max(1) as f64).ln()
+        ((count + 1.0) / holding.max(1) as f64).ln()
     };
     let mut scored: Vec<(f64, String)> = held
         .iter()

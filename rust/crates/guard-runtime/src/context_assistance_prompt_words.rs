@@ -13,14 +13,14 @@ pub(crate) const MAX_NAMED: usize = 4;
 const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
 const STOP_WORDS: &[&str] = &[
     "about", "add", "after", "again", "all", "already", "also", "and", "any", "are", "been",
-    "before", "being", "both", "build", "but", "can", "change", "could", "create", "did", "does",
-    "during", "each", "either", "every", "few", "fix", "for", "from", "further", "get", "had",
-    "has", "have", "help", "here", "how", "into", "its", "itself", "just", "let", "like", "make",
-    "might", "more", "most", "must", "need", "new", "not", "now", "once", "only", "other", "our",
-    "over", "please", "put", "same", "should", "some", "still", "such", "than", "that", "the",
-    "them", "then", "there", "these", "they", "this", "those", "though", "too", "until", "update",
-    "use", "very", "want", "was", "were", "what", "when", "where", "whether", "which", "while",
-    "who", "whose", "why", "will", "with", "would", "you", "your",
+    "before", "being", "both", "build", "but", "can", "cannot", "change", "could", "create", "did",
+    "does", "during", "each", "either", "every", "few", "fix", "for", "from", "further", "get",
+    "had", "has", "have", "help", "here", "how", "into", "its", "itself", "just", "let", "like",
+    "make", "might", "more", "most", "must", "need", "new", "not", "now", "once", "only", "other",
+    "our", "over", "please", "put", "same", "should", "some", "still", "such", "than", "that",
+    "the", "them", "then", "there", "these", "they", "this", "those", "though", "too", "until",
+    "update", "use", "very", "want", "was", "were", "what", "when", "where", "whether", "which",
+    "while", "who", "whose", "why", "will", "with", "would", "you", "your",
 ];
 
 /// Lowercase words from the prompt worth looking for in paths and code.

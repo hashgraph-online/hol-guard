@@ -26,9 +26,8 @@ const MAX_FILE_BYTES: u64 = 262_144;
 const MAX_DEPTH: usize = 10;
 /// Files kept per name the prompt gives.
 const MAX_NAMED_MATCHES: usize = 2;
-/// Test files kept aside when the prompt does not ask about tests, for the
-/// map of where a request's code is.
-const MAX_LEFT_OUT_TESTS: usize = 6;
+/// Test files kept aside for the map's list of where a new test goes.
+const MAX_KEPT_TESTS: usize = 6;
 const WALK_BUDGET: Duration = Duration::from_millis(350);
 
 const SKIPPED_DIRS: &[&str] = &[
@@ -116,8 +115,8 @@ struct Scored {
     named: Option<usize>,
 }
 
-/// What the walk found: the matched files, best first; the test files it
-/// left out of them because the prompt does not ask about tests, best first;
+/// What the walk found: the matched files, best first; the best test files,
+/// kept apart from them;
 /// how many files it checked; how many of those hold each term and each
 /// quoted phrase; and how many code files hold each term as a whole word.
 #[derive(Debug, Default)]
@@ -275,7 +274,7 @@ fn finish(seen: Vec<Seen>, checked: usize, terms: &[String], phrases: usize) -> 
     let quoting = (0..phrases)
         .map(|i| seen.iter().filter(|s| s.quoted[i]).count())
         .collect();
-    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases), terms);
+    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases));
     Walk {
         files,
         tests,
@@ -377,7 +376,7 @@ fn named_as(relative: &str, named: &[String]) -> Option<usize> {
 /// out when a source file matched and the prompt did not ask about tests,
 /// since a test that quotes the same words would otherwise crowd out the
 /// file the request is about.
-fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
+fn ranked(scored: Vec<Scored>) -> (Vec<String>, Vec<String>) {
     let (mut pinned, mut scored): (Vec<Scored>, Vec<Scored>) =
         scored.into_iter().partition(|item| item.named.is_some());
     pinned.sort_by(|a, b| {
@@ -397,8 +396,10 @@ fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
         *count += 1;
         *count <= MAX_NAMED_MATCHES
     });
+    // Tests are kept aside even when the prompt asks for them, so source
+    // files fill the candidates and the map still finds where new tests go.
     let mut tests = Vec::new();
-    if !asks_for_tests(terms) && scored.iter().any(|item| !test_file(&item.relative)) {
+    if scored.iter().any(|item| !test_file(&item.relative)) {
         (tests, scored) = scored
             .into_iter()
             .partition(|item| test_file(&item.relative));
@@ -419,7 +420,7 @@ fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
         .collect();
     let tests = tests
         .into_iter()
-        .take(MAX_LEFT_OUT_TESTS)
+        .take(MAX_KEPT_TESTS)
         .map(|item| item.relative)
         .collect();
     (files, tests)

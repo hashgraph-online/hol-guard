@@ -130,15 +130,20 @@ fn tests_that_quote_the_request_give_way_to_the_source() {
         ["src/components/Header.tsx", "src/theme.css"],
         "no test files when the source matched"
     );
-    let asked = candidates(
+    // Asked for, they are still kept apart, for the map's list of where a
+    // new test goes, so they cannot push the source out.
+    let asked = walk(
         &project,
         &terms("fix the header color tests"),
         &[],
         &[],
         WALK_BUDGET,
     );
+    assert_eq!(asked.files, ["src/components/Header.tsx", "src/theme.css"]);
     assert!(
-        asked.contains(&"src/components/Header.test.tsx".to_owned()),
+        asked
+            .tests
+            .contains(&"src/components/Header.test.tsx".to_owned()),
         "{asked:?}"
     );
     fs::remove_file(project.join("src/components/Header.tsx")).unwrap();

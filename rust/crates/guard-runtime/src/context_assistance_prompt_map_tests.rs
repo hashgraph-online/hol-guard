@@ -129,6 +129,7 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
         docs: true,
         changelog: false,
         named: vec!["CHANGES.rst".into()],
+        changes: false,
     };
     let text = map(
         &files(&[
@@ -149,6 +150,60 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
     let docs = at("Docs:\ndocs/options.rst:1-4 Options");
     let changelog = at("CHANGES.rst:4-8 newest section: Unreleased");
     assert!(source < tests && tests < docs && docs < changelog, "{text}");
+}
+
+/// A class the prompt names finds the tests that use it, however its name is
+/// cased there.
+#[test]
+fn tests_that_use_a_named_class_are_listed() {
+    let tests = "def test_a():\n    click.Choice(['a'])\n\n\
+def test_b():\n    click.Choice(['b'])\n\n\
+def test_other():\n    return 1\n";
+    let text = mapped_text(
+        &[("src/core.py", CORE), ("tests/test_types.py", tests)],
+        &[("choice", true, 3)],
+    )
+    .unwrap();
+    assert!(
+        text.contains("Tests:\ntests/test_types.py: 2 related tests, last test_b 4-5"),
+        "{text}"
+    );
+}
+
+/// The doc section about the request's rare word wins over sections that only
+/// share its everyday words, and a docs folder keeps the top-level README out.
+#[test]
+fn docs_rank_by_rare_words_from_the_docs_folder() {
+    let mut list = vec![
+        ("src/core.py".to_owned(), CORE.to_owned()),
+        ("README.md".to_owned(), "# Choice\n\nchoice\n".to_owned()),
+        (
+            "docs/options.rst".to_owned(),
+            "Choice Options\n==============\n\nPick one choice, for example red.\n".to_owned(),
+        ),
+    ];
+    for n in 0..5 {
+        list.push((
+            format!("docs/page{n}.rst"),
+            format!("Page {n}\n======\n\nAn example to run and check.\n"),
+        ));
+    }
+    let asked = Asked {
+        docs: true,
+        ..Asked::default()
+    };
+    let terms = looking_for(&[
+        ("choice", true, 3),
+        ("example", false, 20),
+        ("run", false, 20),
+        ("check", false, 20),
+    ]);
+    let text = map(&list, &terms, &asked, later()).unwrap().text;
+    assert!(
+        text.contains("Docs:\ndocs/options.rst:1-4 Choice Options"),
+        "{text}"
+    );
+    assert!(!text.contains("README.md"), "{text}");
 }
 
 /// A class too long to read whole gives its first line and its members'
@@ -291,6 +346,7 @@ fn a_named_changelog_stays_on_the_map() {
         docs: false,
         changelog: false,
         named: vec!["CHANGES.rst".into()],
+        changes: false,
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(
@@ -300,6 +356,31 @@ fn a_named_changelog_stays_on_the_map() {
         "{}",
         named.text
     );
+}
+
+/// A prompt about this session's changes, such as "review every change
+/// against the original code", gets no uses of its plain words: the changes
+/// are listed already, and "original" names no code. The changelog it names
+/// stays.
+#[test]
+fn a_review_of_changes_skips_its_plain_words() {
+    let changes = "Changes\n=======\n\nUnreleased\n----------\n\n- Fix thing.\n";
+    let list = files(&[("CHANGES.rst", changes), ("src/core.py", CORE)]);
+    let terms = looking_for(&[("value", false, 2)]);
+    let mut asked = Asked {
+        named: vec!["CHANGES.rst".into()],
+        ..Asked::default()
+    };
+    let plain = map(&list, &terms, &asked, later()).unwrap();
+    assert!(
+        plain.text.contains("Where 'value' appear"),
+        "{}",
+        plain.text
+    );
+    asked.changes = true;
+    let review = map(&list, &terms, &asked, later()).unwrap();
+    assert!(!review.text.contains("'value'"), "{}", review.text);
+    assert!(review.text.contains("CHANGES.rst:4-7"), "{}", review.text);
 }
 
 /// The map gives up once its time is up, however big the files.
@@ -349,12 +430,35 @@ fn project(config: &str, list: &[(&str, &str)]) -> (tempfile::TempDir, tempfile:
 }
 
 fn prompt_map(home: &Path, root: &Path, prompt: &str) -> Option<String> {
+    changes_map(home, root, prompt, false)
+}
+
+/// The map as the hook builds it, for a prompt about this session's changes
+/// when `about_changes`.
+fn changes_map(home: &Path, root: &Path, prompt: &str, about_changes: bool) -> Option<String> {
     let terms = crate::context_assistance_prompt_words::marked_terms(prompt);
     let words: Vec<String> = terms.iter().map(|(term, _)| term.clone()).collect();
     let quoted = crate::context_assistance_prompt_files::phrases(prompt);
-    let found = walk(root, &words, &quoted, &[], Duration::from_secs(5));
+    let found = walk(
+        root,
+        &words,
+        &quoted,
+        &named(prompt),
+        Duration::from_secs(5),
+    );
     let until = Instant::now() + Duration::from_secs(5);
-    mapped(home, root, "codex", &found, &terms, &quoted, prompt, until).map(|r| r.text)
+    let map = mapped(
+        home,
+        root,
+        "codex",
+        &found,
+        &terms,
+        &quoted,
+        prompt,
+        about_changes,
+        until,
+    );
+    map.map(|rendered| rendered.text)
 }
 
 /// From a typed prompt to the map, through the walk and Guard's own read: a
@@ -388,4 +492,30 @@ fn a_prompt_maps_to_allowed_project_code_only() {
     assert!(!text.contains("signing.py"), "{text}");
     let (home, _project, root) = project("", &list);
     assert_eq!(prompt_map(home.path(), &root, prompt), None);
+}
+
+/// A changelog at the project root is read through Guard's own check and
+/// named on the map with its newest section; it was left out before, since
+/// `.rst` counted as source only inside a docs folder. A review of the
+/// session's changes keeps it and drops the uses of its plain words.
+#[test]
+fn a_root_changelog_reaches_the_map() {
+    let changes = "Changes\n=======\n\nUnreleased\n----------\n\n- Fix thing.\n";
+    let list = [
+        ("src/core.py", CORE),
+        ("CHANGES.rst", changes),
+        ("docs/changes.rst", ".. include:: ../CHANGES.rst\n"),
+    ];
+    let prompt = "Make `Choice` honour `case_sensitive` and describe it in CHANGES.rst";
+    let (home, _project, root) = project(ON, &list);
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(
+        text.contains("\nCHANGES.rst:4-7 newest section: Unreleased"),
+        "{text}"
+    );
+    let review = "Review every change against the original code and make sure \
+CHANGES.rst describes everything.";
+    let text = changes_map(home.path(), &root, review, true).unwrap();
+    assert!(text.contains("\nCHANGES.rst:4-7"), "{text}");
+    assert!(!text.contains("'original'"), "{text}");
 }

@@ -212,7 +212,15 @@ fn attach(
         .prompt_context_chosen()
         .then(|| {
             map::mapped(
-                home, &root, harness, &searched, &marked, &quoted, prompt, deadline,
+                home,
+                &root,
+                harness,
+                &searched,
+                &marked,
+                &quoted,
+                prompt,
+                about_changes,
+                deadline,
             )
         })
         .flatten()

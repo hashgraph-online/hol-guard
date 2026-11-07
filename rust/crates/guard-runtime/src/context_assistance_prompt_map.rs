@@ -73,12 +73,15 @@ pub(super) struct Sought {
 }
 
 /// What else the prompt asks for besides its words: docs, a changelog
-/// entry, and files by name.
+/// entry, files by name, and whether it is about this session's changes.
 #[derive(Default)]
 pub(super) struct Asked {
     pub(super) docs: bool,
     pub(super) changelog: bool,
     pub(super) named: Vec<String>,
+    /// The changes are already listed, so the prompt's plain words, such as
+    /// "original" or "naming", say how to review them, not where.
+    pub(super) changes: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -140,6 +143,7 @@ pub(super) fn mapped(
     terms: &[(String, bool)],
     quoted: &[String],
     prompt: &str,
+    about_changes: bool,
     until: Instant,
 ) -> Option<Rendered> {
     let sought = sought(walk, terms, quoted);
@@ -152,6 +156,7 @@ pub(super) fn mapped(
         docs: more::asks_for_docs(prompt),
         changelog: more::asks_for_changelog(prompt),
         named: named(prompt),
+        changes: about_changes,
     };
     map(&texts, &sought, &asked, until)
 }
@@ -205,15 +210,16 @@ pub(super) fn map(
     if Instant::now() >= until {
         return None;
     }
-    // A plain word a source file defines is a name too, unless it is common.
+    // A plain word a source file defines is a name too, unless it is common
+    // or the prompt reviews its changes, where "naming and style" say how to
+    // review and name no code.
     let defined: BTreeSet<String> = (files.iter())
         .filter(|file| file.kind == Kind::Source)
         .flat_map(|file| file.sections.iter().filter_map(|s| s.name.clone()))
         .collect();
+    let plain_name = |item: &Sought| !asked.changes && !item.common && defined.contains(&item.text);
     let names: Vec<&str> = (sought.iter())
-        .filter(|item| {
-            !item.phrase && (item.name || (!item.common && defined.contains(&item.text)))
-        })
+        .filter(|item| !item.phrase && (item.name || plain_name(item)))
         .map(|item| item.text.as_str())
         .collect();
     let chosen = named_definitions(&files, &names);
@@ -223,6 +229,7 @@ pub(super) fn map(
         .collect();
     let rare: Vec<&Sought> = (sought.iter())
         .filter(|item| item.phrase || (!item.common && !placed.contains(item.text.as_str())))
+        .filter(|item| !asked.changes || item.phrase || item.name)
         .collect();
     let (used, uses) = uses::uses(&files, &rare, until)?;
     let mentioned: Vec<String> = (chosen.iter())
@@ -242,11 +249,14 @@ pub(super) fn map(
     blocks.push(("Tests:".to_owned(), more::tests(&files, &mentioned)));
     let mut docs = Vec::new();
     if asked.docs {
+        // Every word of the prompt: a doc section is about "choices" and
+        // "enum" even where code says them too often to point anywhere.
         let words: Vec<String> = (mentioned.iter().cloned())
             .chain(
-                rare.iter()
+                sought
+                    .iter()
                     .filter(|item| !item.phrase)
-                    .map(|item| item.text.clone()),
+                    .map(|item| term_form(&item.text)),
             )
             .collect();
         docs = more::docs(&files, &words);

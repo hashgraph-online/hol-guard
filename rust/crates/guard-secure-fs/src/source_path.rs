@@ -12,7 +12,7 @@ mod names;
 pub use names::EXTERNAL_SENSITIVE_PARTS;
 use names::{
     BENIGN_PROJECT_DOTFILES, BENIGN_PROJECT_DOTFILE_STEMS, BENIGN_PROJECT_READ_DOTFILES,
-    BENIGN_SOURCE_DOTFILES, KNOWN_AGENT_DOC_ROOTS, KNOWN_SKILL_DOC_ROOTS,
+    BENIGN_SOURCE_DOTFILES, DOCUMENT_EXTENSIONS, KNOWN_AGENT_DOC_ROOTS, KNOWN_SKILL_DOC_ROOTS,
     PROJECT_CONFIG_EXTENSIONS, PROJECT_DOCUMENT_EXTENSIONS, SENSITIVE_SEARCH_BASENAMES,
     SOURCE_EXTENSIONS, SOURCE_INSPECTION_PARTS, TOOL_LOGIN_FILE_WORDS, TOOL_LOGIN_WORDS,
 };
@@ -110,7 +110,15 @@ pub fn credential_path_markers() -> &'static [&'static str] {
     EXTERNAL_SENSITIVE_PARTS
 }
 
-fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
+fn source_shape_allowed(path: &Path, parts: &[String], documents: bool) -> bool {
+    let document = |name: &str| {
+        Path::new(name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|suffix| {
+                DOCUMENT_EXTENSIONS.contains(&suffix.to_ascii_lowercase().as_str())
+            })
+    };
     parts
         .iter()
         .any(|part| SOURCE_INSPECTION_PARTS.contains(&part.as_str()))
@@ -125,6 +133,11 @@ fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
             .file_name()
             .and_then(|value| value.to_str())
             .is_some_and(source_extension)
+        || documents
+            && path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .is_some_and(document)
 }
 
 /// Whether `path`'s own name ends in one of the extensions a project's
@@ -290,6 +303,24 @@ pub fn classify_source_path(
     home: Option<&Path>,
     allow_external: bool,
 ) -> SourcePathDecision {
+    classify(target, cwd, home, allow_external, false)
+}
+
+/// [`classify_source_path`] for a project file read as context, which also
+/// admits a prose document such as `CHANGES.rst` or `README.rst` outside a
+/// docs folder. Every other check is the same. Command screening keeps the
+/// narrower list, since this one only widens what may be read as text.
+pub fn classify_project_document(target: &str, cwd: &Path) -> SourcePathDecision {
+    classify(target, cwd, None, false, true)
+}
+
+fn classify(
+    target: &str,
+    cwd: &Path,
+    home: Option<&Path>,
+    allow_external: bool,
+    documents: bool,
+) -> SourcePathDecision {
     let stripped = target.trim().trim_matches(['\'', '"']);
     if stripped.is_empty() {
         return SourcePathDecision::deny("empty_path");
@@ -379,7 +410,7 @@ pub fn classify_source_path(
         if !hidden_parts_allowed(&parts) {
             return SourcePathDecision::deny("unsafe_hidden_dir");
         }
-        if !source_shape_allowed(Path::new(stripped), &parts) {
+        if !source_shape_allowed(Path::new(stripped), &parts, documents) {
             return SourcePathDecision::deny("not_source_like");
         }
         return SourcePathDecision::allow("external_source_path", candidate);
@@ -402,7 +433,7 @@ pub fn classify_source_path(
     if !hidden_parts_allowed(&parts) {
         return SourcePathDecision::deny("unsafe_hidden_dir");
     }
-    if !source_shape_allowed(relative, &parts) {
+    if !source_shape_allowed(relative, &parts, documents) {
         return SourcePathDecision::deny("not_source_like");
     }
     let reason = if parts
@@ -637,5 +668,5 @@ pub fn source_like(path: &Path) -> bool {
     {
         return false;
     }
-    source_shape_allowed(path, &parts)
+    source_shape_allowed(path, &parts, false)
 }
