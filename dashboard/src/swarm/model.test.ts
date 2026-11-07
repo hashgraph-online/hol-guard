@@ -29,7 +29,7 @@ test("projects with identical folder names stay separate; search and attention a
   assert.deepEqual(filterAgents([agent, other], "/work/one/app", "login", true), []);
 });
 
-test("context access requires the exact project and harness; a grant is not proven use", () => {
+test("context matches exact projects and app grants or every-app picks without claiming agent use", () => {
   const scope = { scope_id: "s", workspace: agent.workspace, app: "codex", sources: [], revoked: false } as unknown as ContextWorkspaceScope;
   assert.equal(contextFor(agent, true, [scope]).available, true);
   assert.match(contextFor(agent, true, [scope]).detail, /does not confirm/);
@@ -38,4 +38,12 @@ test("context access requires the exact project and harness; a grant is not prov
   assert.equal(contextFor(agent, true, [{ ...scope, revoked: true }]).available, false);
   assert.equal(contextFor(agent, false, [scope]).label, "CIGAR off");
   assert.equal(contextFor(agent, true, null).label, "Context unknown");
+  const picked = { ...scope, app: "dashboard" };
+  assert.equal(contextFor(agent, true, [picked]).available, true);
+  assert.equal(contextFor({ ...agent, harness: "claude-code" }, true, [picked]).available, true);
+  assert.equal(contextFor({ ...agent, workspace: "/other/app" }, true, [picked]).available, false);
+  assert.equal(contextFor(agent, true, [{ ...picked, revoked: true }]).available, false);
+  assert.match(contextFor(agent, true, [picked]).detail, /new prompts/);
+  assert.doesNotMatch(contextFor(agent, true, [picked]).detail, /needs pairing/);
+  assert.match(contextFor({ ...agent, harness: "gemini" }, true, [picked]).detail, /needs pairing/);
 });

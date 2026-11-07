@@ -111,6 +111,16 @@ Swarm links to existing Context setup and permission flows. It does not enable
 CIGAR, grant sources, authorize other agents, or share notes implicitly when a
 run starts. Multiple projects keep separate scope identities.
 
+An inspector's **Add to CIGAR** action carries its project, app, and return
+selection into CIGAR's Projects screen in tab memory. The folder is preselected;
+the user chooses files and confirms the existing approval gate. An existing
+every-app pick is reused and shown first. Unknown project paths still require
+a folder choice. The context preview and return action complete the workflow.
+Prompt-hook apps receive context on subsequent prompts when Guard is connected;
+other apps still require their own MCP connection and explicit pairing. Process
+discovery does not establish either connection. Swarm recognizes every-app picks
+and matching app scopes without treating either as proof of that agent's use.
+
 ### Visual system and accessibility
 
 Use Guard's existing typography, surfaces, blue accent, focus treatment, and
@@ -231,6 +241,10 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
   journeys exercise desktop, 390px/320px layouts, launch, instruction queue,
   stop confirmation, uncertain retries, stale state, filters, CIGAR, and dialog
   keyboard behavior. Screenshots remain outside Git.
+- Four additional browser journeys cover observed-agent context handoff, file
+  selection and approval, preview citations, return-to-agent status, reuse of
+  existing grants, refused grants and failed previews, unknown folders, MCP
+  pairing guidance, and keeping the handoff while CIGAR is off.
 - Production Vite build passes and shipped assets are rebuilt. Existing shared
   chunk hashes change with the dashboard entry point; no generated evidence,
   vendored dependencies, or old CIGAR branch content is included.
@@ -240,6 +254,24 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
 
 An isolated live macOS dashboard also verified authenticated Swarm reads, real
 process inventory, and installed Codex detection through the resident/HTTP path.
+The context regression then exercised an observed agent's handoff, both saved
+projects (eight selected files each), successful cited previews, and return to
+the same inspector. CIGAR stayed Ready and the browser reported no page errors.
+
+Use an optimized native runtime for source-checkout UI previews:
+
+```sh
+cargo build -p hol-guard-runtime --bin hol-guard-runtime --release --offline --config profile.release.lto=false --config profile.release.codegen-units=16
+```
+
+Run that command from `rust/` after installing the locked dependencies and point
+the preview's `HOL_GUARD_NATIVE_BINARY` at `rust/target/release/hol-guard-runtime`.
+The initial debug preview exceeded the six-second actor deadline while scanning
+saved project files, which closed the optional CIGAR worker. A runtime sample
+located the delay in source scanning; the optimized build restored both projects
+and compiled each preview in under a second with the same checks and deadlines.
+Keep the preview's Guard home bound for ambient native calls too, using
+`bind_context_digest_home(guard_home)` before constructing its store and daemon.
 
 Qualification limits: execution tests use disposable CLI doubles on macOS;
 browser tests use API fixtures. Real provider-backed sessions and Linux/Windows

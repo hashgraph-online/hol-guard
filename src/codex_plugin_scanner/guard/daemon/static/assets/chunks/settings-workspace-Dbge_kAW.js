@@ -1,8 +1,9 @@
-import { r as reactExports, b1 as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, b2 as ApprovalProofModal, T as Tag, aT as PROTECTION_POSTURE_COPY, b3 as POSTURE_OUTCOME_COLUMNS, b4 as getDefaultExportFromCjs, b5 as React, af as HiMiniShieldCheck, k as HiMiniSquares2X2, M as HiMiniLockClosed, b6 as HiMiniBellAlert, b7 as HiMiniAdjustmentsHorizontal, b as HiMiniCircleStack, an as HiMiniCloud, b8 as TabBar, t as HiMiniChevronRight, b9 as SelectMenu, S as SectionLabel, ap as useFocusTrap, ba as fetchCloudReviewSettings, p as HiMiniArrowPath, d as HiMiniXMark, bb as ApprovalProofFieldInputs, bc as isApprovalProofSubmitDisabled, bd as buildApprovalProofCredentials, be as changeCloudReviewSettings, f as fetchWithGuardAuth, bf as isRecord$1, bg as HiMiniArrowTopRightOnSquare, bh as shellHref, s as contextStatusCopy, K as HiMiniCheckCircle, ar as HiMiniExclamationTriangle, bi as HiMiniPauseCircle, v as harnessDisplayName, bj as listContextAgentSessions, bk as HiMiniLink, bl as revokeContextAgentSession, bm as grantContextWorkspace, bn as authorizeContextAgentSession, bo as ContextAssistanceApiError, bp as ask, bq as parseContextScope, br as validContextBrokerRevision, bs as isGuardDemoMode, bt as HiMiniArrowUturnLeft, I as HiMiniPencilSquare, n as HiMiniMagnifyingGlass, bu as HiMiniCodeBracketSquare, H as HiMiniFolder, J as HiMiniDocumentText, m as HiMiniComputerDesktop, bv as HiMiniHome, B as HiMiniCheck, bw as HiMiniFolderPlus, bx as HiMiniClock, l as listContextWorkspaces, by as HiMiniFolderOpen, bz as manageContextWorkspace, bA as compileWorkspaceContext, e as HiMiniArrowRight, bB as HiMiniChatBubbleLeftEllipsis, bC as HiMiniDocumentMagnifyingGlass, bD as HiMiniPower, bE as HiMiniEyeSlash, bF as HiMiniCpuChip, bG as HiMiniAcademicCap, ao as HiMiniQuestionMarkCircle, a1 as HiMiniClipboardDocument, bH as HiMiniArrowLeft, bI as isCigarProducerVersion, bJ as isCigarCoreLabel, ak as HiMiniSparkles, bK as subscribeDashboardLocation, bL as HiMiniChatBubbleLeftRight, bM as HiMiniArrowUpCircle, bN as parseContextAssistanceStatus, bO as isCigarBuildIdentity, bP as fetchContextInstallations, bQ as HiMiniCloudArrowDown, bR as turnOnJob, bS as shouldResumeTurnOn, bT as turnOnRequestedAt, bU as forgetTurnOn, bV as rememberTurnOn, bW as forgetTurnOnClick, bX as rememberTurnOnJob, h as fetchContextAssistance, q as controlContextAssistance, bY as commitDashboardLocation, bZ as HiMiniArrowDownTray, b_ as downloadBlob, b$ as savedEvidenceCopy, c0 as guardAwareHref, c1 as fetchContextData, c2 as forgetContextHistory, c3 as forgetSavedEvidence, c4 as resolveProtectionLevelCopy, aO as fetchSettings, c5 as fetchRuntimeSnapshot, c6 as clearHarnessWatchOverrides, c7 as withHarnessPosturePatch, a4 as updateSettings, c8 as clearPolicy, c9 as clearReviewQueue, ca as revokeApprovalGateCooldown, cb as disableApprovalGateTotp, cc as importSettings, cd as resetSettings, ce as enrollApprovalGateTotp, cf as verifyApprovalGateTotp, cg as clearEvidence, ch as exportDiagnostics, ci as repairApprovalCenter, cj as exportSettings, ck as setupDesktopNotifications, al as EmptyState, cl as settingsWatchBannerModel, cm as WorkspacePageHeader, ac as WatchProtectionBanner, cn as navigateFromAnchor, z as HiMiniChevronDown, co as humanizeList, cp as isProtectionPosture, cq as deriveProtectionPosture, cr as normalizeHarnessPostures, cs as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { r as reactExports, b1 as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, b2 as ApprovalProofModal, T as Tag, aT as PROTECTION_POSTURE_COPY, b3 as POSTURE_OUTCOME_COLUMNS, b4 as getDefaultExportFromCjs, b5 as React, af as HiMiniShieldCheck, k as HiMiniSquares2X2, M as HiMiniLockClosed, b6 as HiMiniBellAlert, b7 as HiMiniAdjustmentsHorizontal, b as HiMiniCircleStack, an as HiMiniCloud, b8 as TabBar, t as HiMiniChevronRight, b9 as SelectMenu, S as SectionLabel, ap as useFocusTrap, ba as fetchCloudReviewSettings, p as HiMiniArrowPath, d as HiMiniXMark, bb as ApprovalProofFieldInputs, bc as isApprovalProofSubmitDisabled, bd as buildApprovalProofCredentials, be as changeCloudReviewSettings, f as fetchWithGuardAuth, bf as isRecord$1, bg as HiMiniArrowTopRightOnSquare, bh as shellHref, s as contextStatusCopy, K as HiMiniCheckCircle, ar as HiMiniExclamationTriangle, bi as HiMiniPauseCircle, v as harnessDisplayName, bj as listContextAgentSessions, bk as HiMiniLink, bl as revokeContextAgentSession, bm as grantContextWorkspace, bn as authorizeContextAgentSession, bo as ContextAssistanceApiError, bp as ask, bq as parseContextScope, br as validContextBrokerRevision, bs as isGuardDemoMode, bt as commitDashboardLocation, bu as HiMiniArrowUturnLeft, I as HiMiniPencilSquare, n as HiMiniMagnifyingGlass, bv as HiMiniCodeBracketSquare, H as HiMiniFolder, J as HiMiniDocumentText, m as HiMiniComputerDesktop, bw as HiMiniHome, B as HiMiniCheck, bx as HiMiniFolderPlus, by as HiMiniClock, l as listContextWorkspaces, bz as HiMiniFolderOpen, bA as manageContextWorkspace, bB as compileWorkspaceContext, e as HiMiniArrowRight, bC as HiMiniChatBubbleLeftEllipsis, bD as HiMiniDocumentMagnifyingGlass, bE as HiMiniPower, bF as HiMiniEyeSlash, bG as HiMiniCpuChip, bH as HiMiniAcademicCap, ao as HiMiniQuestionMarkCircle, a1 as HiMiniClipboardDocument, bI as HiMiniArrowLeft, bJ as isCigarProducerVersion, bK as isCigarCoreLabel, ak as HiMiniSparkles, bL as subscribeDashboardLocation, bM as HiMiniChatBubbleLeftRight, bN as HiMiniArrowUpCircle, bO as parseContextAssistanceStatus, bP as isCigarBuildIdentity, bQ as fetchContextInstallations, bR as HiMiniCloudArrowDown, bS as turnOnJob, bT as shouldResumeTurnOn, bU as turnOnRequestedAt, bV as forgetTurnOn, bW as rememberTurnOn, bX as forgetTurnOnClick, bY as rememberTurnOnJob, h as fetchContextAssistance, q as controlContextAssistance, bZ as HiMiniArrowDownTray, b_ as downloadBlob, b$ as savedEvidenceCopy, c0 as guardAwareHref, c1 as fetchContextData, c2 as forgetContextHistory, c3 as forgetSavedEvidence, c4 as resolveProtectionLevelCopy, aO as fetchSettings, c5 as fetchRuntimeSnapshot, c6 as clearHarnessWatchOverrides, c7 as withHarnessPosturePatch, a4 as updateSettings, c8 as clearPolicy, c9 as clearReviewQueue, ca as revokeApprovalGateCooldown, cb as disableApprovalGateTotp, cc as importSettings, cd as resetSettings, ce as enrollApprovalGateTotp, cf as verifyApprovalGateTotp, cg as clearEvidence, ch as exportDiagnostics, ci as repairApprovalCenter, cj as exportSettings, ck as setupDesktopNotifications, al as EmptyState, cl as settingsWatchBannerModel, cm as WorkspacePageHeader, ac as WatchProtectionBanner, cn as navigateFromAnchor, z as HiMiniChevronDown, co as humanizeList, cp as isProtectionPosture, cq as deriveProtectionPosture, cr as normalizeHarnessPostures, cs as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-Bobk6k6g.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-CkHRMLuC.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-DeMVu_1L.js";
+import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-DcjWDnuh.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
@@ -4191,6 +4192,33 @@ function CigarAllowFilesButton({ allow, className, caption: caption2 }) {
     allow.error && !allow.proofOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-allow-error", children: allow.error }) : caption2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: caption2 }) : null
   ] });
 }
+function SwarmContextPanel({ target, ready, loaded, scope, filesAllowed, allowFiles }) {
+  const automatic = usesPromptContext(target.harness);
+  const panel = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    panel.current?.focus({ preventScroll: true });
+    panel.current?.scrollIntoView({ block: "start" });
+  }, [target.id]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { ref: panel, tabIndex: -1, "aria-label": "Context for Swarm agent", className: "space-y-3 rounded-2xl border border-brand-blue/25 bg-brand-blue/[0.04] p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wider text-brand-blue", children: "From Swarm" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: versionHeading, children: [
+      "Context for ",
+      target.label
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-sm text-brand-dark/75", children: target.workspace ?? "This agent did not report its project. Choose its folder below." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: !ready ? "Turn on or restart CIGAR above to continue. Your selected agent stays here." : !filesAllowed ? "Allow project context so connected agents can receive the files you pick. Your approval is required before this setting changes." : !loaded ? "Checking this project's context…" : scope ? `This project already has ${scope.sources.length} approved ${scope.sources.length === 1 ? "file" : "files"}. Use “Show what your AI would get” below to preview its context.` : "Choose the files below, then add the project. These choices also apply to other agents working in this folder." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/70", children: automatic ? "With Guard connected in App setup, new prompts in this app receive project context. A running turn keeps its existing context; send your next instruction after setup." : "This app needs a CIGAR MCP connection. After adding the project, open App setup and pair its request under “Connect another app” below. Finding its process does not connect it." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      ready && !filesAllowed && allowFiles ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarAllowFilesButton, { allow: allowFiles, className: versionButton }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, onClick: () => {
+        setSwarmContextTarget(null);
+        commitDashboardLocation(`/swarm?agent=${encodeURIComponent(target.id)}&panel=context`);
+      }, children: "Back to agent" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionQuiet, onClick: () => commitDashboardLocation(`/apps/${encodeURIComponent(target.harness)}`), children: "App setup" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionQuiet, onClick: () => setSwarmContextTarget(null), children: "Dismiss" })
+    ] })
+  ] });
+}
 const object$7 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const text$1 = (value) => typeof value === "string";
 const list = (value, max, item) => {
@@ -4859,9 +4887,9 @@ function summary$2(workspace, files, documentsAllowed) {
   if (documentsAllowed && files) return `Prompts about ${folderName(workspace)} will use these ${plural(files, "file")}, in every AI app.`;
   return `No files picked, so your AI apps keep finding matching files in ${folderName(workspace)} on their own.`;
 }
-function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], onGrant }) {
+function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], initialWorkspace = null, onGrant }) {
   const id2 = reactExports.useId();
-  const [workspace, setWorkspace] = reactExports.useState(null);
+  const [workspace, setWorkspace] = reactExports.useState(initialWorkspace);
   const [files, setFiles] = reactExports.useState([]);
   const [picking, setPicking] = reactExports.useState(false);
   const [proofOpen, setProofOpen] = reactExports.useState(false);
@@ -4996,11 +5024,13 @@ const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary$1 = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
 function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }) {
+  const target = useSwarmContextTarget();
   const [scopes, setScopes] = reactExports.useState([]);
   const [loaded, setLoaded] = reactExports.useState(false);
   const listable = ready || waking;
   const [query, setQuery] = reactExports.useState("");
   const [brief, setBrief] = reactExports.useState(null);
+  const briefPanel = reactExports.useRef(null);
   const [previous, setPrevious] = reactExports.useState(null);
   const [cleared, setCleared] = reactExports.useState(0);
   const [busy, setBusy] = reactExports.useState(false);
@@ -5009,6 +5039,12 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
   const revision = reactExports.useRef(0);
   const failed = reactExports.useRef(false);
   const id2 = reactExports.useId();
+  reactExports.useEffect(() => {
+    if (brief) {
+      briefPanel.current?.focus({ preventScroll: true });
+      briefPanel.current?.scrollIntoView({ block: "start" });
+    }
+  }, [brief]);
   reactExports.useEffect(() => {
     const generation2 = ++revision.current;
     request.current?.abort();
@@ -5075,6 +5111,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]);
       granted = true;
+      if (target) setSwarmContextTarget({ ...target, workspace: scope.workspace });
     });
     return granted;
   }
@@ -5102,7 +5139,38 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
     }
   });
   const locked = busy || !ready;
+  const targetScopes = target ? scopes.filter((scope) => !scope.revoked && scope.workspace === target.workspace) : [];
+  const targetScope = targetScopes.find((scope) => scope.app === "dashboard") ?? targetScopes.find((scope) => scope.app === target?.harness);
+  const orderedScopes = targetScope ? [targetScope, ...scopes.filter((scope) => scope !== targetScope)] : scopes;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
+    target ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SwarmContextPanel,
+      {
+        target,
+        ready,
+        loaded,
+        scope: targetScope,
+        filesAllowed: documentsAllowed && agentsAllowed,
+        allowFiles
+      }
+    ) : null,
+    ready && target && loaded && !targetScope ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AddProjectPanel,
+      {
+        busy,
+        dirty,
+        documentsAllowed,
+        allowFiles,
+        executionAllowed,
+        gate,
+        error,
+        first: scopes.length === 0,
+        initialWorkspace: target.workspace,
+        active: scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace),
+        onGrant: grant
+      },
+      `${cleared}:${target.id}`
+    ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-4", "aria-labelledby": `${id2}-projects`, "aria-busy": busy, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-x-6 gap-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -5129,7 +5197,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-query`, className: fieldLabel, children: "Try it: what would you ask your AI?" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-query`, className: versionField, maxLength: 4096, value: query, onChange: (event) => setQuery(event.target.value), placeholder: "For example: how do releases work?" })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: scopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white"), "aria-label": `Project ${scope.workspace}`, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: orderedScopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : scope === targetScope ? "border-brand-blue/30 bg-white" : "border-brand-dark/10 bg-white"), "aria-label": `Project ${scope.workspace}`, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "size-4" }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-1.5", children: [
@@ -5191,7 +5259,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
             ) : null
           ] }) }, scope.scope_id)) })
         ] }),
-        brief ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "What your AI would get", className: "guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
+        brief ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { ref: briefPanel, tabIndex: -1, "aria-label": "What your AI would get", className: "guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-semibold text-brand-dark", children: "What your AI would get" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Checked just now. Try again after you change files or projects." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-96 space-y-3 overflow-auto rounded-xl bg-white p-3 text-sm leading-6 text-slate-700", children: brief.value.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) }),
@@ -5220,7 +5288,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         ] }) : null
       ] })
     ] }),
-    ready ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ready && !target ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       AddProjectPanel,
       {
         busy,
@@ -5867,6 +5935,7 @@ function Intro({ title, children }) {
 }
 function CigarSections(props) {
   const { tab, status, lesson } = props;
+  const swarmTarget = useSwarmContextTarget();
   const id2 = reactExports.useId();
   function moveTab(event, index) {
     let next;
@@ -5929,7 +5998,7 @@ function CigarSections(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Turn on CIGAR first" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects open up as soon as CIGAR is on. Use the button at the top of this page." })
           ] }) }) : null,
-          status?.effective_enabled || cigarWaking(status) ? props.access : null
+          status?.effective_enabled || cigarWaking(status) || swarmTarget ? props.access : null
         ] }) : null,
         tab === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Intro, { title: "Privacy", children: "By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." }),

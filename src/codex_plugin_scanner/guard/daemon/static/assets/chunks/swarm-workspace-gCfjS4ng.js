@@ -1,4 +1,5 @@
 import { j as jsxRuntimeExports, H as HiMiniFolder, a as HiMiniCommandLine, b as HiMiniCircleStack, c as HiMiniArrowUpRight, f as fetchWithGuardAuth, r as reactExports, G as GuardModalLayer, d as HiMiniXMark, e as HiMiniArrowRight, g as HiMiniArrowUp, h as fetchContextAssistance, l as listContextWorkspaces, i as HiMiniPlus, k as HiMiniSquares2X2, m as HiMiniComputerDesktop, n as HiMiniMagnifyingGlass, o as HiMiniListBullet, p as HiMiniArrowPath } from "../guard-dashboard.js";
+import { u as usesPromptContext, s as setSwarmContextTarget } from "./swarm-handoff-DcjWDnuh.js";
 const UNKNOWN_PROJECT = "@unknown";
 const stateLabel = {
   starting: "Starting",
@@ -34,9 +35,11 @@ function filterAgents(agents, project, search, attentionOnly) {
 function contextFor(agent, enabled, scopes) {
   if (enabled === null || enabled && scopes === null) return { label: "Context unknown", detail: "CIGAR could not be checked. Refresh or open Context.", available: false };
   if (!enabled) return { label: "CIGAR off", detail: "CIGAR is off. Agents can still work using their own context.", available: false };
-  const scope = scopes?.find((s) => !s.revoked && s.workspace === agent.workspace && s.app === agent.harness);
-  if (!scope) return { label: "No context grant", detail: "This project and app do not have a matching CIGAR grant.", available: false };
-  return { label: "CIGAR available", detail: `${scope.sources.length} approved ${scope.sources.length === 1 ? "source" : "sources"}${scope.sharing?.notes.read ? "; shared notes enabled" : ""}. Each MCP connection still needs pairing in Context. A project grant does not confirm this agent has access or has used it.`, available: true };
+  const matches = scopes?.filter((s) => !s.revoked && s.workspace === agent.workspace);
+  const scope = matches?.find((s) => s.app === "dashboard") ?? matches?.find((s) => s.app === agent.harness);
+  if (!scope) return { label: "Choose project context", detail: "No files have been picked for this project. Connected prompt hooks can still find matching project files automatically. Add the project to choose its files and preview the context.", available: false };
+  const connection = usesPromptContext(agent.harness) ? "With Guard connected in App setup, new prompts receive project context. A running turn keeps its existing context." : "Each MCP connection still needs pairing in CIGAR.";
+  return { label: "Project context ready", detail: `${scope.sources.length} approved ${scope.sources.length === 1 ? "source" : "sources"}${scope.sharing?.notes.read ? "; shared notes enabled" : ""}. ${connection} A project grant does not confirm this agent has used it.`, available: true };
 }
 function relativeTime(at, now = Date.now()) {
   const seconds = Math.max(0, Math.floor((now - at) / 1e3));
@@ -317,7 +320,7 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
   const [confirmStop, setConfirmStop] = reactExports.useState(false);
   const [notice, setNotice] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
-  const [tab, setTab] = reactExports.useState("Activity");
+  const [tab, setTab] = reactExports.useState(() => new URLSearchParams(window.location.search).get("panel") === "context" ? "Context" : "Activity");
   const panel = reactExports.useRef(null);
   const alive = reactExports.useRef(true);
   const pending = reactExports.useRef(null);
@@ -439,8 +442,12 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
           agent.context_calls === 1 ? "call" : "calls",
           " reported by this CLI."
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Context use has not been reported for this agent. Hook-injected context is not counted here." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "swarm-text-button", type: "button", onClick: () => onNavigate("/cigar?section=access"), children: [
-          "Manage context access ",
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "swarm-button swarm-button--primary", type: "button", onClick: () => {
+          setSwarmContextTarget(agent);
+          onNavigate("/cigar?section=access");
+        }, children: [
+          cigar.available ? "Manage CIGAR context" : "Add to CIGAR",
+          " ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "↗" })
         ] })
       ] }),
@@ -570,7 +577,7 @@ function useSwarm() {
 }
 function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const { snapshot, loading, error, stale, context, refresh, acceptAgent } = useSwarm();
-  const [selected, setSelected] = reactExports.useState(null);
+  const [selected, setSelected] = reactExports.useState(() => new URLSearchParams(window.location.search).get("agent"));
   const [project, setProject] = reactExports.useState(null);
   const [search, setSearch] = reactExports.useState("");
   const [attention, setAttention] = reactExports.useState(false);

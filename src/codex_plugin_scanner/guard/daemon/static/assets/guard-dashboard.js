@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-Dlf1XtpC.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-3v6GAMWH.js","assets/chunks/home-protection-module-k6rV-nyX.js","assets/chunks/supply-chain-protection-stats-yQqXSjoE.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-HYEEz4Ad.js","assets/chunks/harness-version-label-DlEfp-xH.js","assets/chunks/connect-guard-cloud-button-DeMVu_1L.js","assets/chunks/settings-save-proof-modal-Bobk6k6g.js","assets/chunks/settings-workspace-DOg-R4GH.js","assets/chunks/confirm-dialog-CkHRMLuC.js","assets/chunks/extensions-workspace-DuJFFU-5.js","assets/chunks/app-detail-workspace-DrLqe8Wf.js","assets/chunks/policy-workspace-page-CaktLOk9.js","assets/chunks/about-workspace-B9zmKUjK.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-gCfjS4ng.js","assets/chunks/swarm-handoff-DcjWDnuh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-3v6GAMWH.js","assets/chunks/home-protection-module-k6rV-nyX.js","assets/chunks/supply-chain-protection-stats-yQqXSjoE.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-HYEEz4Ad.js","assets/chunks/harness-version-label-DlEfp-xH.js","assets/chunks/connect-guard-cloud-button-DeMVu_1L.js","assets/chunks/settings-save-proof-modal-Bobk6k6g.js","assets/chunks/settings-workspace-Dbge_kAW.js","assets/chunks/confirm-dialog-CkHRMLuC.js","assets/chunks/extensions-workspace-DW4kdQcU.js","assets/chunks/app-detail-workspace-BNXhAgDL.js","assets/chunks/policy-workspace-page-BaLS78hO.js","assets/chunks/about-workspace-B9zmKUjK.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -24140,6 +24140,9 @@ function parseContextBrief(value) {
   return value;
 }
 function refusal(code, action, status) {
+  if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
+    return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
+  }
   if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
   if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
@@ -38141,7 +38144,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-CwSXtXPI.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BnCgFZ31.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -38827,31 +38830,31 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-Dlf1XtpC.js"), true ? __vite__mapDeps([0,1]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-3v6GAMWH.js"), true ? __vite__mapDeps([2,3,4,5,6,7,8]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-HYEEz4Ad.js"), true ? __vite__mapDeps([9,10,11,8,12]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DOg-R4GH.js"), true ? __vite__mapDeps([13,12,8,14,11,5]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-gCfjS4ng.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-3v6GAMWH.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-HYEEz4Ad.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-Dbge_kAW.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DuJFFU-5.js"), true ? __vite__mapDeps([15,14]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-DW4kdQcU.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DrLqe8Wf.js"), true ? __vite__mapDeps([16,10]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-BNXhAgDL.js"), true ? __vite__mapDeps([17,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-C-hAS6ER.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CeHMkP9V.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CGtGjueK.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-CaktLOk9.js"), true ? __vite__mapDeps([17,11]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-BaLS78hO.js"), true ? __vite__mapDeps([18,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-B9zmKUjK.js"), true ? __vite__mapDeps([18,6,7,19]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-B9zmKUjK.js"), true ? __vite__mapDeps([19,7,8,20]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-BiTueETS.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-B8zmAOOV.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
@@ -39895,31 +39898,31 @@ export {
   HiMiniAdjustmentsHorizontal as b7,
   TabBar as b8,
   SelectMenu as b9,
-  compileWorkspaceContext as bA,
-  HiMiniChatBubbleLeftEllipsis as bB,
-  HiMiniDocumentMagnifyingGlass as bC,
-  HiMiniPower as bD,
-  HiMiniEyeSlash as bE,
-  HiMiniCpuChip as bF,
-  HiMiniAcademicCap as bG,
-  HiMiniArrowLeft as bH,
-  isCigarProducerVersion as bI,
-  isCigarCoreLabel as bJ,
-  subscribeDashboardLocation as bK,
-  HiMiniChatBubbleLeftRight as bL,
-  HiMiniArrowUpCircle as bM,
-  parseContextAssistanceStatus as bN,
-  isCigarBuildIdentity as bO,
-  fetchContextInstallations as bP,
-  HiMiniCloudArrowDown as bQ,
-  turnOnJob as bR,
-  shouldResumeTurnOn as bS,
-  turnOnRequestedAt as bT,
-  forgetTurnOn as bU,
-  rememberTurnOn as bV,
-  forgetTurnOnClick as bW,
-  rememberTurnOnJob as bX,
-  commitDashboardLocation as bY,
+  manageContextWorkspace as bA,
+  compileWorkspaceContext as bB,
+  HiMiniChatBubbleLeftEllipsis as bC,
+  HiMiniDocumentMagnifyingGlass as bD,
+  HiMiniPower as bE,
+  HiMiniEyeSlash as bF,
+  HiMiniCpuChip as bG,
+  HiMiniAcademicCap as bH,
+  HiMiniArrowLeft as bI,
+  isCigarProducerVersion as bJ,
+  isCigarCoreLabel as bK,
+  subscribeDashboardLocation as bL,
+  HiMiniChatBubbleLeftRight as bM,
+  HiMiniArrowUpCircle as bN,
+  parseContextAssistanceStatus as bO,
+  isCigarBuildIdentity as bP,
+  fetchContextInstallations as bQ,
+  HiMiniCloudArrowDown as bR,
+  turnOnJob as bS,
+  shouldResumeTurnOn as bT,
+  turnOnRequestedAt as bU,
+  forgetTurnOn as bV,
+  rememberTurnOn as bW,
+  forgetTurnOnClick as bX,
+  rememberTurnOnJob as bY,
   HiMiniArrowDownTray as bZ,
   downloadBlob as b_,
   fetchCloudReviewSettings as ba,
@@ -39941,13 +39944,13 @@ export {
   parseContextScope as bq,
   validContextBrokerRevision as br,
   isGuardDemoMode as bs,
-  HiMiniArrowUturnLeft as bt,
-  HiMiniCodeBracketSquare as bu,
-  HiMiniHome as bv,
-  HiMiniFolderPlus as bw,
-  HiMiniClock as bx,
-  HiMiniFolderOpen as by,
-  manageContextWorkspace as bz,
+  commitDashboardLocation as bt,
+  HiMiniArrowUturnLeft as bu,
+  HiMiniCodeBracketSquare as bv,
+  HiMiniHome as bw,
+  HiMiniFolderPlus as bx,
+  HiMiniClock as by,
+  HiMiniFolderOpen as bz,
   HiMiniArrowUpRight as c,
   LocalCliApiError as c$,
   guardAwareHref as c0,

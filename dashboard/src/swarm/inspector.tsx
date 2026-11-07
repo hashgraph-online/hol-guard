@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { HiMiniArrowUp, HiMiniCircleStack, HiMiniCommandLine, HiMiniXMark } from "react-icons/hi2";
 import type { ContextWorkspaceScope } from "../context-assistance/workspaces-api";
+import { setSwarmContextTarget } from "../context-assistance/swarm-handoff";
 import type { GuardApprovalRequest } from "../guard-types";
 import { directAgent, RejectedAction } from "./api";
 import { Activity } from "./activity";
@@ -17,7 +18,7 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
   const [confirmStop, setConfirmStop] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState("Activity");
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("panel") === "context" ? "Context" : "Activity");
   const panel = useRef<HTMLElement>(null);
   const alive = useRef(true);
   const pending = useRef<{ agent: Agent; epoch: string; action: AgentAction; text: string | null; id: string } | null>(null);
@@ -66,7 +67,9 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
     <div role="tabpanel" id="swarm-panel-Context" aria-labelledby="swarm-tab-Context" hidden={tab !== "Context"}>
     <section className="swarm-context-panel"><h3><HiMiniCircleStack aria-hidden="true" />{cigar.label}</h3><p>{cigar.detail}</p>
       {agent.context_calls > 0 ? <p className="swarm-context-count">{agent.context_calls} completed context {agent.context_calls === 1 ? "call" : "calls"} reported by this CLI.</p> : <p>Context use has not been reported for this agent. Hook-injected context is not counted here.</p>}
-      <button className="swarm-text-button" type="button" onClick={() => onNavigate("/cigar?section=access")}>Manage context access <span aria-hidden="true">↗</span></button></section>
+      <button className="swarm-button swarm-button--primary" type="button" onClick={() => {
+        setSwarmContextTarget(agent); onNavigate("/cigar?section=access");
+      }}>{cigar.available ? "Manage CIGAR context" : "Add to CIGAR"} <span aria-hidden="true">↗</span></button></section>
     {agent.input_tokens + agent.output_tokens > 0 ? <><dl className="swarm-token-facts"><div><dt>Input tokens</dt><dd>{agent.input_tokens.toLocaleString()}</dd></div><div><dt>Output tokens</dt><dd>{agent.output_tokens.toLocaleString()}</dd></div></dl><p className="swarm-muted">Reported by the CLI for completed turns. These are model tokens, not CIGAR savings.</p></> : null}
     </div>
     {agent.controls.message ? <form className="swarm-direct" onSubmit={(e) => { e.preventDefault(); void act("message"); }}>

@@ -1,4 +1,5 @@
 import type { ContextWorkspaceScope } from "../context-assistance/workspaces-api";
+import { usesPromptContext } from "../context-assistance/swarm-handoff";
 import type { Agent, AgentState } from "./types";
 
 export const UNKNOWN_PROJECT = "@unknown";
@@ -27,9 +28,13 @@ export function filterAgents(agents: Agent[], project: string | null, search: st
 export function contextFor(agent: Agent, enabled: boolean | null, scopes: ContextWorkspaceScope[] | null) {
   if (enabled === null || (enabled && scopes === null)) return { label: "Context unknown", detail: "CIGAR could not be checked. Refresh or open Context.", available: false };
   if (!enabled) return { label: "CIGAR off", detail: "CIGAR is off. Agents can still work using their own context.", available: false };
-  const scope = scopes?.find((s) => !s.revoked && s.workspace === agent.workspace && s.app === agent.harness);
-  if (!scope) return { label: "No context grant", detail: "This project and app do not have a matching CIGAR grant.", available: false };
-  return { label: "CIGAR available", detail: `${scope.sources.length} approved ${scope.sources.length === 1 ? "source" : "sources"}${scope.sharing?.notes.read ? "; shared notes enabled" : ""}. Each MCP connection still needs pairing in Context. A project grant does not confirm this agent has access or has used it.`, available: true };
+  const matches = scopes?.filter((s) => !s.revoked && s.workspace === agent.workspace);
+  const scope = matches?.find((s) => s.app === "dashboard") ?? matches?.find((s) => s.app === agent.harness);
+  if (!scope) return { label: "Choose project context", detail: "No files have been picked for this project. Connected prompt hooks can still find matching project files automatically. Add the project to choose its files and preview the context.", available: false };
+  const connection = usesPromptContext(agent.harness)
+    ? "With Guard connected in App setup, new prompts receive project context. A running turn keeps its existing context."
+    : "Each MCP connection still needs pairing in CIGAR.";
+  return { label: "Project context ready", detail: `${scope.sources.length} approved ${scope.sources.length === 1 ? "source" : "sources"}${scope.sharing?.notes.read ? "; shared notes enabled" : ""}. ${connection} A project grant does not confirm this agent has used it.`, available: true };
 }
 export function relativeTime(at: number, now = Date.now()) {
   const seconds = Math.max(0, Math.floor((now - at) / 1000));

@@ -12,7 +12,7 @@ type Props = { onNavigate: (path: string) => void; reviews?: GuardApprovalReques
 
 export function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }: Props) {
   const { snapshot, loading, error, stale, context, refresh, acceptAgent } = useSwarm();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(window.location.search).get("agent"));
   const [project, setProject] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [attention, setAttention] = useState(false);

@@ -12,7 +12,7 @@ test("project map, inspector, list and CIGAR present actual capabilities", async
   await expect(page.getByRole("complementary", { name: "Agent details" })).toBeVisible();
   await page.getByRole("tab", { name: "Context" }).click();
   await expect(page.getByText("3 completed context calls reported by this CLI.")).toBeVisible();
-  await expect(page.getByText(/does not confirm this agent has access/)).toBeVisible();
+  await expect(page.getByText(/does not confirm this agent has used it/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Stop agent", exact: true })).toBeEnabled();
   await page.getByRole("tab", { name: "Activity", exact: true }).click();
   await page.screenshot({ path: info.outputPath("swarm-desktop.png"), fullPage: true });
