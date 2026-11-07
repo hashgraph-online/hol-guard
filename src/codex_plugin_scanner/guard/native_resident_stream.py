@@ -383,8 +383,8 @@ class _PersistentNativeClient:
             self._record_phase_failure(
                 "native_client_timed_out"
                 if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
-                else "native_client_start_failed",
-                "snapshot_start",
+                else ("native_client_start_failed" if allow_start else "native_client_stream_failed"),
+                "snapshot_start" if allow_start else "idle_stream_exited",
             )
             return None
         process = self._process

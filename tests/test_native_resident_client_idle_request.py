@@ -104,11 +104,14 @@ def test_client_dying_after_lease_is_retired_without_respawn(
     polls = iter([None, 1])
     client._process = SimpleNamespace(poll=lambda: next(polls))
     closes = []
+    failures = []
+    monkeypatch.setattr(client, "_record_phase_failure", lambda code, phase: failures.append((code, phase)))
     monkeypatch.setattr(client, "close", lambda **kw: closes.append(kw) or contained)
     monkeypatch.setattr(client, "_write_frame", _unexpected)
     pool._clients.add(client)
     pool._idle.append(client)
     assert clients.native_resident_client_request_if_idle(**kwargs) is None
+    assert failures == [("native_client_stream_failed", "idle_stream_exited")]
     assert len(closes) == 1
     assert pool._idle == []
     assert (client in pool._clients) is not contained

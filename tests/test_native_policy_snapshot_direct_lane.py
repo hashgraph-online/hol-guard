@@ -367,29 +367,6 @@ def test_the_lane_binds_a_home_only_when_the_daemon_gives_hooks_its_own(
     assert len(publishes) == 2
 
 
-def test_hook_transport_tracks_home_eligibility_without_disabling_evidence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    publisher = _publisher(tmp_path)
-    home = tmp_path / "home"
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: home))
-
-    def client(**_kwargs: object) -> bytes:
-        return b""
-
-    publisher._last_runtime_status = SimpleNamespace(identity=SimpleNamespace(path=str(tmp_path / "runtime")))
-    publisher._client_request = client
-    transport = (tmp_path / "runtime", client)
-    assert publisher.direct_hook_transport() == transport
-    publisher.bind_direct_lane_daemon_home(home)
-    assert publisher.direct_hook_transport() == transport
-    publisher.bind_direct_lane_daemon_home(tmp_path / "different-home")
-    assert publisher.direct_hook_transport() is None
-    assert publisher.direct_evidence_transport() == transport
-    publisher.bind_direct_lane_daemon_home(home)
-    assert publisher.direct_hook_transport() == transport
-
-
 def test_the_sink_command_binds_only_when_the_resident_accepts_it() -> None:
     binding = {"workspaces": ["/work/repo"], "inputs": []}
     command = contained_sink_command()

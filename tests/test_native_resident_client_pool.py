@@ -469,7 +469,7 @@ def test_failed_request_log_releases_the_leased_client(tmp_path: Path, monkeypat
     log_path = tmp_path / "resident-requests.log"
     monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(log_path))
     assert pool.request(b"next", deadline_monotonic=time.monotonic() + 1) == b'{"schema":"ok"}'
-    assert log_path.read_bytes() == b"1\n"
+    assert log_path.read_text(encoding="utf-8") == "1\n"
     assert len(pool._clients) == 1  # pyright: ignore[reportPrivateUsage]
 
 
