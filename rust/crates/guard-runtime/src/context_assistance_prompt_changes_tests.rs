@@ -412,3 +412,46 @@ fn a_secret_in_the_diff_is_left_out_though_the_file_no_longer_has_it() {
     );
     assert!(!text.contains(&"-".repeat(5)), "{text}");
 }
+
+/// A commit that also deletes a file shows no diff: the deleted file was
+/// never read, so the screen never saw what it held.
+#[test]
+fn a_commit_deleting_an_unread_file_shows_no_diff() {
+    let repo = Repo::new();
+    repo.write("private/notes.txt", "meeting notes\nnot for the agent\n");
+    repo.commit("add notes");
+    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    repo.write(
+        "src/core.py",
+        &CORE.replace("return value", "return value.strip()"),
+    );
+    repo.git(&["rm", "-q", "private/notes.txt"]);
+    repo.commit("strip values");
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(text.contains("src/core.py: convert 4-5"), "{text}");
+    assert!(
+        text.contains("strip values") && !text.contains("```diff"),
+        "{text}"
+    );
+    assert!(!text.contains("not for the agent"), "{text}");
+}
+
+/// Changes across many files stop at the note's size, and say so.
+#[test]
+fn a_note_about_many_files_stays_bounded() {
+    let repo = Repo::new();
+    let name = |n: usize| format!("src/module_{n:03}_with_a_fairly_long_name.py");
+    for n in 0..120 {
+        repo.write(&name(n), "x = 1\n");
+    }
+    repo.commit("add modules");
+    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    for n in 0..120 {
+        repo.write(&name(n), "x = 2\n");
+    }
+    repo.commit("change modules");
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(text.len() <= 3_000, "{}", text.len());
+    assert!(text.contains(&name(0)), "{text}");
+    assert!(text.contains("more changes left out"), "{text}");
+}

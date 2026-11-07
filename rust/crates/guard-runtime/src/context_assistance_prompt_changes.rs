@@ -394,13 +394,18 @@ pub(super) fn changes(
     render(base, &changed, &texts, &listed)
 }
 
-/// Whether every file `diff` changes is one Guard's read accepted.
+/// Whether every file `diff` changes is one Guard's read accepted. A file
+/// with a header but no part read here (deleted, binary, renamed, a quoted
+/// name or a mode change) was never screened, so its diff is not shown.
 fn shown_files(diff: &str, texts: &[(String, String)]) -> bool {
     let changed = hunks(diff);
-    !changed.is_empty()
-        && changed
-            .iter()
-            .all(|hunk| texts.iter().any(|(path, _)| *path == hunk.path))
+    let headers = (diff.lines())
+        .filter(|line| line.starts_with("diff --git "))
+        .count();
+    let paths: BTreeSet<&str> = changed.iter().map(|hunk| hunk.path.as_str()).collect();
+    !paths.is_empty()
+        && headers == paths.len()
+        && (paths.iter()).all(|changed| texts.iter().any(|(path, _)| path == changed))
 }
 
 /// The commits since `base`, newest first, leaving out merges.

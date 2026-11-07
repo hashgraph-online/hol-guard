@@ -1,7 +1,7 @@
 //! The rest of the prompt map: the test files that already test what the
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
-use super::super::sections::{headed_sections, written_name};
+use super::super::sections::{headed_sections, marked_test, written_name};
 use super::{Asked, File, Kind};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
@@ -66,8 +66,9 @@ pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
     let mut using: Vec<(&File, usize, BTreeSet<&String>)> = Vec::new();
     for file in files.iter().filter(|file| file.kind == Kind::Test) {
         let named_test = |at: &usize| {
-            written_name(file.opening(*at))
-                .is_some_and(|name| name.to_lowercase().starts_with("test"))
+            marked_test(&file.lines, &file.sections[*at])
+                || written_name(file.opening(*at))
+                    .is_some_and(|name| name.to_lowercase().starts_with("test"))
         };
         let tests: Vec<usize> = (0..file.sections.len()).filter(named_test).collect();
         // A test class counts by the tests inside it: mark every section

@@ -103,3 +103,49 @@ fn the_read_without_a_map_keeps_tests_when_asked_for() {
         words(&["src/header.py"])
     );
 }
+
+/// A Rust test is known by its attribute, whatever its name; a helper beside
+/// it that uses the same code is not a test.
+#[test]
+fn tests_marked_by_an_attribute_count_whatever_their_names() {
+    let rust = "use crate::Choice;
+
+#[test]
+fn converts_values() {
+    Choice::new();
+}
+
+#[tokio::test]
+async fn rejects_values() {
+    Choice::new();
+}
+
+fn helper() {
+    Choice::new();
+}
+";
+    let walk = Walk {
+        checked: 200,
+        holding: vec![3],
+        words: vec![3],
+        ..Walk::default()
+    };
+    let text = map(
+        &[
+            (
+                "src/core.py".to_owned(),
+                "class Choice:\n    pass\n".to_owned(),
+            ),
+            ("tests/convert.rs".to_owned(), rust.to_owned()),
+        ],
+        &sought(&walk, &[("choice".to_owned(), true)], &[]),
+        &Asked::default(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        text.contains("tests/convert.rs: 2 related tests, last rejects_values 8-11"),
+        "{text}"
+    );
+}

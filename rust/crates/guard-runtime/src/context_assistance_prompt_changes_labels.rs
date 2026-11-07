@@ -10,6 +10,9 @@ const MAX_LABELS: usize = 8;
 /// A definition longer than this is named by the changed lines, not its own.
 const LONG_SECTION: usize = 150;
 const MAX_TITLE_CHARS: usize = 40;
+/// The most characters the whole note takes; commit diffs share it.
+const MAX_NOTE: usize = 3_000;
+const CUT: &str = "\n(more changes left out; the command above lists them all)";
 
 /// One commit since the session started, and its diff when shown.
 pub(super) struct Commit {
@@ -63,19 +66,33 @@ pub(super) fn render(
 them). {NOT_INSTRUCTIONS}"
         ),
     };
-    if !files.is_empty() {
-        out.push_str(&format!("\n\n{LABELS_TITLE}\n{}", files.join("\n")));
+    let mut parts: Vec<String> = Vec::new();
+    for (at, file) in files.iter().enumerate() {
+        let title = if at == 0 {
+            format!("\n\n{LABELS_TITLE}")
+        } else {
+            String::new()
+        };
+        parts.push(format!("{title}\n{file}"));
     }
     for commit in commits {
         let line = format!("Commit {} {}", &commit.id[..8], commit.subject);
-        match &commit.diff {
-            Some(diff) => out.push_str(&format!(
+        parts.push(match &commit.diff {
+            Some(diff) => format!(
                 "\n\n{}:\n```diff\n{}\n```",
                 line.trim_end(),
                 diff.trim_end()
-            )),
-            None => out.push_str(&format!("\n\n{}", line.trim_end())),
+            ),
+            None => format!("\n\n{}", line.trim_end()),
+        });
+    }
+    // Every later request carries the note, so it stops at its size.
+    for part in parts {
+        if out.len() + part.len() + CUT.len() > MAX_NOTE {
+            out.push_str(CUT);
+            break;
         }
+        out.push_str(&part);
     }
     Some(out)
 }

@@ -2,6 +2,7 @@
 //! definition in a code file, and each headed section of a prose file.
 use crate::context_assistance_engine::{definition, opened, prose};
 use crate::context_assistance_prompt_words::term_form;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 /// Lines `start..=end` (from 1) of one file, and the name it defines.
@@ -152,33 +153,51 @@ pub(super) fn opening<'a>(lines: &[&'a str], section: &Section) -> &'a str {
         .unwrap_or_default()
 }
 
-/// The definitions directly inside `outer` (a class's methods, an impl's
-/// functions), each with its name as written and its lines. A later one
-/// replaces an earlier one of the same name, so overloads count once.
+/// Whether an attribute over the section marks it as a test, as Rust's
+/// `#[test]` or `#[tokio::test]` and Java's `@Test` do, whatever its name.
+pub(super) fn marked_test(lines: &[&str], section: &Section) -> bool {
+    (lines.get(section.start - 1..section.end.min(lines.len())))
+        .unwrap_or_default()
+        .iter()
+        .map(|line| line.trim())
+        .take_while(|line| decorates(line))
+        .any(|attribute| {
+            let name = attribute
+                .trim_start_matches("#[")
+                .trim_start_matches('@')
+                .split(|c: char| matches!(c, ']' | '(' | ' '))
+                .next()
+                .unwrap_or_default();
+            let last = name.rsplit("::").next().unwrap_or_default();
+            matches!(
+                last,
+                "test" | "Test" | "rstest" | "test_case" | "ParameterizedTest"
+            )
+        })
+}
+
+/// The definitions directly inside section `outer` (a class's methods, an
+/// impl's functions), each with its name as written and its lines; `parent`
+/// is each section's smallest holder. A later one replaces an earlier one of
+/// the same name, so overloads count once.
 pub(super) fn members(
     sections: &[Section],
+    parent: &[Option<usize>],
     lines: &[&str],
-    outer: &Section,
+    outer: usize,
 ) -> Vec<(String, usize, usize)> {
-    let inside = |inner: &Section, around: &Section| {
-        around.start <= inner.start
-            && inner.end <= around.end
-            && (around.start, around.end) != (inner.start, inner.end)
-    };
-    let mut found: Vec<(String, usize, usize)> = Vec::new();
-    for section in sections.iter().filter(|section| inside(section, outer)) {
-        let nested = sections
-            .iter()
-            .any(|other| inside(other, outer) && inside(section, other));
-        let Some(name) = written_name(opening(lines, section)) else {
-            continue;
-        };
-        if nested {
+    let mut found: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for (at, section) in sections.iter().enumerate() {
+        if parent.get(at).copied().flatten() != Some(outer) {
             continue;
         }
-        found.retain(|(seen, _, _)| *seen != name);
-        found.push((name, section.start, section.end));
+        if let Some(name) = written_name(opening(lines, section)) {
+            found.insert(name, (section.start, section.end));
+        }
     }
+    let mut found: Vec<(String, usize, usize)> = (found.into_iter())
+        .map(|(name, (start, end))| (name, start, end))
+        .collect();
     found.sort_by_key(|(_, start, _)| *start);
     found
 }

@@ -403,7 +403,7 @@ fn entry(files: &[File], pick: &Pick) -> String {
     let file = &files[pick.file];
     let section = &file.sections[pick.at];
     let first: String = file.opening(pick.at).chars().take(MAX_LINE_CHARS).collect();
-    let inside = members(&file.sections, &file.lines, section);
+    let inside = members(&file.sections, &file.parent, &file.lines, pick.at);
     let length = section.end - section.start + 1;
     let mut entry = if length > LONG_SECTION && !inside.is_empty() {
         format!("{}:{} ({length} lines) {first}", file.path, section.start)
@@ -464,3 +464,7 @@ mod tests;
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_nested_tests.rs"]
 mod nested_tests;
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_project_tests.rs"]
+mod project_tests;
