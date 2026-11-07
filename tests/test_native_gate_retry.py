@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tests.native_gate_retry import (
+    EXTENSION_TIMEOUT_REASON,
     REVIEW_DEADLINE_REASON,
     UNAVAILABLE_REASON,
     NativeUnavailableRetryWarning,
@@ -11,6 +12,7 @@ from tests.native_gate_retry import (
 
 _UNAVAILABLE = {"decision": "deny", "reason_code": UNAVAILABLE_REASON}
 _DEADLINE = {"decision": "deny", "reason_code": REVIEW_DEADLINE_REASON}
+_EXTENSION_TIMEOUT = {"decision": "deny", "reason_code": EXTENSION_TIMEOUT_REASON}
 _ALLOW = {"decision": "allow", "reason_code": "native_allow"}
 
 
@@ -70,3 +72,29 @@ def test_a_budget_miss_may_be_reported_either_way_across_the_two_attempts() -> N
     with pytest.warns(NativeUnavailableRetryWarning, match="both attempts"):
         assert review_with_unavailable_retry("case", review)["reason_code"] == REVIEW_DEADLINE_REASON
     assert len(calls) == 2
+
+
+def test_an_extension_evaluation_timeout_is_retried() -> None:
+    # The command extension pass spells a missed clock apart from a real
+    # evaluation error for exactly this reason: on a loaded runner it says
+    # nothing about the policy under test.
+    review, calls = _scripted(_EXTENSION_TIMEOUT, _ALLOW)
+    with pytest.warns(NativeUnavailableRetryWarning, match="re-running once"):
+        assert review_with_unavailable_retry("case", review) == _ALLOW
+    assert len(calls) == 2
+
+
+def test_an_extension_evaluation_timeout_twice_still_fails_the_case() -> None:
+    review, calls = _scripted(_EXTENSION_TIMEOUT, _EXTENSION_TIMEOUT)
+    with pytest.warns(NativeUnavailableRetryWarning, match="both attempts"):
+        assert review_with_unavailable_retry("case", review)["reason_code"] == EXTENSION_TIMEOUT_REASON
+    assert len(calls) == 2
+
+
+def test_an_extension_evaluation_failure_is_not_retried() -> None:
+    # `_failed` is a command Guard could not model, not a busy machine. Judging
+    # a second answer there would hide a real evaluation error.
+    failed = {"decision": "deny", "reason_code": "native_command_extension_evaluation_failed"}
+    review, calls = _scripted(failed)
+    assert review_with_unavailable_retry("case", review) == failed
+    assert len(calls) == 1

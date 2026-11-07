@@ -7,11 +7,16 @@ policy under test, so the gate re-runs the same payload once at the same
 budget and judges the second answer. A case that misses the budget twice
 still fails, and no other reason is retried.
 
-A missed budget surfaces under two reason codes. ``native_pre_tool_unavailable``
+A missed budget surfaces under three reason codes. ``native_pre_tool_unavailable``
 is the edge that never completed; ``native_review_deadline_exceeded`` is the
 same miss caught one layer up, where the review was still running when the
-deadline passed. Which of the two a loaded runner produces is a matter of
-where the clock ran out, not of what the policy decided, so both are retried.
+deadline passed; ``native_command_extension_evaluation_timed_out`` is the miss
+caught inside the command extension pass, which the runtime spells apart from
+``native_command_extension_evaluation_failed`` precisely so a busy machine can
+be told from a command Guard cannot model. Which of the three a loaded runner
+produces is a matter of where the clock ran out, not of what the policy
+decided, so all three are retried. The ``_failed`` spelling is a real
+evaluation error and is never retried.
 """
 
 from __future__ import annotations
@@ -24,8 +29,9 @@ from codex_plugin_scanner.guard.native_resident_client import native_resident_cl
 
 UNAVAILABLE_REASON = "native_pre_tool_unavailable"
 REVIEW_DEADLINE_REASON = "native_review_deadline_exceeded"
+EXTENSION_TIMEOUT_REASON = "native_command_extension_evaluation_timed_out"
 # The hook reached its budget without a policy answer, however it was reported.
-BUDGET_MISS_REASONS = frozenset({UNAVAILABLE_REASON, REVIEW_DEADLINE_REASON})
+BUDGET_MISS_REASONS = frozenset({UNAVAILABLE_REASON, REVIEW_DEADLINE_REASON, EXTENSION_TIMEOUT_REASON})
 
 
 class NativeUnavailableRetryWarning(UserWarning):
