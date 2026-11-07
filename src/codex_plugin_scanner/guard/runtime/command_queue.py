@@ -49,10 +49,11 @@ from .command_queue_loop import (
     COMMAND_QUEUE_POLL_INTERVAL_ENV,  # noqa: F401 - public compatibility export
     run_command_queue_loop,
 )
+from .command_queue_pending import hold_pending_result as _hold_pending_result
+from .command_queue_pending import retry_pending_result
 from .command_queue_protocol import command_api_url as _command_api_url  # noqa: F401
 from .command_queue_protocol import job_id as _job_id
 from .command_queue_protocol import lease_id as _lease_id
-from .command_queue_protocol import pending_result_is_stale as _pending_result_is_stale
 from .command_queue_protocol import result_payload as _result_payload
 from .command_queue_protocol import retry_wait_seconds as _retry_wait_seconds  # noqa: F401
 from .command_queue_results import drop_refused_result, post_result_unless_refused
@@ -258,60 +259,14 @@ def _retry_pending_result(
     auth_context: dict[str, object],
     state: dict[str, object],
 ) -> bool:
-    pending = state.get("pending_result")
-    if not isinstance(pending, dict):
-        return False
-    job = pending.get("job")
-    payload = pending.get("payload")
-    if not isinstance(job, dict) or not isinstance(payload, dict):
-        state.pop("pending_result", None)
-        state.pop("active_job", None)
-        _save_state(store, state)
-        return False
-    if _pending_result_is_stale(job):
-        _LOGGER.warning("Guard command dropped stale pending result.")
-        state.pop("pending_result", None)
-        state.pop("active_job", None)
-        state["state"] = "idle"
-        state["last_error"] = None
-        _save_state(store, state)
-        return False
-    try:
-        refused = post_result_unless_refused(partial(_post_result, auth_context, job, payload))
-    except urllib.error.HTTPError as error:
-        if error.code != 401:
-            raise
-        _LOGGER.warning("Pending Guard result 401, attempting OAuth refresh retry.")
-        refreshed_auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
-        refused = post_result_unless_refused(partial(_post_result, refreshed_auth_context, job, payload))
-    if refused is not None:
-        drop_refused_result(store, state, job, refused, save_state=_save_state)
-        return False
-    state.pop("pending_result", None)
-    state.pop("active_job", None)
-    state.update(
-        {
-            "state": "idle",
-            "last_result_at": _now(),
-            "last_error": None,
-            "last_poll_was_empty": False,
-        }
+    return retry_pending_result(
+        store,
+        auth_context,
+        state,
+        post_result=_post_result,
+        resolve_auth=_resolve_command_queue_auth_context,
+        save_state=_save_state,
     )
-    _save_state(store, state)
-    return True
-
-
-def _hold_pending_result(
-    store: GuardStore,
-    state: dict[str, object],
-    job: dict[str, object],
-    payload: dict[str, object],
-) -> None:
-    """Keep a settled job's result in this lane's state until its upload succeeds."""
-
-    _LOGGER.warning("Guard command result upload failed.")
-    state.update({"state": "result_pending", "pending_result": {"job": job, "payload": payload, "recorded_at": _now()}})
-    _save_state(store, state)
 
 
 def _record_leased_job(store: GuardStore, state: dict[str, object], item: dict[str, object]) -> None:
@@ -462,8 +417,10 @@ def poll_command_queue_once(
         # A handed-over job is already leased. Its few setup reads and writes
         # share one connection, so they pay one schema load instead of one
         # per call while the other drain workers contend for the store.
+        # Auth can refresh over the network, so it resolves before the shared
+        # connection, which holds the storage gate, is opened.
+        auth_context = _resolve_command_queue_auth_context(store)
         with _review_connection_scope(store, leased_item):
-            auth_context = _resolve_command_queue_auth_context(store)
             state = _load_state(store)
             state.update({"last_poll_at": _now(), "last_error": None})
             _record_leased_job(store, state, leased_item)

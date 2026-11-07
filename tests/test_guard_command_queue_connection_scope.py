@@ -90,9 +90,10 @@ def test_a_handed_over_review_job_sets_up_on_one_connection(tmp_path: Path, monk
     with pytest.raises(_StopError):
         command_queue.poll_command_queue_once(store, context, leased_item=job)  # type: ignore[arg-type]
 
-    # Each of these would otherwise open its own connection and pay its own
-    # schema load while every other drain worker contends for the store.
-    assert seen == [("auth", 1), ("load", 1), ("save", 1)]
+    # Auth may refresh over the network, so it runs before the shared
+    # connection opens. The store reads and writes after it would otherwise
+    # each open a connection while every other drain worker contends for it.
+    assert seen == [("auth", 0), ("load", 1), ("save", 1)]
     assert saved[-1]["state"] == "leased"
     assert saved[-1]["active_job"] == job
     assert saved[-1]["last_poll_was_empty"] is False
