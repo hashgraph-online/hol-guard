@@ -25,6 +25,8 @@ _CLAIM_KINDS = frozenset({"daemon", "exact_cloud", "legacy_local", "store"})
 _DISPOSITIONS = frozenset({"consumed", "retained"})
 _SAVED_ACTIONS = frozenset({"allow", "block"})
 _VERDICT_KEYS = ("decision", "risk_summary", "user_copy", "record_monitor_evidence")
+# How many times one install reads a waited Cloud allow's authority.
+_AUTHORITY_READS = 4
 
 
 class NativePackagePolicyResolveError(NativePackageEvaluationComposeError):
@@ -168,6 +170,26 @@ def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: An
     raise NativePackagePolicyResolveError("Native package policy claim invalid")
 
 
+def _authority_moved(refused: Mapping[str, object], fresh: object) -> bool:
+    """Whether a fresh read found the refused waited allow at a newer revision.
+
+    Every allow stored or spent moves the shared approval authority revision,
+    and the spend refuses a decision read at an older one. When a reviewer
+    approves several requests at once, another request's allow can land
+    between this install reading its Cloud allow and spending it. Only then is
+    the spend tried again, with the authority read at the new revision. The
+    fresh read repeats the ordinary lookup, so a block saved in between still
+    wins, and an allow already spent reads as nothing.
+    """
+
+    return (
+        isinstance(fresh, Mapping)
+        and fresh.get("authority_kind") == "exact-cloud"
+        and fresh.get("approval_id") == refused.get("approval_id")
+        and fresh.get("_approval_authority_revision") != refused.get("_approval_authority_revision")
+    )
+
+
 def _invalid() -> NativePackagePolicyResolveError:
     return NativePackagePolicyResolveError("Native package policy resolution invalid")
 
@@ -283,37 +305,46 @@ def native_resolve_stored_package_policy(
 ) -> tuple[Any, str | None, dict[str, object] | None]:
     """Return the resolved evaluation, claim disposition and the reused saved decision."""
 
-    facts = _hydrate(
-        store,
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        policy_workspaces=policy_workspaces,
-        now=now,
-        waited_request_ids=waited_request_ids,
-    )
-    authority = facts.pop("authority")
-    decision = facts.get("decision")
-    nothing_saved = decision is None and not facts["ignored_integrity"] and "diagnosed_reason" not in facts
-    if nothing_saved and current_action is None:
-        return evaluation, None, None
-    request: dict[str, object] = {
-        "evaluation": _evaluation_view(evaluation, fields=("policy_action", "reasons", "packages")),
-        "harness": artifact.harness,
-        "artifact_id": artifact.artifact_id,
-        "artifact_hash": artifact_hash,
-        "workspace_dir": str(workspace_dir),
-        "claim_saved_approval": claim_saved_approval,
-        **facts,
-    }
-    if current_action is not None:
-        request["current_action"] = current_action
+    def hydrate() -> dict[str, object]:
+        return _hydrate(
+            store,
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            policy_workspaces=policy_workspaces,
+            now=now,
+            waited_request_ids=waited_request_ids,
+        )
+
+    facts = hydrate()
     guard_home = _resolve_digest_home(Path(store.guard_home) if getattr(store, "guard_home", None) else None)
-    payload = _call(request, guard_home, evaluation=evaluation, claim_saved_approval=claim_saved_approval)
-    claim = payload["claim"]
-    if claim is not None:
+    reads = 1
+    while True:
+        authority = facts.pop("authority")
+        decision = facts.get("decision")
+        nothing_saved = decision is None and not facts["ignored_integrity"] and "diagnosed_reason" not in facts
+        if nothing_saved and current_action is None:
+            return evaluation, None, None
+        request: dict[str, object] = {
+            "evaluation": _evaluation_view(evaluation, fields=("policy_action", "reasons", "packages")),
+            "harness": artifact.harness,
+            "artifact_id": artifact.artifact_id,
+            "artifact_hash": artifact_hash,
+            "workspace_dir": str(workspace_dir),
+            "claim_saved_approval": claim_saved_approval,
+            **facts,
+        }
+        if current_action is not None:
+            request["current_action"] = current_action
+        payload = _call(request, guard_home, evaluation=evaluation, claim_saved_approval=claim_saved_approval)
+        claim = payload["claim"]
+        if claim is None:
+            break
         if not isinstance(decision, dict):
             raise NativePackagePolicyResolveError("Native package policy claim invalid")
-        if not _run_claim(claim, store, decision, authority, now):
+        if _run_claim(claim, store, decision, authority, now):
+            break
+        fresh = hydrate() if claim == "exact_cloud" and reads < _AUTHORITY_READS else None
+        if fresh is None or not _authority_moved(decision, fresh.get("decision")):
             request["claim_succeeded"] = False
             payload = _call(
                 request,
@@ -321,6 +352,9 @@ def native_resolve_stored_package_policy(
                 evaluation=evaluation,
                 claim_saved_approval=claim_saved_approval,
             )
+            break
+        facts = fresh
+        reads += 1
     resolved = apply_package_evaluation_patch(evaluation, payload["patch"])
     if payload["reused"] and not isinstance(decision, dict):
         raise NativePackagePolicyResolveError("Native package policy resolution invalid")
