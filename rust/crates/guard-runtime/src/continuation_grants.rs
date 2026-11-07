@@ -86,13 +86,18 @@ fn spend(
     else {
         return Ok(false);
     };
-    if decision["action"] != "allow"
-        || crate::claim_reuse::approval_authority_revision(connection)? != revision
-    {
+    let kind = decision["authority_kind"].as_str().unwrap_or("");
+    if decision["action"] != "allow" || !kinds.contains(&kind) {
         return Ok(false);
     }
-    let kind = decision["authority_kind"].as_str().unwrap_or("");
-    if !kinds.contains(&kind) {
+    // An exact Cloud allow answers one request, and its row is read and
+    // verified again below under this write. Another request's allow moves
+    // the shared revision, as a bulk approval does for each request it
+    // settles, so only legacy authority must still stand at the revision it
+    // was read under.
+    if kind != "exact-cloud"
+        && crate::claim_reuse::approval_authority_revision(connection)? != revision
+    {
         return Ok(false);
     }
     let now = guard_contracts::canonical_utc_timestamp(now).ok_or(
