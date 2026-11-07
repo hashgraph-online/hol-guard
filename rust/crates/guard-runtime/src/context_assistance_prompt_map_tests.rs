@@ -170,22 +170,57 @@ def test_other():\n    return 1\n";
     );
 }
 
-/// The doc section about the request's rare word wins over sections that only
-/// share its everyday words, and a docs folder keeps the top-level README out.
+/// The few tests that use the request's rare word come before the many that
+/// only use the class it names.
 #[test]
-fn docs_rank_by_rare_words_from_the_docs_folder() {
+fn tests_using_a_rare_word_come_first() {
+    let mut many = String::new();
+    for n in 0..6 {
+        many.push_str(&format!("def test_choice_{n}():\n    Choice(['a'])\n\n"));
+    }
+    let rare = "def test_plain():\n    Choice(['a'])\n\n\
+def test_sensitive_a():\n    Choice(['a'], case_sensitive=False)\n\n\
+def test_sensitive_b():\n    Choice(['b'], case_sensitive=False)\n";
+    let text = mapped_text(
+        &[
+            ("src/core.py", CORE),
+            ("tests/test_many.py", &many),
+            ("tests/test_rare.py", rare),
+        ],
+        &[("choice", true, 3), ("casesensitive", true, 2)],
+    )
+    .unwrap();
+    assert!(
+        text.contains(
+            "Tests:\ntests/test_rare.py: 2 related tests, last test_sensitive_b 7-8\n\
+tests/test_many.py: 6 related tests"
+        ),
+        "{text}"
+    );
+}
+
+/// The doc section that quotes the request's rare name wins over sections
+/// that only say it in prose or quote everyday words, and a docs folder keeps
+/// the top-level README out.
+#[test]
+fn docs_rank_by_quoted_names_from_the_docs_folder() {
     let mut list = vec![
         ("src/core.py".to_owned(), CORE.to_owned()),
-        ("README.md".to_owned(), "# Choice\n\nchoice\n".to_owned()),
+        ("README.md".to_owned(), "# Choice\n\n``choice``\n".to_owned()),
         (
             "docs/options.rst".to_owned(),
-            "Choice Options\n==============\n\nPick one choice, for example red.\n".to_owned(),
+            "Choice Options\n==============\n\nPick one with :class:`Choice`.\n".to_owned(),
+        ),
+        (
+            "docs/prose.rst".to_owned(),
+            "Choice and more\n===============\n\nA choice, a choice, an example to run.\n"
+                .to_owned(),
         ),
     ];
     for n in 0..5 {
         list.push((
             format!("docs/page{n}.rst"),
-            format!("Page {n}\n======\n\nAn example to run and check.\n"),
+            format!("Page {n}\n======\n\nAn example to ``run`` and check.\n"),
         ));
     }
     let asked = Asked {
@@ -204,6 +239,7 @@ fn docs_rank_by_rare_words_from_the_docs_folder() {
         "{text}"
     );
     assert!(!text.contains("README.md"), "{text}");
+    assert!(!text.contains("docs/prose.rst"), "{text}");
 }
 
 /// A class too long to read whole gives its first line and its members'

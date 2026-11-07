@@ -14,6 +14,8 @@ const MAX_DOCS: usize = 4;
 /// A doc section this long is a whole page, not the part about the request.
 const MAX_DOC_SECTION: usize = 200;
 const MAX_TITLE_CHARS: usize = 60;
+/// How much a long doc section is marked down, as BM25's `k1`.
+const LENGTH_K: f64 = 1.2;
 
 /// True when the prompt asks about docs or documentation.
 pub(super) fn asks_for_docs(prompt: &str) -> bool {
@@ -52,13 +54,16 @@ pub(super) fn changelog_file(path: &str) -> bool {
     CHANGELOG_NAMES.contains(&stem) && prose(Path::new(path))
 }
 
-/// The test files with the most tests that use `mentioned`, each with its
-/// count and its last such test, where a new one fits.
+/// The test files whose tests best match `mentioned`, each with its count of
+/// close matches and the last of its best ones, where a new test fits. A test
+/// scores the rarity of the words it uses, so the few tests that use a rare
+/// word outrank the many that say "option".
 pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
     if mentioned.is_empty() {
         return Vec::new();
     }
-    let mut found: Vec<(usize, String)> = Vec::new();
+    // Every test, with the mentioned words it uses.
+    let mut using: Vec<(&File, usize, BTreeSet<&String>)> = Vec::new();
     for file in files.iter().filter(|file| file.kind == Kind::Test) {
         let named_test = |at: &usize| {
             written_name(file.opening(*at))
@@ -69,50 +74,86 @@ pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
         let single = |at: &usize| {
             !(tests.iter()).any(|other| around(&file.sections[*at], &file.sections[*other]))
         };
-        let mut count = 0;
-        let mut last = None;
         for at in tests.iter().copied().filter(single) {
             let section = &file.sections[at];
             let body = file
                 .lines
                 .get(section.start - 1..section.end.min(file.lines.len()))
                 .unwrap_or_default();
-            let uses = body.iter().any(|line| {
-                let words = line_words(line);
-                mentioned.iter().any(|word| words.contains(word))
-            });
-            if uses {
-                count += 1;
-                last = Some(at);
-            }
-        }
-        if let Some(at) = last {
-            let section = &file.sections[at];
-            let name = written_name(file.opening(at)).unwrap_or_default();
-            found.push((
-                count,
-                format!(
-                    "{}: {count} related tests, last {name} {}-{}",
-                    file.path, section.start, section.end
-                ),
-            ));
+            let words: BTreeSet<String> = body.iter().flat_map(|line| line_words(line)).collect();
+            let used = mentioned
+                .iter()
+                .filter(|word| words.contains(*word))
+                .collect();
+            using.push((file, at, used));
         }
     }
-    found.sort_by(|a, b| b.0.cmp(&a.0));
+    let count = using.len() as f64;
+    let rarity: Vec<f64> = (mentioned.iter())
+        .map(|word| {
+            let holding = using
+                .iter()
+                .filter(|(_, _, used)| used.contains(&word))
+                .count();
+            ((count + 1.0) / holding.max(1) as f64).ln()
+        })
+        .collect();
+    let weight = |word: &String| {
+        let at = mentioned.iter().position(|other| other == word);
+        at.map_or(0.0, |at| rarity[at])
+    };
+    let scored: Vec<(&File, usize, f64)> = (using.iter())
+        .map(|(file, at, used)| (*file, *at, used.iter().map(|word| weight(word)).sum()))
+        .filter(|(_, _, score)| *score > 0.0)
+        .collect();
+    let mut found: Vec<(f64, usize, String)> = Vec::new();
+    for file in files.iter().filter(|file| file.kind == Kind::Test) {
+        let own: Vec<&(&File, usize, f64)> = (scored.iter())
+            .filter(|(of, _, _)| std::ptr::eq(*of, file))
+            .collect();
+        let Some(best) = own
+            .iter()
+            .map(|(_, _, score)| *score)
+            .max_by(f64::total_cmp)
+        else {
+            continue;
+        };
+        let close = own
+            .iter()
+            .filter(|(_, _, score)| *score * 2.0 >= best)
+            .count();
+        let Some((_, at, _)) = own.iter().rev().find(|(_, _, score)| *score >= best) else {
+            continue;
+        };
+        let section = &file.sections[*at];
+        let name = written_name(file.opening(*at)).unwrap_or_default();
+        found.push((
+            best,
+            close,
+            format!(
+                "{}: {close} related tests, last {name} {}-{}",
+                file.path, section.start, section.end
+            ),
+        ));
+    }
+    found.sort_by(|a, b| b.0.total_cmp(&a.0).then(b.1.cmp(&a.1)));
     found
         .into_iter()
         .take(MAX_TEST_FILES)
-        .map(|(_, line)| line)
+        .map(|(_, _, line)| line)
         .collect()
 }
 
-/// The doc sections that hold the most of `words`, rarer words counting for
-/// more, a word in every section for next to nothing, and a word in the heading
-/// twice. A project with a docs folder documents its features there, so its
+/// The doc sections about `words`. A section is about the code names it
+/// quotes, ``like_this`` or :class:`This`, not the everyday words of its prose,
+/// so only quoted words count: rarer ones for more, one in the heading four
+/// times over, and a long section for less, since it quotes many names in
+/// passing. A project with a docs folder documents its features there, so its
 /// top-level files, a README or CONTRIBUTING, are left out.
 pub(super) fn docs(files: &[File], words: &[String]) -> Vec<String> {
     let mut held: Vec<(&File, usize, BTreeSet<String>, BTreeSet<String>)> = Vec::new();
     let mut count = 0;
+    let mut length = 0;
     let doc = |file: &&File| file.kind == Kind::Doc;
     let foldered = files.iter().filter(doc).any(|file| file.path.contains('/'));
     let listed = |file: &&File| !foldered || file.path.contains('/');
@@ -122,42 +163,50 @@ pub(super) fn docs(files: &[File], words: &[String]) -> Vec<String> {
                 continue;
             }
             count += 1;
+            length += section.end + 1 - section.start;
             let lines = file
                 .lines
                 .get(section.start - 1..section.end.min(file.lines.len()))
                 .unwrap_or_default();
-            let wanted = |line: &&str| {
-                line_words(line)
+            let wanted = |text: &str| {
+                line_words(text)
                     .into_iter()
                     .filter(|word| words.contains(word))
                     .collect::<BTreeSet<String>>()
             };
-            let body: BTreeSet<String> = lines.iter().flat_map(&wanted).collect();
-            let title = lines.first().map(wanted).unwrap_or_default();
-            if !body.is_empty() {
-                held.push((file, at, body, title));
+            let quoted: BTreeSet<String> = (lines.iter())
+                .flat_map(|line| code_spans(line))
+                .flat_map(&wanted)
+                .collect();
+            let title = lines.first().map(|line| wanted(line)).unwrap_or_default();
+            if !quoted.is_empty() {
+                held.push((file, at, quoted, title));
             }
         }
     }
     let count = count.max(1) as f64;
+    let average = length.max(1) as f64 / count;
     let rarity = |word: &String| {
         let holding = held
             .iter()
-            .filter(|(_, _, body, _)| body.contains(word))
+            .filter(|(_, _, quoted, _)| quoted.contains(word))
             .count();
         ((count + 1.0) / holding.max(1) as f64).ln()
     };
     let mut scored: Vec<(f64, String)> = held
         .iter()
-        .map(|(file, at, body, title)| {
-            let score: f64 = body
-                .iter()
-                .map(|word| rarity(word) * if title.contains(word) { 2.0 } else { 1.0 })
-                .sum();
+        .map(|(file, at, quoted, title)| {
             let section = &file.sections[*at];
+            let lines = (section.end + 1 - section.start) as f64;
+            // BM25's length weight for a word found once.
+            let short = (1.0 + LENGTH_K) / (1.0 + LENGTH_K * (0.25 + 0.75 * lines / average));
+            let score: f64 = quoted
+                .iter()
+                .map(|word| rarity(word) * if title.contains(word) { 4.0 } else { 1.0 })
+                .sum();
             let heading = heading(file, section.start);
             (
-                score,
+                score * short,
                 format!("{}:{}-{} {heading}", file.path, section.start, section.end),
             )
         })
@@ -169,6 +218,23 @@ pub(super) fn docs(files: &[File], words: &[String]) -> Vec<String> {
         .take(MAX_DOCS)
         .map(|(_, line)| line)
         .collect()
+}
+
+/// The text between each pair of matching backtick runs in a line: the code
+/// a doc quotes as `name`, ``name`` or :func:`name`.
+fn code_spans(line: &str) -> Vec<&str> {
+    let mut spans = Vec::new();
+    let mut rest = line;
+    while let Some(open) = rest.find('`') {
+        let run = rest[open..].chars().take_while(|c| *c == '`').count();
+        let after = &rest[open + run..];
+        let Some(close) = after.find(&"`".repeat(run)) else {
+            break;
+        };
+        spans.push(&after[..close]);
+        rest = &after[close + run..];
+    }
+    spans
 }
 
 /// The newest section of the changelog the prompt names, or of the
