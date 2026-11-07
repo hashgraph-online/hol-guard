@@ -236,9 +236,29 @@ fn innermost_brace_pair(candidate: &str) -> Option<(usize, usize)> {
         .find_map(|(close, _)| candidate[..close].rfind('{').map(|open| (open, close)))
 }
 
+/// The same candidate with the `}` at `close` taken as the literal text an
+/// escaped brace leaves behind. Bash carries the pair on to the next `}`, so
+/// this reading exists only when a comma and a later `}` follow, and only
+/// when the next character is not itself a `}`: a brace that closes straight
+/// into another one is the inner half of a nested pair such as a Go template
+/// `{{.Names}},{{.Status}}`, not an escape. `None` otherwise, which is the
+/// ordinary case.
+fn escaped_close_reading(candidate: &str, close: usize) -> Option<String> {
+    if candidate[close + 1..].starts_with('}') {
+        return None;
+    }
+    let comma = candidate[close + 1..].find(',')? + close + 1;
+    candidate[comma..].find('}')?;
+    Some(format!(
+        "{}{}",
+        &candidate[..close],
+        &candidate[close + 1..]
+    ))
+}
+
 fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
     let mut expanded = vec![pattern.to_owned()];
-    for _depth in 0..8 {
+    for depth in 0..8 {
         // A brace with no `}` after it expands to nothing: bash leaves `a{b`
         // and a search pattern such as `json({ error` as the literal text it
         // was written as. Reading that shape as a glob nobody could expand
@@ -268,6 +288,22 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
                 let suffix = candidate[close + 1..]
                     .strip_prefix(closing.as_str())
                     .unwrap_or(&candidate[close + 1..]);
+                // The tokenizer drops a backslash before it reaches here, so
+                // `z{prefix/{x\},.env}` arrives as `z{prefix/{x},.env}`. To
+                // bash that `}` was literal text, which left the pair opening
+                // further left and the words `z{prefix/x}` and `z{prefix/.env`.
+                // Reading only the inner pair would hide that second word, so
+                // the spelling with this brace taken as literal is carried
+                // alongside and screened too. Only the word as written can
+                // have carried the backslash, so the second reading is taken
+                // once, on the first pass; generating one at every pass makes
+                // an ordinary multi-part template outgrow the budget below and
+                // fail closed.
+                if depth == 0 {
+                    if let Some(escaped) = escaped_close_reading(&candidate, close) {
+                        expanded.push(escaped);
+                    }
+                }
                 expanded.push(format!("{}{trimmed}{suffix}", &candidate[..open],));
                 continue;
             }

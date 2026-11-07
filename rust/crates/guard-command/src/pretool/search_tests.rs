@@ -98,3 +98,25 @@ fn brace_sequences_still_select_sensitive_names() {
         assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
     }
 }
+
+/// The shell tokenizer removes a backslash before a search screen sees the
+/// word, so `z{prefix/{x\},.env}` arrives spelled `z{prefix/{x},.env}`. Bash
+/// read that `}` as literal text and split the word into `z{prefix/x}` and
+/// `z{prefix/.env`, the second of which names a credential file. Reading only
+/// the inner brace pair hid that word.
+#[test]
+fn an_escaped_close_brace_still_names_the_credential_bash_would_reach() {
+    for operand in ["z{prefix/{x},.env}", "dir/{a},.ssh}", "x{y/{keep},.aws}"] {
+        assert!(literal_glob_names_sensitive_path(operand), "{operand}");
+        assert!(glob_can_select_sensitive_path(operand), "{operand}");
+    }
+    // An ordinary template whose braces all close where they are written
+    // gains no second reading, so it stays out of review.
+    for template in [
+        "{{.Names}},{{.Status}}",
+        "{{.Repository}},{{.Tag}},{{.Size}}",
+        "{{range .Items}},{{end}}",
+    ] {
+        assert!(!literal_glob_names_sensitive_path(template), "{template}");
+    }
+}
