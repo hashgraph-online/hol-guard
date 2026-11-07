@@ -217,7 +217,13 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
 
 
 def cursor_route_probe(
-    case_id: str, payload: dict[str, object], fixture: Any, worker: Any, workspace: Path
+    case_id: str,
+    payload: dict[str, object],
+    fixture: Any,
+    worker: Any,
+    workspace: Path,
+    *,
+    on_retry: Any = None,
 ) -> dict[str, object]:
     """Send Cursor's silent preToolUse probe and return the call its shell hook then reviews.
 
@@ -238,6 +244,7 @@ def cursor_route_probe(
             guard_home=fixture.guard_home,
             workspace=workspace,
         ),
+        on_retry=on_retry,
     )
     output = answer.get("hookSpecificOutput")
     updated = output.get("updatedInput") if isinstance(output, dict) else None
