@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -94,6 +96,10 @@ class FakeStore:
         self.payloads: dict[str, dict[str, object] | list[object]] = {
             "policy_bundle_keyring": review_trusted_keyring_payload(),
         }
+
+    @contextmanager
+    def connection_scope(self) -> Iterator[None]:
+        yield
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
         # The real store answers with no key until one is created; the resident
@@ -1087,6 +1093,62 @@ def test_poll_once_posts_rejection_when_the_approval_grant_cannot_be_settled(
     assert status["active_job"] is None
     assert result_payloads[0]["status"] == "failed"
     assert result_payloads[0]["failureCode"] == "native_command_envelope_unavailable"
+
+
+def test_poll_once_posts_a_failure_when_the_shared_scope_raises_after_the_job_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlite3
+    from contextlib import contextmanager
+
+    store = FakeStore(tmp_path / "guard-home")
+    result_payloads: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {"id": "job-poisoned", "leaseId": "lease-poisoned", "operation": "guard.packageShims.status"}
+            }
+        if path.endswith("/result"):
+            result_payloads.append(payload)
+        return {"ok": True}
+
+    depth = [0]
+    job_ran = [False]
+
+    # The real scope re-raises a storage failure recorded while the job ran
+    # once the outermost scope closes, after the job and its grant are spent.
+    @contextmanager
+    def poisoned_scope(_store: object, _job: dict[str, object]):
+        depth[0] += 1
+        job_ran[0] = job_ran[0] or depth[0] > 1
+        try:
+            yield
+        finally:
+            depth[0] -= 1
+        if depth[0] == 0 and job_ran[0]:
+            raise sqlite3.DatabaseError("disk I/O error")
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(command_queue, "_review_connection_scope", poisoned_scope)
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["active_job"] is None
+    assert len(result_payloads) == 1
+    assert result_payloads[0]["status"] == "failed"
+    assert result_payloads[0]["failureCode"] == "execution_error"
 
 
 def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, monkeypatch) -> None:

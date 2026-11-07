@@ -124,6 +124,16 @@ def _fresh_verified_runtime_copy() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_command_queue_auth_context() -> Iterator[None]:
+    """Resolve the command queue's Cloud sign-in afresh in each test."""
+    from codex_plugin_scanner.guard.runtime import command_queue_auth
+
+    command_queue_auth.clear_command_queue_auth_context_cache()
+    yield
+    command_queue_auth.clear_command_queue_auth_context_cache()
+
+
+@pytest.fixture(autouse=True)
 def _checkout_runtime_judges_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
     """Let a source checkout validate distribution roots with the pinned runtime."""
     from tests.native_distribution_support import route_distribution
