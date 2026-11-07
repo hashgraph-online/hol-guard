@@ -188,11 +188,7 @@ pub(crate) fn allow_settles_read_order(
         if preserves_tree(&segment.arguments) {
             continue;
         }
-        if segment
-            .arguments
-            .first()
-            .is_none_or(|argument| argument.starts_with('-'))
-        {
+        if !globals_only_route_or_print(&segment.arguments) {
             return false;
         }
         first = Some(first.map_or(index, |current: usize| current.min(index)));
@@ -234,6 +230,49 @@ fn read_directory(model: &CanonicalCommandV1, context: PathContext<'_>) -> Optio
         return None;
     }
     Some(cwd)
+}
+
+/// Whether every Git global option before the subcommand only chooses the
+/// directory the step runs in or shapes what it prints.
+///
+/// `git -c core.pager='sh -c true' pull && git log` is the shape this
+/// refuses: `-c` and `--config-env` set configuration the later read obeys,
+/// which is the one thing [`preserves_configuration`] cannot see, because the
+/// shared Git parser skips those options to reach the subcommand.
+/// `--exec-path`, `--git-dir`, `--work-tree`, `--namespace`, `--super-prefix`
+/// and `--bare` move the repository out from under the read, and
+/// `--paginate` starts the program `core.pager` names, so a step carrying
+/// one settles nothing either. A `-C <dir>` only picks the checkout
+/// the step works in; whatever it rewrites there is answered by the
+/// later-read walk below, the same way a step with no global option is.
+/// Git takes these options as whole words, so `-Cdir` and `-ckey=value`
+/// are not spellings of them and keep the refusal.
+fn globals_only_route_or_print(arguments: &[String]) -> bool {
+    let Some(end) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    let mut index = 0;
+    while index < end {
+        let argument = &arguments[index];
+        let option = argument.split('=').next().unwrap_or(argument);
+        if option == "-C" {
+            index += if argument.contains('=') { 1 } else { 2 };
+        } else if matches!(
+            option,
+            "-P" | "--no-pager"
+                | "--no-replace-objects"
+                | "--literal-pathspecs"
+                | "--glob-pathspecs"
+                | "--noglob-pathspecs"
+                | "--icase-pathspecs"
+                | "--no-optional-locks"
+        ) {
+            index += 1;
+        } else {
+            return false;
+        }
+    }
+    true
 }
 
 /// Whether a Git step, wherever its global options route it, writes no
@@ -527,7 +566,7 @@ fn output_target_is_placed(target: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{preserves_tree, REF_READS};
+    use super::{globals_only_route_or_print, preserves_tree, REF_READS};
 
     #[test]
     fn working_tree_reads_are_not_ref_reads() {
@@ -709,6 +748,37 @@ mod tests {
             "-C repo worktree add wt",
         ] {
             assert!(!preserves_tree(&words(command)), "{command}");
+        }
+    }
+
+    #[test]
+    fn a_directory_option_leaves_a_refresh_able_to_settle_a_later_read() {
+        for command in [
+            "pull --ff-only origin main",
+            "-C /repo pull --ff-only origin main",
+            "-C /repo --no-pager merge --ff-only origin/main",
+            "--no-optional-locks -C /repo pull --ff-only origin main",
+        ] {
+            assert!(globals_only_route_or_print(&words(command)), "{command}");
+        }
+    }
+
+    #[test]
+    fn an_inline_setting_or_a_moved_repository_still_settles_nothing() {
+        for command in [
+            "-c core.pager=sh pull --ff-only origin main",
+            "-ccore.pager=sh pull --ff-only origin main",
+            "-C/repo pull --ff-only origin main",
+            "-c core.pager sh pull --ff-only origin main",
+            "--config-env=core.pager=P pull --ff-only origin main",
+            "--exec-path=/tmp/x pull --ff-only origin main",
+            "--git-dir /other/.git pull --ff-only origin main",
+            "--work-tree /other pull --ff-only origin main",
+            "--namespace ns pull --ff-only origin main",
+            "--bare pull --ff-only origin main",
+            "--paginate pull --ff-only origin main",
+        ] {
+            assert!(!globals_only_route_or_print(&words(command)), "{command}");
         }
     }
 }
