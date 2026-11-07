@@ -19,6 +19,9 @@ const APPROVAL_CENTER_SURFACE: &str = "approval-center";
 /// Writes a request-bound session may make besides deciding its own request:
 /// the dashboard marks what the user has seen while the page is open.
 const BOUND_SESSION_WRITES: &[&str] = &["/v1/read-state"];
+/// Bulk exports the approval page never loads. A session opened from an
+/// agent-handed link must not pull every request's evidence or the settings.
+const BOUND_SESSION_DENIED_READS: &[&str] = &["/v1/evidence/export", "/v1/settings/export"];
 
 /// Host of a transport-normalized origin (`scheme://host[:port]`), without
 /// IPv6 brackets. `None` when the value is not that shape.
@@ -143,8 +146,8 @@ fn decide(request: &SessionRequest<'_>) -> (bool, Option<String>) {
 /// What a session opened from an agent-handed approval link may do.
 ///
 /// That link is relayed through the agent's transcript, so the session it
-/// opens may read what the approval page shows but may only decide the one
-/// request it names. Every other write the approval center can make
+/// opens may read what the approval page shows, but not bulk exports, and
+/// may only decide the one request it names. Every other write the approval center can make
 /// (other requests, bulk approval, policy, settings, repair) needs a session
 /// opened from Guard itself.
 fn bound_request_allowed(method: &str, path: &str, bound: &str) -> bool {
@@ -152,7 +155,7 @@ fn bound_request_allowed(method: &str, path: &str, bound: &str) -> bool {
         return false;
     }
     if method == "GET" {
-        return true;
+        return !BOUND_SESSION_DENIED_READS.contains(&path);
     }
     if method != "POST" {
         return false;

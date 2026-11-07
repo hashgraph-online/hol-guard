@@ -282,6 +282,10 @@ fn a_link_bound_session_decides_only_its_own_request() {
     assert_eq!(bound("GET", "/v1/requests"), true);
     assert_eq!(bound("GET", &format!("/v1/requests/{own}")), true);
     assert_eq!(bound("POST", "/v1/read-state"), true);
+    // Bulk exports are not part of the page.
+    for path in ["/v1/evidence/export", "/v1/settings/export"] {
+        assert_eq!(bound("GET", path), false, "{path}");
+    }
     // Nothing else the approval center can change is open to it.
     for path in [
         "/v1/requests/bulk-allow-once",
@@ -305,6 +309,13 @@ fn an_unbound_approval_session_keeps_every_approval_center_route() {
     ] {
         assert_eq!(
             approval_session(None, "POST", &path)["allowed"],
+            true,
+            "{path}"
+        );
+    }
+    for path in ["/v1/evidence/export", "/v1/settings/export"] {
+        assert_eq!(
+            approval_session(None, "GET", path)["allowed"],
             true,
             "{path}"
         );
