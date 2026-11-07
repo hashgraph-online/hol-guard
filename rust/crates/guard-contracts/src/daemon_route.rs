@@ -80,6 +80,9 @@ pub struct DaemonSessionClaimsV1 {
     /// String items of the `managers` claim; `None` when not a list.
     #[serde(default)]
     pub managers: Option<Vec<String>>,
+    /// The one approval request an agent-handed link session may act on.
+    #[serde(default)]
+    pub request_id: Option<String>,
 }
 
 /// The request-body fields a claim may be compared against.
