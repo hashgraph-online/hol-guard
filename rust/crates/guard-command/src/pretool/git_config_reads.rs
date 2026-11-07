@@ -118,6 +118,27 @@ pub(crate) fn screened_arguments(arguments: &[String]) -> Vec<&str> {
         .collect()
 }
 
+/// The `--get-regexp` operands of a `git config` read in `segment`, if it is
+/// one. Git matches each against the keys in the configuration file and never
+/// expands it over the files that are there, so it is a pattern rather than a
+/// path and the screens that refuse every `remote.*url` do not apply to it.
+pub(crate) fn configuration_patterns(segment: &crate::CommandSegmentV1) -> Vec<&str> {
+    if crate::command_compatibility::basename(segment) != "git" {
+        return Vec::new();
+    }
+    let arguments = &segment.arguments;
+    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
+        return Vec::new();
+    };
+    if arguments.get(index).map(String::as_str) != Some("config") {
+        return Vec::new();
+    }
+    match parse(&arguments[index + 1..]) {
+        Some(form) if form.mode == "--get-regexp" => form.operands,
+        _ => Vec::new(),
+    }
+}
+
 fn parse(arguments: &[String]) -> Option<Form<'_>> {
     let (verb, rest) = match arguments.split_first() {
         Some((first, rest)) if matches!(first.as_str(), "get" | "list") => (first.as_str(), rest),

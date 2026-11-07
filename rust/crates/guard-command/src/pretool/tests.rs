@@ -752,6 +752,44 @@ fn magic_pathspecs_are_screened_by_the_path_they_name() {
     }
 }
 
+/// A `git config --get-regexp` operand is matched against the keys in the
+/// configuration file, so the fixed floor asks of it only what a search
+/// pattern is asked: does the glob's own text name a private file? The wider
+/// questions a path operand faces -- could some longer string this glob
+/// matches hold a credential marker? -- refuse every pattern carrying a `.*`,
+/// and `remote.*url` is the spelling a read of the configured remotes uses.
+#[test]
+fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
+    let model = |command: &str| {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+        )
+        .unwrap()
+    };
+    for command in [
+        "git config --get-regexp remote.*url",
+        "git config --get-regexp '^remote\\..*\\.url$'",
+        "git config --get-regexp 'remote.*url' github",
+        "git config get --regexp remote.*url",
+        "git --no-pager config --get-regexp 'branch.*remote'",
+        "git config --get-regexp 'cookie.*name'",
+    ] {
+        assert!(!fixed_command_floor(&model(command)), "{command}");
+    }
+    for command in [
+        // The pattern's own text still names a private file.
+        "git config --get-regexp '.en*'",
+        "git config --get-regexp '.ssh/*'",
+        // Only a `--get-regexp` operand is a pattern. The shell expands
+        // every other argument before Git sees it.
+        "git config --get-all 'remote.*url'",
+        "git config --get 'remote.*url'",
+        "git config *",
+    ] {
+        assert!(fixed_command_floor(&model(command)), "{command}");
+    }
+}
+
 #[test]
 fn secret_selecting_globs_are_a_fixed_floor() {
     let model = |command: &str| {

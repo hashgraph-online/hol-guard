@@ -88,6 +88,7 @@ pub mod pretool_doctl_reads;
 pub mod pretool_du_sibling_reads;
 pub mod pretool_empty_read_request;
 pub mod pretool_env_prefix_controls;
+pub mod pretool_extension_allow_git_config_pattern;
 pub mod pretool_extension_allow_git_order;
 pub mod pretool_extension_allow_github_compound;
 pub mod pretool_extension_allow_guard_named_checkout;
