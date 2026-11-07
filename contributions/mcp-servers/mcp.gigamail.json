@@ -3,7 +3,7 @@
   "id": "mcp.gigamail",
   "version": "1.0.0",
   "name": "GigaMail",
-  "description": "Local stdio server that connects an agent to the user's own mailbox, calendar and files (Microsoft 365 through Graph, or any IMAP server). Guard matches only the executable basename gigamail-server. Its 10 outbound or destructive tools (send, reply, move, delete, calendar, Zoom, Drive) already wait for the user's approval out of band in GigaMail itself; Guard adds review on every write. Reads stay on Guard's usual handling. Off until you turn it on.",
+  "description": "Local stdio server that connects an agent to the user's own mailbox, calendar and files (Microsoft 365 through Graph, or any IMAP server). Guard matches only the executable basename gigamail-server. Its 10 outbound or destructive tools (send, reply, move, delete, calendar, Zoom, Drive) already wait for the user's approval out of band in GigaMail itself; Guard defaults every write to review, subject to the user's grants and policy. Reads stay on Guard's usual handling. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
