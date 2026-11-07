@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import threading
 import time
@@ -70,9 +72,29 @@ __all__ = ["resolve_command_queue_auth_context"]
 # is reused for a few seconds, well inside the margin in which the resolver
 # itself keeps reusing an access token, so a reused token is never one the
 # resolver would have refreshed. A 401 still forces a fresh resolve.
+#
+# A context is reused only while the stored sign-in it came from is unchanged.
+# Connecting, reconnecting or signing out rewrites that record, from this
+# process or another one, so the next poll resolves the new sign-in at once.
 _AUTH_CONTEXT_REUSE_SECONDS = 15.0
 _auth_context_lock = threading.Lock()
-_auth_context_cache: dict[tuple[str, object], tuple[float, dict[str, object]]] = {}
+_auth_context_cache: dict[tuple[str, object], tuple[float, str, dict[str, object]]] = {}
+
+
+def _sign_in_stamp(store: GuardStore) -> str | None:
+    """A digest of the stored sign-in record, or None when it cannot be read."""
+
+    state_key = getattr(store, "_oauth_local_credentials_state_key", None)
+    if not isinstance(state_key, str):
+        return None
+    try:
+        record = store.get_sync_payload(state_key)
+    except Exception:
+        return None
+    if record is None:
+        return None
+    encoded = json.dumps(record, sort_keys=True, separators=(",", ":"), default=str).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def reuse_command_queue_auth_context(
@@ -84,9 +106,15 @@ def reuse_command_queue_auth_context(
 ) -> dict[str, object]:
     key = (str(getattr(store, "guard_home", id(store))), resolve_auth_context)
     with _auth_context_lock:
+        stamp = _sign_in_stamp(store)
         cached = None if force_refresh else _auth_context_cache.get(key)
-        if cached is not None and time.monotonic() - cached[0] < _AUTH_CONTEXT_REUSE_SECONDS:
-            return dict(cached[1])
+        if (
+            cached is not None
+            and stamp is not None
+            and cached[1] == stamp
+            and time.monotonic() - cached[0] < _AUTH_CONTEXT_REUSE_SECONDS
+        ):
+            return dict(cached[2])
         _auth_context_cache.pop(key, None)
         resolved_at = time.monotonic()
         auth_context = resolve_command_queue_auth_context(
@@ -95,9 +123,13 @@ def reuse_command_queue_auth_context(
             resolve_auth_context=resolve_auth_context,
             repair_authorization=repair_authorization,
         )
-        if len(_auth_context_cache) >= 8:
-            _auth_context_cache.clear()
-        _auth_context_cache[key] = (resolved_at, auth_context)
+        # Resolving can refresh and rewrite the record, so the stamp kept is
+        # the one the resolved context belongs to.
+        stamp = _sign_in_stamp(store)
+        if stamp is not None:
+            if len(_auth_context_cache) >= 8:
+                _auth_context_cache.clear()
+            _auth_context_cache[key] = (resolved_at, stamp, auth_context)
         return dict(auth_context)
 
 
