@@ -39,7 +39,7 @@ from .command_queue_activation import (
 )
 from .command_queue_auth import reuse_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
-from .command_queue_authorization import start_command_authorization
+from .command_queue_authorization import start_command_authorization, start_overlapped_acknowledgement
 from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
@@ -511,8 +511,13 @@ def poll_command_queue_once(
         item,
         authorize=_authorize_in_connection_scope,
     )
+    # A job that checks its authority again as it applies settles while its
+    # acknowledgement is in flight; waiting for that round trip first added it
+    # to every approval the person was waiting on.
+    acknowledgement = start_overlapped_acknowledgement(item, partial(_heartbeat, auth_context, item))
     try:
-        _heartbeat(auth_context, item)
+        if acknowledgement is None:
+            _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
         if error.code != 401:
             raise
@@ -559,6 +564,13 @@ def poll_command_queue_once(
                 "failureCode": "execution_error",
                 "failureMessage": _redacted_error(error),
             }
+    if acknowledgement is not None:
+        acknowledgement_error = acknowledgement()
+        if acknowledgement_error is not None:
+            _LOGGER.warning(
+                "Guard Review acknowledgement failed; posting the result: error=%s",
+                _redacted_error(acknowledgement_error),
+            )
     payload = _result_payload(item, execution)
     refused: urllib.error.HTTPError | None = None
     # Posting the result refreshes the job's heartbeat on the server, so a
