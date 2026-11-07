@@ -1,0 +1,152 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.rozee",
+    "version": "1.0.0",
+    "name": "Rozee job-search CLI network requests",
+    "description": "Reviews the Rozee search CLI's public listing search and detail requests before they send query or listing data to Rozee.pk.",
+    "action_classes": [
+      "Rozee public job-search request"
+    ],
+    "risk_classes": [
+      "network_egress"
+    ],
+    "safer_alternatives": [
+      "Review the search query before sending it; do not include personal or confidential information.",
+      "Use the CLI's --help option to read usage without making a network request."
+    ],
+    "reference_urls": [
+      "https://github.com/usama236a/rozee-job-search-cli",
+      "https://www.rozee.pk/"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "bun"
+    ],
+    "executables": [
+      "bun"
+    ],
+    "project_markers": [
+      ".agents/skills/rozee-search/SKILL.md"
+    ],
+    "permissions": [
+      {
+        "permission_id": "command.rozee.permission.public-listing-requests",
+        "implementation_version": "1.0.0",
+        "label": "Review Rozee listing requests",
+        "description": "Review the Rozee CLI's outbound public listing searches and detail fetches. Search terms are sent to Rozee.pk.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Rozee public job-search request"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Check that search terms contain no personal or confidential information.",
+          "Use the local --help option when you only need command usage."
+        ],
+        "example_command": "bun run .agents/skills/rozee-search/cli/src/cli.ts search --query \"data analyst\" --location Lahore"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.rozee.public-listing-request",
+        "rule_version": "1.0.0",
+        "permission_id": "command.rozee.permission.public-listing-requests",
+        "title": "Rozee public listing request",
+        "description": "Reviews only the Rozee CLI search and detail subcommands, which make outbound requests to fetch public job listings. The search query is sent to Rozee.pk.",
+        "severity": "medium",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "action_classes": [
+          "Rozee public job-search request"
+        ],
+        "safer_alternatives": [
+          "Review the query and city before allowing the search; omit private or confidential information.",
+          "Use --help to inspect usage without contacting Rozee.pk."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "bun"
+                ],
+                "required_arguments": [
+                  "run",
+                  ".agents/skills/rozee-search/cli/src/cli.ts",
+                  "search"
+                ]
+              }
+            },
+            {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "bun"
+                ],
+                "required_arguments": [
+                  "run",
+                  ".agents/skills/rozee-search/cli/src/cli.ts",
+                  "detail"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "local-help",
+            "title": "Show local CLI help without a request",
+            "matcher": {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "bun"
+                ],
+                "required_arguments": [
+                  "run",
+                  ".agents/skills/rozee-search/cli/src/cli.ts",
+                  "--help"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "local-short-help",
+            "title": "Show local CLI help without a request",
+            "matcher": {
+              "op": "arguments.v1",
+              "config": {
+                "executables": [
+                  "bun"
+                ],
+                "required_arguments": [
+                  "run",
+                  ".agents/skills/rozee-search/cli/src/cli.ts",
+                  "-h"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
