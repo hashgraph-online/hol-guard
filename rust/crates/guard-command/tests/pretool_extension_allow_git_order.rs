@@ -400,6 +400,15 @@ fn an_allowed_read_whose_valueless_setting_hides_a_monitor_still_waits() {
     }
 }
 
+/// A path as the shell reads it. On Windows a path's separators are the
+/// shell's own escape character, so a command that spells one unquoted reaches
+/// Git as something else and Guard refuses to prove it. The drive-absolute
+/// forward-slash form is the one Guard's own path proofs work in, and every
+/// shell passes it through unchanged.
+fn shell_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 /// A second checkout beside the first, so a step can be routed somewhere other
 /// than the checkout the read runs in.
 fn sibling_checkout(root: &Path) -> PathBuf {
@@ -435,8 +444,7 @@ fn sibling_checkout(root: &Path) -> PathBuf {
 #[test]
 fn a_ref_read_after_a_step_routed_to_its_own_checkout_runs_without_review() {
     let (root, _cleanup) = checkout("routed-same", false);
-    let project = root.join("project");
-    let project = project.to_str().unwrap();
+    let project = shell_path(&root.join("project"));
     let controls = every_permission("enabled");
     let mut failures = Vec::new();
     for harness in ["omp", "zcode", "codex", "claude-code"] {
@@ -479,10 +487,8 @@ fn a_ref_read_after_a_step_routed_to_its_own_checkout_runs_without_review() {
 #[test]
 fn a_ref_read_after_a_step_routed_elsewhere_still_waits_for_review() {
     let (root, _cleanup) = checkout("routed-elsewhere", false);
-    let other = sibling_checkout(&root);
-    let other = other.to_str().unwrap();
-    let project = root.join("project");
-    let project = project.to_str().unwrap();
+    let other = shell_path(&sibling_checkout(&root));
+    let project = shell_path(&root.join("project"));
     let controls = every_permission("enabled");
     for command in [
         // The step refreshes a different checkout than the read reports on.
