@@ -147,6 +147,7 @@ mod git_hook_files;
 pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_ls_remote;
+mod git_output_target;
 mod git_probe;
 mod git_push;
 mod git_read_after_allow;
