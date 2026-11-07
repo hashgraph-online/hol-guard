@@ -1306,6 +1306,40 @@
       "expect": "allow"
     },
     {
+      "id": "grep-regex-with-an-unbalanced-brace",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"json({ error: 'not found', path\" src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-regex-with-an-unbalanced-repetition-brace",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn 'retry after \\d{2' src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "egrep-recursive-regex-source-tree",
       "fix_area": "shell",
       "harnesses": [
