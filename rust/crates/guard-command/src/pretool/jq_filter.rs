@@ -694,8 +694,31 @@ fn literal(part: &str) -> bool {
             && part
                 .strip_prefix('"')
                 .and_then(|value| value.strip_suffix('"'))
-                .is_some_and(|value| !value.contains('"') && !value.contains("\\(")))
+                .is_some_and(|value| !value.contains('"') && !interpolates(value)))
         || numeric_literal(part)
+}
+
+/// Whether `value`, the text inside a jq string, opens an interpolation. jq
+/// reads `\(` as the start of one, but a backslash escapes whatever follows
+/// it, so the `\\(` of `has("\\(")` is an escaped backslash and then a plain
+/// parenthesis, which is text. Walking the escapes the way
+/// [`interpolated_string`] does is the only way to tell the two apart: a
+/// substring test reads the second as the first and sends a plain filter to
+/// review.
+fn interpolates(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index + 1 < bytes.len() {
+        if bytes[index] != b'\\' {
+            index += 1;
+            continue;
+        }
+        if bytes[index + 1] == b'(' {
+            return true;
+        }
+        index += 2;
+    }
+    false
 }
 
 /// `1`, `-1`, `1.5`, `.5`, `1e-2`: a bounded jq number. A leading `+` is the

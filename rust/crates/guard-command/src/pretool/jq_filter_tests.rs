@@ -343,11 +343,31 @@ fn rejects_an_interpolation_that_reaches_outside_the_value_read() {
         ".a | join(\"\\(.b)\")",
         // A computed object key is refused however it is written.
         "{\"\\(.a)\": .b}",
+        // Three backslashes are an escaped backslash and then an
+        // interpolation, which still carries a filter.
+        ".a | has(\"\\\\\\(.b)\")",
         // A format applied to a template renders words, not a value read.
         "@sh \"\\(.a)\"",
         "@base64 \"\\(.a)\"",
     ] {
         assert!(!safe_filter(filter), "expected rejected: {filter}");
+    }
+}
+
+/// `has("\\(")`: the two backslashes are one escaped backslash, so the
+/// parenthesis that follows them is text and not the opening of an
+/// interpolation. Reading the escapes is what tells the two apart; a search
+/// for the characters alone takes the text for code and sends an ordinary
+/// filter to review.
+#[test]
+fn admits_an_escaped_backslash_before_a_parenthesis() {
+    for filter in [
+        ".a | has(\"\\\\(\")",
+        ".a | join(\"\\\\(\")",
+        ".a == \"\\\\(\"",
+        ".a // \"x\\\\(y\"",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
     }
 }
 
