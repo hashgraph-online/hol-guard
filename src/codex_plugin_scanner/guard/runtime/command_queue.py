@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextvars
 import logging
 import urllib.error
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any
 
@@ -13,6 +15,7 @@ from ..store import GuardStore
 from .auto_update import maybe_auto_update
 from .cloud_policy_revision import cloud_policy_store_key, observe_cloud_policy_revision
 from .command_capability import (
+    AuthorizedCommandJob,
     CommandCapabilityError,
     CommandCapabilityUnavailableError,
     audit_command_decision,
@@ -163,6 +166,27 @@ def _resolve_command_queue_auth_context(
         resolve_auth_context=_resolve_guard_sync_auth_context,
         repair_authorization=repair_guard_cloud_connect_storage,
     )
+
+
+def _start_authorization(store: GuardStore, job: dict[str, object]) -> Callable[[], AuthorizedCommandJob]:
+    """Authorize ``job`` while its acknowledgement is in flight.
+
+    Authorization only reads local state, so it need not wait for the
+    acknowledgement round trip. The job still executes only after both finish.
+    """
+
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="guard-command-authorize")
+    try:
+        future = executor.submit(
+            contextvars.copy_context().run,
+            authorize_command_queue_job,
+            store,
+            job,
+            schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
+        )
+    finally:
+        executor.shutdown(wait=False)
+    return future.result
 
 
 def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardStore) -> dict[str, object]:
@@ -321,7 +345,10 @@ def poll_command_queue_once(
     *,
     on_exact_review_lease: Callable[[], object] | None = None,
 ) -> dict[str, object]:
-    if not command_queue_should_poll(store):
+    # A drain lane only starts beside a main poll that passed the full check,
+    # and its lease scope already requires a ready Review keyring.
+    ready = command_environment_allows_queue() if _current_lane().is_drain else command_queue_should_poll(store)
+    if not ready:
         state = _load_state(store)
         state.update(
             {
@@ -370,6 +397,7 @@ def poll_command_queue_once(
             on_exact_review_lease()
         except Exception as error:
             _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
+    authorization = _start_authorization(store, item)
     try:
         _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
@@ -392,11 +420,7 @@ def poll_command_queue_once(
         _save_state(store, state)
         raise
     try:
-        authorized = authorize_command_queue_job(
-            store,
-            item,
-            schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
-        )
+        authorized = authorization()
     except (CommandCapabilityError, CommandCapabilityUnavailableError) as error:
         reason = error.code if isinstance(error, CommandCapabilityError) else error.reason
         audit_command_decision(
