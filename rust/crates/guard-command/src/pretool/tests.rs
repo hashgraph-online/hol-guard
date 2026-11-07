@@ -773,6 +773,14 @@ fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
         "git config get --regexp remote.*url",
         "git --no-pager config --get-regexp 'branch.*remote'",
         "git config --get-regexp 'cookie.*name'",
+        // A bracket class writes its members down, so a class that cannot
+        // produce a leading dash is read as the pattern it spells.
+        "git config --get-regexp '[r]emote.*url'",
+        "git config --get-regexp '[Rr]emote.*url'",
+        "git config --get-regexp '[a-z]emote.*url'",
+        "git config --get-regexp '[^-]emote.*url'",
+        // An unterminated class is literal, so the word opens with `[`.
+        "git config --get-regexp '[remote.*url'",
     ] {
         assert!(!fixed_command_floor(&model(command)), "{command}");
     }
@@ -789,6 +797,10 @@ fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
         // shell expands it to by the time Git reads it, so it keeps the path
         // screen that refuses a file of the caller's choosing.
         "git config --get-regexp '[-]-file=*' x",
+        "git config --get-regexp '[+--]-file=*' x",
+        "git config --get-regexp '[^a]-file=*' x",
+        "git config --get-regexp '[[:punct:]]-file=*' x",
+        "git config --get-regexp '[\\-]-file=*' x",
     ] {
         assert!(fixed_command_floor(&model(command)), "{command}");
     }

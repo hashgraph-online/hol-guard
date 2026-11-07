@@ -105,11 +105,52 @@ pub(crate) fn read_form(arguments: &[String]) -> Option<Printed> {
 /// literal text, so a word opening with a glob or an expansion is the only one
 /// whose first character the parse cannot see: `[-]-file=*` is a pattern here
 /// and `--file=secret`, naming a file of Git's choosing, by the time Git runs.
+/// A bracket class is the one glob that writes its members down, so it is read
+/// rather than refused outright.
 fn could_expand_into_an_option(operand: &str) -> bool {
-    operand
-        .chars()
-        .next()
-        .is_none_or(|first| matches!(first, '*' | '?' | '[' | '{' | '~' | '$' | '\\'))
+    match operand.chars().next() {
+        None => true,
+        Some('[') => leading_class_can_match_a_dash(operand),
+        Some(first) => matches!(first, '*' | '?' | '{' | '~' | '$' | '\\'),
+    }
+}
+
+/// Whether the bracket class an operand opens with could match a leading `-`.
+/// A class is the one glob whose members are written down, so reading them
+/// answers the question the leading character could not: `[r]emote.*url` can
+/// only ever produce `r` and stays the pattern Guard parsed, while `[-]-file=*`
+/// and `[^a]-file=*` can each produce a dash and keep the path screen.
+fn leading_class_can_match_a_dash(operand: &str) -> bool {
+    let chars: Vec<char> = operand.chars().collect();
+    let Some((end, readable)) = super::class_end(&chars, 0) else {
+        // A `[` with no closing `]` is literal, so the word still opens with
+        // the bracket itself and never with a dash.
+        return false;
+    };
+    if !readable {
+        // A leading `]`, a backslash or a `[:name:]` puts members in the class
+        // that this reader cannot enumerate, so the class is taken as one that
+        // could hold a dash.
+        return true;
+    }
+    let negated = matches!(chars.get(1), Some('!' | '^'));
+    let members = &chars[usize::from(negated) + 1..end];
+    let mut listed = false;
+    let mut index = 0;
+    while index < members.len() {
+        // A `-` with a member on each side spells a range; one that opens or
+        // closes the class is a member of its own.
+        if index + 2 < members.len() && members[index + 1] == '-' {
+            listed |= members[index] <= '-' && '-' <= members[index + 2];
+            index += 3;
+            continue;
+        }
+        listed |= members[index] == '-';
+        index += 1;
+    }
+    // A negated class matches every character it does not list, so it produces
+    // a dash exactly when the listed members leave one out.
+    listed != negated
 }
 
 /// The arguments the path screen still covers. A `--get-regexp` operand is

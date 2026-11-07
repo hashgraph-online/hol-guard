@@ -137,6 +137,8 @@ fn an_allowed_step_keeps_its_allow_beside_a_configuration_pattern() {
         "git config --get-regexp 'remote.*url' github && git worktree add ../review main",
         "git --no-pager config --get-regexp 'branch.*remote' && git worktree add ../review main",
         "git stash list && git config --get-regexp 'remote.*url'",
+        "git config --get-regexp '[r]emote.*url' && git worktree add ../review main",
+        "git config --get-regexp '[a-z]emote.*url' && git worktree add ../review main",
     ] {
         for harness in HARNESSES {
             let result = decide(&root, harness, command, &controls);
@@ -159,6 +161,7 @@ fn a_glob_that_names_a_private_file_keeps_its_floor() {
         "git config --get-all 'remote.*url' && git worktree add ../review main",
         "git worktree add ../review main && git config *",
         "git config --get-regexp '[-]-file=*' x && git worktree add ../review main",
+        "git config --get-regexp '[^a]-file=*' x && git worktree add ../review main",
     ] {
         for harness in HARNESSES {
             let result = decide(&root, harness, command, &controls);
