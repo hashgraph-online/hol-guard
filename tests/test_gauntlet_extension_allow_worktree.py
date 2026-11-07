@@ -31,6 +31,7 @@ EXECUTED_FLAG = "output/extension-executed.flag"
 
 
 def scenario() -> dict[str, object]:
+    """The worktree allow case as the shipped catalog carries it."""
     catalog = json.loads((Path(__file__).resolve().parents[1] / "ci/gauntlet/scenarios.json").read_text())
     for case in catalog["scenarios"]:
         if case["id"] == EXTENSION_ALLOW_WORKTREE_CASE:
@@ -39,6 +40,7 @@ def scenario() -> dict[str, object]:
 
 
 def test_the_case_runs_the_allowed_action_inside_the_worktree_it_creates() -> None:
+    """The chain adds a worktree, enters it, and asks for the allowed action there."""
     case = scenario()
     assert case["expectation"] == "allow"
     (command,) = case["commands"]
@@ -51,6 +53,7 @@ def test_the_case_runs_the_allowed_action_inside_the_worktree_it_creates() -> No
 
 
 def test_the_case_gets_an_offline_origin_without_joining_the_git_control_set() -> None:
+    """The case takes the git lane's fixture shape but not its control set."""
     # The worktree is built from `origin/main`, which the git ALLOW lane's
     # fixture shape provides locally, so the chain never reaches the network.
     assert EXTENSION_ALLOW_WORKTREE_CASE in GIT_ORIGIN_SHAPE_CASES
@@ -83,6 +86,7 @@ def signing(monkeypatch) -> list[list[str]]:
 
 
 def test_the_case_allows_the_contributed_extension_and_the_git_step_before_it(monkeypatch) -> None:
+    """Both extensions the chain needs are allowed from one authorization."""
     authorizations = signing(monkeypatch)
     record = configure_extension_allow_controls(object(), Path("guard-home"), EXTENSION_ALLOW_WORKTREE_CASE)
 
@@ -96,6 +100,7 @@ def test_the_case_allows_the_contributed_extension_and_the_git_step_before_it(mo
 
 
 def test_the_other_allow_cases_still_sign_only_the_contributed_extension(monkeypatch) -> None:
+    """A case that needs no git step still signs the contributed extension alone."""
     authorizations = signing(monkeypatch)
     record = configure_extension_allow_controls(object(), Path("guard-home"), "external-extension-allow-solo-action")
 
@@ -105,6 +110,7 @@ def test_the_other_allow_cases_still_sign_only_the_contributed_extension(monkeyp
 
 @pytest.mark.parametrize("worktree_present", [False, True])
 def test_the_oracle_asks_for_the_worktree_as_well_as_the_executed_flag(tmp_path, worktree_present: bool) -> None:
+    """The executed flag alone passes a run whose worktree step never happened."""
     workspace = tmp_path / "project"
     (workspace / "output").mkdir(parents=True)
     (workspace / EXECUTED_FLAG).write_text("executed\n")
@@ -137,10 +143,12 @@ def test_several_extensions_are_committed_in_one_layer(monkeypatch) -> None:
     commits: list[tuple[object, ...]] = []
 
     def authorize(_daemon, guard_home):
+        """Stand in for the enrolment the lane performs against a live daemon."""
         authorizations.append(guard_home)
         return "password"
 
     def commit_controls(_service, _password, controls):
+        """Record the controls each commit carries and hand back its revision."""
         commits.append(controls)
         return len(commits)
 
