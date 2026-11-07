@@ -15,6 +15,7 @@
 //! git dependency (`registry_install_tree`).
 
 use super::*;
+use crate::package_manager_command::lifecycle_scripts_disabled;
 
 /// A project `.npmrc` larger than this is treated as redirecting the registry.
 const MAX_NPMRC_BYTES: u64 = 64 * 1024;
@@ -229,40 +230,6 @@ pub(super) fn lifecycle_scripts_enabled_reason(artifact: &GuardArtifact) -> Map<
 fn command_tokens(artifact: &GuardArtifact) -> Vec<String> {
     let redacted = optional_string(artifact.metadata.get("redacted_command")).unwrap_or_default();
     crate::command_launcher_floors::shlex_split(&redacted).unwrap_or_default()
-}
-
-/// Mirrors how npm's option parser settles a boolean flag: the last spelling
-/// wins, and a bare `true`/`false` after the flag is its value. Any other
-/// `=` value, or `--no-ignore-scripts`, leaves scripts enabled.
-fn lifecycle_scripts_disabled(tokens: &[String]) -> bool {
-    let mut disabled = false;
-    let mut index = 0;
-    while index < tokens.len() {
-        let token = tokens[index].as_str();
-        if token == "--" {
-            break;
-        }
-        if token == "--ignore-scripts" {
-            match tokens.get(index + 1).map(String::as_str) {
-                Some("false") => {
-                    disabled = false;
-                    index += 1;
-                }
-                Some("true") => {
-                    disabled = true;
-                    index += 1;
-                }
-                _ => disabled = true,
-            }
-        } else if token == "--ignore-scripts=true" {
-            disabled = true;
-        } else if token.starts_with("--ignore-scripts=") || token.starts_with("--no-ignore-scripts")
-        {
-            disabled = false;
-        }
-        index += 1;
-    }
-    disabled
 }
 
 /// npm settles `--allow-git` like any option: the last spelling wins, and the

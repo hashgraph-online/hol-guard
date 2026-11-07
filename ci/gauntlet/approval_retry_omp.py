@@ -19,7 +19,7 @@ from .approval_retry_marker import assessment as marker_assessment
 from .approval_retry_marker import collect as collect_approval_marker
 from .approval_retry_marker import stage as stage_approval_marker
 from .approval_retry_persistent import CASE as APPROVAL_PERSISTENT_CASE
-from .approval_retry_persistent import PACKAGE_CASE as APPROVAL_PERSISTENT_PACKAGE_CASE
+from .approval_retry_persistent import PACKAGE_CASES as APPROVAL_PERSISTENT_PACKAGE_CASES
 from .approval_retry_persistent import assessment as persistent_assessment
 from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
@@ -53,7 +53,7 @@ class OmpReview:
         # subprocess, so the shell floor would leave its read unreviewed.
         case["review_policy"] = (
             write_package_review_config(self.guard_home)
-            if scenario.id == APPROVAL_PERSISTENT_PACKAGE_CASE
+            if scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES
             else write_review_config(
                 self.guard_home,
                 file_tool="bash" not in scenario.required_tools,

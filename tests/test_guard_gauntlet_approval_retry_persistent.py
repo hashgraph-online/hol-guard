@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 import shlex
+import subprocess
 from pathlib import Path
 
 from ci.gauntlet.approval_retry_persistent import (
     AGENT_NODE_OPTIONS,
     CASE,
     CASE_COMMAND,
+    HOOKED_PACKAGE_CASE,
+    LINKED_PACKAGE_COMMAND,
+    LINKED_WORKTREE,
     NPM_LOGS,
     PACKAGE_CASE,
     PACKAGE_COMMAND,
@@ -104,3 +108,53 @@ def test_the_package_case_counts_npm_runs_from_its_logs(tmp_path: Path) -> None:
     config = write_package_review_config(tmp_path / "guard-home")
     assert config["package_review"] is True
     assert 'blocked_request_mode = "ask"' in (tmp_path / "guard-home" / "config.toml").read_text()
+
+
+def test_the_hooked_case_pins_both_installs_and_saves_only_the_first() -> None:
+    scenarios = json.loads(CATALOG.read_text())["scenarios"]
+    case = next(scenario for scenario in scenarios if scenario["id"] == HOOKED_PACKAGE_CASE)
+    assert [tuple(shlex.split(command)) for command in case["commands"]] == [
+        PACKAGE_COMMAND,
+        LINKED_PACKAGE_COMMAND,
+    ]
+    assert case_environment(HOOKED_PACKAGE_CASE) == {"NODE_OPTIONS": AGENT_NODE_OPTIONS}
+    assert persistent_consent(HOOKED_PACKAGE_CASE, shlex.join(PACKAGE_COMMAND))
+    assert not persistent_consent(HOOKED_PACKAGE_CASE, shlex.join(LINKED_PACKAGE_COMMAND))
+    assert targets_case_command(shlex.join(LINKED_PACKAGE_COMMAND), HOOKED_PACKAGE_CASE)
+    assert not targets_case_command(shlex.join(LINKED_PACKAGE_COMMAND), PACKAGE_CASE)
+
+
+def test_the_hooked_case_fails_when_the_worktree_asks_again() -> None:
+    primary = shlex.join(PACKAGE_COMMAND)
+    linked = shlex.join(LINKED_PACKAGE_COMMAND)
+    assert assessment(HOOKED_PACKAGE_CASE, _case(2, [primary]), ("pass", "ok")) == ("pass", "ok")
+    asked_again = _case(2, [primary, linked])
+    asked_again["approval_grants"]["granted"][1]["persist_policy"] = False  # type: ignore[index]
+    verdict, detail = assessment(HOOKED_PACKAGE_CASE, asked_again, ("pass", "ok"))
+    assert verdict == "fail"
+    assert "reviewed 2 times" in detail
+    verdict, _ = assessment(HOOKED_PACKAGE_CASE, _case(1, [primary]), ("pass", "ok"))
+    assert verdict == "fail"
+
+
+def test_the_hooked_case_stages_a_hooked_project_and_a_linked_worktree(tmp_path: Path) -> None:
+    case: dict[str, object] = {}
+    stage(tmp_path, HOOKED_PACKAGE_CASE, case)
+    linked = tmp_path / LINKED_WORKTREE
+    manifest = json.loads((linked / "package.json").read_text())
+    assert set(manifest["scripts"]) == {"prepare", "prepublishOnly"}
+    assert (linked / "package-lock.json").is_file()
+    assert (linked / ".npmrc").read_text() == (tmp_path / ".npmrc").read_text()
+    common = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=linked,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert Path(common) == (tmp_path / ".git").resolve()
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=tmp_path, check=True, capture_output=True, text=True
+    ).stdout
+    assert status == ""
+    assert case["persistent_approval"] == {"initially_absent": True}

@@ -71,6 +71,11 @@ impl Lab {
     }
 
     fn context(&self, workspace: &Path, manager: &str) -> BuiltContext {
+        self.context_with_args(workspace, manager, &[])
+    }
+
+    fn context_with_args(&self, workspace: &Path, manager: &str, args: &[&str]) -> BuiltContext {
+        let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
         let home = self.path("home");
         let bin = self.path("bin");
         let environment = BTreeMap::from([
@@ -87,7 +92,7 @@ impl Lab {
             workspace_dir: workspace.to_str().unwrap(),
             metadata: &metadata,
             executable: Some(manager),
-            executable_args: &[],
+            executable_args: &args,
             environment: &environment,
             process_cwd: workspace.to_str().unwrap(),
             process_home: home.to_str().unwrap(),
@@ -386,4 +391,102 @@ fn config_an_install_hook_reads_still_asks_again() {
     let before = lab.context(&checkout, "bun");
     write(&checkout, "package.json", &hooked("9090"));
     assert_ne!(before.digest, lab.context(&checkout, "bun").digest);
+}
+
+const SCRIPT_FREE_INSTALL: &[&str] = &["install", "--frozen-lockfile", "--ignore-scripts"];
+
+fn hooked_package_json() -> String {
+    PACKAGE_JSON.replace(
+        "\"next dev\"",
+        "\"next dev\", \"postinstall\": \"node setup.js\", \"prepare\": \"husky\"",
+    )
+}
+
+#[test]
+fn script_free_install_reuses_the_context_across_checkouts_despite_hooks() {
+    let lab = Lab::new();
+    let origin = [("origin", "https://example.test/team/app.git")];
+    let primary = lab.clone("primary", &origin);
+    let linked = lab.worktree(&primary, "linked");
+    let clone = lab.clone("elsewhere/clone", &origin);
+    for checkout in [&primary, &linked, &clone] {
+        write(checkout, "package.json", &hooked_package_json());
+        write(checkout, "bun.lock", BUN_LOCK);
+    }
+
+    let first = lab.context_with_args(&primary, "bun", SCRIPT_FREE_INSTALL);
+    assert!(first.portable, "{:?}", first.non_portable_reason);
+    for checkout in [&linked, &clone] {
+        let other = lab.context_with_args(checkout, "bun", SCRIPT_FREE_INSTALL);
+        assert_eq!(changed(&first, &other), Vec::<String>::new());
+        assert_eq!(first.digest, other.digest);
+    }
+
+    let scripted = lab.context_with_args(&primary, "bun", &["install", "--frozen-lockfile"]);
+    assert!(!scripted.portable);
+    assert_eq!(
+        scripted.non_portable_reason.as_deref(),
+        Some("dynamic_lifecycle_hook")
+    );
+}
+
+#[test]
+fn scripts_turned_back_on_still_bind_the_checkout() {
+    let lab = Lab::new();
+    let checkout = lab.clone("app", &[("origin", "https://example.test/team/app.git")]);
+    write(&checkout, "package.json", &hooked_package_json());
+    write(&checkout, "bun.lock", BUN_LOCK);
+    for args in [
+        &["install", "--ignore-scripts=false"][..],
+        &["install", "--ignore-scripts", "false"],
+        &["install", "--ignore-scripts", "--no-ignore-scripts"],
+        &["install", "--", "--ignore-scripts"],
+    ] {
+        let built = lab.context_with_args(&checkout, "bun", args);
+        assert_eq!(
+            built.non_portable_reason.as_deref(),
+            Some("dynamic_lifecycle_hook"),
+            "{args:?}"
+        );
+    }
+}
+
+#[test]
+fn script_free_install_keeps_hook_edits_and_its_flag_in_the_digest() {
+    let lab = Lab::new();
+    let checkout = lab.clone("app", &[("origin", "https://example.test/team/app.git")]);
+    write(&checkout, "package.json", PACKAGE_JSON);
+    write(&checkout, "bun.lock", BUN_LOCK);
+    let plain = lab.context_with_args(&checkout, "bun", &["install", "--frozen-lockfile"]);
+    let script_free = lab.context_with_args(&checkout, "bun", SCRIPT_FREE_INSTALL);
+    assert!(plain.portable && script_free.portable);
+    assert_eq!(
+        changed(&plain, &script_free),
+        vec!["package_manager_executable".to_owned()]
+    );
+
+    write(&checkout, "package.json", &hooked_package_json());
+    let before = lab.context_with_args(&checkout, "bun", SCRIPT_FREE_INSTALL);
+    write(
+        &checkout,
+        "package.json",
+        &hooked_package_json().replace("setup.js", "other.js"),
+    );
+    let after = lab.context_with_args(&checkout, "bun", SCRIPT_FREE_INSTALL);
+    assert!(changed(&before, &after).contains(&"lifecycle_hooks_overrides_and_patches".to_owned()));
+}
+
+#[test]
+fn publish_only_scripts_do_not_bind_the_checkout() {
+    let lab = Lab::new();
+    let checkout = lab.clone("app", &[("origin", "https://example.test/team/app.git")]);
+    let publish_only = PACKAGE_JSON.replace(
+        "\"next dev\"",
+        "\"next dev\", \"prepublishOnly\": \"npm run build\"",
+    );
+    write(&checkout, "package.json", &publish_only);
+    write(&checkout, "bun.lock", BUN_LOCK);
+
+    let built = lab.context(&checkout, "bun");
+    assert!(built.portable, "{:?}", built.non_portable_reason);
 }
