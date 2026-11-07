@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.mdm import runtime_request
+from codex_plugin_scanner.guard.runtime import exact_cloud_review
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     ExactCloudReviewError,
     _capability_digest,
@@ -58,6 +59,8 @@ def test_without_the_runtime_no_capability_is_issued_or_honoured(
     store = connected_exact_review_store(tmp_path)
     enable_exact_cloud_review(store)
     monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    # A resident this process talks to is the runtime too, so it is gone as well.
+    monkeypatch.setattr(exact_cloud_review, "resident_exact_cloud_review_answer", lambda *_args: None)
 
     status = exact_cloud_review_status(store)
     assert status["capability_valid"] is False

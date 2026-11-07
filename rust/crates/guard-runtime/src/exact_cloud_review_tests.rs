@@ -368,12 +368,11 @@ fn unknown_requests_are_refused_and_the_command_is_named() {
 #[test]
 fn the_resident_answers_exactly_like_the_helper() {
     let inner = json!({"op": "digest", "payload": {"b": 2, "a": 1}});
-    let operation: crate::resident_protocol::ResidentOperationV1 =
-        serde_json::from_value(json!({
-            "operation": "exact_cloud_review",
-            "request": {"schema": RESIDENT_REQUEST_SCHEMA, "request": inner.clone()},
-        }))
-        .expect("resident envelope");
+    let operation: crate::resident_protocol::ResidentOperationV1 = serde_json::from_value(json!({
+        "operation": "exact_cloud_review",
+        "request": {"schema": RESIDENT_REQUEST_SCHEMA, "request": inner.clone()},
+    }))
+    .expect("resident envelope");
     let crate::resident_protocol::ResidentOperationV1::ExactCloudReview(request) = operation else {
         panic!("routed to another operation");
     };
