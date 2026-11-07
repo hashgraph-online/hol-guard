@@ -96,10 +96,14 @@ def command_queue_operations(store: GuardStore) -> tuple[str, ...]:
 
 
 def lease_ready_operations(store: GuardStore) -> tuple[str, ...]:
-    operations = command_queue_operations(store)
-    if review_verification_keyring_ready(store) or native_workspace_review_transport_candidate(store):
-        return operations
-    return tuple(operation for operation in operations if operation != EXACT_CLOUD_REVIEW_OPERATION)
+    # Checking which operations this device can take reads the store many
+    # times over; one connection keeps that to a single schema load per lease.
+    # Nothing here waits on the network.
+    with store.connection_scope():
+        operations = command_queue_operations(store)
+        if review_verification_keyring_ready(store) or native_workspace_review_transport_candidate(store):
+            return operations
+        return tuple(operation for operation in operations if operation != EXACT_CLOUD_REVIEW_OPERATION)
 
 
 def _generic_command_queue_operations(store: GuardStore) -> tuple[str, ...]:
@@ -143,9 +147,16 @@ def _lease_payload(
     wait_ms: int | None = None,
     max_jobs: int = 1,
 ) -> dict[str, object]:
-    return command_queue_lease_payload(
-        store, operations=operations, wait_ms=wait_ms, max_jobs=max_jobs, operation_resolver=command_queue_operations
-    )
+    # Built before the lease request is sent, so the shared connection is
+    # released before the request waits on Cloud.
+    with store.connection_scope():
+        return command_queue_lease_payload(
+            store,
+            operations=operations,
+            wait_ms=wait_ms,
+            max_jobs=max_jobs,
+            operation_resolver=command_queue_operations,
+        )
 
 
 def _exact_json_request(

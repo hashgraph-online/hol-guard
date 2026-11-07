@@ -52,3 +52,34 @@ def test_only_review_jobs_hold_the_shared_connection_while_executing(
     # An update can wait on outside work; holding the storage gate through it
     # would stall another process's storage recovery.
     assert seen == [1 if shares_connection else 0]
+
+
+def test_a_lease_checks_its_operations_and_builds_its_payload_on_one_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _ScopeStore()
+    seen: list[tuple[str, int]] = []
+
+    def operations(_store: object) -> tuple[str, ...]:
+        seen.append(("operations", store.open_scopes))
+        return ("guard.review.exact",)
+
+    def keyring_ready(_store: object) -> bool:
+        seen.append(("keyring", store.open_scopes))
+        return True
+
+    def payload(_store: object, **_kwargs: object) -> dict[str, object]:
+        seen.append(("payload", store.open_scopes))
+        return {}
+
+    monkeypatch.setattr(command_queue, "command_queue_operations", operations)
+    monkeypatch.setattr(command_queue, "review_verification_keyring_ready", keyring_ready)
+    monkeypatch.setattr(command_queue, "command_queue_lease_payload", payload)
+
+    command_queue.lease_ready_operations(store)  # type: ignore[arg-type]
+    command_queue._lease_payload(store, operations=("guard.review.exact",), wait_ms=0)  # type: ignore[arg-type]
+
+    # The payload scope closes before the lease request is sent, so the shared
+    # connection is never held while the request waits on Cloud.
+    assert seen == [("operations", 1), ("keyring", 1), ("payload", 1)]
+    assert store.open_scopes == 0
