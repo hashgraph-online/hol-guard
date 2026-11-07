@@ -240,29 +240,36 @@ def test_a_missed_budget_leaves_no_row_behind_for_the_retry_to_be_judged_on(
         )
 
     quiet = next(c for c in _CASES if c.expect == "quiet" and c.harness == "claude-code" and behaves(c))
-    reviewed = next(c for c in _CASES if c.expect == "always" and c.harness == "claude-code" and behaves(c))
+    # A review-by-design case can be contained or routed on a given host and queue nothing at all,
+    # so the stand-in is whichever candidate actually leaves a row behind here.
+    candidates = [c for c in _CASES if c.expect in {"always", "block"} and c.harness == "claude-code" and behaves(c)]
     answered = worker.review_http_payload
     calls: list[int] = []
+    left_behind: list[str] = []
 
     def interrupted_first(**kwargs: object) -> dict[str, object]:
         calls.append(1)
         if len(calls) > 1:
             return answered(**kwargs)
         before = approval_snapshot(worker.store)
-        answered(
-            payload=_payload(reviewed, fixture),
-            params={},
-            default_harness=reviewed.harness,
-            home_dir=fixture.home,
-            guard_home=fixture.guard_home,
-            workspace=fixture.cwd(reviewed.cwd),
-        )
-        assert approval_snapshot(worker.store) != before, f"{reviewed.case_id} queued no review to leave behind"
+        for candidate in candidates[:12]:
+            answered(
+                payload=_payload(candidate, fixture),
+                params={},
+                default_harness=candidate.harness,
+                home_dir=fixture.home,
+                guard_home=fixture.guard_home,
+                workspace=fixture.cwd(candidate.cwd),
+            )
+            if approval_snapshot(worker.store) != before:
+                left_behind.append(candidate.case_id)
+                break
         return {"decision": "deny", "reason_code": EXTENSION_TIMEOUT_REASON}
 
     monkeypatch.setattr(worker, "review_http_payload", interrupted_first)
     with pytest.warns(NativeUnavailableRetryWarning):
         result, rows = _replay(quiet, fixture, worker)
+    assert left_behind, "no review-by-design case queued a row for the interrupted attempt to leave behind"
     assert len(calls) == 2
     assert result.get("reason_code") != EXTENSION_TIMEOUT_REASON
     assert rows == [], f"{quiet.case_id} judged the interrupted attempt's rows: {rows}"
