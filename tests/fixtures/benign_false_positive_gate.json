@@ -5875,6 +5875,40 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-git-dash-C-other-checkout-refresh-then-read",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${ORG}/app-portal pull --ff-only origin main && git log -1 --oneline"
+      },
+      "cwd": "org_wt",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-dash-C-other-checkout-refresh-then-routed-read",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${ORG}/app-portal pull --ff-only origin main && git -C ${ORG_WT} log -1 --oneline"
+      },
+      "cwd": "org_wt",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-git-dash-c-pager-pull-then-read",
       "fix_area": "git",
       "harnesses": [
