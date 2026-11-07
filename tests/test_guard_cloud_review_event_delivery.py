@@ -205,7 +205,9 @@ def test_canonical_transport_accepts_zero_for_an_all_rejected_batch(monkeypatch:
     assert normalized["rejected"] == 1
 
 
-@pytest.mark.parametrize("code", ["review_event_snapshot_sequence_collision", "review_event_sequence_conflict"])
+@pytest.mark.parametrize(
+    "code", ["review_event_snapshot_sequence_collision", "review_event_sequence_conflict", "review_event_ingest_failed"]
+)
 def test_collision_result_retains_verified_event_identity_only_for_recoverable_code(
     monkeypatch: pytest.MonkeyPatch, code: str
 ) -> None:
@@ -217,7 +219,7 @@ def test_collision_result_retains_verified_event_identity_only_for_recoverable_c
     monkeypatch.setattr(delivery, "_post_json", lambda *_args, **_kwargs: response)
     normalized = _post([_event()])["perEventResults"]
     assert isinstance(normalized, list)
-    assert normalized[0].get("eventId") == ("event-41" if code.endswith("snapshot_sequence_collision") else None)
+    assert normalized[0].get("eventId") == ("event-41" if "sequence" in code else None)
 
 
 @pytest.mark.parametrize("status", ["duplicate", "stale"])

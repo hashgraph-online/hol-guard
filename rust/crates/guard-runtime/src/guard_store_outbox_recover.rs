@@ -1,5 +1,6 @@
 //! Atomic rebase of authenticated snapshot events after a Cloud stream
-//! sequence collision.
+//! sequence collision, and of any pending event once Cloud has acknowledged
+//! more of this installation's stream than this store ever allocated.
 
 use std::collections::BTreeMap;
 
@@ -81,48 +82,6 @@ pub(crate) fn recover_sequences(
     if by_sequence.len() != collisions.len() {
         return Ok(json!([]));
     }
-    for (old_sequence, expected_id) in &collisions {
-        let row = by_sequence[old_sequence];
-        let mut params = vec![
-            row.get("local_request_id").cloned().unwrap_or(Value::Null),
-            row.get("request_sequence").cloned().unwrap_or(Value::Null),
-            Value::from(source),
-        ];
-        params.extend(ids.iter().map(|id| Value::from(*id)));
-        let later = query_one(
-            connection,
-            &format!(
-                "select 1 as present from guard_review_outbox_events \
-                 where local_request_id = ? and request_sequence > ? \
-                 and acknowledged_at is null and oauth_source = ? \
-                 and event_id not in ({}) limit 1",
-                placeholders(ids.len())
-            ),
-            &params,
-        )?;
-        let trusted = later.is_none()
-            && row.get("event_id").and_then(Value::as_str) == Some(*expected_id)
-            && row.get("oauth_source").and_then(Value::as_str) == Some(source)
-            && row_matches(row, &binding)
-            && row.get("binding_status").and_then(Value::as_str) == Some("ready")
-            && row.get("acknowledged_at").is_none_or(Value::is_null)
-            && row.get("event_type").and_then(Value::as_str) == Some(REQUEUED);
-        let decoded = if trusted {
-            decode_stored_event(row)
-        } else {
-            None
-        };
-        let Some(event) = decoded else {
-            return Ok(json!([]));
-        };
-        if event.stream_sequence != *old_sequence
-            || event.event_id != *expected_id
-            || event.event_type != REQUEUED
-        {
-            return Ok(json!([]));
-        }
-    }
-
     let mut cursor_params = vec![Value::from(source)];
     cursor_params.extend(binding.values());
     let local_cursor = query_one(
@@ -149,6 +108,54 @@ pub(crate) fn recover_sequences(
         .max(local_cursor)
         .max(local_max)
         .max(sqlite_sequence);
+    // Cloud never acknowledges a sequence this store did not allocate, so a
+    // higher mark means the store was restored from an older copy (a backup,
+    // a VM snapshot, a baked container image). Its pending events then reuse
+    // sequences Cloud already holds and can only be delivered after a rebase.
+    let restored_stream = acknowledged_through > local_max.max(sqlite_sequence);
+
+    for (old_sequence, expected_id) in &collisions {
+        let row = by_sequence[old_sequence];
+        let mut params = vec![
+            row.get("local_request_id").cloned().unwrap_or(Value::Null),
+            row.get("request_sequence").cloned().unwrap_or(Value::Null),
+            Value::from(source),
+        ];
+        params.extend(ids.iter().map(|id| Value::from(*id)));
+        let later = query_one(
+            connection,
+            &format!(
+                "select 1 as present from guard_review_outbox_events \
+                 where local_request_id = ? and request_sequence > ? \
+                 and acknowledged_at is null and oauth_source = ? \
+                 and event_id not in ({}) limit 1",
+                placeholders(ids.len())
+            ),
+            &params,
+        )?;
+        let trusted = later.is_none()
+            && row.get("event_id").and_then(Value::as_str) == Some(*expected_id)
+            && row.get("oauth_source").and_then(Value::as_str) == Some(source)
+            && row_matches(row, &binding)
+            && row.get("binding_status").and_then(Value::as_str) == Some("ready")
+            && row.get("acknowledged_at").is_none_or(Value::is_null)
+            && (restored_stream || row.get("event_type").and_then(Value::as_str) == Some(REQUEUED));
+        let decoded = if trusted {
+            decode_stored_event(row)
+        } else {
+            None
+        };
+        let Some(event) = decoded else {
+            return Ok(json!([]));
+        };
+        if event.stream_sequence != *old_sequence
+            || event.event_id != *expected_id
+            || (!restored_stream && event.event_type != REQUEUED)
+        {
+            return Ok(json!([]));
+        }
+    }
+
     if base > MAX_SAFE_STREAM_SEQUENCE - sequences.len() as i64 {
         return Ok(json!([]));
     }

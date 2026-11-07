@@ -295,3 +295,50 @@ def test_recover_review_snapshot_sequences_rolls_back_all_updates_on_failure(tmp
         acknowledged_through=529,
         binding=_plain_binding(binding),
     ) == dict(zip(range(34, 57), range(530, 553), strict=True))
+
+
+def _seed_restored_stream(tmp_path):
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    for request_id in ("restored-1", "restored-2", "restored-3"):
+        store.add_approval_request(_request(request_id), _NOW)
+    rows = [row for row in _all_events(store) if row["event_type"] == "review.request.created"]
+    assert len(rows) == 3
+    return store, binding, rows
+
+
+def test_recover_review_snapshot_sequences_rebases_any_event_of_a_restored_stream(tmp_path) -> None:
+    store, binding, before_rows = _seed_restored_stream(tmp_path)
+    collisions = _snapshot_collision_ids(before_rows)
+    old_sequences = sorted(collisions)
+
+    replacements = store.recover_review_snapshot_sequences(
+        collisions=collisions,
+        acknowledged_through=3791,
+        binding=_plain_binding(binding),
+    )
+
+    assert replacements == dict(zip(old_sequences, range(3792, 3795), strict=True))
+    after_rows = [row for row in _all_events(store) if row["event_type"] == "review.request.created"]
+    assert [row["stream_sequence"] for row in after_rows] == [3792, 3793, 3794]
+    assert [row["event_id"] for row in after_rows] == [row["event_id"] for row in before_rows]
+    store.add_approval_request(_request("after-restore"), _LATER)
+    future = [row for row in _all_events(store) if row["local_request_id"] == "after-restore"]
+    assert len(future) == 1 and future[0]["stream_sequence"] == 3795
+
+
+def test_recover_review_snapshot_sequences_keeps_ordinary_events_when_the_stream_is_current(tmp_path) -> None:
+    store, binding, before_rows = _seed_restored_stream(tmp_path)
+    collisions = _snapshot_collision_ids(before_rows)
+    local_max = max(collisions)
+
+    for acknowledged_through in (0, local_max):
+        assert (
+            store.recover_review_snapshot_sequences(
+                collisions=collisions,
+                acknowledged_through=acknowledged_through,
+                binding=_plain_binding(binding),
+            )
+            == {}
+        )
+    assert [row["stream_sequence"] for row in _all_events(store)] == sorted(collisions)

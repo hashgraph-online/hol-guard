@@ -36,7 +36,12 @@ const BINDING_KEYS: [&str; 4] = [
     "machine_installation_id",
 ];
 
-const SEQUENCE_COLLISION: &str = "review_event_snapshot_sequence_collision";
+/// The store rebases a snapshot collision, and any conflicting event once
+/// Cloud's mark shows the local stream was restored from an older copy.
+const SEQUENCE_COLLISIONS: [&str; 2] = [
+    "review_event_snapshot_sequence_collision",
+    "review_event_sequence_conflict",
+];
 const CORRELATION_REQUIRED: &str = "review_event_canonical_correlation_required";
 const CONTINUATION_MISMATCH: &str = "review_continuation_binding_mismatch";
 const RETRY_EXHAUSTED: &str = "review_event_retry_exhausted";
@@ -189,7 +194,9 @@ fn sent_collisions<'a>(rejections: &[Rejection<'a>]) -> BTreeMap<i64, &'a str> {
     for rejection in rejections {
         let event_id = rejection.result.get("eventId").and_then(Value::as_str);
         if let Some(event_id) = event_id.filter(|id| {
-            rejection.code() == Some(SEQUENCE_COLLISION)
+            rejection
+                .code()
+                .is_some_and(|code| SEQUENCE_COLLISIONS.contains(&code))
                 && rejection.event_text("eventId") == Some(*id)
         }) {
             collisions.insert(rejection.sequence, event_id);
@@ -206,7 +213,7 @@ fn safe_high_water(value: Option<&Value>) -> Option<i64> {
         .filter(|through| (0..=MAX_SAFE_STREAM_SEQUENCE).contains(through))
 }
 
-/// Rebase the snapshot events Cloud reported as sequence collisions, when the
+/// Rebase the events Cloud reported as sequence collisions, when the
 /// result names exactly the event that was sent and Cloud's high-water mark is
 /// a safe integer. Returns the rebased sequences.
 fn rebase_collisions(

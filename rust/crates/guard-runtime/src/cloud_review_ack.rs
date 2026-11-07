@@ -22,7 +22,12 @@ const MAX_RETRY_AFTER_MS: i128 = 3_600_000;
 const MAX_SAFE_INTEGER: i128 = (1 << 53) - 1;
 const SUCCESS: [&str; 3] = ["accepted", "duplicate", "stale"];
 const KNOWN: [&str; 5] = ["accepted", "duplicate", "stale", "quarantined", "rejected"];
-const SEQUENCE_COLLISION: &str = "review_event_snapshot_sequence_collision";
+/// Rejections that name their event so the store can rebase it: a snapshot
+/// that collided, or any event whose sequence Cloud already holds.
+const SEQUENCE_COLLISIONS: [&str; 2] = [
+    "review_event_snapshot_sequence_collision",
+    "review_event_sequence_conflict",
+];
 
 const ERR_ACK: &str =
     "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying.";
@@ -137,7 +142,11 @@ fn normalize(
         {
             entry.insert("nativeContextCommitted".to_owned(), json!(true));
         }
-        if status == "rejected" && code.as_str() == Some(SEQUENCE_COLLISION) {
+        if status == "rejected"
+            && code
+                .as_str()
+                .is_some_and(|code| SEQUENCE_COLLISIONS.contains(&code))
+        {
             entry.insert("eventId".to_owned(), expected_event_id.clone());
         }
         accepted_count += usize::from(accepted);
