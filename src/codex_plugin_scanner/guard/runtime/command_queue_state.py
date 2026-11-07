@@ -58,7 +58,18 @@ class CommandQueueLane:
 
     @property
     def is_drain(self) -> bool:
+        """Whether this lane is a Review drain worker rather than the main worker."""
+
         return self.state_key != COMMAND_QUEUE_STATE_KEY
+
+    def lease_scope(self, operations: tuple[str, ...], wait_ms: int) -> tuple[tuple[str, ...], int] | None:
+        """Narrow a lease of ``operations`` to this lane, or None when it may lease none."""
+
+        if self.operations is not None:
+            operations = tuple(operation for operation in self.operations if operation in operations)
+            if not operations:
+                return None
+        return operations, wait_ms if self.wait_ms is None else self.wait_ms
 
 
 _MAIN_LANE = CommandQueueLane()
@@ -66,6 +77,8 @@ _CURRENT_LANE: ContextVar[CommandQueueLane] = ContextVar("guard_command_queue_la
 
 
 def current_command_queue_lane() -> CommandQueueLane:
+    """The lane bound to the calling thread's context; the main lane by default."""
+
     return _CURRENT_LANE.get()
 
 

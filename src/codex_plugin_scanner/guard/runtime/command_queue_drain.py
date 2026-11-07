@@ -11,9 +11,10 @@ appear, and stops at its first empty lease, so an idle device still holds just
 the main worker's one long poll. Guard Cloud locks each delivery while it
 leases it, so parallel leases never receive the same job.
 
-Each drain worker keeps its own queue state. A result it could not upload
-stays with that worker and is retried the next time the pool starts, which
-also happens when the daemon starts.
+Each drain worker keeps its own queue state. A worker whose result upload
+fails retries it with a short backoff. A result still unsent when the worker
+gives up stays in that worker's state, and the main worker restarts the pool
+on its next poll, so the result is sent without waiting for another job.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from .command_queue_state import (
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 
 REVIEW_DRAIN_WORKERS = 3
+REVIEW_DRAIN_RETRY_DELAYS_SECONDS = (0.25, 0.5, 1.0, 2.0, 4.0)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +42,8 @@ PollOnce = Callable[[GuardStore, HarnessContext], dict[str, object]]
 
 
 def review_drain_lane(slot: int) -> CommandQueueLane:
+    """The queue lane drain worker ``slot`` owns: its own state, exact Review jobs, no wait."""
+
     return CommandQueueLane(
         state_key=f"{COMMAND_QUEUE_STATE_KEY}.review_drain.{slot}",
         operations=(EXACT_CLOUD_REVIEW_OPERATION,),
@@ -56,22 +60,37 @@ def drain_review_jobs(
     poll_once: PollOnce,
     format_error: Callable[[BaseException], str],
 ) -> None:
-    """Settle exact Review jobs until a lease comes back empty."""
+    """Settle exact Review jobs until a lease comes back empty.
+
+    A poll that raises or leaves a result unsent is retried after each delay in
+    ``REVIEW_DRAIN_RETRY_DELAYS_SECONDS``; any other state ends the worker.
+    """
 
     enter_command_queue_lane(review_drain_lane(slot))
+    failures = 0
     while not stop_event.is_set():
         try:
             status = poll_once(store, context)
         except Exception as error:
-            # The main worker keeps leasing; a job this worker could not
-            # finish is re-leased once its lease goes stale.
-            _LOGGER.warning("Guard Review drain worker stopped: error=%s", format_error(error))
+            # A job this worker could not finish is re-leased once its lease
+            # goes stale; a result it could not send stays in its state.
+            _LOGGER.warning("Guard Review drain poll failed: error=%s", format_error(error))
+            status = None
+        if status is not None and status.get("state") == "idle":
+            if status.get("last_poll_was_empty") is True:
+                return
+            failures = 0
+            continue
+        retryable = status is None or status.get("state") == "result_pending"
+        if not retryable or failures >= len(REVIEW_DRAIN_RETRY_DELAYS_SECONDS):
             return
-        if status.get("last_poll_was_empty") is True or status.get("state") != "idle":
-            return
+        stop_event.wait(REVIEW_DRAIN_RETRY_DELAYS_SECONDS[failures])
+        failures += 1
 
 
 def review_drain_has_pending_result(store: GuardStore) -> bool:
+    """Whether any drain lane holds a result it has not sent yet."""
+
     for slot in range(REVIEW_DRAIN_WORKERS):
         payload = store.get_sync_payload(review_drain_lane(slot).state_key)
         if isinstance(payload, dict) and isinstance(payload.get("pending_result"), dict):
@@ -123,16 +142,47 @@ class ReviewDrainPool:
                     name=f"guard-review-drain-{slot}",
                     daemon=True,
                 )
+                try:
+                    worker.start()
+                except RuntimeError as error:
+                    # The leased job settles on the main worker either way.
+                    _LOGGER.warning("Guard Review drain worker did not start: error=%s", self._format_error(error))
+                    break
                 self._threads[slot] = worker
-                worker.start()
                 started += 1
         return started
 
 
+def with_review_drains(
+    store: GuardStore,
+    context: HarnessContext,
+    *,
+    stop_event: Any,
+    poll_once: Callable[..., dict[str, object]],
+    format_error: Callable[[BaseException], str],
+) -> PollOnce:
+    """Wrap the main worker's poll so it starts drain workers when they have work.
+
+    The pool starts when the main worker leases an exact Review job, and on any
+    poll while a drain lane still holds an unsent result.
+    """
+
+    pool = ReviewDrainPool(store, context, stop_event=stop_event, poll_once=poll_once, format_error=format_error)
+
+    def poll(poll_store: GuardStore, poll_context: HarnessContext) -> dict[str, object]:
+        if review_drain_has_pending_result(poll_store):
+            pool.start()
+        return poll_once(poll_store, poll_context, on_exact_review_lease=pool.start)
+
+    return poll
+
+
 __all__ = [
+    "REVIEW_DRAIN_RETRY_DELAYS_SECONDS",
     "REVIEW_DRAIN_WORKERS",
     "ReviewDrainPool",
     "drain_review_jobs",
     "review_drain_has_pending_result",
     "review_drain_lane",
+    "with_review_drains",
 ]
