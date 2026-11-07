@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.siftwise",
+  "version": "1.0.0",
+  "name": "siftwise",
+  "description": "Test impact analysis for coding agents: picks the tests a change can affect and classifies CI failures as new regression, pre-existing or flaky. Local stdio server from PramodBasavarajMenasi/siftwise; Guard matches only the executable basename siftwise. Runs git (and go list in Go repos), reads JUnit files, and sends changed paths and test results to the user's own siftwise server. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.pramodbasavarajmenasi",
+    "displayName": "Pramod Basavaraj Menasi",
+    "url": "https://github.com/PramodBasavarajMenasi/siftwise"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0D1117"
+  },
+  "homepage": "https://github.com/PramodBasavarajMenasi/siftwise",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "siftwise"
+  },
+  "riskClasses": [
+    "local-source-read",
+    "local-file-read",
+    "external-network-read",
+    "external-data-egress",
+    "package-or-source-installation",
+    "local-cache-write"
+  ],
+  "tools": [
+    {
+      "name": "select_tests",
+      "state": "inherit"
+    },
+    {
+      "name": "triage_failure",
+      "state": "inherit"
+    },
+    {
+      "name": "explain",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/PramodBasavarajMenasi/siftwise",
+    "https://github.com/PramodBasavarajMenasi/siftwise/blob/main/docs/mcp-clients.md",
+    "https://github.com/PramodBasavarajMenasi/siftwise/tree/main/src/siftwise/mcp",
+    "https://pypi.org/project/siftwise/"
+  ],
+  "saferAlternatives": [
+    "Apart from go list (next entry), the tools don't edit project files, execute tests or record runs; select_tests returns a test command for the agent to run. They run git in the checkout and read JUnit files.",
+    "In Go repos select_tests runs `go list -deps -test -json ./...`, which can download modules via GOPROXY and write the module cache; GOFLAGS=-mod=mod can also update go.mod. Set GOFLAGS=-mod=readonly or -mod=vendor explicitly.",
+    "The tools send data to SIFTWISE_SERVER, the user's self-hosted siftwise server: changed file paths, import edges and parsed JUnit results. Use an https:// server URL; the API token is never returned in tool results.",
+    "If the server is unreachable or the token is missing, select_tests answers 'run the full suite' and triage_failure reports verdicts unavailable, so failures are never hidden.",
+    "Guard matches the basename siftwise for every stdio invocation; install with `pip install 'siftwise[mcp]'` or `uv tool install 'siftwise[mcp]'` and launch `siftwise mcp` so the identity matches."
+  ]
+}
