@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import base64
+import functools
 import os
 import secrets
-from collections.abc import Mapping
+import threading
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import ParamSpec, TypeVar
 
 from ..native_command_capability import (
     CommandCapabilityUnavailableError,
@@ -430,6 +433,28 @@ def _identity_digest(store: GuardStore, identity: Mapping[str, object]) -> str:
     return digest
 
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+_COMMAND_STATE_LOCK = threading.RLock()
+
+
+def _holding_command_state_lock(function: Callable[_P, _R]) -> Callable[_P, _R]:
+    """Run ``function`` while holding the lock on the shared command state rows.
+
+    Pending approvals, local grants and replay rows are each read, changed and
+    written back whole. Review drain workers settle jobs on parallel threads,
+    so two writers that read the same rows would each drop the other's change.
+    """
+
+    @functools.wraps(function)
+    def locked(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        with _COMMAND_STATE_LOCK:
+            return function(*args, **kwargs)
+
+    return locked
+
+
+@_holding_command_state_lock
 def register_pending_command(
     store: GuardStore,
     authorized: AuthorizedCommandJob,
@@ -468,6 +493,7 @@ def pending_command_approvals(store: GuardStore, *, now: str | None = None) -> l
     ]
 
 
+@_holding_command_state_lock
 def approve_pending_command(
     store: GuardStore,
     job_id: str,
@@ -533,6 +559,7 @@ def command_identity_digest(store: GuardStore, authorized: AuthorizedCommandJob)
     return _identity_digest(store, authorized.identity)
 
 
+@_holding_command_state_lock
 def consume_local_command_approval(
     store: GuardStore,
     authorized: AuthorizedCommandJob,
@@ -576,6 +603,7 @@ def consume_local_command_approval(
     return True
 
 
+@_holding_command_state_lock
 def mark_command_job_consumed(
     store: GuardStore,
     authorized: AuthorizedCommandJob,

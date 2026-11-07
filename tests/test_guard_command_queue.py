@@ -1361,7 +1361,7 @@ def test_command_queue_loop_empty_long_poll_returns_positive_bounded_backoff(
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
 
-    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
         return {"last_poll_was_empty": True}
 
     monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
@@ -1409,7 +1409,7 @@ def test_command_queue_loop_leases_again_at_once_after_a_job_with_long_poll(
         ]
     )
 
-    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
         return next(statuses)
 
     monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
@@ -1443,7 +1443,7 @@ def test_command_queue_loop_waits_the_interval_after_a_job_without_long_poll(
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "0")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "2")
 
-    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
         return {"state": "idle", "last_poll_was_empty": False}
 
     monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
@@ -1477,7 +1477,7 @@ def test_command_queue_loop_backs_off_after_empty_short_poll_when_wait_disabled(
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
 
-    def fake_poll_once(current_store: object, context: HarnessContext) -> dict[str, object]:
+    def fake_poll_once(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
         return {"last_poll_was_empty": True}
 
     monkeypatch.setattr(command_queue, "poll_command_queue_once", fake_poll_once)
@@ -1565,7 +1565,7 @@ def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(
         command_queue,
         "poll_command_queue_once",
-        lambda current_store, context: (_ for _ in ()).throw(OSError("network down")),
+        lambda current_store, context, **_options: (_ for _ in ()).throw(OSError("network down")),
     )
 
     command_queue.command_queue_loop(

@@ -36,6 +36,7 @@ from .command_queue_activation import (
 )
 from .command_queue_auth import resolve_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
+from .command_queue_drain import with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
 from .command_queue_http import request_json as _json_request
@@ -62,6 +63,7 @@ from .command_queue_state import (
 from .command_queue_state import clear_exact_route_failure as _clear_exact_route_failure
 from .command_queue_state import command_queue_now as _now
 from .command_queue_state import command_queue_status as _state_command_queue_status
+from .command_queue_state import current_command_queue_lane as _current_lane
 from .command_queue_state import load_command_queue_state as _load_state
 from .command_queue_state import record_exact_route_failure as _record_exact_route_failure
 from .command_queue_state import save_command_queue_state as _save_state
@@ -82,9 +84,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def command_queue_operations(store: GuardStore) -> tuple[str, ...]:
-    generic = tuple(
-        operation for operation in command_capability_operations(store) if operation != EXACT_CLOUD_REVIEW_OPERATION
-    )
+    generic = _generic_command_queue_operations(store)
     return generic + tuple(operation for operation in exact_cloud_review_operations(store) if operation not in generic)
 
 
@@ -136,10 +136,7 @@ def _lease_payload(
     wait_ms: int | None = None,
 ) -> dict[str, object]:
     return command_queue_lease_payload(
-        store,
-        operations=operations,
-        wait_ms=wait_ms,
-        operation_resolver=command_queue_operations,
+        store, operations=operations, wait_ms=wait_ms, operation_resolver=command_queue_operations
     )
 
 
@@ -151,11 +148,7 @@ def _exact_json_request(
     payload: dict[str, object],
 ) -> dict[str, object]:
     return request_json(
-        auth_context,
-        method=method,
-        path=path,
-        payload=payload,
-        base_path=EXACT_CLOUD_REVIEW_COMMAND_API_BASE,
+        auth_context, method=method, path=path, payload=payload, base_path=EXACT_CLOUD_REVIEW_COMMAND_API_BASE
     )
 
 
@@ -182,22 +175,12 @@ def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
     payload: dict[str, object] = {"leaseId": _lease_id(job)}
     if uses_exact_transport(job):
         payload["protocolVersion"] = EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
-    request(
-        auth_context,
-        method="POST",
-        path=path,
-        payload=payload,
-    )
+    request(auth_context, method="POST", path=path, payload=payload)
 
 
 def _post_result(auth_context: dict[str, object], job: dict[str, object], payload: dict[str, object]) -> None:
     request = _exact_json_request if uses_exact_transport(job) else _json_request
-    request(
-        auth_context,
-        method="POST",
-        path=f"/{_job_id(job)}/result",
-        payload=payload,
-    )
+    request(auth_context, method="POST", path=f"/{_job_id(job)}/result", payload=payload)
 
 
 def _lease_next_job(
@@ -206,7 +189,10 @@ def _lease_next_job(
     *,
     state: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
-    operations = lease_ready_operations(store)
+    scope = _current_lane().lease_scope(lease_ready_operations(store), _command_queue_lease_wait_ms())
+    if scope is None:
+        return None
+    operations, wait_ms = scope
     exact_route_failure: Callable[[urllib.error.HTTPError], None] | None = None
     exact_route_success: Callable[[], None] | None = None
     if state is not None:
@@ -214,7 +200,7 @@ def _lease_next_job(
         exact_route_success = partial(_clear_exact_route_failure, state)
     return lease_next_job(
         operations=operations,
-        wait_ms=_command_queue_lease_wait_ms(),
+        wait_ms=wait_ms,
         exact_request=lambda options: _exact_json_request(
             auth_context,
             method="POST",
@@ -289,6 +275,19 @@ def _retry_pending_result(
     return True
 
 
+def _hold_pending_result(
+    store: GuardStore,
+    state: dict[str, object],
+    job: dict[str, object],
+    payload: dict[str, object],
+) -> None:
+    """Keep a settled job's result in this lane's state until its upload succeeds."""
+
+    _LOGGER.warning("Guard command result upload failed.")
+    state.update({"state": "result_pending", "pending_result": {"job": job, "payload": payload, "recorded_at": _now()}})
+    _save_state(store, state)
+
+
 def _record_leased_job(store: GuardStore, state: dict[str, object], item: dict[str, object]) -> None:
     state.update(
         {
@@ -316,7 +315,12 @@ def _lease_job_with_401_retry(
     return _lease_next_job(store, refreshed_auth_context, state=state)
 
 
-def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
+def poll_command_queue_once(
+    store: GuardStore,
+    context: HarnessContext,
+    *,
+    on_exact_review_lease: Callable[[], object] | None = None,
+) -> dict[str, object]:
     if not command_queue_should_poll(store):
         state = _load_state(store)
         state.update(
@@ -353,10 +357,19 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
             }
         )
         _save_state(store, state)
-        maybe_auto_update(store, context)
+        if not _current_lane().is_drain:
+            maybe_auto_update(store, context)
         return command_queue_status(store)
     auth_context = _resolve_command_queue_auth_context(store)
     _record_leased_job(store, state, item)
+    if on_exact_review_lease is not None and uses_exact_transport(item):
+        # A Review decision rarely comes alone: a bulk approval queues one
+        # job per request. Settle the rest beside this one; this job settles
+        # here whether or not they start.
+        try:
+            on_exact_review_lease()
+        except Exception as error:
+            _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
     try:
         _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
@@ -469,14 +482,7 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
     except urllib.error.HTTPError as error:
         if error.code != 401:
-            _LOGGER.warning("Guard command result upload failed.")
-            state.update(
-                {
-                    "state": "result_pending",
-                    "pending_result": {"job": item, "payload": payload, "recorded_at": _now()},
-                }
-            )
-            _save_state(store, state)
+            _hold_pending_result(store, state, item, payload)
             raise
         _LOGGER.warning("Guard result 401, attempting OAuth refresh retry.")
         auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
@@ -485,24 +491,10 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
         try:
             refused = post_result_unless_refused(partial(_post_result, auth_context, item, payload))
         except Exception:
-            _LOGGER.warning("Guard command result upload failed.")
-            state.update(
-                {
-                    "state": "result_pending",
-                    "pending_result": {"job": item, "payload": payload, "recorded_at": _now()},
-                }
-            )
-            _save_state(store, state)
+            _hold_pending_result(store, state, item, payload)
             raise
     except Exception:
-        _LOGGER.warning("Guard command result upload failed.")
-        state.update(
-            {
-                "state": "result_pending",
-                "pending_result": {"job": item, "payload": payload, "recorded_at": _now()},
-            }
-        )
-        _save_state(store, state)
+        _hold_pending_result(store, state, item, payload)
         raise
     if refused is not None:
         drop_refused_result(store, state, item, refused, save_state=_save_state)
@@ -532,7 +524,9 @@ def command_queue_loop(
         context,
         stop_event=stop_event,
         enabled=command_queue_should_poll,
-        poll_once=poll_command_queue_once,
+        poll_once=with_review_drains(
+            store, context, stop_event=stop_event, poll_once=poll_command_queue_once, format_error=_redacted_error
+        ),
         load_state=_load_state,
         save_state=_save_state,
         format_error=_redacted_error,
