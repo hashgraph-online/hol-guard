@@ -90,6 +90,7 @@ pub mod pretool_empty_read_request;
 pub mod pretool_env_prefix_controls;
 pub mod pretool_extension_allow_git_order;
 pub mod pretool_extension_allow_guard_named_checkout;
+pub mod pretool_extension_allow_github_compound;
 pub mod pretool_extension_allow_merge;
 pub mod pretool_extension_allow_unmodelled_git;
 pub mod pretool_extension_allow_worktree_entry;

@@ -121,13 +121,24 @@ pub(crate) fn verified_climb_target(
         return None;
     }
     let supplied = sibling::climbed(value, std::path::Path::new(context.cwd?))?;
+    // The user's private macOS temporary directory is as much theirs as home,
+    // and agents keep checkouts there, so a climb inside it clears the same
+    // screens an absolute `cd` to the same directory clears. Without this the
+    // two spellings of one directory would not answer alike.
+    let temporary =
+        super::read_paths::inside_private_temporary_directory(&supplied, context.home_dir);
     // The climb names its directory in the spelling the harness reports, so
     // the read screens below and every later operand proof see that spelling
     // rather than the `\\?\` verbatim form `canonicalize` answers with on
     // Windows, which no reported directory is written as.
     if !sibling::own_canonical_spelling(&supplied)
         || !supplied.is_dir()
-        || !super::read_paths::resolved_path_allowed(&supplied, context.home_dir, context.cwd)
+        || !super::read_paths::resolved_path_allowed_in_scope(
+            &supplied,
+            context.home_dir,
+            context.cwd,
+            temporary,
+        )
     {
         return None;
     }
