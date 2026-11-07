@@ -269,3 +269,21 @@ def test_the_request_digest_never_covers_the_policy_integrity_key() -> None:
     assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(renamed)) != bare
     assert "integrity_key_b64" not in native_guard_store._digest_material(keyed)["args"]
     assert keyed["args"]["integrity_key_b64"] == "c2VjcmV0"
+
+
+def test_a_store_call_resolves_the_runtime_status_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+    resolved: list[object] = []
+
+    class _Status:
+        identity = None
+
+    status = _Status()
+    _patch_transport(monkeypatch, [100.0], seen, lambda: None)
+    monkeypatch.setattr(native_guard_store, "native_runtime_status", lambda: resolved.append(status) or status)
+
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _call(tmp_path, 130.0)
+
+    assert resolved == [status]
+    assert seen["status"] is status
