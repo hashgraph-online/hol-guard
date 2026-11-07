@@ -665,6 +665,7 @@
       "src/pretool/worktree_add_destination.rs",
       "src/pretool/worktree_add_links.rs",
       "src/pretool/worktree_add_names.rs",
+      "src/pretool/worktree_add_search_path.rs",
       "src/pretool/worktree_add_spec.rs",
       "src/pretool/worktree_maintenance.rs",
       "src/pretool/worktree_maintenance_chain.rs",

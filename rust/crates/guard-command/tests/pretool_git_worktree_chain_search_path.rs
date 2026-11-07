@@ -274,3 +274,19 @@ fn a_long_s_entry_inside_the_new_checkout_revokes_the_proof() {
         );
     }
 }
+
+/// On Unix an empty search path entry is the shell's own directory, and Git
+/// reads it the same way when it looks up a pager or helper. Once the `cd`
+/// has entered the new checkout it names that checkout, so the chain keeps
+/// no proof over it. Windows drops the entry instead, which its own test
+/// binary covers.
+#[test]
+fn an_empty_search_path_entry_revokes_the_entered_proof() {
+    let (_cleanup, home, repository) = repository("chain-path-empty");
+    assert_reviewed_on_search_path(
+        &home,
+        &repository,
+        std::path::Path::new(""),
+        "git worktree add -b flat ../app-flat origin/main && cd ../app-flat && git status --short",
+    );
+}
