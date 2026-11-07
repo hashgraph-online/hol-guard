@@ -74,6 +74,43 @@ def test_second_call_reuses_the_status_without_validating(probe: tuple[Path, Pat
     assert len(calls) == 1
 
 
+def test_a_hit_on_a_literal_candidate_resolves_no_path(
+    probe: tuple[Path, Path, list[Path]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary, _manifest, calls = probe
+    first = native_runtime_status()
+    assert first.identity is not None and first.identity.path == binary
+    resolved: list[Path] = []
+    monkeypatch.setattr(process_cache, "_resolved_candidate_path", lambda candidate: resolved.append(candidate))
+    assert native_runtime_status() is first
+    assert len(calls) == 1
+    assert resolved == []
+
+
+def test_a_literal_candidate_whose_directory_now_leads_elsewhere_recomputes(
+    probe: tuple[Path, Path, list[Path]], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _binary, _manifest, calls = probe
+    home = tmp_path / "runtime"
+    home.mkdir()
+    candidate = home / "hol-guard-runtime"
+    candidate.write_bytes(b"process-cache-runtime")
+    candidate.chmod(0o700)
+    monkeypatch.setattr(native_runtime_module, "_runtime_candidates", lambda: (candidate,))
+    first = native_runtime_status()
+    assert first.identity is not None and first.identity.path == candidate
+    # Same bytes and spelling, but the directory now leads to another file.
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "hol-guard-runtime").write_bytes(b"process-cache-runtime")
+    (other / "hol-guard-runtime").chmod(0o700)
+    home.rename(tmp_path / "runtime-old")
+    home.symlink_to(other, target_is_directory=True)
+    second = native_runtime_status()
+    assert len(calls) == 2
+    assert second is not first
+
+
 def test_a_touched_binary_recomputes(probe: tuple[Path, Path, list[Path]]) -> None:
     binary, _manifest, calls = probe
     first = native_runtime_status()

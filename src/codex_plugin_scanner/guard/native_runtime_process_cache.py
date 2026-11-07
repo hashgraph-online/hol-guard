@@ -88,6 +88,24 @@ def remember_process_status(
         _STATUSES[key] = (status, binary, manifest if status.manifest is not None else None)
 
 
+def _still_names(candidate: Path, path: Path) -> bool:
+    """Whether ``candidate`` still leads to the cached runtime ``path``.
+
+    A candidate spelled exactly as the resolved path needs no walk: the binary
+    fingerprint that follows is taken through that same spelling, so it matches
+    only while the spelling still reaches the same file. Resolving stat-ed every
+    path component on each call, and the status is asked for on every resident
+    request.
+    """
+
+    try:
+        if candidate.expanduser() == path:
+            return True
+    except RuntimeError:
+        return False
+    return _resolved_candidate_path(candidate) == path
+
+
 def process_status(key: _RequestKey, candidates: tuple[Path, ...]) -> NativeRuntimeStatus | None:
     """Return the cached status while stat metadata proves the runtime is unchanged."""
 
@@ -100,7 +118,7 @@ def process_status(key: _RequestKey, candidates: tuple[Path, ...]) -> NativeRunt
     if (
         identity is None
         or not candidates
-        or identity.path != _resolved_candidate_path(candidates[0])
+        or not _still_names(candidates[0], identity.path)
         or _fingerprint(identity.path, follow=True) != binary
         or (manifest is not None and _fingerprint(_manifest_path(identity.path), follow=False) != manifest)
     ):
