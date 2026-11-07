@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 import urllib.error
 from collections.abc import Callable, Mapping
 
@@ -60,3 +62,45 @@ def resolve_command_queue_auth_context(
 
 
 __all__ = ["resolve_command_queue_auth_context"]
+
+
+# Every poll resolves the Cloud sign-in before and after its lease, and each
+# resolve takes the OAuth refresh file lock. Drain workers settling a bulk
+# Review decision queued behind one another on that lock. A resolved context
+# is reused for a few seconds, well inside the margin in which the resolver
+# itself keeps reusing an access token, so a reused token is never one the
+# resolver would have refreshed. A 401 still forces a fresh resolve.
+_AUTH_CONTEXT_REUSE_SECONDS = 15.0
+_auth_context_lock = threading.Lock()
+_auth_context_cache: dict[tuple[str, object], tuple[float, dict[str, object]]] = {}
+
+
+def reuse_command_queue_auth_context(
+    store: GuardStore,
+    *,
+    force_refresh: bool = False,
+    resolve_auth_context: Callable[..., dict[str, object]] = _resolve_guard_sync_auth_context,
+    repair_authorization: Callable[[GuardStore], Mapping[str, object]] = repair_guard_cloud_connect_storage,
+) -> dict[str, object]:
+    key = (str(getattr(store, "guard_home", id(store))), resolve_auth_context)
+    with _auth_context_lock:
+        cached = None if force_refresh else _auth_context_cache.get(key)
+        if cached is not None and time.monotonic() - cached[0] < _AUTH_CONTEXT_REUSE_SECONDS:
+            return dict(cached[1])
+        _auth_context_cache.pop(key, None)
+        resolved_at = time.monotonic()
+        auth_context = resolve_command_queue_auth_context(
+            store,
+            force_refresh=force_refresh,
+            resolve_auth_context=resolve_auth_context,
+            repair_authorization=repair_authorization,
+        )
+        if len(_auth_context_cache) >= 8:
+            _auth_context_cache.clear()
+        _auth_context_cache[key] = (resolved_at, auth_context)
+        return dict(auth_context)
+
+
+def clear_command_queue_auth_context_cache() -> None:
+    with _auth_context_lock:
+        _auth_context_cache.clear()

@@ -10,6 +10,7 @@ idle window and hands them to the next request for the same host.
 from __future__ import annotations
 
 import http.client
+import selectors
 import ssl
 import threading
 import time
@@ -25,13 +26,14 @@ if TYPE_CHECKING:
 _IDLE_SECONDS = 4.0
 _MAX_IDLE_PER_HOST = 8
 # A reused socket the server already closed fails on first use with one of
-# these. The request is retried once on a fresh connection.
+# these. The request is retried once on a fresh connection when that is safe.
 _STALE_SOCKET_ERRORS = (
     http.client.RemoteDisconnected,
     ConnectionResetError,
     ConnectionAbortedError,
     BrokenPipeError,
 )
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
 
 
 class _ConnectionPool:
@@ -39,18 +41,32 @@ class _ConnectionPool:
         self._lock = threading.Lock()
         self._idle: dict[object, list[tuple[float, http.client.HTTPConnection]]] = {}
 
+    def _sweep_locked(self, now: float, expired: list[http.client.HTTPConnection]) -> None:
+        # Keys retire too: the default SSL context is rebuilt every few
+        # minutes and is part of the key. Sweeping every key on each call
+        # closes the sockets a retired key left behind.
+        for key, idle in list(self._idle.items()):
+            fresh = [entry for entry in idle if now - entry[0] <= _IDLE_SECONDS]
+            expired.extend(connection for released_at, connection in idle if now - released_at > _IDLE_SECONDS)
+            if fresh:
+                self._idle[key] = fresh
+            else:
+                del self._idle[key]
+
     def take(self, key: object) -> http.client.HTTPConnection | None:
         expired: list[http.client.HTTPConnection] = []
         found: http.client.HTTPConnection | None = None
-        now = time.monotonic()
         with self._lock:
+            self._sweep_locked(time.monotonic(), expired)
             idle = self._idle.get(key, [])
             while idle:
-                released_at, connection = idle.pop()
-                if now - released_at <= _IDLE_SECONDS and connection.sock is not None:
+                _released_at, connection = idle.pop()
+                if not _closed_by_peer(connection):
                     found = connection
                     break
                 expired.append(connection)
+            if not idle:
+                self._idle.pop(key, None)
         for connection in expired:
             connection.close()
         return found
@@ -58,8 +74,10 @@ class _ConnectionPool:
     def give(self, key: object, connection: http.client.HTTPConnection) -> None:
         overflow: list[http.client.HTTPConnection] = []
         with self._lock:
+            now = time.monotonic()
+            self._sweep_locked(now, overflow)
             idle = self._idle.setdefault(key, [])
-            idle.append((time.monotonic(), connection))
+            idle.append((now, connection))
             while len(idle) > _MAX_IDLE_PER_HOST:
                 overflow.append(idle.pop(0)[1])
         for stale in overflow:
@@ -74,6 +92,19 @@ class _ConnectionPool:
 
 
 _POOL = _ConnectionPool()
+
+
+def _closed_by_peer(connection: http.client.HTTPConnection) -> bool:
+    """An idle keep-alive socket that is readable has seen EOF or an alert."""
+    sock = connection.sock
+    if sock is None:
+        return True
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(sock, selectors.EVENT_READ)
+            return bool(selector.select(timeout=0))
+    except (OSError, ValueError):
+        return True
 
 
 class _PooledResponse(http.client.HTTPResponse):
@@ -121,6 +152,7 @@ def open_keepalive(
             connection.timeout = timeout
             if connection.sock is not None:
                 connection.sock.settimeout(timeout)
+        sent = False
         try:
             connection.request(
                 request.get_method(),
@@ -129,10 +161,14 @@ def open_keepalive(
                 headers,
                 encode_chunked=request.has_header("Transfer-encoding"),
             )
+            sent = True
             response = connection.getresponse()
         except _STALE_SOCKET_ERRORS as error:
             connection.close()
-            if reused:
+            # A request that failed while sending never reached the server. One
+            # that failed waiting for the answer may have been handled already,
+            # so only a method that is safe to repeat is sent again.
+            if reused and (not sent or request.get_method() in _IDEMPOTENT_METHODS):
                 continue
             raise urllib.error.URLError(error) from error
         except OSError as error:

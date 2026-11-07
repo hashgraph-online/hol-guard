@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import logging
-import threading
-import time
 import urllib.error
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from functools import partial
 from typing import Any
 
@@ -37,7 +36,7 @@ from .command_queue_activation import (
 from .command_queue_activation import (
     command_queue_lease_wait_ms as _command_queue_lease_wait_ms,
 )
-from .command_queue_auth import resolve_command_queue_auth_context
+from .command_queue_auth import reuse_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
 from .command_queue_authorization import start_command_authorization
 from .command_queue_drain import with_review_drains
@@ -156,53 +155,31 @@ def _exact_json_request(
     )
 
 
-# Every poll resolves the Cloud sign-in before and after its lease, and each
-# resolve takes the OAuth refresh file lock. Drain workers settling a bulk
-# Review decision queued behind one another on that lock. A resolved context
-# is reused for a few seconds, well inside the margin in which the resolver
-# itself keeps reusing an access token, so a reused token is never one the
-# resolver would have refreshed. A 401 still forces a fresh resolve.
-_AUTH_CONTEXT_REUSE_SECONDS = 15.0
-_auth_context_lock = threading.Lock()
-_auth_context_cache: dict[tuple[str, object], tuple[float, dict[str, object]]] = {}
-
-
 def _resolve_command_queue_auth_context(
     store: GuardStore,
     *,
     force_refresh: bool = False,
 ) -> dict[str, object]:
-    resolver = _resolve_guard_sync_auth_context
-    key = (str(getattr(store, "guard_home", id(store))), resolver)
-    with _auth_context_lock:
-        cached = None if force_refresh else _auth_context_cache.get(key)
-        if cached is not None and time.monotonic() - cached[0] < _AUTH_CONTEXT_REUSE_SECONDS:
-            return dict(cached[1])
-        _auth_context_cache.pop(key, None)
-        resolved_at = time.monotonic()
-        auth_context = resolve_command_queue_auth_context(
-            store,
-            force_refresh=force_refresh,
-            resolve_auth_context=resolver,
-            repair_authorization=repair_guard_cloud_connect_storage,
-        )
-        if len(_auth_context_cache) >= 8:
-            _auth_context_cache.clear()
-        _auth_context_cache[key] = (resolved_at, auth_context)
-        return dict(auth_context)
-
-
-def clear_command_queue_auth_context_cache() -> None:
-    with _auth_context_lock:
-        _auth_context_cache.clear()
+    return reuse_command_queue_auth_context(
+        store,
+        force_refresh=force_refresh,
+        resolve_auth_context=_resolve_guard_sync_auth_context,
+        repair_authorization=repair_guard_cloud_connect_storage,
+    )
 
 
 def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardStore) -> dict[str, object]:
-    # One job makes dozens of store calls; opening a connection for each one
-    # (and repeating its pragmas) cost more than the work under concurrent
-    # Review drains. Each call still commits on its own.
-    with store.connection_scope():
+    with _review_connection_scope(store, job):
         return execute_guard_command_job(job, context=context, store=store, now=_now)
+
+
+def _review_connection_scope(store: GuardStore, job: dict[str, object]) -> AbstractContextManager[None]:
+    # A Review decision makes dozens of store calls; opening a connection for
+    # each one (and paying its schema load) cost more than the work under
+    # concurrent drains. Each call still commits on its own. The shared scope
+    # holds the storage gate, so jobs that can wait on outside work, such as
+    # an update, keep opening a connection per call.
+    return store.connection_scope() if uses_exact_transport(job) else nullcontext()
 
 
 def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
@@ -355,7 +332,7 @@ def _authorize_in_connection_scope(store: GuardStore, job: dict[str, object]) ->
     # Every SQLite connection pays for a schema load on its first statement,
     # and authorizing a job reads the store many times over. One connection
     # for the whole check keeps that cost to a single load per job.
-    with store.connection_scope():
+    with _review_connection_scope(store, job):
         return authorize_command_queue_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
 
 
@@ -532,9 +509,7 @@ def poll_command_queue_once(
             "failureMessage": "The local Guard command capability rejected this job.",
         }
     else:
-        # Settling reads and writes the store a dozen times; share one
-        # connection so each step skips the per-connection schema load.
-        with store.connection_scope():
+        with _review_connection_scope(store, item):
             execution = _settle_authorized_job(store, context, item, authorized)
     payload = _result_payload(item, execution)
     refused: urllib.error.HTTPError | None = None

@@ -21,6 +21,7 @@ class _Server(ThreadingHTTPServer):
     def __init__(self) -> None:
         super().__init__(("127.0.0.1", 0), _Handler)
         self.peers: list[tuple[str, int]] = []
+        self.paths: list[str] = []
         self.drop_next_idle = False
 
 
@@ -35,6 +36,10 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
         self.server.peers.append(self.client_address)
+        self.server.paths.append(self.path)
+        if self.path == "/vanish":
+            self.close_connection = True
+            return
         if self.path == "/redirect":
             self.send_response(302)
             self.send_header("Location", "/elsewhere")
@@ -150,3 +155,25 @@ def test_idle_connections_expire(
 
     _post(server, pool, "/second")
     assert len(set(server.peers)) == 2
+
+
+def test_a_post_the_server_may_have_handled_is_not_sent_again(
+    server: _Server, pool: network_keepalive._ConnectionPool
+) -> None:
+    _post(server, pool, "/first")
+
+    with pytest.raises(urllib.error.URLError):
+        _post(server, pool, "/vanish")
+    assert server.paths.count("/vanish") == 1
+
+
+def test_sockets_of_a_retired_key_are_closed(pool: network_keepalive._ConnectionPool) -> None:
+    retired = http.client.HTTPConnection("127.0.0.1")
+    closed: list[bool] = []
+    retired.close = lambda: closed.append(True)  # type: ignore[method-assign]
+    pool.give("old-context", retired)
+    pool._idle["old-context"] = [(0.0, retired)]
+
+    assert pool.take("new-context") is None
+    assert closed == [True]
+    assert "old-context" not in pool._idle
