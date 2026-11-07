@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 import urllib.error
 from collections.abc import Callable
 from functools import partial
@@ -13,6 +15,7 @@ from ..store import GuardStore
 from .auto_update import maybe_auto_update
 from .cloud_policy_revision import cloud_policy_store_key, observe_cloud_policy_revision
 from .command_capability import (
+    AuthorizedCommandJob,
     CommandCapabilityError,
     CommandCapabilityUnavailableError,
     audit_command_decision,
@@ -153,17 +156,45 @@ def _exact_json_request(
     )
 
 
+# Every poll resolves the Cloud sign-in before and after its lease, and each
+# resolve takes the OAuth refresh file lock. Drain workers settling a bulk
+# Review decision queued behind one another on that lock. A resolved context
+# is reused for a few seconds, well inside the margin in which the resolver
+# itself keeps reusing an access token, so a reused token is never one the
+# resolver would have refreshed. A 401 still forces a fresh resolve.
+_AUTH_CONTEXT_REUSE_SECONDS = 15.0
+_auth_context_lock = threading.Lock()
+_auth_context_cache: dict[tuple[str, object], tuple[float, dict[str, object]]] = {}
+
+
 def _resolve_command_queue_auth_context(
     store: GuardStore,
     *,
     force_refresh: bool = False,
 ) -> dict[str, object]:
-    return resolve_command_queue_auth_context(
-        store,
-        force_refresh=force_refresh,
-        resolve_auth_context=_resolve_guard_sync_auth_context,
-        repair_authorization=repair_guard_cloud_connect_storage,
-    )
+    resolver = _resolve_guard_sync_auth_context
+    key = (str(getattr(store, "guard_home", id(store))), resolver)
+    with _auth_context_lock:
+        cached = None if force_refresh else _auth_context_cache.get(key)
+        if cached is not None and time.monotonic() - cached[0] < _AUTH_CONTEXT_REUSE_SECONDS:
+            return dict(cached[1])
+        _auth_context_cache.pop(key, None)
+        resolved_at = time.monotonic()
+        auth_context = resolve_command_queue_auth_context(
+            store,
+            force_refresh=force_refresh,
+            resolve_auth_context=resolver,
+            repair_authorization=repair_guard_cloud_connect_storage,
+        )
+        if len(_auth_context_cache) >= 8:
+            _auth_context_cache.clear()
+        _auth_context_cache[key] = (resolved_at, auth_context)
+        return dict(auth_context)
+
+
+def clear_command_queue_auth_context_cache() -> None:
+    with _auth_context_lock:
+        _auth_context_cache.clear()
 
 
 def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardStore) -> dict[str, object]:
@@ -320,6 +351,88 @@ def _lease_job_with_401_retry(
     return _lease_next_job(store, refreshed_auth_context, state=state)
 
 
+def _authorize_in_connection_scope(store: GuardStore, job: dict[str, object]) -> AuthorizedCommandJob:
+    # Every SQLite connection pays for a schema load on its first statement,
+    # and authorizing a job reads the store many times over. One connection
+    # for the whole check keeps that cost to a single load per job.
+    with store.connection_scope():
+        return authorize_command_queue_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
+
+
+def _settle_authorized_job(
+    store: GuardStore,
+    context: HarnessContext,
+    item: dict[str, object],
+    authorized: AuthorizedCommandJob,
+) -> dict[str, object]:
+    execution: dict[str, object]
+    # The job is leased by this point and the lease only closes on a posted
+    # result. Matching the approval grant, recording the replay row and
+    # registering a pending approval all ask the runtime for a signature or
+    # a digest, so each of them can refuse. A refusal is this job's failure
+    # and has to reach the posted result; letting it escape the poll would
+    # leave the lease open with nothing posted and nothing recorded.
+    try:
+        # Spending the grant and recording the replay row both name this
+        # job by the runtime's digest. Ask for it once, before the grant
+        # is deleted: a resident that stopped answering in between would
+        # otherwise fail the job with the user's approval already gone.
+        needs_replay_row = not is_native_workspace_review_job(item)
+        identity_digest = (
+            command_identity_digest(store, authorized)
+            if authorized.requires_local_approval or needs_replay_row
+            else None
+        )
+        if not consume_local_command_approval(store, authorized, identity_digest=identity_digest):
+            pending = register_pending_command(store, authorized, item)
+            execution = {
+                "waitingLocalConfirm": True,
+                "operation": authorized.operation,
+                "jobId": authorized.identity["id"],
+                "approveCommand": pending["approveCommand"],
+            }
+            audit_command_decision(
+                store,
+                "cloud_command.waiting_local_approval",
+                job=item,
+                reason="local_approval_required",
+            )
+        else:
+            if needs_replay_row:
+                mark_command_job_consumed(store, authorized, identity_digest=identity_digest)
+            audit_command_decision(
+                store,
+                "cloud_command.accepted",
+                job=item,
+                reason="capability_and_job_valid",
+            )
+            try:
+                _LOGGER.info("Guard command leased.")
+                execution = _execute_job(item, context, store)
+            except Exception as error:
+                _LOGGER.warning(
+                    "Guard command execution failed: error=%s",
+                    _redacted_error(error),
+                )
+                execution = {
+                    "failureCode": "execution_error",
+                    "failureMessage": _redacted_error(error),
+                }
+    except (CommandCapabilityError, CommandCapabilityUnavailableError) as error:
+        reason = error.code if isinstance(error, CommandCapabilityError) else error.reason
+        audit_command_decision(
+            store,
+            "cloud_command.rejected",
+            job=item,
+            reason=reason,
+        )
+        execution = {
+            "failureCode": reason,
+            "failureMessage": "The local Guard command capability could not settle this job.",
+        }
+    return execution
+
+
 def poll_command_queue_once(
     store: GuardStore,
     context: HarnessContext,
@@ -381,9 +494,7 @@ def poll_command_queue_once(
     authorization = start_command_authorization(
         store,
         item,
-        authorize=lambda auth_store, job: authorize_command_queue_job(
-            auth_store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS
-        ),
+        authorize=_authorize_in_connection_scope,
     )
     try:
         _heartbeat(auth_context, item)
@@ -421,70 +532,10 @@ def poll_command_queue_once(
             "failureMessage": "The local Guard command capability rejected this job.",
         }
     else:
-        # The job is leased by this point and the lease only closes on a posted
-        # result. Matching the approval grant, recording the replay row and
-        # registering a pending approval all ask the runtime for a signature or
-        # a digest, so each of them can refuse. A refusal is this job's failure
-        # and has to reach the upload below; letting it escape the poll would
-        # leave the lease open with nothing posted and nothing recorded.
-        try:
-            # Spending the grant and recording the replay row both name this
-            # job by the runtime's digest. Ask for it once, before the grant
-            # is deleted: a resident that stopped answering in between would
-            # otherwise fail the job with the user's approval already gone.
-            needs_replay_row = not is_native_workspace_review_job(item)
-            identity_digest = (
-                command_identity_digest(store, authorized)
-                if authorized.requires_local_approval or needs_replay_row
-                else None
-            )
-            if not consume_local_command_approval(store, authorized, identity_digest=identity_digest):
-                pending = register_pending_command(store, authorized, item)
-                execution = {
-                    "waitingLocalConfirm": True,
-                    "operation": authorized.operation,
-                    "jobId": authorized.identity["id"],
-                    "approveCommand": pending["approveCommand"],
-                }
-                audit_command_decision(
-                    store,
-                    "cloud_command.waiting_local_approval",
-                    job=item,
-                    reason="local_approval_required",
-                )
-            else:
-                if needs_replay_row:
-                    mark_command_job_consumed(store, authorized, identity_digest=identity_digest)
-                audit_command_decision(
-                    store,
-                    "cloud_command.accepted",
-                    job=item,
-                    reason="capability_and_job_valid",
-                )
-                try:
-                    _LOGGER.info("Guard command leased.")
-                    execution = _execute_job(item, context, store)
-                except Exception as error:
-                    _LOGGER.warning(
-                        "Guard command execution failed: error=%s",
-                        _redacted_error(error),
-                    )
-                    execution = {
-                        "failureCode": "execution_error",
-                        "failureMessage": _redacted_error(error),
-                    }
-        except (CommandCapabilityError, CommandCapabilityUnavailableError) as error:
-            reason = error.code if isinstance(error, CommandCapabilityError) else error.reason
-            audit_command_decision(
-                store,
-                "cloud_command.rejected",
-                job=item,
-                reason=reason,
-            )
-            execution = {
-                "failureCode": reason,
-                "failureMessage": "The local Guard command capability could not settle this job.",
-            }
+        # Settling reads and writes the store a dozen times; share one
+        # connection so each step skips the per-connection schema load.
+        with store.connection_scope():
+            execution = _settle_authorized_job(store, context, item, authorized)
     payload = _result_payload(item, execution)
     refused: urllib.error.HTTPError | None = None
     # Posting the result refreshes the job's heartbeat on the server, so a

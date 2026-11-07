@@ -151,7 +151,7 @@ def open_keepalive(
         if isinstance(response, _PooledResponse):
             response._release = release
         response.url = request.get_full_url()  # type: ignore[attr-defined]
-        response.msg = response.reason  # type: ignore[assignment]
+        response.msg = response.reason  # type: ignore[assignment]  # pyright: ignore[reportAttributeAccessIssue]
         return response
     raise AssertionError("unreachable")
 
