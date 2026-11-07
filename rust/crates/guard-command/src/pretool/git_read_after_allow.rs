@@ -54,9 +54,9 @@ const REF_READS: &[&str] = &[
 
 /// Git operations that write no configuration a later read obeys. Some record
 /// an upstream (`push -u`, `checkout --track`, `branch -u`), and those
-/// `branch.*` keys name no program. Only a step whose first argument is one of
-/// these carries a read, so a leading `-C` that points the step at another
-/// repository ends the run.
+/// `branch.*` keys name no program. Only a step on this list carries a read,
+/// and only into the checkout it works in: a step whose leading `-C` points
+/// at another repository ends the run.
 const CONFIG_STABLE_STEPS: &[&str] = &[
     "add", "branch", "checkout", "commit", "fetch", "merge", "pull", "push", "reset", "restore",
     "stash", "switch", "tag",
@@ -107,10 +107,12 @@ const TREE_PRESERVING_WORKTREE_ACTIONS: &[&str] = &["list", "lock", "prune", "re
 ///
 /// `benign` holds the segments the native benign proof covers and `covered`
 /// every segment covered so far, by that proof, an enabled permission or a
-/// GitHub grant. A read qualifies when it is proven safe on its own, takes no
-/// leading Git option (so `-C` and `--git-dir` cannot route it elsewhere), and
-/// every earlier step is covered and either benign or a Git step on
-/// [`CONFIG_STABLE_STEPS`]. Any other step, such as an allowed `ln` or `git
+/// GitHub grant. A read qualifies when it is proven safe on its
+/// own, takes no leading Git option beyond one that routes or shapes its
+/// output (so `--git-dir` and `-c` cannot repoint it, and a `-C` must name
+/// the checkout the steps before it worked in), and every earlier step is
+/// covered and either benign or a Git step on [`CONFIG_STABLE_STEPS`]
+/// working in that same checkout. Any other step, such as an allowed `ln` or `git
 /// config`, could repoint the directory the read runs in or the program it
 /// starts, so it ends the run.
 pub(crate) fn git_reads_after_allowed_steps(
@@ -131,19 +133,35 @@ pub(crate) fn git_reads_after_allowed_steps(
         ..context
     };
     let mut added = Vec::new();
+    // The checkouts the carried steps worked in. A step with no leading
+    // option works where the command runs; one with a leading `-C` works
+    // where it points. A read is carried only when every step before it
+    // worked in the checkout the read itself runs in, which is the question
+    // the Git floor's own order check asks in `allow_settles_read_order`. A
+    // step routed somewhere else still ends the run.
+    let mut routes: Vec<std::path::PathBuf> = Vec::new();
     for (index, segment) in model.segments.iter().enumerate() {
         let git = git_segment(segment);
         if covered.contains(&index) {
-            if benign.contains(&index)
-                || (git && leading_operation_in(segment, CONFIG_STABLE_STEPS))
+            if benign.contains(&index) {
+                continue;
+            }
+            if let Some(route) = git
+                .then(|| config_stable_route(segment, proof_context))
+                .flatten()
             {
+                routes.push(route);
                 continue;
             }
             break;
         }
         let read = if git {
             ref_read(model, segment, proof_context)
+                && routed_checkout(segment, proof_context)
+                    .is_some_and(|route| routes.iter().all(|carried| *carried == route))
         } else {
+            // A Docker listing reads no checkout, so where a Git step before
+            // it worked changes nothing it looks at.
             docker_listing(model, segment, proof_context)
         };
         if !read {
@@ -152,6 +170,35 @@ pub(crate) fn git_reads_after_allowed_steps(
         added.push(index);
     }
     added
+}
+
+/// The checkout a Git segment works in, when its leading options only route
+/// or shape what it prints. `None` when it carries any other leading option
+/// or the route cannot be named, so `--git-dir`, `--work-tree` and `-c` keep
+/// the refusal they had.
+fn routed_checkout(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    globals_only_route_or_print(&segment.arguments)
+        .then(|| super::git_remote_ops::routed_directory(segment, context))
+        .flatten()
+}
+
+/// The checkout a Git step on [`CONFIG_STABLE_STEPS`] works in, resolving the
+/// subcommand the way Git does rather than reading the first word: `git -C
+/// <dir> pull` is the same step as `git pull`, pointed at a checkout this
+/// names, and the caller compares that checkout with the read's own.
+fn config_stable_route(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    let index = crate::command_compatibility::git_command_index(&segment.arguments)?;
+    let operation = segment.arguments.get(index)?;
+    CONFIG_STABLE_STEPS
+        .contains(&operation.as_str())
+        .then(|| routed_checkout(segment, context))
+        .flatten()
 }
 
 /// Whether the user's Allow may settle the Git floor's order check for
@@ -344,15 +391,6 @@ fn preserves_tree(arguments: &[String]) -> bool {
     }
 }
 
-/// Whether the segment's first argument, with no global option before it, is
-/// one of `operations`.
-fn leading_operation_in(segment: &crate::CommandSegmentV1, operations: &[&str]) -> bool {
-    segment
-        .arguments
-        .first()
-        .is_some_and(|operation| operations.contains(&operation.as_str()))
-}
-
 fn git_segment(segment: &crate::CommandSegmentV1) -> bool {
     segment
         .executable
@@ -380,9 +418,17 @@ fn ref_read(
 ) -> bool {
     let stripped = super::without_stderr_merge(segment);
     let segment = stripped.as_ref().unwrap_or(segment);
-    let Some((operation, rest)) = segment.arguments.split_first() else {
+    // Git resolves the subcommand past its leading options, so `git -C <dir>
+    // rev-parse HEAD` is the same read as `git rev-parse HEAD`. The caller
+    // screens which leading options are acceptable and compares the checkout
+    // a `-C` points at with the one the steps before it worked in.
+    let Some(index) = crate::command_compatibility::git_command_index(&segment.arguments) else {
         return false;
     };
+    let Some(operation) = segment.arguments.get(index) else {
+        return false;
+    };
+    let rest = &segment.arguments[index + 1..];
     !segment.path_overridden
         && segment.wrapper_chain.is_empty()
         && segment
