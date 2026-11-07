@@ -2835,6 +2835,25 @@ class _GuardDaemonHandler(
                 return claims
         return None
 
+    def _request_holds_link_bound_session(self) -> bool:
+        """Whether the caller presents a session opened from an approval link."""
+
+        session_token = self.headers.get("X-Guard-Dashboard-Session")
+        authorization = self.headers.get("Authorization")
+        bearer_token = None
+        if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+            bearer_token = authorization[7:].strip()
+        for candidate in (session_token, bearer_token):
+            if not isinstance(candidate, str) or not candidate.strip():
+                continue
+            claims = self._dashboard_session_token_claims(
+                candidate,
+                allow_expired_within_seconds=_LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS,
+            )
+            if claims is not None and claims.get("request_id") is not None:
+                return True
+        return False
+
     def _consume_dashboard_session_nonce(self, nonce: str) -> bool:
         now = time.monotonic()
         ttl_seconds = 600.0
