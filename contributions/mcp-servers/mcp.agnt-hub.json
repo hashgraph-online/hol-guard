@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.agnt-hub",
+  "version": "1.0.0",
+  "name": "Agent Hub",
+  "description": "Coordination server and live Kanban dashboard for multi-agent AI coding with advisory file locking and worktree isolation. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.MayankSharma-2812",
+    "displayName": "Mayank Sharma",
+    "url": "https://github.com/MayankSharma-2812/agnt-hub"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/MayankSharma-2812/agnt-hub",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "agent-hub-mcp"
+  },
+  "riskClasses": [
+    "external-filesystem-write",
+    "remote-state-mutation",
+    "agent-coordination"
+  ],
+  "tools": [
+    { "name": "hub_whoami", "state": "inherit" },
+    { "name": "hub_heartbeat", "state": "inherit" },
+    { "name": "hub_list_tasks", "state": "inherit" },
+    { "name": "hub_get_task", "state": "inherit" },
+    { "name": "hub_read_inbox", "state": "inherit" },
+    { "name": "hub_claim_task", "state": "review" },
+    { "name": "hub_update_task_status", "state": "review" },
+    { "name": "hub_create_task", "state": "review" },
+    { "name": "hub_send_message", "state": "review" },
+    { "name": "hub_lock_files", "state": "review" },
+    { "name": "hub_release_locks", "state": "review" },
+    { "name": "hub_add_artifact", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/MayankSharma-2812/agnt-hub",
+    "https://github.com/MayankSharma-2812/agnt-hub/blob/main/docs/SPEC_PACK.md"
+  ],
+  "saferAlternatives": [
+    "Use read-only tools (hub_whoami, hub_list_tasks, hub_get_task, hub_read_inbox) to inspect state without modifying tasks or locks.",
+    "Acquire granular file locks before editing code and promptly call hub_release_locks upon completion."
+  ]
+}
