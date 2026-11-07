@@ -257,8 +257,12 @@ fn escaped_close_reading(candidate: &str, close: usize) -> Option<String> {
 }
 
 fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
-    let mut expanded = vec![pattern.to_owned()];
-    for depth in 0..8 {
+    // The flag beside each candidate records whether it still carries the
+    // braces of the word as written. Only such a candidate can have held the
+    // backslash the tokenizer dropped, and a comma expansion hands that
+    // standing on to every part it produces.
+    let mut expanded = vec![(pattern.to_owned(), true)];
+    for _ in 0..8 {
         // A brace with no `}` after it expands to nothing: bash leaves `a{b`
         // and a search pattern such as `json({ error` as the literal text it
         // was written as. Reading that shape as a glob nobody could expand
@@ -267,11 +271,16 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
         // an alternative.
         let Some(index) = expanded
             .iter()
-            .position(|candidate| innermost_brace_pair(candidate).is_some())
+            .position(|(candidate, _)| innermost_brace_pair(candidate).is_some())
         else {
-            return Some(expanded);
+            return Some(
+                expanded
+                    .into_iter()
+                    .map(|(candidate, _)| candidate)
+                    .collect(),
+            );
         };
-        let candidate = expanded.swap_remove(index);
+        let (candidate, as_written) = expanded.swap_remove(index);
         let (open, close) = innermost_brace_pair(&candidate)?;
         let choices: Vec<&str> = candidate[open + 1..close].split(',').collect();
         // A brace with no comma and no `..`, such as Git's `HEAD^{commit}`,
@@ -295,16 +304,16 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
                 // Reading only the inner pair would hide that second word, so
                 // the spelling with this brace taken as literal is carried
                 // alongside and screened too. Only the word as written can
-                // have carried the backslash, so the second reading is taken
-                // once, on the first pass; generating one at every pass makes
-                // an ordinary multi-part template outgrow the budget below and
-                // fail closed.
-                if depth == 0 {
+                // have carried the backslash, so a candidate this branch has
+                // already rewritten yields no further reading; generating one
+                // from every rewrite makes an ordinary multi-part template
+                // outgrow the budget below and fail closed.
+                if as_written {
                     if let Some(escaped) = escaped_close_reading(&candidate, close) {
-                        expanded.push(escaped);
+                        expanded.push((escaped, false));
                     }
                 }
-                expanded.push(format!("{}{trimmed}{suffix}", &candidate[..open],));
+                expanded.push((format!("{}{trimmed}{suffix}", &candidate[..open],), false));
                 continue;
             }
         }
@@ -312,11 +321,14 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
             return None;
         }
         for choice in choices {
-            expanded.push(format!(
-                "{}{}{}",
-                &candidate[..open],
-                choice,
-                &candidate[close + 1..]
+            expanded.push((
+                format!(
+                    "{}{}{}",
+                    &candidate[..open],
+                    choice,
+                    &candidate[close + 1..]
+                ),
+                as_written,
             ));
         }
     }

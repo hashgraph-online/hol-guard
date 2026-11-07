@@ -106,7 +106,15 @@ fn brace_sequences_still_select_sensitive_names() {
 /// the inner brace pair hid that word.
 #[test]
 fn an_escaped_close_brace_still_names_the_credential_bash_would_reach() {
-    for operand in ["z{prefix/{x},.env}", "dir/{a},.ssh}", "x{y/{keep},.aws}"] {
+    for operand in [
+        "z{prefix/{x},.env}",
+        "dir/{a},.ssh}",
+        "x{y/{keep},.aws}",
+        // A balanced alternative in front must not consume the reading of the
+        // escaped brace: bash splits this word into `a/x}`, `a/.env`, `b/x}`
+        // and `b/.env`.
+        "{a,b}/{x},.env}",
+    ] {
         assert!(literal_glob_names_sensitive_path(operand), "{operand}");
         assert!(glob_can_select_sensitive_path(operand), "{operand}");
     }
