@@ -16,14 +16,20 @@ use guard_contracts::PreToolResultV1;
 /// Profiles whose launchers filter the environment through the restricted
 /// allowlist (`restricted_pytest::environment::filter`).
 ///
-/// The workspace profile is on this list for the same reason as the read-only
-/// ones, though it may write: `restricted_workspace.run_workspace_contained`
-/// builds its launch environment with that same filter, so a setting the
-/// projection removed does not reach the run there either. Which of these
-/// profiles a host picks for one command varies -- the same sibling build
-/// settles as `node-build-output-v1` on one host and `workspace-contained-v1`
-/// on another -- and leaving the workspace profile off turned that into a
-/// review for the prefixed spelling alone.
+/// The workspace profile is on this list for a different reason, and it is
+/// worth stating plainly: its sink plans and runs the command's own text, so
+/// an inline assignment is applied by the shell inside containment and the
+/// allowlist never sees it. What makes it safe is the `data_only` test every
+/// entry here is gated on. A setting only counts as data once it is not a
+/// search path, not an endpoint or credential name, not `NODE_PATH` or a
+/// temporary-directory name, not a forwarded setting, and holds no expansion,
+/// separator or redirection, so what still reaches the contained run cannot
+/// change which program runs or where it connects -- and the sandbox's write
+/// and exec roots bound where it can point. Which of these profiles a host
+/// picks for one command varies -- the same sibling build settles as
+/// `node-build-output-v1` on one host and `workspace-contained-v1` on another
+/// -- and leaving the workspace profile off turned that into a review for the
+/// prefixed spelling alone.
 const FILTERED_PROFILES: [&str; 11] = [
     "native_bun_eval_readonly_containment_required",
     "native_git_readonly_containment_required",

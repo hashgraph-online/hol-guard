@@ -279,6 +279,15 @@ fn an_inert_assignment_keeps_the_runs_own_decision() {
                 (&cd_form.decision, &cd_form.minimum_action),
                 "{harness}: PORT={value}"
             );
+            // Parity alone would still hold if both spellings settled, so
+            // name the floor itself: neither form may allow, and neither may
+            // reach the contained profile, whose launcher would run the
+            // command with this setting applied.
+            assert_ne!(steered.decision, "allow", "{harness}: PORT={value}");
+            assert_ne!(
+                steered.minimum_action, "sandbox-required",
+                "{harness}: PORT={value}"
+            );
         }
     }
 }
