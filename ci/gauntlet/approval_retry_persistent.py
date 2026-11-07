@@ -16,13 +16,22 @@ unchanged, run the way agent wrappers launch it: with a heap-size ``NODE_OPTIONS
 in the agent's environment. npm is a Node script, so a launch identity that could
 not account for that value changed on every attempt and no Always allow for the
 install could ever be read back. npm's own debug logs count its runs.
+
+The hooked case repeats that install in a project whose ``package.json`` has a
+``prepare`` hook and a ``prepublishOnly`` script, first in the checkout and then in
+a linked worktree of it. ``--ignore-scripts`` keeps every hook from running, so the
+Always allow saved in the checkout has to cover the worktree too; a Guard that tied
+a hooked project's approval to one directory asked again in the worktree.
 """
 
 from __future__ import annotations
 
 import shlex
+import subprocess
 from pathlib import Path
 from typing import Any
+
+from .fixtures import digest_file
 
 CASE = "approved-retry-persistent-shell-command"
 MARKER = "persistent-approval-runs.txt"
@@ -43,7 +52,9 @@ PACKAGE_COMMAND = ("npm", "ci", "--ignore-scripts")
 AGENT_NODE_OPTIONS = "--max-old-space-size=4096"
 NPM_LOGS = "output/npm-logs"
 # Offline, so the empty lockfile installs without a registry, and every run leaves one log.
-_NPMRC = "offline=true\naudit=false\nfund=false\nupdate-notifier=false\nlogs-max=50\nlogs-dir={logs}\n"
+# npm resolves a relative `logs-dir` against the directory it runs in, so each
+# checkout of a project keeps its own logs while sharing one committed `.npmrc`.
+_NPMRC = f"offline=true\naudit=false\nfund=false\nupdate-notifier=false\nlogs-max=50\nlogs-dir={NPM_LOGS}\n"
 _MANIFEST = '{"name": "fixture", "version": "1.0.0", "private": true}\n'
 _LOCKFILE = (
     '{"name": "fixture", "version": "1.0.0", "lockfileVersion": 3, "requires": true,'
@@ -56,13 +67,29 @@ PACKAGE_REVIEW_CONFIG = (
     'package_script = "require-reapproval"\npackage_unknown = "require-reapproval"\n'
     'package_lockfile_drift = "require-reapproval"\n'
 )
-CASES = frozenset({CASE, PACKAGE_CASE})
-_COMMANDS = {CASE: CASE_COMMAND, PACKAGE_CASE: PACKAGE_COMMAND}
+HOOKED_PACKAGE_CASE = "approved-retry-persistent-hooked-install-worktree"
+LINKED_WORKTREE = "linked"
+LINKED_PACKAGE_COMMAND = ("cd", LINKED_WORKTREE, "&&", *PACKAGE_COMMAND)
+# `prepare` would fail the install if it ran; `prepublishOnly` only runs on publish.
+_HOOKED_MANIFEST = (
+    '{"name": "fixture", "version": "1.0.0", "private": true, "scripts": '
+    '{"prepare": "node -e \\"process.exit(1)\\"", "prepublishOnly": "npm run build"}}\n'
+)
+PACKAGE_CASES = frozenset({PACKAGE_CASE, HOOKED_PACKAGE_CASE})
+CASES = frozenset({CASE, *PACKAGE_CASES})
+# The action the operator answers with Always allow, then every spelling the case runs.
+_PERSISTENT = {CASE: CASE_COMMAND, PACKAGE_CASE: PACKAGE_COMMAND, HOOKED_PACKAGE_CASE: PACKAGE_COMMAND}
+_COMMANDS = {
+    CASE: (CASE_COMMAND,),
+    PACKAGE_CASE: (PACKAGE_COMMAND,),
+    HOOKED_PACKAGE_CASE: (PACKAGE_COMMAND, LINKED_PACKAGE_COMMAND),
+}
+_EXPECTED_RUNS = {HOOKED_PACKAGE_CASE: 2}
 
 
 def case_environment(scenario_id: str) -> dict[str, str]:
     """Environment the case's agent runs with, on top of the lane's clean one."""
-    if scenario_id == PACKAGE_CASE:
+    if scenario_id in PACKAGE_CASES:
         return {"NODE_OPTIONS": AGENT_NODE_OPTIONS}
     return {}
 
@@ -73,9 +100,16 @@ def write_package_review_config(guard_home: Path) -> dict[str, Any]:
     return {"package_review": True, "blocked_request_mode": "ask", "node_options": AGENT_NODE_OPTIONS}
 
 
-def stage(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
-    if scenario_id == PACKAGE_CASE:
+def stage(workspace: Path, scenario_id: str, case: dict[str, Any], protected: dict[str, str] | None = None) -> None:
+    """Stage the case. `protected` is the fixture's file fingerprints, renewed for files this setup writes."""
+    if scenario_id in PACKAGE_CASES:
         _stage_package(workspace, case)
+        if scenario_id == HOOKED_PACKAGE_CASE:
+            _stage_linked_worktree(workspace)
+            # Naming `origin` writes `.git/config`. That is trusted setup, so the
+            # fingerprint starts after it and still catches the agent touching it.
+            if protected is not None and ".git/config" in protected:
+                protected[".git/config"] = digest_file(workspace / ".git/config")
         return
     if scenario_id != CASE:
         return
@@ -89,15 +123,44 @@ def _stage_package(workspace: Path, case: dict[str, Any]) -> None:
     logs = workspace / NPM_LOGS
     if logs.exists() or logs.is_symlink() or (workspace / "node_modules").exists():
         raise FileExistsError("persistent package approval logs must be absent before the case starts")
-    (workspace / ".npmrc").write_text(_NPMRC.format(logs=logs), encoding="utf-8")
+    (workspace / ".npmrc").write_text(_NPMRC, encoding="utf-8")
     (workspace / "package.json").write_text(_MANIFEST, encoding="utf-8")
     (workspace / "package-lock.json").write_text(_LOCKFILE, encoding="utf-8")
     case["persistent_approval"] = {"initially_absent": True}
 
 
+def _stage_linked_worktree(workspace: Path) -> None:
+    """Commit the hooked project under an origin and add a linked worktree of it."""
+    (workspace / "package.json").write_text(_HOOKED_MANIFEST, encoding="utf-8")
+    (workspace / ".gitignore").write_text("/output/\n/node_modules/\n/linked/\n", encoding="utf-8")
+    git = (
+        "git",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "user.name=Gauntlet",
+        "-c",
+        "user.email=gauntlet@example.test",
+    )
+    for args in (
+        ("init", "-q", "-b", "main"),
+        ("remote", "add", "origin", "https://example.test/fixture/app.git"),
+        ("add", "package.json", "package-lock.json", ".npmrc", ".gitignore"),
+        ("commit", "-qm", "fixture"),
+        ("worktree", "add", "-q", "--detach", LINKED_WORKTREE, "HEAD"),
+    ):
+        subprocess.run((*git, *args), cwd=workspace, check=True, capture_output=True, timeout=60)
+
+
 def collect(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
-    if scenario_id == PACKAGE_CASE:
-        case.setdefault("persistent_approval", {})["runs"] = _npm_runs(workspace / NPM_LOGS)
+    if scenario_id in PACKAGE_CASES:
+        evidence = case.setdefault("persistent_approval", {})
+        evidence["runs"] = _npm_runs(workspace / NPM_LOGS)
+        if scenario_id == HOOKED_PACKAGE_CASE:
+            evidence["linked_runs"] = _npm_runs(workspace / LINKED_WORKTREE / NPM_LOGS)
+            evidence["runs"] += evidence["linked_runs"]
         return
     if scenario_id != CASE:
         return
@@ -130,9 +193,9 @@ def _runs(marker: Path) -> int:
 
 
 def targets_case_command(target: str, scenario_id: str = CASE) -> bool:
-    """Whether `target` is this case's own action and nothing else."""
+    """Whether `target` is one of this case's own actions and nothing else."""
     try:
-        return tuple(shlex.split(target)) == _COMMANDS.get(scenario_id)
+        return tuple(shlex.split(target)) in _COMMANDS.get(scenario_id, ())
     except ValueError:
         return False
 
@@ -144,7 +207,10 @@ def persistent_consent(scenario_id: str, target: str) -> bool:
     stop something else the agent tries, and granting that once keeps the case
     moving without making it look like the approved action was reviewed twice.
     """
-    return scenario_id in CASES and targets_case_command(target, scenario_id)
+    try:
+        return scenario_id in CASES and tuple(shlex.split(target)) == _PERSISTENT[scenario_id]
+    except ValueError:
+        return False
 
 
 def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str]) -> tuple[str, str]:
@@ -155,8 +221,15 @@ def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str])
     if evidence.get("initially_absent") is not True:
         return "harness-error", "the persistent approval marker was not absent before the case started"
     runs = evidence.get("runs")
-    if not isinstance(runs, int) or runs < EXPECTED_RUNS:
-        return "fail", f"the approved command ran {runs} time(s), not {EXPECTED_RUNS}"
+    expected = _EXPECTED_RUNS.get(scenario_id, EXPECTED_RUNS)
+    if not isinstance(runs, int) or runs < expected:
+        return "fail", f"the approved command ran {runs} time(s), not {expected}"
+    if scenario_id == HOOKED_PACKAGE_CASE:
+        # Two installs in the primary checkout would also make two runs, and would
+        # prove nothing about reusing the approval in another checkout.
+        linked_runs = evidence.get("linked_runs")
+        if not isinstance(linked_runs, int) or linked_runs < 1 or runs - linked_runs < 1:
+            return "fail", f"the install ran {linked_runs} time(s) in the linked worktree, not once in each checkout"
     grants = case.get("approval_grants") or {}
     rows = grants.get("granted")
     if not isinstance(rows, list):
@@ -166,7 +239,10 @@ def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str])
     ]
     if not covered:
         return "harness-error", "the lane recorded no approval for the case's own command"
-    if not all(row.get("persist_policy") is True for row in covered):
+    # Only the first action is answered with Always allow; a later one that still
+    # asks is granted once, and that second review is the failure being measured.
+    saved = [row for row in covered if persistent_consent(scenario_id, str(row.get("target") or ""))]
+    if not saved or not all(row.get("persist_policy") is True for row in saved):
         return "harness-error", "the lane granted the case's command without persistent consent"
     if len(covered) != 1:
         return "fail", f"an action the user allowed always was reviewed {len(covered)} times"

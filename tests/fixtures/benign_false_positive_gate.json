@@ -4094,6 +4094,96 @@
       "expect": "allow"
     },
     {
+      "id": "sibling-bun-run-cwd-build-env-prefix",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PORT=3000 bun run --cwd ${ORG}/service-api build"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-npm-prefix-run-build-env-prefix",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PORT=3000 CI=1 npm --prefix ${ORG}/service-api run build"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-bun-run-cwd-build-named-port-prefix",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "APP_ENV=test APP_PORT=3027 POSTGRES_PORT=55477 bun --cwd ${ORG}/service-api run build"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sibling-bun-run-cwd-build-port-host",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PORT=db.example.test:5432 bun run --cwd ${ORG}/service-api build"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-bun-run-cwd-build-port-out-of-range",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PORT=99999 bun run --cwd ${ORG}/service-api build"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "home-bun-run-cwd-build-env-prefix-reviewed",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PORT=3000 bun run --cwd ${HOME} build"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "sibling-pnpm-dir-run-test",
       "fix_area": "package",
       "harnesses": [

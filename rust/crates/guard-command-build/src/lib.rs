@@ -180,6 +180,8 @@ mod launch_identity_common;
 #[cfg(windows)]
 #[path = "../../guard-command/src/launch_identity_windows.rs"]
 mod launch_identity_windows;
+#[path = "../../guard-command/src/lifecycle_scripts_flag.rs"]
+pub mod lifecycle_scripts_flag;
 #[path = "../../guard-command/src/local_supply_chain.rs"]
 pub mod local_supply_chain;
 #[path = "../../guard-command/src/native_command_catalog.rs"]

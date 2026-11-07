@@ -119,6 +119,16 @@ fn is_global_request(metadata: &serde_json::Map<String, Value>) -> bool {
     })
 }
 
+/// npm, pnpm and bun skip every `package.json` lifecycle script, the
+/// project's own included, under `--ignore-scripts`. Yarn is left out: Berry
+/// has no such flag and decides from `enableScripts` instead. The arguments
+/// are the ones the launch identity binds, so an approval saved for a
+/// script-free install never covers one that runs scripts.
+fn launch_disables_lifecycle_scripts(manager: &str, arguments: &[String]) -> bool {
+    matches!(manager, "npm" | "pnpm" | "bun")
+        && crate::lifecycle_scripts_flag::lifecycle_scripts_disabled(arguments)
+}
+
 fn component(
     ports: &mut dyn Ports,
     name: &str,
@@ -228,6 +238,10 @@ pub fn build_with_ports(
             repository_root: repository.root.as_deref(),
             manager: &manager,
             environment: input.environment,
+            lifecycle_scripts_disabled: launch_disables_lifecycle_scripts(
+                &manager,
+                input.executable_args,
+            ),
         },
     ) {
         Ok(configuration) => configuration,

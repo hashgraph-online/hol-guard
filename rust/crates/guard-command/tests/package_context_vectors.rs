@@ -12,7 +12,9 @@
 //! every remote's, else the common Git directory) in place of the common Git
 //! directory plus every remote URL, with a relative local URL resolved against
 //! the directory holding the common Git directory, and `package.json` and
-//! `pyproject.toml` entries digest only their install sections. Each scenario
+//! `pyproject.toml` entries digest only their install sections. Third,
+//! `prepublishOnly` is no longer an install hook, since only `npm publish` runs
+//! it, so a manifest whose only lifecycle script it is stays portable. Each scenario
 //! materialises a file tree in a scratch directory, runs the Rust build over
 //! it with replay ports, and requires the same digest, components and
 //! non-portable reason, plus the same ordered log of native hook calls (digest

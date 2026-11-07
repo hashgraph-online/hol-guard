@@ -167,6 +167,7 @@ pub mod launch_identity_environment;
 #[cfg(windows)]
 mod launch_identity_windows;
 pub mod launch_screen;
+pub mod lifecycle_scripts_flag;
 pub mod local_tool_eligibility;
 pub mod mcp_arguments;
 pub mod mcp_config_risk;
