@@ -19,7 +19,9 @@ use serde_json::json;
 /// A request whose `metadata.flags` is what the parser records from the raw
 /// argv: `flag_tokens` over everything after the package manager.
 fn request_for(command: &str, evaluation_action: &str) -> PackageApprovalHashRequestV1 {
-    let tokens = guard_command::contained_execution::shlex_split(command).unwrap();
+    // Whitespace splitting, not a shell split: every command here is plain, and
+    // `contained_execution::shlex_split` is `#[cfg(unix)]`.
+    let tokens: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
     let flags = guard_command::package_intent_common::flag_tokens(&tokens[1..]);
     serde_json::from_value(json!({
         "schema": PACKAGE_AUTHORITY_REQUEST_SCHEMA,
