@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import urllib.error
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
@@ -509,8 +510,18 @@ def poll_command_queue_once(
             "failureMessage": "The local Guard command capability rejected this job.",
         }
     else:
-        with _review_connection_scope(store, item):
-            execution = _settle_authorized_job(store, context, item, authorized)
+        # A storage failure recorded inside the shared scope is raised when it
+        # closes, after the job ran and its grant was spent. It still reached
+        # recovery there; here it becomes the posted result so the lease closes.
+        try:
+            with _review_connection_scope(store, item):
+                execution = _settle_authorized_job(store, context, item, authorized)
+        except sqlite3.DatabaseError as error:
+            _LOGGER.warning("Guard command settle storage failure: error=%s", _redacted_error(error))
+            execution = {
+                "failureCode": "execution_error",
+                "failureMessage": _redacted_error(error),
+            }
     payload = _result_payload(item, execution)
     refused: urllib.error.HTTPError | None = None
     # Posting the result refreshes the job's heartbeat on the server, so a
