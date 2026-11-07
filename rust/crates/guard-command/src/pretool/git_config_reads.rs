@@ -120,6 +120,17 @@ fn could_expand_into_an_option(operand: &str) -> bool {
 /// answers the question the leading character could not: `[r]emote.*url` can
 /// only ever produce `r` and stays the pattern Guard parsed, while `[-]-file=*`
 /// and `[^a]-file=*` can each produce a dash and keep the path screen.
+///
+/// Two shapes are read as classes that could hold a dash rather than taken
+/// apart. A brace inside the class is expanded by the shell before the class
+/// is ever a class, so `[!{a,-}]-file=*` is two words by the time Git sees it
+/// and the members written here are not the members that run. And a range only
+/// holds the characters between its ends under ASCII ordering: a shell
+/// collating with `strcoll` under a UTF-8 locale follows the locale's order
+/// instead, which in glibc's table puts `-` inside spans such as `[_-z]`. A
+/// range whose ends do not sit in one ASCII alphanumeric span therefore leaves
+/// the answer unknown, and since negating the class turns that answer around,
+/// neither way is safe to assume and the class keeps the path screen.
 fn leading_class_can_match_a_dash(operand: &str) -> bool {
     let chars: Vec<char> = operand.chars().collect();
     let Some((end, readable)) = super::class_end(&chars, 0) else {
@@ -135,13 +146,32 @@ fn leading_class_can_match_a_dash(operand: &str) -> bool {
     }
     let negated = matches!(chars.get(1), Some('!' | '^'));
     let members = &chars[usize::from(negated) + 1..end];
+    if members.iter().any(|member| matches!(member, '{' | '}')) {
+        // The shell expands braces before it reads a class, so these members
+        // are not the ones that run.
+        return true;
+    }
     let mut listed = false;
     let mut index = 0;
     while index < members.len() {
         // A `-` with a member on each side spells a range; one that opens or
         // closes the class is a member of its own.
         if index + 2 < members.len() && members[index + 1] == '-' {
-            listed |= members[index] <= '-' && '-' <= members[index + 2];
+            let (low, high) = (members[index], members[index + 2]);
+            let ascii_span =
+                [('a', 'z'), ('A', 'Z'), ('0', '9')]
+                    .into_iter()
+                    .any(|(first, last)| {
+                        (first..=last).contains(&low) && (first..=last).contains(&high)
+                    });
+            if !ascii_span {
+                // Outside one ASCII alphanumeric span a locale's collation
+                // decides what the range holds. Whether `-` is inside it is
+                // unknown, and a negated class turns that answer around, so
+                // neither way is the safe one to assume.
+                return true;
+            }
+            listed |= low <= '-' && '-' <= high;
             index += 3;
             continue;
         }
