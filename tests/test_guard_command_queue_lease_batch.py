@@ -309,8 +309,14 @@ def test_a_watch_that_finds_jobs_passes_the_watch_on_while_it_settles(tmp_path: 
         on_exact_review_lease=None,
     ):
         watching = (current_command_queue_lane().wait_ms or 0) > 0
+        if leased_item is not None:
+            kind = str(leased_item["id"])
+        elif watching:
+            kind = "watch"
+        else:
+            kind = "lease"
         with lock:
-            polls.append(str(leased_item["id"]) if leased_item else "watch" if watching else "lease")
+            polls.append(kind)
             first_watch = watching and polls.count("watch") == 1
         if leased_item is not None:
             return {"state": "idle", "last_poll_was_empty": False}
