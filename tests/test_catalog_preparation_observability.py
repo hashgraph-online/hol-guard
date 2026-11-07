@@ -493,3 +493,65 @@ def test_an_engine_mismatch_reaches_the_daemon_log_as_info(prepared, tmp_path, m
     assert [(entry["event"], entry["level"]) for entry in catalog] == [("catalog_publication_engine_pending", "info")]
     # Closing the daemon releases the notice sink with the failure sink.
     assert background_diagnostics.record_background_notice("catalog_publication_engine_pending", "x") is False
+
+
+def restoring_into(monkeypatch, tmp_path, refusal: str) -> None:
+    """Run the real `restore` up to the native publication check, which refuses."""
+
+    authority = object.__new__(VerifiedDistribution)
+    object.__setattr__(authority, "data", publication("40151296356.1"))
+    monkeypatch.setattr(current_refresh, "_capture", lambda _store: ("floor", "cursor", "security"))
+    monkeypatch.setattr(current_refresh, "_cache", lambda _store, name: tmp_path / name)
+    monkeypatch.setattr(current_refresh, "_load", lambda _directory, _retained, now: authority)
+
+    def invoke(_store, _captured, **fields):
+        if "publication" in fields:
+            raise NativePackLifecycleUnavailableError(refusal)
+        return {"retained": {"root": "r", "source": "s"}}
+
+    monkeypatch.setattr(current_refresh, "_invoke", invoke)
+
+
+def test_a_cached_publication_for_another_engine_names_itself(monkeypatch, tmp_path) -> None:
+    restoring_into(monkeypatch, tmp_path, ENGINE_REFUSAL)
+    store = SimpleNamespace(_get_policy_integrity_secret_from_store=lambda _ref: None, _build_scoped_secret_ref=str)
+
+    with pytest.raises(current_refresh.PublicationEngineMismatchError) as raised:
+        current_refresh.restore(store)
+
+    assert raised.value.describe() == "publication=40151296356.1 source=5bd027561100 engine=136157264585"
+    assert isinstance(raised.value.__cause__, NativePackLifecycleUnavailableError)
+
+
+def test_any_other_refusal_during_restore_keeps_its_own_error(monkeypatch, tmp_path) -> None:
+    restoring_into(monkeypatch, tmp_path, "native_pack_lifecycle_unavailable: discovery_current_authority_expired")
+    store = SimpleNamespace(_get_policy_integrity_secret_from_store=lambda _ref: None, _build_scoped_secret_ref=str)
+
+    with pytest.raises(NativePackLifecycleUnavailableError, match="discovery_current_authority_expired"):
+        current_refresh.restore(store)
+
+
+def test_a_cached_publication_for_the_same_other_engine_is_noted_once(prepared, observed, monkeypatch) -> None:
+    """A core released before the compiler changed keeps a cached publication it cannot read.
+
+    Refresh and restore then both answer `discovery_current_engine_incompatible`,
+    which is the same expected version skew as an empty cache and must not be
+    logged as a failure pair on every five-minute timer tick.
+    """
+
+    def refresh(_store):
+        raise current_refresh.PublicationEngineMismatchError(publication("40151296356.1"))
+
+    def restore(_store):
+        raise current_refresh.PublicationEngineMismatchError(publication("40140000000.1"))
+
+    monkeypatch.setattr(current_refresh, "refresh", refresh)
+    monkeypatch.setattr(current_refresh, "restore", restore)
+
+    discovery._refresh(prepared, SimpleNamespace())
+    discovery._refresh(prepared, SimpleNamespace())
+
+    assert observed.errors == []
+    assert observed.notices == [
+        ("catalog_publication_engine_pending", "publication=40151296356.1 source=5bd027561100 engine=136157264585")
+    ]
