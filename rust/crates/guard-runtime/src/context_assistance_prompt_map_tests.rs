@@ -206,7 +206,10 @@ tests/test_many.py: 6 related tests"
 fn docs_rank_by_quoted_names_from_the_docs_folder() {
     let mut list = vec![
         ("src/core.py".to_owned(), CORE.to_owned()),
-        ("README.md".to_owned(), "# Choice\n\n``choice``\n".to_owned()),
+        (
+            "README.md".to_owned(),
+            "# Choice\n\n``choice``\n".to_owned(),
+        ),
         (
             "docs/options.rst".to_owned(),
             "Choice Options\n==============\n\nPick one with :class:`Choice`.\n".to_owned(),

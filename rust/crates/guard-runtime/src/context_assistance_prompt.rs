@@ -52,6 +52,10 @@ const MATCHED_HEADER: &str = "HOL Guard CIGAR matched these project files to thi
 best first. Open them for context:";
 const REPEATED_HEADER: &str = "HOL Guard CIGAR matched code it already added earlier in this \
 session. Open the files if those excerpts are no longer in view.";
+/// Every tool call re-sends the whole conversation, so the reads and edits a
+/// note makes possible cost least when they come in few calls.
+const BATCHING: &str = "Each tool call re-sends this whole conversation, so read every range \
+you need in one call and make all the edits you already know in one patch, across files.";
 
 /// A prompt's context and the excerpts it shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -88,7 +92,9 @@ pub(crate) fn harness_response(
         let _ = crate::hook_direct::claude_prompt_text::brand(&mut response, result);
     }
     if let Some(store) = store {
+        let before = context_len(&response);
         attach(&mut response, envelope, harness, store, started);
+        ask_for_batching(&mut response, before);
     }
     Some(response)
 }
@@ -540,6 +546,21 @@ fn add_context(response: &mut Value, context: &str) {
         _ => context.to_owned(),
     };
     output.insert("additionalContext".into(), Value::String(combined));
+}
+
+/// Ends a note Guard added to this prompt with the request to batch reads
+/// and edits; a prompt Guard added nothing to gets nothing.
+fn ask_for_batching(response: &mut Value, before: usize) {
+    if context_len(response) > before {
+        add_context(response, BATCHING);
+    }
+}
+
+fn context_len(response: &Value) -> usize {
+    response
+        .pointer("/hookSpecificOutput/additionalContext")
+        .and_then(Value::as_str)
+        .map_or(0, str::len)
 }
 
 #[cfg(test)]
