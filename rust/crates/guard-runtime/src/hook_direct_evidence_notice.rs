@@ -1,12 +1,17 @@
-//! The desktop notice for a connector-setup review the resident queued.
+//! The desktop notices for reviews the resident queued.
 //!
-//! The resident's answer names the stored row and the CLI, and the drain
-//! raises the notice from the stored row as `notify_connector_setup` does:
-//! only while desktop notifications are on, once per connector (the store
-//! answers a request with its first notified sibling's marker), with the
-//! approval link signed in, and marked on the row once it is shown. The
-//! notice is best effort, as the daemon's is: the row is in the Inbox either
-//! way, so a notice that cannot be shown is not retried.
+//! A connector-setup review's answer names the stored row and the CLI, and the
+//! drain raises the notice from the stored row as `notify_connector_setup`
+//! does. An MCP call the relay blocks on an approval request it wrote raises
+//! that request's notice as soon as the request is written, from the persisted
+//! fields `_QueuedNotice` reads, as `_notify_pending_approval` does.
+//!
+//! Either way a notice is shown only while desktop notifications are on, once
+//! per request (once per connector: the store answers a request with its first
+//! notified sibling's marker), with the approval link signed in, and is marked
+//! on the row once it is shown. A notice is best effort, as the daemon's is:
+//! the row is in the Inbox either way, so a notice that cannot be shown is not
+//! retried.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -43,43 +48,124 @@ pub(super) fn pending(record: &Value) -> Option<(String, String)> {
     Some((request_id, connector_name))
 }
 
-/// Raise a page's notices one after another on a thread of their own, so
-/// the drain never waits on the notifier.
-pub(super) fn raise(guard_home: &str, source: &str, notices: Vec<(String, String)>) {
+/// One notice the drain raises.
+pub(super) enum Notice {
+    /// A connector-setup review, read from its stored row.
+    Connector {
+        request_id: String,
+        connector_name: String,
+    },
+    /// A request an MCP call was blocked on, as its record names it.
+    Approval(Shown),
+}
+
+/// `_QueuedNotice`: the persisted request fields a notice reads.
+#[derive(Debug, PartialEq)]
+pub(super) struct Shown {
+    request_id: String,
+    harness: String,
+    workspace: Option<String>,
+    approval_url: String,
+    /// `risk_headline or trigger_summary or artifact_name`.
+    subject: String,
+    connector: bool,
+}
+
+/// Raise the notice of the request an MCP call was just blocked on, from the
+/// persisted fields `_QueuedNotice` reads. A notice the daemon could not read
+/// is left to the daemon, and says so by returning `false`.
+pub(crate) fn raise_approval(guard_home: &str, source: &str, notice: &Value) -> bool {
+    let Some(shown) = approval_notice(notice) else {
+        return false;
+    };
+    raise(guard_home, source, vec![Notice::Approval(shown)]);
+    true
+}
+
+fn approval_notice(notice: &Value) -> Option<Shown> {
+    let field = |key: &str| text(notice.get(key));
+    let workspace = match notice.get("workspace") {
+        Some(Value::String(workspace)) => Some(workspace.clone()),
+        Some(Value::Null) => None,
+        _ => return None,
+    };
+    let subject = field("risk_headline")
+        .or_else(|| field("trigger_summary"))
+        .or_else(|| field("artifact_name"))
+        .unwrap_or_default();
+    Some(Shown {
+        request_id: field("request_id")?,
+        harness: field("harness")?,
+        workspace,
+        approval_url: field("approval_url")?,
+        subject,
+        connector: false,
+    })
+}
+
+/// Raise notices one after another on a thread of their own, so neither the
+/// drain nor a blocked call waits on the notifier.
+pub(super) fn raise(guard_home: &str, source: &str, notices: Vec<Notice>) {
     if notices.is_empty() {
         return;
     }
     let (guard_home, source) = (guard_home.to_owned(), source.to_owned());
     let _ = std::thread::Builder::new()
-        .name("hol-guard-connector-notice".to_owned())
+        .name("hol-guard-approval-notice".to_owned())
         .spawn(move || {
-            for (request_id, connector_name) in notices {
-                notify(&guard_home, &source, &request_id, &connector_name);
+            for notice in notices {
+                notify(&guard_home, &source, notice);
             }
         });
 }
 
-fn notify(guard_home: &str, source: &str, request_id: &str, connector_name: &str) {
+fn notify(guard_home: &str, source: &str, notice: Notice) {
     if disabled_by_env() {
         return;
     }
-    let Some(queued) = store(guard_home, source, "get_approval_request", request_id, None)
-        .filter(Value::is_object)
-    else {
-        return;
+    let shown = match notice {
+        Notice::Connector {
+            request_id,
+            connector_name,
+        } => match connector_row(guard_home, source, &request_id, connector_name) {
+            Some(shown) => shown,
+            None => return,
+        },
+        Notice::Approval(shown) => shown,
     };
+    show(guard_home, source, shown);
+}
+
+/// The connector-setup notice of the stored row `request_id`.
+fn connector_row(
+    guard_home: &str,
+    source: &str,
+    request_id: &str,
+    connector_name: String,
+) -> Option<Shown> {
+    let queued = store(guard_home, source, "get_approval_request", request_id, None)
+        .filter(Value::is_object)?;
     let field = |key: &str| text(queued.get(key));
-    let (Some(request_id), Some(harness), Some(approval_url), Some(group)) = (
-        field("request_id"),
-        field("harness"),
-        field("approval_url"),
-        field("queue_group_id"),
-    ) else {
-        return;
-    };
-    let connector = group.starts_with("connector:");
+    Some(Shown {
+        request_id: field("request_id")?,
+        harness: field("harness")?,
+        workspace: field("workspace"),
+        approval_url: field("approval_url")?,
+        connector: field("queue_group_id")?.starts_with("connector:"),
+        subject: connector_name,
+    })
+}
+
+fn show(guard_home: &str, source: &str, shown: Shown) {
+    let Shown {
+        request_id,
+        harness,
+        workspace,
+        approval_url,
+        subject,
+        connector,
+    } = shown;
     let home = Path::new(guard_home);
-    let workspace = field("workspace");
     // A configuration that cannot be read leaves notifications on, as the
     // daemon's `load_guard_config` failure does.
     if crate::guard_config_load::desktop_notifications(home, workspace.as_deref().map(Path::new))
@@ -112,7 +198,7 @@ fn notify(guard_home: &str, source: &str, request_id: &str, connector_name: &str
         })
         .unwrap_or(approval_url);
     let title = if connector { TITLE } else { APPROVAL_TITLE };
-    let message = message(&harness, connector_name, connector);
+    let message = message(&harness, &subject, connector);
     let shown =
         crate::desktop_notification::send_approval(&request_id, title, &message, &approval_url);
     settle(&request_id, shown);
@@ -147,13 +233,13 @@ fn settle(request_id: &str, shown: bool) {
     }
 }
 
-/// `_approval_notification_message`, whose subject is the CLI's name.
-pub(super) fn message(harness: &str, connector_name: &str, connector: bool) -> String {
+/// `_approval_notification_message`; a connector's subject is the CLI's name.
+pub(super) fn message(harness: &str, subject: &str, connector: bool) -> String {
     let harness = title_case(&harness.replace('-', " "));
     let message = if connector {
-        format!("{harness} is waiting on a connector Guard has not set up yet: {connector_name}")
+        format!("{harness} is waiting on a connector Guard has not set up yet: {subject}")
     } else {
-        format!("{harness} wants approval: {connector_name}")
+        format!("{harness} wants approval: {subject}")
     };
     if message.chars().count() <= MAX_MESSAGE_CHARS {
         return message;

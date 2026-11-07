@@ -12,7 +12,8 @@
 //!
 //! Everything else is still drained to the daemon: a remembered allow writes
 //! the daemon's policy, a safe-alternative block adds an inbox row and an ask
-//! block raises the desktop notice and the approval center.
+//! block opens the approval center. The resident raises an ask block's
+//! desktop notice itself as soon as it writes the request.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an

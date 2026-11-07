@@ -480,7 +480,7 @@ fn checked_receipt(mut record: Value) -> Value {
 }
 
 #[path = "hook_direct_evidence_notice.rs"]
-mod notice;
+pub(crate) mod notice;
 #[path = "hook_direct_evidence_record.rs"]
 mod record;
 #[cfg(test)]

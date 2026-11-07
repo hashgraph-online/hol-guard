@@ -1,6 +1,6 @@
-use serde_json::json;
+use serde_json::{json, Value};
 
-use super::{message, pending};
+use super::{approval_notice, message, pending, Shown};
 
 #[test]
 fn a_connector_notice_reads_as_the_daemon_writes_it() {
@@ -37,5 +37,56 @@ fn a_record_names_its_notice_until_the_drain_raises_it() {
         json!({"connector_setup_notice": {"request_id": "req-1"}}),
     ] {
         assert_eq!(pending(&unnamed), None);
+    }
+}
+
+fn notice(fields: Value) -> Value {
+    let mut notice = json!({
+        "request_id": "req-1",
+        "harness": "codex",
+        "workspace": "/work",
+        "approval_url": "http://127.0.0.1:1/approvals/req-1",
+        "artifact_name": "example-server",
+        "risk_headline": null,
+        "trigger_summary": null,
+    });
+    for (key, value) in fields.as_object().into_iter().flatten() {
+        notice[key] = value.clone();
+    }
+    notice
+}
+
+fn subject(notice: &Value) -> Option<String> {
+    approval_notice(notice).map(|shown| shown.subject)
+}
+
+#[test]
+fn an_asked_call_names_its_notice_as_the_daemon_reads_it() {
+    assert_eq!(
+        approval_notice(&notice(json!({}))),
+        Some(Shown {
+            request_id: "req-1".to_owned(),
+            harness: "codex".to_owned(),
+            workspace: Some("/work".to_owned()),
+            approval_url: "http://127.0.0.1:1/approvals/req-1".to_owned(),
+            subject: "example-server".to_owned(),
+            connector: false,
+        })
+    );
+    let headline = notice(json!({"risk_headline": "Deletes files", "trigger_summary": "rm"}));
+    let summary = notice(json!({"risk_headline": "", "trigger_summary": "rm", "workspace": null}));
+    assert_eq!(subject(&headline).as_deref(), Some("Deletes files"));
+    assert_eq!(subject(&summary).as_deref(), Some("rm"));
+}
+
+#[test]
+fn a_notice_the_daemon_could_not_read_is_left() {
+    for unreadable in [
+        notice(json!({"request_id": ""})),
+        notice(json!({"approval_url": null})),
+        notice(json!({"workspace": 1})),
+        json!("req-1"),
+    ] {
+        assert_eq!(approval_notice(&unreadable), None);
     }
 }

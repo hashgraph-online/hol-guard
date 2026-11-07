@@ -157,8 +157,11 @@ pub(super) fn leftovers(
     let mut notices = Vec::new();
     let mut noticed = Vec::new();
     for paged in paged.iter() {
-        if let Some(notice) = super::notice::pending(&paged.record) {
-            notices.push(notice);
+        if let Some((request_id, connector_name)) = super::notice::pending(&paged.record) {
+            notices.push(super::notice::Notice::Connector {
+                request_id,
+                connector_name,
+            });
             noticed.push((paged.seq, vec![super::notice::NOTICE_RAISED]));
         }
     }
