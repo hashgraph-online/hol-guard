@@ -85,6 +85,15 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniShieldCheck,
   },
   {
+    href: "/swarm",
+    label: "Swarm",
+    shortLabel: "Swarm",
+    description: "Launch, follow, and direct local agents across projects",
+    view: "swarm",
+    group: "primary",
+    icon: HiMiniSquares2X2,
+  },
+  {
     href: "/cigar",
     label: "Context",
     shortLabel: "Context",

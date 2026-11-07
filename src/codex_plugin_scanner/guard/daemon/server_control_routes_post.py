@@ -31,6 +31,7 @@ from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
 from .plugin_updates_http import handle_plugin_updates_dismiss
 from .server_common import _now
+from .swarm_http import respond as respond_swarm
 from .workspace_assessment_api import handle_workspace_assessment_post
 
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
@@ -72,6 +73,14 @@ class _ControlPostRoutes:
     """Control-plane route dispatch for the daemon handler."""
 
     def _dispatch_control_post(self, parsed: Any, path_parts: list[str], payload: dict[str, Any], route: Any) -> None:
+        if parsed.path in {"/v1/swarm/launch", "/v1/swarm/action", "/v1/swarm/events"}:
+            action = {
+                "/v1/swarm/launch": "launch",
+                "/v1/swarm/action": "direct",
+                "/v1/swarm/events": "events",
+            }[parsed.path]
+            respond_swarm(self, action, payload)
+            return
         if parsed.path in CONTEXT_ASSISTANCE_WRITE_PATHS:
             respond_context_assistance(self, CONTEXT_ASSISTANCE_WRITE_PATHS[parsed.path], payload)
             return

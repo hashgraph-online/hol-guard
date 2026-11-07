@@ -277,6 +277,7 @@ mod context_assistance_execution;
 mod context_assistance_history;
 mod context_assistance_notifications;
 mod context_assistance_op;
+mod swarm_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
 mod context_assistance_prompt_ignore;

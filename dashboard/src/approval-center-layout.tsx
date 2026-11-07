@@ -78,6 +78,7 @@ type LayoutProps = {
   codexResume: GuardCodexResumeResult | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   homeContent: ReactNode;
+  swarmContent?: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
   extensionsContent: ReactNode;
@@ -200,6 +201,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
 }
 
 function renderViewContent(props: LayoutProps): ReactNode {
+  if (props.view === "swarm") return props.swarmContent ?? null;
   if (props.view === "home") {
     return props.homeContent;
   }

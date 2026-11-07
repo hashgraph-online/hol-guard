@@ -22,7 +22,7 @@ function source(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-assert(SHELL_NAV_ITEMS.length === 11, "The shell exposes every top-level Guard destination");
+assert(SHELL_NAV_ITEMS.length === 12, "The shell exposes every top-level Guard destination");
 assert(
   new Set(SHELL_NAV_ITEMS.map((item) => item.href)).size === SHELL_NAV_ITEMS.length,
   "Top-level navigation destinations are unique",
@@ -33,8 +33,8 @@ assert(
 );
 assert(
   SHELL_NAV_ITEMS.map((item) => item.view).join(",") ===
-    "home,inbox,fleet,cigar,extensions,policy,supply-chain,settings,evidence,releases,about",
-  "CIGAR is a primary destination beside Protect, with Extensions and existing management surfaces retained",
+    "home,inbox,fleet,swarm,cigar,extensions,policy,supply-chain,settings,evidence,releases,about",
+  "Swarm and Context are primary destinations beside Protect, with existing management surfaces retained",
 );
 assert(
   navigationItemForView("cigar").label === "Context" &&

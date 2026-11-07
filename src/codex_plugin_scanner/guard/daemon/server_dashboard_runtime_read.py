@@ -25,6 +25,7 @@ from .local_cli_http import handle_local_cli_list
 from .plugin_updates_http import handle_plugin_updates_read
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
+from .swarm_http import respond as respond_swarm
 from .workspace_assessment_api import handle_workspace_assessment_get
 
 m = _ServerProxy()
@@ -33,6 +34,9 @@ m = _ServerProxy()
 class _DashboardRuntimeReadRoutes:
     def _serve_dashboard_runtime_read(self, parsed: ParseResult, path_parts: list[str], store: GuardStore) -> bool:
         """Serve a dashboard read route; return True when the route was handled."""
+        if parsed.path == "/v1/swarm":
+            respond_swarm(self)
+            return True
         if parsed.path in CONTEXT_ASSISTANCE_READ_PATHS:
             respond_context_assistance(self, CONTEXT_ASSISTANCE_READ_PATHS[parsed.path])
             return True
