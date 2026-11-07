@@ -443,7 +443,6 @@ fn a_quiet_spelling_keeps_the_whole_package_approval_key() {
     assert_ne!(unbound, loud);
 }
 
-
 // ---------------------------------------------------------------------------
 // The `package_script` risk setting and a frozen script-free install.
 //
