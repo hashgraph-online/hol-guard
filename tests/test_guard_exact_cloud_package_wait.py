@@ -301,3 +301,87 @@ def test_the_install_that_waited_runs_once_and_a_later_retry_is_reviewed_again(
     assert again_rc == 2
     assert again["executed"] is False
     assert launches.read_text(encoding="utf-8").splitlines() == ["launch"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="launches a POSIX shell stub as npm")
+def test_a_sibling_allow_landing_before_the_spend_does_not_deny_the_waited_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A reviewer approves several requests at once. Every allow stored moves
+    # the shared approval authority revision, so a sibling's allow can land
+    # between this install reading its Cloud allow and spending it.
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "evaluate_package_request_artifact",
+        lambda **_kwargs: _review_package_evaluation(),
+    )
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = connected_exact_review_store(tmp_path)
+    config = _package_policy_config(guard_home=store.guard_home, workspace_dir=workspace)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    launches = tmp_path / "npm-launches.txt"
+    npm = fake_bin / "npm"
+    npm.write_text(f"#!/bin/sh\nprintf 'launch\\n' >> '{launches}'\n", encoding="utf-8")
+    npm.chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake_bin))
+
+    def check(now: str, waited: tuple[str, ...] = (), *, dry_run: bool) -> tuple[dict[str, object], int]:
+        result = build_package_protect_payload(
+            command=["npm", "install", "guard-proof"],
+            store=store,
+            workspace_dir=workspace,
+            dry_run=dry_run,
+            now=now,
+            config=config,
+            unsafe_raw_output=False,
+            timeout_seconds=30,
+            waited_request_ids=waited,
+        )
+        assert result is not None
+        return result
+
+    baseline, _ = check("2026-07-17T00:00:00Z", dry_run=True)
+    receipt = baseline["receipt"]
+    assert isinstance(receipt, dict)
+    enable_exact_cloud_review(store)
+    store.add_approval_request(
+        _package_request(
+            "pkg-bulk-own",
+            workspace,
+            artifact_id=str(receipt["artifact_id"]),
+            artifact_hash=str(receipt["artifact_hash"]),
+        ),
+        datetime.now(timezone.utc).isoformat(),
+    )
+    store.add_approval_request(
+        _package_request("pkg-bulk-sibling", workspace, artifact_hash="hash-sibling-install"),
+        datetime.now(timezone.utc).isoformat(),
+    )
+    apply_exact_cloud_review(store, remote_approval=remote_approval(store, "pkg-bulk-own", receipt_id="receipt-own"))
+
+    consume = store.consume_waited_exact_cloud_package_allow
+    sibling_landed: list[str] = []
+
+    def sibling_lands_then_consume(decision: dict[str, object], *, now: str) -> bool:
+        if not sibling_landed:
+            sibling_landed.append("pkg-bulk-sibling")
+            apply_exact_cloud_review(
+                store, remote_approval=remote_approval(store, "pkg-bulk-sibling", receipt_id="receipt-sibling")
+            )
+        return consume(decision, now=now)
+
+    monkeypatch.setattr(store, "consume_waited_exact_cloud_package_allow", sibling_lands_then_consume)
+
+    ran, ran_rc = check("2026-07-17T00:01:00Z", ("pkg-bulk-own",), dry_run=False)
+
+    assert sibling_landed == ["pkg-bulk-sibling"]
+    assert ran_rc == 0
+    assert ran["executed"] is True
+    assert launches.read_text(encoding="utf-8").splitlines() == ["launch"]
+    # The allow was spent exactly once.
+    again, again_rc = check("2026-07-17T00:02:00Z", ("pkg-bulk-own",), dry_run=False)
+    assert again_rc == 2
+    assert again["executed"] is False
+    assert launches.read_text(encoding="utf-8").splitlines() == ["launch"]

@@ -36,6 +36,10 @@ struct SavedApprovalStore {
     lookup_calls: RefCell<u32>,
     /// When set, lookups after this 1-based call return a store error.
     fail_lookup_after: Option<u32>,
+    /// When set, lookups after the first return this row instead.
+    later_decision: Option<Value>,
+    /// How many claims refuse before the store answers `claim_succeeds`.
+    refused_claims: RefCell<u32>,
 }
 
 impl SupplyChainStore for SavedApprovalStore {
@@ -105,8 +109,12 @@ impl SupplyChainStore for SavedApprovalStore {
                 ..PolicyDecisionLookup::default()
             };
         }
+        let decision = match &self.later_decision {
+            Some(later) if call > 1 => Some(later.clone()),
+            _ => self.decision.clone(),
+        };
         PolicyDecisionLookup {
-            decision: self.decision.clone(),
+            decision,
             ignored_local_integrity: None,
             error: None,
         }
@@ -129,6 +137,11 @@ impl SupplyChainStore for SavedApprovalStore {
         self.claimed
             .borrow_mut()
             .push((decision.clone(), now.to_string()));
+        let mut refused = self.refused_claims.borrow_mut();
+        if *refused > 0 {
+            *refused -= 1;
+            return false;
+        }
         self.claim_succeeds
     }
     fn claim_local_once_approval(
@@ -313,6 +326,8 @@ fn resolve_recording(
         events: RefCell::new(Vec::new()),
         lookup_calls: RefCell::new(0),
         fail_lookup_after: None,
+        later_decision: None,
+        refused_claims: RefCell::new(0),
     };
     let seams = Seams;
     let resolved = apply_stored_package_policy_override(
@@ -384,6 +399,95 @@ fn a_refused_claim_leaves_the_review_verdict_standing() {
     assert_eq!(unchanged.value.get("saved_approval_decision_id"), None);
 }
 
+/// Resolves against a store whose first claim refuses and whose later lookups
+/// offer `later`, returning the evaluation and the rows it tried to claim.
+fn resolve_after_a_sibling_approval(
+    first: Value,
+    later: Option<Value>,
+) -> (PackageRequestEvaluation, Vec<Value>) {
+    let store = SavedApprovalStore {
+        home: PathBuf::from("/tmp/guard-home"),
+        decision: Some(first),
+        claim_succeeds: true,
+        claimed: RefCell::new(Vec::new()),
+        looked_up: RefCell::new(Vec::new()),
+        lookup_error: None,
+        events: RefCell::new(Vec::new()),
+        lookup_calls: RefCell::new(0),
+        fail_lookup_after: None,
+        later_decision: later,
+        refused_claims: RefCell::new(1),
+    };
+    let seams = Seams;
+    let resolved = apply_stored_package_policy_override(
+        &evaluation(),
+        &store,
+        &artifact(),
+        ARTIFACT_HASH,
+        Path::new("/tmp/proj"),
+        NOW,
+        None,
+        None,
+        true,
+        &seams,
+        &seams,
+        &seams,
+        &seams,
+    )
+    .evaluation;
+    let claimed = store
+        .claimed
+        .borrow()
+        .iter()
+        .map(|(row, _)| row.clone())
+        .collect();
+    (resolved, claimed)
+}
+
+fn saved_row(decision_id: i64, revision: i64) -> Value {
+    json!({
+        "decision_id": decision_id,
+        "action": "allow",
+        "artifact_hash": ARTIFACT_HASH,
+        "_approval_authority_revision": revision,
+    })
+}
+
+#[test]
+fn a_claim_refused_for_a_moved_revision_reads_the_saved_allow_again() {
+    // A sibling approval moved the authority revision between this request
+    // reading its saved allow and claiming it.
+    let (resolved, claims) =
+        resolve_after_a_sibling_approval(saved_row(7, 4), Some(saved_row(7, 5)));
+    assert_eq!(claims, vec![saved_row(7, 4), saved_row(7, 5)]);
+    assert_eq!(resolved.policy_action().as_deref(), Some("allow"));
+    assert_eq!(resolved.value["saved_approval_decision_id"], json!(7));
+}
+
+#[test]
+fn a_claim_refused_at_an_unmoved_revision_is_not_tried_again() {
+    let (resolved, claims) = resolve_after_a_sibling_approval(saved_row(7, 4), None);
+    assert_eq!(claims, vec![saved_row(7, 4)]);
+    assert_eq!(resolved.policy_action().as_deref(), Some("review"));
+}
+
+#[test]
+fn a_different_row_at_the_new_revision_is_not_claimed_in_its_place() {
+    let (resolved, claims) =
+        resolve_after_a_sibling_approval(saved_row(7, 4), Some(saved_row(8, 5)));
+    assert_eq!(claims, vec![saved_row(7, 4)]);
+    assert_eq!(resolved.policy_action().as_deref(), Some("review"));
+}
+
+#[test]
+fn a_block_read_after_a_refused_claim_keeps_the_review() {
+    let mut block = saved_row(7, 5);
+    block["action"] = json!("block");
+    let (resolved, claims) = resolve_after_a_sibling_approval(saved_row(7, 4), Some(block));
+    assert_eq!(claims, vec![saved_row(7, 4)]);
+    assert_eq!(resolved.policy_action().as_deref(), Some("review"));
+}
+
 #[test]
 fn a_saved_row_for_another_content_hash_leaves_the_evaluation_alone() {
     let (unchanged, claims) = resolve_with_claim(
@@ -423,6 +527,8 @@ fn a_failed_lookup_keeps_the_review_and_records_its_code() {
         events: RefCell::new(Vec::new()),
         lookup_calls: RefCell::new(0),
         fail_lookup_after: None,
+        later_decision: None,
+        refused_claims: RefCell::new(0),
     };
     let seams = Seams;
     let applied = apply_stored_package_policy_override(
@@ -581,6 +687,8 @@ fn a_failed_refresh_after_a_consumed_claim_keeps_the_review() {
         events: RefCell::new(Vec::new()),
         lookup_calls: RefCell::new(0),
         fail_lookup_after: Some(1),
+        later_decision: None,
+        refused_claims: RefCell::new(0),
     };
     let initial = PackageProtectAuthority {
         intent: install_intent(),
