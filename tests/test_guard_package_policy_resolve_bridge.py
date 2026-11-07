@@ -173,9 +173,10 @@ def test_a_claim_refused_for_a_moved_revision_reads_the_allow_again(monkeypatch:
 
 
 def test_every_sibling_in_a_full_bulk_approval_landing_first_still_allows(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Guard settles a full lease batch of Cloud Review jobs at once, and each
-    # sibling allow can move the authority revision once before this claim.
-    siblings = command_queue_drain.REVIEW_LEASE_BATCH_SIZE - 1
+    # Guard settles a full lease batch of Cloud Review jobs at once. Each
+    # sibling moves the authority revision twice before this claim: once when
+    # its allow is stored and once when its own install claims it.
+    moves = 2 * (command_queue_drain.REVIEW_LEASE_BATCH_SIZE - 1)
 
     def transport(request: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
         if request.get("claim_succeeded") is False:
@@ -186,15 +187,15 @@ def test_every_sibling_in_a_full_bulk_approval_landing_first_still_allows(monkey
     monkeypatch.setattr(bridge, "apply_package_evaluation_patch", lambda evaluation, _patch: evaluation)
     saved: dict[str, object] = {"action": "allow", "decision_id": 7}
     store = _MovingStore(
-        [{**saved, "_approval_authority_revision": revision} for revision in range(1, siblings + 2)],
-        [False] * siblings + [True],
+        [{**saved, "_approval_authority_revision": revision} for revision in range(1, moves + 2)],
+        [False] * moves + [True],
     )
 
     _evaluation, disposition, reused = _call(store)
 
-    assert store.claims == [str(revision) for revision in range(1, siblings + 2)]
+    assert store.claims == [str(revision) for revision in range(1, moves + 2)]
     assert disposition == "retained"
-    assert reused == {**saved, "_approval_authority_revision": siblings + 1}
+    assert reused == {**saved, "_approval_authority_revision": moves + 1}
 
 
 def test_a_claim_refused_at_an_unmoved_revision_is_not_tried_again(monkeypatch: pytest.MonkeyPatch) -> None:
