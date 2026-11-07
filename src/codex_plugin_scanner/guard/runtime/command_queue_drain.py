@@ -89,10 +89,18 @@ def drain_review_jobs(
 
 
 def review_drain_has_pending_result(store: GuardStore) -> bool:
-    """Whether any drain lane holds a result it has not sent yet."""
+    """Whether any drain lane holds a result it has not sent yet.
+
+    A lane whose state cannot be read is skipped, so it never stops the main
+    worker's poll or hides another lane's unsent result.
+    """
 
     for slot in range(REVIEW_DRAIN_WORKERS):
-        payload = store.get_sync_payload(review_drain_lane(slot).state_key)
+        try:
+            payload = store.get_sync_payload(review_drain_lane(slot).state_key)
+        except Exception as error:
+            _LOGGER.warning("Guard Review drain state unreadable: slot=%s error=%s", slot, type(error).__name__)
+            continue
         if isinstance(payload, dict) and isinstance(payload.get("pending_result"), dict):
             return True
     return False
