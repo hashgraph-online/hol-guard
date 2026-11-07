@@ -201,6 +201,7 @@ from .server_control_health import _ControlHealthRoutes
 from .server_control_misc import _ControlMiscRoutes
 from .server_control_operations import _ControlOperationRoutes
 from .server_control_policy import _ControlPolicyRoutes
+from .server_control_pulse import _ControlPulseRoutes
 from .server_control_repair import _RepairSettingsRoutes
 from .server_control_routes_post import _ControlPostRoutes
 from .server_control_supply_chain import _SupplyChainRoutes
@@ -1388,6 +1389,7 @@ class _GuardDaemonHandler(
     _RepairSettingsRoutes,
     _ControlPolicyRoutes,
     _ControlSyncRoutes,
+    _ControlPulseRoutes,
     _ControlOperationRoutes,
     _ControlHealthRoutes,
     BaseHTTPRequestHandler,

@@ -1,6 +1,9 @@
 //! Turning Pulse off.
 //!
-//! - `disable_pulse` needs a fresh, strict Pulse grant for `settings_write`.
+//! - `disable_pulse` needs a fresh, strict Pulse grant for `settings_write`
+//!   that names this exact operation (`PULSE_DISABLE_ACTION`,
+//!   `PULSE_DISABLE_SUBJECT`), so an approval for another settings change
+//!   cannot turn Pulse off.
 //! - `recover_pulse` is for a user who lost access to the YID app. It needs
 //!   the approval password and the one-time recovery code shown at
 //!   enrollment. Neither is ever readable by an agent: the password is a
@@ -75,7 +78,13 @@ fn turn_pulse_off(
     Ok(public_config_locked(guard_home, now).to_dict())
 }
 
-/// `disable_pulse`. Needs a fresh, strict Pulse grant for `settings_write`.
+/// The action a grant must name to turn Pulse off.
+pub(crate) const PULSE_DISABLE_ACTION: &str = "pulse_disable";
+/// The subject a grant must name to turn Pulse off.
+pub(crate) const PULSE_DISABLE_SUBJECT: &str = "approval-gate:pulse";
+
+/// `disable_pulse`. Needs a fresh, strict Pulse grant for `settings_write`
+/// bound to turning Pulse off.
 pub(crate) fn disable_pulse(
     guard_home: &Path,
     grants: &ApprovalGateGrants,
@@ -99,9 +108,9 @@ pub(crate) fn disable_pulse(
         epoch(Some(grant.expires_at.as_str())),
         Some("settings_write"),
         true,
+        Some(PULSE_DISABLE_ACTION),
         None,
-        None,
-        None,
+        Some(PULSE_DISABLE_SUBJECT),
         None,
         factor_generation(&state),
         false,

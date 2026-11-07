@@ -31,6 +31,7 @@ from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
 from .plugin_updates_http import handle_plugin_updates_dismiss
 from .server_common import _now
+from .server_control_pulse import PULSE_ROUTE_PATHS
 from .workspace_assessment_api import handle_workspace_assessment_post
 
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
@@ -205,6 +206,9 @@ class _ControlPostRoutes:
             return
         if parsed.path == "/v1/approval-gate/totp/disable":
             self._handle_approval_gate_totp_disable(payload)
+            return
+        if parsed.path in PULSE_ROUTE_PATHS:
+            self._handle_approval_gate_pulse_route(parsed.path.rsplit("/", 1)[-1], payload)
             return
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]

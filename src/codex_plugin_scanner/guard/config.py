@@ -417,7 +417,11 @@ def update_guard_update_channel(
 ) -> GuardConfig:
     """Persist the local release channel selected from the update surface."""
 
-    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
+    require_settings_write(
+        guard_home,
+        approval_gate_grant=approval_gate_grant,
+        settings_change={"kind": "update_channel", "update_channel": update_channel},
+    )
     _write_guard_config_change(guard_home, "channel", update_channel)
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)
@@ -431,7 +435,11 @@ def reset_guard_settings(
 ) -> GuardConfig:
     """Reset editable local Guard settings while preserving non-dashboard config."""
 
-    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
+    require_settings_write(
+        guard_home,
+        approval_gate_grant=approval_gate_grant,
+        settings_change={"kind": "reset"},
+    )
     _write_guard_config_change(guard_home, "reset", None)
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)

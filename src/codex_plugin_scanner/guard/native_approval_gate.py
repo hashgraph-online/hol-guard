@@ -104,6 +104,9 @@ _CONFIG_METHODS = frozenset(
         "unlock_cooldown",
         "confirm_totp_enrollment",
         "disable_totp",
+        "confirm_pulse_enrollment",
+        "disable_pulse",
+        "recover_pulse",
     }
 )
 _GRANT_METHODS = frozenset(
@@ -191,6 +194,12 @@ def _input_to_wire(gate_input: ApprovalGateInput | None) -> dict[str, object] | 
         wire["use_cooldown"] = bool(gate_input.use_cooldown)
     wire["revoke_cooldown"] = bool(gate_input.revoke_cooldown)
     wire["require_fresh_totp"] = bool(gate_input.require_fresh_totp)
+    if gate_input.pulse_request_id is not None:
+        wire["pulse_request_id"] = gate_input.pulse_request_id
+    if gate_input.pulse_agent_key is not None:
+        wire["pulse_agent_key"] = gate_input.pulse_agent_key
+    if gate_input.pulse_recovery_code is not None:
+        wire["pulse_recovery_code"] = gate_input.pulse_recovery_code
     return wire
 
 

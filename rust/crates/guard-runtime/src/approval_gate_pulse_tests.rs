@@ -15,6 +15,11 @@ const NOW: &str = "2026-10-02T00:00:00+00:00";
 const LATER: &str = "2026-10-02T00:00:30+00:00";
 const PASSWORD: &str = "correct horse battery";
 
+/// The binding the daemon and CLI send to turn Pulse off.
+fn disable_binding() -> Value {
+    json!({"settings_change": {"kind": "pulse_disable"}})
+}
+
 struct Gate {
     home: PathBuf,
     fake: Rc<FakePulse>,
@@ -672,7 +677,7 @@ fn disabling_pulse_needs_a_fresh_pulse_approval() {
     let id = g.send(
         "pulse_request",
         NOW,
-        json!({"purpose": "settings_write", "strict": true}),
+        json!({"purpose": "settings_write", "strict": true, "params": disable_binding()}),
     )["payload"]["request_id"]
         .as_str()
         .unwrap()
@@ -681,7 +686,7 @@ fn disabling_pulse_needs_a_fresh_pulse_approval() {
     let verified = g.send(
         "verify",
         LATER,
-        json!({"purpose": "settings_write", "strict": true,
+        json!({"purpose": "settings_write", "strict": true, "params": disable_binding(),
                "approval_gate_input": {"pulse_request_id": id}}),
     );
     assert_eq!(verified["status"], "ok", "{verified}");
@@ -907,3 +912,6 @@ fn a_zero_pulse_cooldown_without_pulse_changes_nothing() {
 
 #[path = "approval_gate_pulse_review_tests.rs"]
 mod review;
+
+#[path = "approval_gate_pulse_binding_tests.rs"]
+mod binding;

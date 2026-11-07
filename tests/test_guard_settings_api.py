@@ -566,3 +566,136 @@ def test_policy_api_rejects_global_allow_without_target(tmp_path: Path) -> None:
     assert status == 400
     assert payload["saved"] is False
     assert payload["error"] == "broad_allow_requires_narrow_scope"
+
+
+def test_an_overflowing_pulse_cooldown_is_an_invalid_request(tmp_path: Path) -> None:
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}/v1/approval-gate/pulse/confirm",
+        # 1e309 parses as infinity, which int() cannot convert.
+        data=b'{"request_id": "azr_1", "cooldown_seconds": 1e309}',
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    try:
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(request, timeout=5)
+    finally:
+        daemon.stop()
+    assert refused.value.code == 400
+    assert json.loads(refused.value.read().decode("utf-8"))["error"] == "approval_gate_pulse_invalid_request"
+
+
+def _raw_post(daemon: GuardDaemonServer, path: str, body: bytes, *, token: bool) -> tuple[int, dict[str, Any]]:
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["X-Guard-Token"] = daemon._server.auth_token
+    request = urllib.request.Request(f"http://127.0.0.1:{daemon.port}{path}", data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            status, body = response.status, response.read()
+    except urllib.error.HTTPError as error:
+        status, body = error.code, error.read()
+    try:
+        return status, json.loads(body.decode("utf-8"))
+    except ValueError:
+        return status, {}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/approval-gate/pulse/enroll",
+        "/v1/approval-gate/pulse/x/enroll",
+        "/v1/approval-gate/pulse/x/poll",
+        "/v1/approval-gate/pulse/enroll/",
+    ],
+)
+def test_no_pulse_route_answers_without_the_daemon_token(tmp_path: Path, path: str) -> None:
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    try:
+        status, payload = _raw_post(daemon, path, b'{"password": "x", "step": "authorize"}', token=False)
+    finally:
+        daemon.stop()
+    assert status in {401, 404}, (status, payload)
+    assert not str(payload.get("error", "")).startswith("approval_gate"), "no Pulse handler ran"
+
+
+def test_a_confirmed_setup_returns_its_recovery_code_even_if_the_settings_view_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.daemon import server_control_pulse
+
+    monkeypatch.setattr(
+        server_control_pulse,
+        "confirm_pulse_enrollment",
+        lambda *_a, **_k: {"pulse_enabled": True, "recovery_code": "rc-once"},
+    )
+
+    def broken(_guard_home: object) -> object:
+        raise ValueError("config unreadable")
+
+    monkeypatch.setattr(server_control_pulse, "load_guard_config", broken)
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    try:
+        status, payload = _raw_post(daemon, "/v1/approval-gate/pulse/confirm", b'{"request_id": "azr_1"}', token=True)
+    finally:
+        daemon.stop()
+    assert status == 200, payload
+    assert payload["pulse_recovery_code"] == "rc-once"
+    assert payload["approval_gate"]["pulse_enabled"] is True
+
+
+def test_a_settings_approval_is_bound_to_the_exact_settings_saved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
+    from codex_plugin_scanner.guard.daemon import server_control_repair
+
+    subjects: list[object] = []
+
+    def gate(*_args: object, **kwargs: object) -> None:
+        subjects.append(kwargs.get("subject"))
+        raise ApprovalGateError("approval_gate_required", "stop here")
+
+    monkeypatch.setattr(server_control_repair, "require_high_risk", gate)
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    try:
+        for settings in (
+            {"receipt_redaction_level": "none"},
+            {"receipt_redaction_level": "none"},
+            {"receipt_redaction_level": "strict"},
+        ):
+            _raw_post(
+                daemon,
+                "/v1/settings",
+                json.dumps({"settings": settings, "approval_pulse_request_id": "azr_1"}).encode(),
+                token=True,
+            )
+    finally:
+        daemon.stop()
+    assert len(subjects) == 3
+    assert subjects[0] == subjects[1], "the same change keeps its subject on resubmit"
+    assert subjects[0] != subjects[2], "a different change is a different subject"
+
+
+def test_a_confirmed_setup_returns_its_recovery_code_even_if_the_response_cannot_be_encoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.daemon import server_control_pulse
+
+    monkeypatch.setattr(
+        server_control_pulse,
+        "confirm_pulse_enrollment",
+        lambda *_a, **_k: {"pulse_enabled": True, "recovery_code": "rc-once"},
+    )
+    # A settings view json.dumps cannot encode.
+    monkeypatch.setattr(server_control_pulse, "_settings_response_payload", lambda *_a: {"settings": object()})
+    _store, daemon = _with_daemon(tmp_path / "guard-home")
+    try:
+        status, payload = _raw_post(daemon, "/v1/approval-gate/pulse/confirm", b'{"request_id": "azr_1"}', token=True)
+    finally:
+        daemon.stop()
+    assert status == 200, payload
+    assert payload["pulse_recovery_code"] == "rc-once"
+    assert payload["approval_gate"]["pulse_enabled"] is True
