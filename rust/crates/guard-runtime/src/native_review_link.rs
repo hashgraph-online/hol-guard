@@ -9,8 +9,11 @@
 //! shape it does not reproduce byte for byte; the caller then leaves the
 //! reason unlinked.
 
+use std::sync::LazyLock;
+
 use base64ct::{Base64UrlUnpadded, Encoding};
 use hmac::{Hmac, Mac};
+use regex::Regex;
 use sha2::Sha256;
 
 use crate::guard_store_json::py_strip;
@@ -27,6 +30,30 @@ pub(crate) const OPEN_GUARD: &str = "Open HOL Guard to approve or keep this bloc
 pub(crate) const SIGNED_LINK_UNAVAILABLE: &str =
     "HOL Guard could not create a signed approval link; open Inbox from Guard on this device, then retry.";
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
+
+static GUARD_TOKEN_FRAGMENT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)#guard-token=[A-Za-z0-9_~%+-]+(?:\.[A-Za-z0-9_~%+-]+)*")
+        .expect("guard token pattern compiles")
+});
+
+static HANDOFF_CODE: LazyLock<Regex> = LazyLock::new(|| {
+    // Ends where `carries_handoff_link` ends a code: at punctuation, space
+    // or the end of the reason, never mid-path.
+    Regex::new(r"(/requests/[0-9a-f]{32})/[0-9]{1,12}-[0-9a-f]{32}([^A-Za-z0-9/_-]|$)")
+        .expect("approval handoff pattern compiles")
+});
+
+/// True when `text` holds a short signed `/requests/<id>/<expires>-<mac>` link.
+pub(crate) fn has_handoff_code(text: &str) -> bool {
+    HANDOFF_CODE.is_match(text)
+}
+
+/// `text` with every link's session fragment and short code removed, so two
+/// copies of a reason that differ only in their signature compare equal.
+pub(crate) fn strip_review_link_codes(text: &str) -> String {
+    let unfragmented = GUARD_TOKEN_FRAGMENT.replace_all(text, "");
+    HANDOFF_CODE.replace_all(&unfragmented, "$1$2").into_owned()
+}
 
 /// `canonical_harness` (`hook_fail_closed.py`).
 pub(crate) fn canonical_harness(harness: &str) -> String {
@@ -125,8 +152,65 @@ fn browser_url(
     surface: &str,
     now_micros: i64,
 ) -> Option<String> {
+    if surface == APPROVAL_CENTER_SURFACE {
+        if let Some(short) = handoff_url(link.url, auth_token, now_micros) {
+            return Some(short);
+        }
+    }
     let token = session_token(auth_token, surface, now_micros)?;
     Some(format!("{}#guard-token={token}", link.url))
+}
+
+const HANDOFF_VERSION: &str = "guard-approval-link.v1";
+const HANDOFF_TTL_SECONDS: i64 = 12 * 60 * 60;
+const HANDOFF_MAC_BYTES: usize = 16;
+const HANDOFF_MAC_HEX: usize = HANDOFF_MAC_BYTES * 2;
+
+/// `build_approval_handoff_url`: `<origin>/requests/<id>/<expires>-<mac>` for
+/// a bare request link. Agents relay this whole; they drop the long session
+/// fragment. The daemon checks the MAC and redirects to the signed page.
+fn handoff_url(url: &str, auth_token: &str, now_micros: i64) -> Option<String> {
+    let request_id = crate::desktop_review_link::approval_request_id(url)?;
+    let rest = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))?;
+    let (_, path) = rest.split_once('/')?;
+    if path.strip_prefix("requests/") != Some(request_id) {
+        return None;
+    }
+    let expires = now_micros
+        .div_euclid(1_000_000)
+        .checked_add(HANDOFF_TTL_SECONDS)?;
+    let mut mac = <Hmac<Sha256>>::new_from_slice(auth_token.as_bytes()).ok()?;
+    mac.update(format!("{HANDOFF_VERSION}\n{request_id}\n{expires}").as_bytes());
+    let digest = mac.finalize().into_bytes();
+    let code = hex::encode(digest.get(..HANDOFF_MAC_BYTES)?);
+    Some(format!("{url}/{expires}-{code}"))
+}
+
+/// Whether `reason` already carries `review_url` as a short signed link:
+/// `<review_url>/<expires>-<32 hex mac>`, ending there. Any other path after
+/// the review link is not one, and still needs signing.
+pub(crate) fn carries_handoff_link(reason: &str, review_url: &str) -> bool {
+    let prefix = format!("{review_url}/");
+    reason
+        .match_indices(&prefix)
+        .any(|(at, _)| is_handoff_code(&reason.as_bytes()[at + prefix.len()..]))
+}
+
+fn is_handoff_code(rest: &[u8]) -> bool {
+    let digits = rest.iter().take_while(|byte| byte.is_ascii_digit()).count();
+    if !(1..=12).contains(&digits) || rest.get(digits) != Some(&b'-') {
+        return false;
+    }
+    let mac = &rest[digits + 1..];
+    mac.len() >= HANDOFF_MAC_HEX
+        && mac[..HANDOFF_MAC_HEX]
+            .iter()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        && !mac
+            .get(HANDOFF_MAC_HEX)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_'))
 }
 
 fn py_space(character: char) -> bool {
@@ -188,6 +272,11 @@ fn with_review_url(
         }
         _ => review_url.to_owned(),
     };
+    // A short link already in the reason stays as written; prefixing a fresh
+    // code onto it would leave a two-code path the daemon cannot redeem.
+    if carries_handoff_link(stripped, review_url) {
+        return Some(stripped.to_owned());
+    }
     if live_url != review_url && stripped.contains(review_url) {
         return Some(stripped.replacen(review_url, &live_url, 1));
     }
@@ -317,7 +406,7 @@ pub(crate) fn native_review_reason(
         return Some(py_strip(&format!("{without} {SIGNED_LINK_UNAVAILABLE}")).to_owned());
     };
     let signed_url = browser_url(&link, token, APPROVAL_CENTER_SURFACE, now_micros)?;
-    if stripped.contains(&signed_url) {
+    if stripped.contains(&signed_url) || carries_handoff_link(stripped, approval_url) {
         return Some(stripped.to_owned());
     }
     if stripped.contains(approval_url) {

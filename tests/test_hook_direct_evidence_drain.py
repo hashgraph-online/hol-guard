@@ -164,6 +164,14 @@ def test_a_codex_receipt_reaches_the_binding_capture(tmp_path: Path, harness: st
         assert capture.captured[0]["receipt"] == RECEIPT
 
 
+def test_a_codex_receipt_the_resident_captured_is_not_captured_again(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    capture = _Capture()
+    host.capture_writer = capture  # pyright: ignore[reportAttributeAccessIssue]
+    assert record_direct_hook_evidence(host, _record(capture_recorded=True))
+    assert capture.captured == []
+
+
 @pytest.mark.parametrize(
     "record",
     [

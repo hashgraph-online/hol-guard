@@ -135,8 +135,9 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
             with suppress(Exception):
                 submit(receipt=accepted)
         capture = getattr(getattr(host, "capture_writer", None), "submit_native_capture", None)
-        if harness == "codex" and callable(capture):
-            # The daemon hands a Codex receipt to the binding capture as well.
+        if harness == "codex" and callable(capture) and record.get("capture_recorded") is not True:
+            # The daemon hands a Codex receipt to the binding capture as well,
+            # unless a current resident sealed it as the page left.
             with suppress(Exception):
                 capture(guard_home=host.guard_home, payload=payload, receipt=accepted)
     if event == _USER_PROMPT_SUBMIT:
