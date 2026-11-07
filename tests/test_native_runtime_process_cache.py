@@ -142,6 +142,25 @@ def test_a_literal_candidate_whose_directory_now_leads_to_a_hard_link_recomputes
     assert second is not first
 
 
+def test_a_literal_candidate_whose_directory_moved_behind_a_link_recomputes(
+    probe: tuple[Path, Path, list[Path]], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _binary, _manifest, calls = probe
+    candidate, _other = _literal_runtime(tmp_path, monkeypatch)
+    first = native_runtime_status()
+    assert first.identity is not None and first.identity.path == candidate
+    # Moving the directory keeps its inode and the binary's, and the link left
+    # at the old name reaches both; only the directory's new location differs.
+    moved = tmp_path / "moved" / "runtime"
+    moved.parent.mkdir()
+    candidate.parent.rename(moved)
+    candidate.parent.symlink_to(moved, target_is_directory=True)
+    second = native_runtime_status()
+    assert len(calls) == 2
+    assert second is not first
+    assert second.identity is not None and second.identity.path == moved / candidate.name
+
+
 def test_a_touched_binary_recomputes(probe: tuple[Path, Path, list[Path]]) -> None:
     binary, _manifest, calls = probe
     first = native_runtime_status()

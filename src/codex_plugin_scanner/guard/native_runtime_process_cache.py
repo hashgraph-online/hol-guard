@@ -27,7 +27,8 @@ _MAX_ENTRIES = 8
 _ENABLED = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
 _LOCK = threading.Lock()
 _Fingerprint = tuple[int, ...]
-_STATUSES: dict[_RequestKey, tuple[NativeRuntimeStatus, _Fingerprint, _Fingerprint | None, tuple[int, int] | None]] = {}
+_DirectoryKey = tuple[int, int, str]
+_STATUSES: dict[_RequestKey, tuple[NativeRuntimeStatus, _Fingerprint, _Fingerprint | None, _DirectoryKey | None]] = {}
 
 
 def _fingerprint(path: Path, *, follow: bool) -> _Fingerprint | None:
@@ -43,12 +44,33 @@ def _fingerprint(path: Path, *, follow: bool) -> _Fingerprint | None:
     return (*full_stat_identity(metadata), int(metadata.st_uid), int(metadata.st_gid))
 
 
-def _parent_directory_key(path: Path) -> tuple[int, int] | None:
+def _parent_directory_key(path: Path) -> _DirectoryKey | None:
+    """Return the directory's identity and the path the kernel holds for it now.
+
+    The path comes from an open descriptor, so it reflects any rename of the
+    directory or its ancestors in one lookup rather than a walk. ``None`` (no
+    such directory, or no way to ask on this host) disables the literal-path
+    shortcut and the caller resolves the candidate in full.
+    """
+
+    import fcntl  # POSIX only; the cache is disabled elsewhere
+
     try:
-        metadata = path.stat()
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     except OSError:
         return None
-    return (int(metadata.st_dev), int(metadata.st_ino))
+    try:
+        metadata = os.fstat(descriptor)
+        get_path = getattr(fcntl, "F_GETPATH", None)
+        if get_path is not None:
+            current = os.fsdecode(fcntl.fcntl(descriptor, get_path, bytes(1024)).split(b"\0", 1)[0])
+        else:
+            current = os.readlink(f"/proc/self/fd/{descriptor}")
+    except OSError:
+        return None
+    finally:
+        os.close(descriptor)
+    return (int(metadata.st_dev), int(metadata.st_ino), current)
 
 
 def _manifest_path(binary: Path) -> Path:
@@ -90,6 +112,9 @@ def remember_process_status(
         manifest is None or _fingerprint(_manifest_path(path), follow=False) != manifest
     ):
         return
+    parent = _parent_directory_key(path.parent)
+    if parent is not None and parent[2] != str(path.parent):
+        parent = None
     with _LOCK:
         if key not in _STATUSES and len(_STATUSES) >= _MAX_ENTRIES:
             _STATUSES.pop(next(iter(_STATUSES)))
@@ -97,11 +122,11 @@ def remember_process_status(
             status,
             binary,
             manifest if status.manifest is not None else None,
-            _parent_directory_key(path.parent),
+            parent,
         )
 
 
-def _still_names(candidate: Path, path: Path, binary: _Fingerprint, parent: tuple[int, int] | None) -> bool:
+def _still_names(candidate: Path, path: Path, binary: _Fingerprint, parent: _DirectoryKey | None) -> bool:
     """Whether ``candidate`` still leads to the cached runtime ``path``.
 
     A candidate spelled exactly as the resolved path needs no full walk, which
@@ -111,7 +136,9 @@ def _still_names(candidate: Path, path: Path, binary: _Fingerprint, parent: tupl
     the binary's), and the directory it reaches is still the one verified.
     Directories cannot be hard linked, so an ancestor redirected to another
     tree, even one holding a hard link to the same binary, reaches a different
-    directory and falls back to the full walk.
+    directory and falls back to the full walk. The directory's current path is
+    compared too: a tree moved elsewhere with a link left at its old name keeps
+    every inode, but no longer lives where the trust walk examined it.
     """
 
     try:
