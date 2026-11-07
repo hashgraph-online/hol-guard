@@ -48,7 +48,7 @@ class OmpReview:
         self.known_ids: set[str] = set()
         stage(fixture.workspace, scenario.id)
         stage_approval_marker(fixture.workspace, scenario.id, case)
-        stage_approval_persistent(fixture.workspace, scenario.id, case)
+        stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
         case["review_policy"] = (

@@ -25,6 +25,7 @@ from ci.gauntlet.approval_retry_persistent import (
     targets_case_command,
     write_package_review_config,
 )
+from ci.gauntlet.fixtures import digest_file
 
 CATALOG = Path(__file__).resolve().parents[1] / "ci" / "gauntlet" / "approval_retry.json"
 # The run count the prompt asks the agent to report. It names the same words as
@@ -46,9 +47,12 @@ def test_a_read_that_names_the_same_key_is_not_the_case_command() -> None:
     assert not targets_case_command("git config --file 'unclosed")
 
 
-def _case(runs: int, targets: list[str]) -> dict[str, object]:
+def _case(runs: int, targets: list[str], linked_runs: int | None = None) -> dict[str, object]:
+    evidence: dict[str, object] = {"initially_absent": True, "runs": runs}
+    if linked_runs is not None:
+        evidence["linked_runs"] = linked_runs
     return {
-        "persistent_approval": {"initially_absent": True, "runs": runs},
+        "persistent_approval": evidence,
         "approval_grants": {"granted": [{"target": target, "persist_policy": True} for target in targets]},
     }
 
@@ -127,19 +131,29 @@ def test_the_hooked_case_pins_both_installs_and_saves_only_the_first() -> None:
 def test_the_hooked_case_fails_when_the_worktree_asks_again() -> None:
     primary = shlex.join(PACKAGE_COMMAND)
     linked = shlex.join(LINKED_PACKAGE_COMMAND)
-    assert assessment(HOOKED_PACKAGE_CASE, _case(2, [primary]), ("pass", "ok")) == ("pass", "ok")
-    asked_again = _case(2, [primary, linked])
+    assert assessment(HOOKED_PACKAGE_CASE, _case(2, [primary], 1), ("pass", "ok")) == ("pass", "ok")
+    asked_again = _case(2, [primary, linked], 1)
     asked_again["approval_grants"]["granted"][1]["persist_policy"] = False  # type: ignore[index]
     verdict, detail = assessment(HOOKED_PACKAGE_CASE, asked_again, ("pass", "ok"))
     assert verdict == "fail"
     assert "reviewed 2 times" in detail
-    verdict, _ = assessment(HOOKED_PACKAGE_CASE, _case(1, [primary]), ("pass", "ok"))
+    verdict, _ = assessment(HOOKED_PACKAGE_CASE, _case(1, [primary], 1), ("pass", "ok"))
     assert verdict == "fail"
+
+
+def test_the_hooked_case_fails_unless_each_checkout_installs() -> None:
+    primary = shlex.join(PACKAGE_COMMAND)
+    for linked_runs in (0, 2, None):
+        verdict, detail = assessment(HOOKED_PACKAGE_CASE, _case(2, [primary], linked_runs), ("pass", "ok"))
+        assert verdict == "fail"
+        assert "linked worktree" in detail
 
 
 def test_the_hooked_case_stages_a_hooked_project_and_a_linked_worktree(tmp_path: Path) -> None:
     case: dict[str, object] = {}
-    stage(tmp_path, HOOKED_PACKAGE_CASE, case)
+    protected = {".git/config": "before staging"}
+    stage(tmp_path, HOOKED_PACKAGE_CASE, case, protected)
+    assert protected == {".git/config": digest_file(tmp_path / ".git/config")}
     linked = tmp_path / LINKED_WORKTREE
     manifest = json.loads((linked / "package.json").read_text())
     assert set(manifest["scripts"]) == {"prepare", "prepublishOnly"}
@@ -158,3 +172,10 @@ def test_the_hooked_case_stages_a_hooked_project_and_a_linked_worktree(tmp_path:
     ).stdout
     assert status == ""
     assert case["persistent_approval"] == {"initially_absent": True}
+    for checkout, stamps in ((tmp_path, "ab"), (linked, "c")):
+        logs = checkout / NPM_LOGS
+        logs.mkdir(parents=True)
+        for stamp in stamps:
+            (logs / f"2026-11-06T00_00_0{stamp}-debug-0.log").write_text("log")
+    collect(tmp_path, HOOKED_PACKAGE_CASE, case)
+    assert case["persistent_approval"] == {"initially_absent": True, "runs": 3, "linked_runs": 1}

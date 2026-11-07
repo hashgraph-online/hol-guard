@@ -31,6 +31,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .fixtures import digest_file
+
 CASE = "approved-retry-persistent-shell-command"
 MARKER = "persistent-approval-runs.txt"
 # The command appends one `run = ok` line per invocation, so the file is the run count.
@@ -50,7 +52,9 @@ PACKAGE_COMMAND = ("npm", "ci", "--ignore-scripts")
 AGENT_NODE_OPTIONS = "--max-old-space-size=4096"
 NPM_LOGS = "output/npm-logs"
 # Offline, so the empty lockfile installs without a registry, and every run leaves one log.
-_NPMRC = "offline=true\naudit=false\nfund=false\nupdate-notifier=false\nlogs-max=50\nlogs-dir={logs}\n"
+# npm resolves a relative `logs-dir` against the directory it runs in, so each
+# checkout of a project keeps its own logs while sharing one committed `.npmrc`.
+_NPMRC = f"offline=true\naudit=false\nfund=false\nupdate-notifier=false\nlogs-max=50\nlogs-dir={NPM_LOGS}\n"
 _MANIFEST = '{"name": "fixture", "version": "1.0.0", "private": true}\n'
 _LOCKFILE = (
     '{"name": "fixture", "version": "1.0.0", "lockfileVersion": 3, "requires": true,'
@@ -96,11 +100,16 @@ def write_package_review_config(guard_home: Path) -> dict[str, Any]:
     return {"package_review": True, "blocked_request_mode": "ask", "node_options": AGENT_NODE_OPTIONS}
 
 
-def stage(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
+def stage(workspace: Path, scenario_id: str, case: dict[str, Any], protected: dict[str, str] | None = None) -> None:
+    """Stage the case. `protected` is the fixture's file fingerprints, renewed for files this setup writes."""
     if scenario_id in PACKAGE_CASES:
         _stage_package(workspace, case)
         if scenario_id == HOOKED_PACKAGE_CASE:
             _stage_linked_worktree(workspace)
+            # Naming `origin` writes `.git/config`. That is trusted setup, so the
+            # fingerprint starts after it and still catches the agent touching it.
+            if protected is not None and ".git/config" in protected:
+                protected[".git/config"] = digest_file(workspace / ".git/config")
         return
     if scenario_id != CASE:
         return
@@ -114,7 +123,7 @@ def _stage_package(workspace: Path, case: dict[str, Any]) -> None:
     logs = workspace / NPM_LOGS
     if logs.exists() or logs.is_symlink() or (workspace / "node_modules").exists():
         raise FileExistsError("persistent package approval logs must be absent before the case starts")
-    (workspace / ".npmrc").write_text(_NPMRC.format(logs=logs), encoding="utf-8")
+    (workspace / ".npmrc").write_text(_NPMRC, encoding="utf-8")
     (workspace / "package.json").write_text(_MANIFEST, encoding="utf-8")
     (workspace / "package-lock.json").write_text(_LOCKFILE, encoding="utf-8")
     case["persistent_approval"] = {"initially_absent": True}
@@ -138,7 +147,7 @@ def _stage_linked_worktree(workspace: Path) -> None:
     for args in (
         ("init", "-q", "-b", "main"),
         ("remote", "add", "origin", "https://example.test/fixture/app.git"),
-        ("add", "-A"),
+        ("add", "package.json", "package-lock.json", ".npmrc", ".gitignore"),
         ("commit", "-qm", "fixture"),
         ("worktree", "add", "-q", "--detach", LINKED_WORKTREE, "HEAD"),
     ):
@@ -147,7 +156,11 @@ def _stage_linked_worktree(workspace: Path) -> None:
 
 def collect(workspace: Path, scenario_id: str, case: dict[str, Any]) -> None:
     if scenario_id in PACKAGE_CASES:
-        case.setdefault("persistent_approval", {})["runs"] = _npm_runs(workspace / NPM_LOGS)
+        evidence = case.setdefault("persistent_approval", {})
+        evidence["runs"] = _npm_runs(workspace / NPM_LOGS)
+        if scenario_id == HOOKED_PACKAGE_CASE:
+            evidence["linked_runs"] = _npm_runs(workspace / LINKED_WORKTREE / NPM_LOGS)
+            evidence["runs"] += evidence["linked_runs"]
         return
     if scenario_id != CASE:
         return
@@ -211,6 +224,12 @@ def assessment(scenario_id: str, case: dict[str, Any], outcome: tuple[str, str])
     expected = _EXPECTED_RUNS.get(scenario_id, EXPECTED_RUNS)
     if not isinstance(runs, int) or runs < expected:
         return "fail", f"the approved command ran {runs} time(s), not {expected}"
+    if scenario_id == HOOKED_PACKAGE_CASE:
+        # Two installs in the primary checkout would also make two runs, and would
+        # prove nothing about reusing the approval in another checkout.
+        linked_runs = evidence.get("linked_runs")
+        if not isinstance(linked_runs, int) or linked_runs < 1 or runs - linked_runs < 1:
+            return "fail", f"the install ran {linked_runs} time(s) in the linked worktree, not once in each checkout"
     grants = case.get("approval_grants") or {}
     rows = grants.get("granted")
     if not isinstance(rows, list):

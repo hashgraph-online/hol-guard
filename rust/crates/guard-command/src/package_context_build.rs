@@ -126,7 +126,7 @@ fn is_global_request(metadata: &serde_json::Map<String, Value>) -> bool {
 /// script-free install never covers one that runs scripts.
 fn launch_disables_lifecycle_scripts(manager: &str, arguments: &[String]) -> bool {
     matches!(manager, "npm" | "pnpm" | "bun")
-        && crate::package_manager_command::lifecycle_scripts_disabled(arguments)
+        && crate::lifecycle_scripts_flag::lifecycle_scripts_disabled(arguments)
 }
 
 fn component(

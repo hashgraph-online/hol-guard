@@ -15,7 +15,7 @@
 //! git dependency (`registry_install_tree`).
 
 use super::*;
-use crate::package_manager_command::lifecycle_scripts_disabled;
+use crate::lifecycle_scripts_flag::lifecycle_scripts_disabled;
 
 /// A project `.npmrc` larger than this is treated as redirecting the registry.
 const MAX_NPMRC_BYTES: u64 = 64 * 1024;

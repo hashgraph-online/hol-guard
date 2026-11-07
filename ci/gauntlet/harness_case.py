@@ -192,7 +192,7 @@ def run_harness_case(
         "transcript": {"calls": [], "terminal": False},
     }
     stage_approval_marker(fixture.workspace, scenario.id, case)
-    stage_approval_persistent(fixture.workspace, scenario.id, case)
+    stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
     daemon = None
     connector = None
     seed: CredentialSeed | None = None
