@@ -214,6 +214,8 @@ def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
         "HOME",
+        # The desktop-notice opt-out the resident drain honours.
+        "HOL_GUARD_DESKTOP_NOTIFICATIONS",
         "HOL_GUARD_NATIVE_DIAGNOSTIC",
         # Dedicated opt-in for the resident's supply-chain test seams; kept
         # separate from diagnostics so diagnostics alone never enable them.
