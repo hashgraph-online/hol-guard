@@ -145,9 +145,11 @@ fn an_allowed_step_keeps_its_allow_beside_a_configuration_pattern() {
     }
 }
 
-/// The pattern's own text still names a private file, and only a `--get-regexp`
-/// operand is a pattern at all -- the shell expands every other argument before
-/// Git sees it. Both keep the floor the user's Allow cannot settle.
+/// The pattern's own text still names a private file; only a `--get-regexp`
+/// operand is a pattern at all, because the shell expands every other argument
+/// before Git sees it; and an operand opening with a glob is a pattern here and
+/// an option naming a file of the caller's choosing by the time Git reads it.
+/// Each keeps the floor the user's Allow cannot settle.
 #[test]
 fn a_glob_that_names_a_private_file_keeps_its_floor() {
     let (root, _cleanup) = checkout("floor");
@@ -156,6 +158,7 @@ fn a_glob_that_names_a_private_file_keeps_its_floor() {
         "git config --get-regexp '.ssh/*' && git worktree add ../review main",
         "git config --get-all 'remote.*url' && git worktree add ../review main",
         "git worktree add ../review main && git config *",
+        "git config --get-regexp '[-]-file=*' x && git worktree add ../review main",
     ] {
         for harness in HARNESSES {
             let result = decide(&root, harness, command, &controls);

@@ -100,17 +100,27 @@ pub(crate) fn read_form(arguments: &[String]) -> Option<Printed> {
     }
 }
 
+/// An operand the shell could expand into something Git reads as an option
+/// rather than as the pattern Guard parsed. Expansion keeps a word's leading
+/// literal text, so a word opening with a glob or an expansion is the only one
+/// whose first character the parse cannot see: `[-]-file=*` is a pattern here
+/// and `--file=secret`, naming a file of Git's choosing, by the time Git runs.
+fn could_expand_into_an_option(operand: &str) -> bool {
+    operand
+        .chars()
+        .next()
+        .is_none_or(|first| matches!(first, '*' | '?' | '[' | '{' | '~' | '$' | '\\'))
+}
+
 /// The arguments the path screen still covers. A `--get-regexp` operand is
 /// matched against the keys in the configuration file, so it is a pattern
 /// rather than a path and the screen would refuse every `remote.*url`. Every
 /// other argument is one the shell can expand over the files that are there,
 /// turning `git config *` into the write `git config user.name value`, so it
-/// keeps the screen those expanded words would face.
+/// keeps the screen those expanded words would face. An operand the shell
+/// could turn into an option keeps it too, for the same reason.
 pub(crate) fn screened_arguments(arguments: &[String]) -> Vec<&str> {
-    let patterns = match parse(arguments) {
-        Some(form) if form.mode == "--get-regexp" => form.operands,
-        _ => Vec::new(),
-    };
+    let patterns = configuration_pattern_operands(parse(arguments));
     arguments
         .iter()
         .map(String::as_str)
@@ -122,6 +132,9 @@ pub(crate) fn screened_arguments(arguments: &[String]) -> Vec<&str> {
 /// one. Git matches each against the keys in the configuration file and never
 /// expands it over the files that are there, so it is a pattern rather than a
 /// path and the screens that refuse every `remote.*url` do not apply to it.
+///
+/// An operand the shell could still turn into an option is left out, because
+/// Guard would be reading a pattern where Git reads a flag.
 pub(crate) fn configuration_patterns(segment: &crate::CommandSegmentV1) -> Vec<&str> {
     if crate::command_compatibility::basename(segment) != "git" {
         return Vec::new();
@@ -133,8 +146,18 @@ pub(crate) fn configuration_patterns(segment: &crate::CommandSegmentV1) -> Vec<&
     if arguments.get(index).map(String::as_str) != Some("config") {
         return Vec::new();
     }
-    match parse(&arguments[index + 1..]) {
-        Some(form) if form.mode == "--get-regexp" => form.operands,
+    configuration_pattern_operands(parse(&arguments[index + 1..]))
+}
+
+/// The operands of `form` that Git reads as configuration patterns and the
+/// shell cannot turn into anything else.
+fn configuration_pattern_operands(form: Option<Form<'_>>) -> Vec<&str> {
+    match form {
+        Some(form) if form.mode == "--get-regexp" => form
+            .operands
+            .into_iter()
+            .filter(|operand| !could_expand_into_an_option(operand))
+            .collect(),
         _ => Vec::new(),
     }
 }

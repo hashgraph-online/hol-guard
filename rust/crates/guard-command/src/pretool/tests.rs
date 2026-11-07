@@ -785,6 +785,10 @@ fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
         "git config --get-all 'remote.*url'",
         "git config --get 'remote.*url'",
         "git config *",
+        // An operand opening with a glob is a pattern here and whatever the
+        // shell expands it to by the time Git reads it, so it keeps the path
+        // screen that refuses a file of the caller's choosing.
+        "git config --get-regexp '[-]-file=*' x",
     ] {
         assert!(fixed_command_floor(&model(command)), "{command}");
     }
