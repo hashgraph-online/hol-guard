@@ -20,7 +20,8 @@ bulk approval submits its decisions a few at a time, so the rest arrive while
 the main worker is still settling its job; the watch worker holds one lease
 open for up to ``REVIEW_WATCH_SECONDS`` to take them as they land, instead of
 leaving them for the main worker's next long poll. Each partial batch restarts
-the watch, and at most one worker watches at a time.
+the watch, and at most one worker watches at a time. A watch that returns jobs
+passes the watch to another worker while it settles the first of them.
 
 Each drain worker keeps its own queue state. A worker whose result upload
 fails retries it with a short backoff. A result still unsent when the worker
@@ -281,6 +282,12 @@ class ReviewDrainPool:
                 self._handoff.may_lease = False
             wanted = len(self._threads)
             self._drop_dead_watcher()
+            watcher = self._handoff.watcher
+            if watcher is not None and self._threads[watcher] is threading.current_thread():
+                # The watch lease returned jobs and its worker now settles the
+                # first one. The rest of the burst keeps landing meanwhile, so
+                # another worker takes the watch.
+                self._handoff.watcher = None
             if not self._handoff.may_lease:
                 watch = self._handoff.watcher is None and self._handoff.watch_until > time.monotonic()
                 wanted = len(self._handoff.jobs) + watch
