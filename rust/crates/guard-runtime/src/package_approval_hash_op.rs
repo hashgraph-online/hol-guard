@@ -13,7 +13,6 @@
 //! manifests itself, composes the action, builds the approval identity and
 //! returns the token; callers never recompute any of it.
 
-use guard_command::action_lattice::most_restrictive_guard_action;
 use guard_command::effect_decision::GuardAction;
 use guard_command::launch_identity::package_request_launch_identity_material;
 use guard_command::local_supply_chain::stable_digest_hex;
@@ -31,13 +30,14 @@ use guard_contracts::{
 use serde_json::{json, Map, Value};
 use std::path::Path;
 
+use crate::package_approval_action::{compose_current_action, hashed_action};
 use crate::package_authority_op::request_digest;
 
 fn invalid() -> String {
     "native_package_approval_hash_invalid".to_owned()
 }
 
-fn field<'a>(map: &'a Value, key: &str) -> &'a Value {
+pub(crate) fn field<'a>(map: &'a Value, key: &str) -> &'a Value {
     map.get(key).unwrap_or(&Value::Null)
 }
 
@@ -102,49 +102,6 @@ fn resolve_config_policy(
         },
     )
     .ok_or_else(invalid)
-}
-
-/// Whether this request is an install proven to run no lifecycle scripts.
-///
-/// The proof is the native command authority's, read over the redacted argv
-/// the artifact already carries. Redaction only rewrites URL-bearing and
-/// `--hash` tokens, and it rewrites them into shapes the proof refuses, so it
-/// can make the proof fail but never make it pass.
-fn package_scripts_disabled(request: &PackageApprovalHashRequestV1) -> bool {
-    field(field(&request.artifact, "metadata"), "redacted_command")
-        .as_str()
-        .is_some_and(guard_command::pretool::no_script_install_command)
-}
-
-/// `most_restrictive_guard_action(policy_action, additional?, config actions…)`.
-///
-/// An install proven to run no lifecycle scripts has nothing for the
-/// `package_script` risk setting to govern, so that setting alone is left out
-/// of the composition. This is the package-approval half of
-/// `policy_enforcement::package_scripts_disabled`, and it is just as narrow:
-/// the evaluation's own action, the caller's additional action and a
-/// configured artifact, publisher or harness override are all still folded in,
-/// so a user's explicit package policy and every other floor still decide this
-/// request.
-fn compose_current_action(
-    request: &PackageApprovalHashRequestV1,
-    config_policy: &Value,
-) -> GuardAction {
-    let mut actions = vec![field(&request.evaluation, "policy_action").clone()];
-    if let Some(additional) = request.additional_current_action.as_ref() {
-        actions.push(additional.clone());
-    }
-    let scripts_disabled = package_scripts_disabled(request);
-    for key in ["effective_package_script_action", "resolved_override"] {
-        if scripts_disabled && key == "effective_package_script_action" {
-            continue;
-        }
-        let action = field(config_policy, key);
-        if !action.is_null() {
-            actions.push(action.clone());
-        }
-    }
-    most_restrictive_guard_action(&actions, GuardAction::Block)
 }
 
 fn string_items(value: &Value) -> Vec<String> {
@@ -456,7 +413,11 @@ pub(crate) fn package_current_action_and_hash(
     }
     let config_policy = resolve_config_policy(request, PolicySource::InProcess)?;
     let current_action = compose_current_action(request, &config_policy);
-    let artifact_hash = artifact_hash(request, &config_policy, current_action)?;
+    let artifact_hash = artifact_hash(
+        request,
+        &config_policy,
+        hashed_action(request, &config_policy),
+    )?;
     Ok((current_action, artifact_hash))
 }
 
@@ -483,7 +444,11 @@ pub(crate) fn evaluate_package_approval_hash(
         "artifact_hash" => {
             payload.insert(
                 "artifact_hash".to_owned(),
-                Value::String(artifact_hash(request, &config_policy, current_action)?),
+                Value::String(artifact_hash(
+                    request,
+                    &config_policy,
+                    hashed_action(request, &config_policy),
+                )?),
             );
         }
         _ => return Err(invalid()),
