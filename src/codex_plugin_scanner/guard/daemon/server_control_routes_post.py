@@ -356,7 +356,9 @@ class _ControlPostRoutes:
                 workspace=self._optional_string(payload.get("workspace")),
                 reason=self._optional_string(payload.get("reason")),
                 return_queue_result=True,
-                resolve_scope_matches=True,
+                # A link-opened session decides only the request it names, so its
+                # scoped decision must not also settle other pending requests.
+                resolve_scope_matches=not self._request_holds_link_bound_session(),
                 approval_gate_input=approval_gate_input_from_mapping(payload),
                 persist_policy=persist_policy,
                 scope_contract_version=scope_contract_version,
