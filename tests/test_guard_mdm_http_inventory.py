@@ -25,6 +25,7 @@ _RAW_HTTP_CALLS = frozenset(
 _RAW_HTTP_BOUNDARIES = frozenset(
     {
         "mdm/network_transport.py",
+        "mdm/network_keepalive.py",
         "daemon/client.py",
         "daemon/live_identity.py",
         "daemon/manager.py",
