@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import urllib.error
 from email.message import Message
 from pathlib import Path
@@ -239,6 +240,15 @@ def _join(pool: command_queue_drain.ReviewDrainPool) -> None:
             thread.join(5)
 
 
+def _settle(pool: command_queue_drain.ReviewDrainPool, polls: list[str], expected: list[str]) -> None:
+    """Join workers until ``polls`` matches; a replacement may start between joins."""
+
+    deadline = time.monotonic() + 5
+    while sorted(polls) != expected and time.monotonic() < deadline:
+        _join(pool)
+    _join(pool)
+
+
 def test_partial_batch_settles_its_jobs_and_watches_once_for_the_rest(tmp_path: Path) -> None:
     polls: list[str] = []
     pool = _recording_pool(tmp_path, polls, threading.Lock())
@@ -276,8 +286,7 @@ def test_a_watch_that_finds_jobs_hands_them_over_and_keeps_watching(tmp_path: Pa
     pool = _recording_pool(tmp_path, polls, lock, hits)
 
     pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(_exact_job("job-2"),), more_may_be_ready=False))
-    for _ in range(3):
-        _join(pool)
+    _settle(pool, polls, ["job-2", "job-3", "watch", "watch", "watch"])
 
     assert sorted(polls) == ["job-2", "job-3", "watch", "watch", "watch"]
     assert not pool.has_handoff()
@@ -289,6 +298,11 @@ def test_only_one_worker_watches_at_a_time(tmp_path: Path) -> None:
     _join(pool)
     pool._handoff.may_lease = False
     pool._handoff.watch_until = command_queue_drain.time.monotonic() + 5
+    # Each slot asks from its own running worker.
+    running = threading.Event()
+    for slot in (0, 1):
+        pool._threads[slot] = threading.Thread(target=running.wait, daemon=True)
+        pool._threads[slot].start()
 
     first = pool._take_job(0)
     second = pool._take_job(1)
@@ -300,6 +314,7 @@ def test_only_one_worker_watches_at_a_time(tmp_path: Path) -> None:
     assert pool._take_job(1) is command_queue_drain.STOP_DRAIN
     pool._handoff.watch_until = command_queue_drain.time.monotonic() + 5
     assert isinstance(pool._take_job(1), command_queue_drain.ReviewWatch)
+    running.set()
 
 
 def test_partial_batch_stops_leasing_while_an_earlier_worker_is_still_running(tmp_path: Path) -> None:
@@ -318,6 +333,18 @@ def test_partial_batch_stops_leasing_while_an_earlier_worker_is_still_running(tm
 
     assert not pool._handoff.may_lease
     assert sorted(polls) == ["job-2", "watch"]
+
+
+def test_a_watcher_that_ended_on_an_error_does_not_block_the_next_watch(tmp_path: Path) -> None:
+    pool = _recording_pool(tmp_path, [], threading.Lock())
+    pool._handoff.may_lease = False
+    pool._handoff.watch_until = command_queue_drain.time.monotonic() + 5
+    # Slot 1 took the watch, then its worker exited without freeing it.
+    pool._handoff.watcher = 1
+    pool._threads[1] = None
+
+    assert isinstance(pool._take_job(0), command_queue_drain.ReviewWatch)
+    assert pool._handoff.watcher == 0
 
 
 def test_a_lane_whose_state_cannot_be_read_keeps_the_handed_job_queued(tmp_path: Path) -> None:
@@ -386,8 +413,7 @@ def test_job_handed_over_while_a_worker_stops_is_still_settled(tmp_path: Path, m
     pool._take_job = take_after_a_late_handoff  # type: ignore[method-assign]
 
     assert pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(_exact_job("job-2"),), more_may_be_ready=False)) == 1
-    for _ in range(3):
-        _join(pool)
+    _settle(pool, polls, ["job-2", "job-3"])
 
     assert sorted(polls) == ["job-2", "job-3"]
     assert not pool.has_handoff()

@@ -225,6 +225,7 @@ class ReviewDrainPool:
                 return self._handoff.jobs.popleft()
             if self._handoff.may_lease:
                 return None
+            self._drop_dead_watcher()
             if self._handoff.watcher in (None, slot):
                 remaining = self._handoff.watch_until - time.monotonic()
                 if remaining >= _REVIEW_WATCH_MIN_SECONDS:
@@ -241,6 +242,14 @@ class ReviewDrainPool:
                 return False
             self._free(slot)
             return True
+
+    def _drop_dead_watcher(self) -> None:
+        # A watch worker that ended on an error never reached ``_free``.
+        watcher = self._handoff.watcher
+        if watcher is not None:
+            thread = self._threads[watcher]
+            if thread is None or not thread.is_alive():
+                self._handoff.watcher = None
 
     def _free(self, slot: int) -> None:
         if self._handoff.watcher == slot:
@@ -271,6 +280,7 @@ class ReviewDrainPool:
                 self._handoff.watch_until = time.monotonic() + REVIEW_WATCH_SECONDS
                 self._handoff.may_lease = False
             wanted = len(self._threads)
+            self._drop_dead_watcher()
             if not self._handoff.may_lease:
                 watch = self._handoff.watcher is None and self._handoff.watch_until > time.monotonic()
                 wanted = len(self._handoff.jobs) + watch
