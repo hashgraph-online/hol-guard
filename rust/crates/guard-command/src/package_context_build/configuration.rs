@@ -21,6 +21,9 @@ pub(super) struct ConfigurationInput<'a> {
     pub(super) repository_root: Option<&'a str>,
     pub(super) manager: &'a str,
     pub(super) environment: &'a BTreeMap<String, String>,
+    /// The launch turns off `package.json` lifecycle scripts, so a hook there
+    /// cannot run during this install.
+    pub(super) lifecycle_scripts_disabled: bool,
 }
 
 pub(super) struct Configuration {
@@ -206,6 +209,7 @@ fn append_package_json_sections(
     ports: &mut dyn Ports,
     path: &str,
     label: &str,
+    lifecycle_scripts_disabled: bool,
     collected: &mut Collected,
 ) -> Built<()> {
     let payload = files.read(fs, path, MAX_CONFIG_FILE_BYTES, false)?;
@@ -246,7 +250,9 @@ fn append_package_json_sections(
         digest: hook_digest,
         path: entry_path,
     });
-    if has_lifecycle {
+    // The hooks stay in the digest either way, so editing one still asks
+    // again. Only a launch that can run them is tied to this checkout.
+    if has_lifecycle && !lifecycle_scripts_disabled {
         return Err(BuildError::Unavailable("dynamic_lifecycle_hook"));
     }
     Ok(())
@@ -372,7 +378,15 @@ pub(super) fn configuration_material(
         }
         let package_json = base.join("package.json").to_string();
         if JS_MANAGERS.contains(&manager) && fs.exists(&package_json)? {
-            append_package_json_sections(fs, files, ports, &package_json, &label, &mut collected)?;
+            append_package_json_sections(
+                fs,
+                files,
+                ports,
+                &package_json,
+                &label,
+                input.lifecycle_scripts_disabled,
+                &mut collected,
+            )?;
         }
     }
     for (path, npmrc) in user_configuration_paths(fs, manager, input.environment)? {

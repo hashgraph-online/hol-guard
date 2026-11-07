@@ -17,7 +17,8 @@ use crate::hook_adapter_value::{parse_python_json, OMap, OValue};
 use crate::launch_identity_common::sha256_hex;
 
 /// Lifecycle scripts a package manager runs on install. Other scripts only run
-/// when someone asks for them by name.
+/// when someone asks for them by name; `prepublishOnly` runs on `npm publish`
+/// alone.
 #[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) const LIFECYCLE_NAMES: &[&str] = &[
     "dependencies",
@@ -29,7 +30,6 @@ pub(crate) const LIFECYCLE_NAMES: &[&str] = &[
     "prepare",
     "preprepare",
     "prepublish",
-    "prepublishOnly",
 ];
 
 const PACKAGE_JSON_SECTIONS: &[&str] = &[
