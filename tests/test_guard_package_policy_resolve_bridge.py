@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_package_policy_resolve as bridge
+from codex_plugin_scanner.guard.runtime import command_queue_drain
 
 
 class _Store:
@@ -169,6 +170,31 @@ def test_a_claim_refused_for_a_moved_revision_reads_the_allow_again(monkeypatch:
     assert all("claim_succeeded" not in request for request in requests)
     assert disposition == "retained"
     assert reused == {**saved, "_approval_authority_revision": 5}
+
+
+def test_every_sibling_in_a_full_bulk_approval_landing_first_still_allows(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Guard settles a full lease batch of Cloud Review jobs at once, and each
+    # sibling allow can move the authority revision once before this claim.
+    siblings = command_queue_drain.REVIEW_LEASE_BATCH_SIZE - 1
+
+    def transport(request: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
+        if request.get("claim_succeeded") is False:
+            return _reply(patch=_verdict_patch("review"))
+        return _reuse_store_reply()
+
+    monkeypatch.setattr(bridge, "_transport", transport)
+    monkeypatch.setattr(bridge, "apply_package_evaluation_patch", lambda evaluation, _patch: evaluation)
+    saved: dict[str, object] = {"action": "allow", "decision_id": 7}
+    store = _MovingStore(
+        [{**saved, "_approval_authority_revision": revision} for revision in range(1, siblings + 2)],
+        [False] * siblings + [True],
+    )
+
+    _evaluation, disposition, reused = _call(store)
+
+    assert store.claims == [str(revision) for revision in range(1, siblings + 2)]
+    assert disposition == "retained"
+    assert reused == {**saved, "_approval_authority_revision": siblings + 1}
 
 
 def test_a_claim_refused_at_an_unmoved_revision_is_not_tried_again(monkeypatch: pytest.MonkeyPatch) -> None:

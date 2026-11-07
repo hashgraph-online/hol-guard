@@ -40,6 +40,9 @@ struct SavedApprovalStore {
     later_decision: Option<Value>,
     /// How many claims refuse before the store answers `claim_succeeds`.
     refused_claims: RefCell<u32>,
+    /// When set, each later lookup offers `later_decision` one revision newer
+    /// than the lookup before it, as when sibling approvals keep landing.
+    later_revision_moves: bool,
 }
 
 impl SupplyChainStore for SavedApprovalStore {
@@ -110,6 +113,12 @@ impl SupplyChainStore for SavedApprovalStore {
             };
         }
         let decision = match &self.later_decision {
+            Some(later) if call > 1 && self.later_revision_moves => {
+                let mut row = later.clone();
+                let base = row["_approval_authority_revision"].as_i64().unwrap_or(0);
+                row["_approval_authority_revision"] = json!(base + i64::from(call) - 2);
+                Some(row)
+            }
             Some(later) if call > 1 => Some(later.clone()),
             _ => self.decision.clone(),
         };
@@ -328,6 +337,7 @@ fn resolve_recording(
         fail_lookup_after: None,
         later_decision: None,
         refused_claims: RefCell::new(0),
+        later_revision_moves: false,
     };
     let seams = Seams;
     let resolved = apply_stored_package_policy_override(
@@ -405,6 +415,17 @@ fn resolve_after_a_sibling_approval(
     first: Value,
     later: Option<Value>,
 ) -> (PackageRequestEvaluation, Vec<Value>) {
+    resolve_after_sibling_approvals(first, later, 1, false)
+}
+
+/// Resolves against a store whose first `refusals` claims refuse, and whose
+/// later lookups offer `later`, one revision newer each time when `moves`.
+fn resolve_after_sibling_approvals(
+    first: Value,
+    later: Option<Value>,
+    refusals: u32,
+    moves: bool,
+) -> (PackageRequestEvaluation, Vec<Value>) {
     let store = SavedApprovalStore {
         home: PathBuf::from("/tmp/guard-home"),
         decision: Some(first),
@@ -416,7 +437,8 @@ fn resolve_after_a_sibling_approval(
         lookup_calls: RefCell::new(0),
         fail_lookup_after: None,
         later_decision: later,
-        refused_claims: RefCell::new(1),
+        refused_claims: RefCell::new(refusals),
+        later_revision_moves: moves,
     };
     let seams = Seams;
     let resolved = apply_stored_package_policy_override(
@@ -462,6 +484,31 @@ fn a_claim_refused_for_a_moved_revision_reads_the_saved_allow_again() {
     assert_eq!(claims, vec![saved_row(7, 4), saved_row(7, 5)]);
     assert_eq!(resolved.policy_action().as_deref(), Some("allow"));
     assert_eq!(resolved.value["saved_approval_decision_id"], json!(7));
+}
+
+#[test]
+fn a_full_bulk_approval_of_siblings_landing_before_the_claim_still_allows() {
+    // Guard settles up to eight Cloud Review jobs at once, so seven sibling
+    // allows can each move the revision once before this request's claim.
+    let (resolved, claims) =
+        resolve_after_sibling_approvals(saved_row(7, 1), Some(saved_row(7, 2)), 7, true);
+    let revisions: Vec<i64> = (1..=8).collect();
+    assert_eq!(
+        claims,
+        revisions
+            .iter()
+            .map(|revision| saved_row(7, *revision))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(resolved.policy_action().as_deref(), Some("allow"));
+}
+
+#[test]
+fn the_rereads_stop_at_the_budget_when_the_revision_keeps_moving() {
+    let (resolved, claims) =
+        resolve_after_sibling_approvals(saved_row(7, 1), Some(saved_row(7, 2)), 20, true);
+    assert_eq!(claims.len(), 8);
+    assert_eq!(resolved.policy_action().as_deref(), Some("review"));
 }
 
 #[test]
@@ -529,6 +576,7 @@ fn a_failed_lookup_keeps_the_review_and_records_its_code() {
         fail_lookup_after: None,
         later_decision: None,
         refused_claims: RefCell::new(0),
+        later_revision_moves: false,
     };
     let seams = Seams;
     let applied = apply_stored_package_policy_override(
@@ -689,6 +737,7 @@ fn a_failed_refresh_after_a_consumed_claim_keeps_the_review() {
         fail_lookup_after: Some(1),
         later_decision: None,
         refused_claims: RefCell::new(0),
+        later_revision_moves: false,
     };
     let initial = PackageProtectAuthority {
         intent: install_intent(),

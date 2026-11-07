@@ -5518,7 +5518,11 @@ fn compose_current_package_policy_action(
 // ---------------------------------------------------------------------------
 
 /// How many times one package request reads its saved allow's authority.
-const PACKAGE_AUTHORITY_READS: u32 = 4;
+///
+/// Guard settles up to eight Cloud Review jobs at once, and each sibling allow
+/// moves the revision about once, so a request can need one read per job.
+/// Keep this in step with the Python resolver's `_AUTHORITY_READS`.
+const PACKAGE_AUTHORITY_READS: u32 = 8;
 
 /// Whether a fresh read offers the refused saved allow at a newer revision.
 ///
