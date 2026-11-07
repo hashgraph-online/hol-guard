@@ -166,6 +166,7 @@ from .hook_policy_admission import prepare_native_hook_policy
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .live_decision_warmup import start_codex_live_decision_warmup
 from .local_cli_api import LocalCliApiService
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
@@ -3594,6 +3595,7 @@ class GuardDaemonServer:
             self._publish_listen_state()
             self._diagnostics.record("daemon_listen_ready")
             self._warm_desktop_bootstrap_cache()
+            start_codex_live_decision_warmup(self._diagnostics)
             if not continue_after_listen:
                 return
         self._complete_owned_service_after_listen(generation, already_locked=True)
