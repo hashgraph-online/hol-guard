@@ -2,7 +2,7 @@
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
 
-pub(crate) const MAX_TERMS: usize = 12;
+pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
 /// How far past an opening quote to look for its closing one, so a prompt
 /// full of unmatched quotes is still scanned in one pass.
@@ -12,11 +12,15 @@ const MAX_PHRASE_SPAN: usize = 120;
 pub(crate) const MAX_NAMED: usize = 4;
 const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
 const STOP_WORDS: &[&str] = &[
-    "about", "add", "also", "and", "any", "are", "build", "but", "can", "change", "could",
-    "create", "does", "fix", "for", "from", "get", "have", "help", "how", "into", "its", "just",
-    "let", "like", "make", "need", "new", "not", "now", "our", "please", "put", "should", "some",
-    "that", "the", "them", "then", "there", "this", "update", "use", "want", "what", "when",
-    "where", "which", "why", "will", "with", "would", "you", "your",
+    "about", "add", "after", "again", "all", "already", "also", "and", "any", "are", "been",
+    "before", "being", "both", "build", "but", "can", "change", "could", "create", "did", "does",
+    "during", "each", "either", "every", "few", "fix", "for", "from", "further", "get", "had",
+    "has", "have", "help", "here", "how", "into", "its", "itself", "just", "let", "like", "make",
+    "might", "more", "most", "must", "need", "new", "not", "now", "once", "only", "other", "our",
+    "over", "please", "put", "same", "should", "some", "still", "such", "than", "that", "the",
+    "them", "then", "there", "these", "they", "this", "those", "though", "too", "until", "update",
+    "use", "very", "want", "was", "were", "what", "when", "where", "whether", "which", "while",
+    "who", "whose", "why", "will", "with", "would", "you", "your",
 ];
 
 /// Lowercase words from the prompt worth looking for in paths and code.
