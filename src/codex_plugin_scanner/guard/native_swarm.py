@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -49,7 +50,7 @@ def execute(action: str, payload: dict[str, Any], *, guard_home: Path) -> dict[s
     answer = resident_decide(
         _OPERATION,
         partial(_resident_request, max_request_bytes=32768),
-        {"guard_home": str(home), "input": inputs[action]},
+        {"guard_home": str(home), "cli_path": os.environ.get("PATH", ""), "input": inputs[action]},
         home,
         lambda payload: shape_fields(payload, fields[action], lambda: SwarmError(_OPERATION.invalid)),
     )

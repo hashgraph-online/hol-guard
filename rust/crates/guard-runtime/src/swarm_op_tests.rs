@@ -58,7 +58,7 @@ fn swarm_needs_the_scoped_resident_and_binds_each_reply() {
         .unwrap();
     let store = PolicySnapshotStore::new(&home, &"a".repeat(64)).unwrap();
     let frame = json!({"operation":"swarm", "request":{"schema":"guard-swarm-request.v1", "request_id":"snapshot-1",
-        "query":{"guard_home":home,"input":{"action":"snapshot"}}}});
+        "query":{"guard_home":home,"cli_path":"/usr/bin:/bin","input":{"action":"snapshot"}}}});
     assert_eq!(
         crate::resident_protocol::evaluate_resident_bytes(frame.to_string().as_bytes(), None)
             .unwrap_err(),

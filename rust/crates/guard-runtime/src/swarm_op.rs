@@ -40,6 +40,7 @@ pub(crate) struct Request {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Query {
     pub(crate) guard_home: String,
+    cli_path: String,
     pub(crate) input: Input,
 }
 
@@ -62,6 +63,10 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         }
         store.require_guard_home(&request.query.guard_home)?;
         let swarm = store.swarm();
+        swarm
+            .service
+            .configure_cli_path(&request.query.cli_path)
+            .map_err(str::to_owned)?;
         let mut checkpoint = swarm.checkpoint.lock().map_err(|_| "swarm_unavailable")?;
         let home = std::path::Path::new(&request.query.guard_home);
         let history_path = home.join("swarm-history.v1.json");

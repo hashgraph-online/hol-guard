@@ -99,6 +99,34 @@ fn launch_and_resume_use_literal_stdin_and_idempotent_requests() {
 }
 
 #[test]
+fn daemon_cli_path_drives_discovery_and_the_owned_child() {
+    let (dir, mut service, request) = fixture("");
+    fs::rename(dir.path().join("fixture-cli"), dir.path().join("codex")).unwrap();
+    service.test_executable = None;
+    let path = std::env::join_paths([
+        std::path::Path::new("relative"),
+        dir.path(),
+        std::path::Path::new("/usr/bin"),
+        std::path::Path::new("/bin"),
+    ])
+    .unwrap();
+    service.configure_cli_path(path.to_str().unwrap()).unwrap();
+    assert!(service
+        .snapshot()
+        .unwrap()
+        .adapters
+        .iter()
+        .any(|a| a.id == "codex" && a.installed && a.launch_supported));
+    let run = service.launch(request.clone()).unwrap();
+    wait(&service, &run.id, |a| a.state == AgentState::AwaitingInput);
+    assert_eq!(
+        fs::read_to_string(dir.path().join("prompts.txt")).unwrap(),
+        request.task
+    );
+    assert!(service.configure_cli_path("bad\0path").is_err());
+}
+
+#[test]
 fn stale_foreign_conflicting_and_observed_actions_cannot_launch_or_signal() {
     let (_dir, service, request) = fixture("");
     let run = service.launch(request.clone()).unwrap();

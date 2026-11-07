@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 pub(crate) struct Run {
     pub agent: Agent,
     pub executable: PathBuf,
+    pub cli_path: std::ffi::OsString,
     pub session: Option<String>,
     pub pending: VecDeque<String>,
     pub events: VecDeque<Event>,
@@ -65,6 +66,7 @@ pub(crate) struct Registry {
 
 pub struct Service {
     epoch: String,
+    cli_path: Mutex<std::ffi::OsString>,
     inventory: Mutex<Option<(Instant, Snapshot)>>,
     pub(crate) registry: Arc<Mutex<Registry>>,
     workers: Mutex<Vec<JoinHandle<()>>>,
@@ -82,6 +84,7 @@ impl Default for Service {
         };
         Self {
             epoch,
+            cli_path: Mutex::new(std::env::var_os("PATH").unwrap_or_default()),
             inventory: Mutex::new(None),
             registry: Arc::new(Mutex::new(Registry::default())),
             workers: Mutex::new(Vec::new()),
@@ -92,6 +95,30 @@ impl Default for Service {
 }
 
 impl Service {
+    /// The daemon provides its own launch PATH as metadata, never a browser
+    /// field. The resident keeps its restricted environment; only owned CLI
+    /// children receive the validated absolute search directories.
+    pub fn configure_cli_path(&self, path: &str) -> Result<(), &'static str> {
+        if path.len() > 16_384 || path.contains('\0') {
+            return Err("swarm_cli_path_invalid");
+        }
+        let value = std::env::join_paths(std::env::split_paths(path).filter(|p| p.is_absolute()))
+            .map_err(|_| "swarm_cli_path_invalid")?;
+        let changed = {
+            let mut current = self.cli_path.lock().map_err(|_| "swarm_unavailable")?;
+            if *current == value {
+                false
+            } else {
+                *current = value;
+                true
+            }
+        };
+        if changed {
+            *self.inventory.lock().map_err(|_| "swarm_unavailable")? = None;
+        }
+        Ok(())
+    }
+
     /// Owned work keeps the resident alive even when its dashboard is closed.
     pub fn has_active_runs(&self) -> bool {
         self.registry
@@ -118,7 +145,12 @@ impl Service {
                     observed_at_ms,
                     discovery,
                     agents,
-                    adapters: installed_adapters(),
+                    adapters: installed_adapters(
+                        self.cli_path
+                            .lock()
+                            .map_err(|_| "swarm_unavailable")?
+                            .as_os_str(),
+                    ),
                 },
             ));
         }
@@ -148,8 +180,13 @@ impl Service {
         if registry.runs.values().filter(|r| r.active).count() >= MAX_RUNS {
             return Err("swarm_run_limit");
         }
+        let cli_path = self
+            .cli_path
+            .lock()
+            .map_err(|_| "swarm_unavailable")?
+            .clone();
         let executable = self
-            .executable(&request.harness)
+            .executable(&request.harness, &cli_path)
             .ok_or("swarm_cli_missing")?;
         let workspace = PathBuf::from(&request.workspace)
             .canonicalize()
@@ -201,6 +238,7 @@ impl Service {
         let mut run = Run {
             agent,
             executable,
+            cli_path,
             session: None,
             pending: VecDeque::from([request.task]),
             events: VecDeque::new(),
@@ -313,12 +351,12 @@ impl Service {
         }
     }
 
-    fn executable(&self, harness: &str) -> Option<PathBuf> {
+    fn executable(&self, harness: &str, cli_path: &std::ffi::OsStr) -> Option<PathBuf> {
         #[cfg(test)]
         if let Some(path) = self.test_executable.as_ref() {
             return Some(path.clone());
         }
-        crate::discovery::executable(harness)
+        crate::discovery::executable(harness, cli_path)
     }
 
     fn start_worker(&self, id: String) -> Result<(), &'static str> {

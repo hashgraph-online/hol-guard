@@ -70,6 +70,7 @@ impl Service {
             let mut run = Run {
                 agent,
                 executable: PathBuf::new(),
+                cli_path: std::ffi::OsString::new(),
                 session: None,
                 pending: VecDeque::new(),
                 events: VecDeque::new(),

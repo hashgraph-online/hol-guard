@@ -184,10 +184,11 @@ fn prepare(registry: &Arc<Mutex<Registry>>, id: &str) -> Option<(Command, String
     let prompt = run.pending.pop_front()?;
     let mut command = Command::new(&run.executable);
     command.current_dir(run.agent.workspace.as_deref()?);
-    if let Some(path) = std::env::var_os("PATH") {
+    {
+        let path = &run.cli_path;
         // Script entry points may use /usr/bin/env. Relative PATH entries must
         // not resolve an interpreter from the newly selected project.
-        match std::env::join_paths(std::env::split_paths(&path).filter(|p| p.is_absolute())) {
+        match std::env::join_paths(std::env::split_paths(path).filter(|p| p.is_absolute())) {
             Ok(path) => {
                 command.env("PATH", path);
             }

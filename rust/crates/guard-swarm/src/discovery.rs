@@ -189,9 +189,9 @@ pub fn discover(now: u64) -> (Vec<Agent>, Coverage) {
 
 /// Resolve only a fixed adapter name in absolute PATH entries. A workspace or
 /// browser request cannot supply an executable, PATH override, or command.
-pub(crate) fn executable(harness: &str) -> Option<PathBuf> {
+pub(crate) fn executable(harness: &str, search_path: &std::ffi::OsStr) -> Option<PathBuf> {
     let (_, _, binary) = HARNESSES.iter().find(|(id, _, _)| *id == harness)?;
-    resolve(binary, std::env::var_os("PATH").as_deref())
+    resolve(binary, Some(search_path))
 }
 
 fn resolve(binary: &str, search_path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
@@ -227,9 +227,9 @@ fn resolve(binary: &str, search_path: Option<&std::ffi::OsStr>) -> Option<PathBu
     None
 }
 
-pub fn installed_adapters() -> Vec<Adapter> {
+pub fn installed_adapters(search_path: &std::ffi::OsStr) -> Vec<Adapter> {
     HARNESSES.iter().map(|(id, label, _)| {
-        let installed = executable(id).is_some();
+        let installed = executable(id, search_path).is_some();
         let supported = matches!(*id, "codex" | "claude-code");
         Adapter { id: (*id).into(), label: (*label).into(), installed, launch_supported: installed && supported,
             detail: if installed && supported { "Run tasks, queue follow-ups, interrupt, and stop. Uses your CLI configuration and permissions." }

@@ -185,6 +185,11 @@ controls reasoning effort and the goal API does not change it.
   sandbox policy, hooks, credentials, or context grants. Noninteractive CLI
   permission limits still apply; inspect activity and continue in the native
   harness when a tool needs permissions the CLI cannot request in this mode.
+  The daemon supplies its own PATH through the bound native request; browser
+  input cannot override it. Rust uses only absolute entries for installed-CLI
+  discovery and owned child execution, without relaxing the resident's isolated
+  environment. Provider credentials that exist only in shell environment
+  variables are not forwarded; use the CLI's persisted sign-in/configuration.
 - Busy instructions queue for the next successful turn. In-turn steering is
   unavailable; interrupt and then send a follow-up to change direction.
   Failed, interrupted, denied, or stopped turns discard unsent instructions.
@@ -215,7 +220,7 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
 
 ### Verification
 
-- Rust Swarm: 16 tests cover process discovery, literal stdin, exact resume,
+- Rust Swarm: 17 tests cover process discovery, daemon PATH transport, literal stdin, exact resume,
   duplicate/stale/foreign actions, output limits, owned descendant shutdown,
   inert recovery, CLI permissions, and truthful context counts. Clippy passes
   with warnings denied.
@@ -232,6 +237,9 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
 - TypeScript with Node types reports the same 60 diagnostics as clean main,
   with no new diagnostics. The default TypeScript invocation also inherits
   main's missing Node-type configuration.
+
+An isolated live macOS dashboard also verified authenticated Swarm reads, real
+process inventory, and installed Codex detection through the resident/HTTP path.
 
 Qualification limits: execution tests use disposable CLI doubles on macOS;
 browser tests use API fixtures. Real provider-backed sessions and Linux/Windows

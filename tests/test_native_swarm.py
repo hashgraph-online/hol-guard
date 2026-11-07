@@ -13,15 +13,20 @@ from codex_plugin_scanner.guard.daemon import swarm_http as http
 def test_browser_payload_cannot_override_home_or_route(monkeypatch, tmp_path: Path):
     captured = {}
     monkeypatch.setattr(api, "_resolve_digest_home", lambda _: tmp_path)
+    monkeypatch.setenv("PATH", "/tool-bin")
 
     def decide(operation, transport, query, home, validate):
         captured.update(query=query, home=home, operation=operation)
         return {"agent": {"id": "run-1"}}
 
     monkeypatch.setattr(api, "resident_decide", decide)
-    payload = {"guard_home": "/foreign", "action": "snapshot", "executable": "/bin/sh"}
+    payload = {"guard_home": "/foreign", "cli_path": "/foreign-bin", "action": "snapshot", "executable": "/bin/sh"}
     assert api.execute("launch", payload, guard_home=tmp_path) == {"agent": {"id": "run-1"}}
-    assert captured["query"] == {"guard_home": str(tmp_path), "input": {"action": "launch", "launch": payload}}
+    assert captured["query"] == {
+        "guard_home": str(tmp_path),
+        "cli_path": "/tool-bin",
+        "input": {"action": "launch", "launch": payload},
+    }
     assert captured["operation"].feature == "swarm-v1"
     api.execute("events", {"run_id": "run-1", "action": "launch"}, guard_home=tmp_path)
     assert captured["query"]["input"] == {"action": "events", "run_id": "run-1"}
