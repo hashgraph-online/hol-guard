@@ -367,7 +367,7 @@ python -m ci.gauntlet qualify --sha FULL_TESTED_SOURCE_SHA \
 - Each attempt is a complete fresh `run --native-luna-route --fail-fast` in a pristine detached worktree under `--run-root` with its own evidence and work directories; no results are stitched. `--max-load` (default `2 * os.cpu_count()`) gates new cases on host load, bounded by `--max-load-wait` (default 180 s). Each attempt spends up to `--case-retries` re-runs per case before the attempt itself is judged, so one uncooperative case no longer costs a whole fresh round. A fresh attempt happens only while attempts remain **and** every failed case is `not-exercised`, `inference-error` or `harness-error` — product outcomes (`false-positive`, `false-negative`, `task-incomplete`) always stop the loop. The budget runs from 1 to 10: a round is clean only when every case in the catalog complies, so three rounds was not enough to clear model noise on a product that had nothing wrong with it. `attempts_run` and `attempts_allowed` sit beside the per-attempt records so a `qualified: false` that merely ran out of rounds cannot be read as a product failure. `attempts_run` counts rounds that **started**: a round interrupted mid-run spent the lane and left no record, and the `attempts` list already gives the completed count.
 - A passing attempt is verified in-process by the driver checkout's own verifier with `--source-root` on the candidate worktree. That verification is independent only when the reported `independent_verifier` is true (driver checkout clean and an ancestor of `origin/main`); otherwise treat the result as provisional.
 - It prints exactly one JSON line to stdout (also written to `run_root/qualification.json`; progress lines go to stderr) with the sha binding, wheel/SDK identity, jobs/host_slots/max_load, per-attempt records, cleanup results and the verify report, and exits 0 only when the evidence verified **and** the report is merge-qualified.
-- The same record carries `coverage`: the one lane the driver drove (`omp` on the `core` profile) and the ten it did not. A qualification is green for that lane alone. The harness lanes and the full-task profile cover the work a person actually does, so `qualified: true` is not a statement about Claude Code, Codex or Cursor, and `coverage.not_driven` says so in the artifact rather than leaving it to be remembered. The eleven lanes are the ones the runner accepts: Cursor has no `full-tasks` lane, because the full-task runner reads its transcript back only from Oh My Pi, Claude Code and Codex. A run that starts no attempt — `--prepare-only`, or a setup failure — publishes `coverage.driven: null` and lists every lane under `not_driven`, with `coverage.lane` naming the lane it was set up for.
+- The same record carries `coverage`: the one lane the driver drove (`omp` on the `core` profile) and the ones it did not. A qualification is green for that lane alone. The harness lanes and the full-task profile cover the work a person actually does, so `qualified: true` is not a statement about Claude Code, Codex or Cursor, and `coverage.not_driven` says so in the artifact rather than leaving it to be remembered. The lanes in the record are the ones the runner accepts: Cursor has no `full-tasks` lane, because the full-task runner reads its transcript back only from Oh My Pi, Claude Code and Codex. A run that starts no attempt — `--prepare-only`, or a setup failure — publishes `coverage.driven: null` and lists every lane under `not_driven`, with `coverage.lane` naming the lane it was set up for.
 
 ### Other harnesses (`--harness`, never merge-qualifying)
 
@@ -476,12 +476,8 @@ exactly `QUALIFYING_LANE = ("omp", "core")`, so no change to the driver reaches 
 The approval round trip -- the only live proof that an approval, and an **Always allow** in
 particular, survives the retry -- therefore runs only when someone runs this lane deliberately.
 Treat it as a release-time step beside the core and full-task runs, and record which lane
-answered the cards.
-
-One caveat while reading a qualification record: `lane_coverage.py` lists `approval-retry` in
-`_HARNESS_ONLY_PROFILES`, so `lane_profiles("omp")` omits a lane Oh My Pi can in fact drive and
-`not_driven` never mentions it. The runner is the authority here; the coverage record understates
-what the Oh My Pi lane could have run.
+answered the cards. A qualification record's `not_driven` names the `omp` approval-retry lane
+when a run left it undriven, the same as every other lane.
 
 ### Installed acceptance (`installed`, never merge-qualifying)
 
