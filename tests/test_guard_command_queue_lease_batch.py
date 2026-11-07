@@ -456,8 +456,8 @@ def test_job_handed_over_while_a_worker_stops_is_still_settled(tmp_path: Path, m
     take_job = pool._take_job
     handed = threading.Event()
 
-    def take_after_a_late_handoff(slot: int) -> object:
-        job = take_job(slot)
+    def take_after_a_late_handoff(slot: int, **kwargs: bool) -> object:
+        job = take_job(slot, **kwargs)
         if job is command_queue_drain.STOP_DRAIN and not handed.is_set():
             # The worker has decided to stop; a job handed over now starts a worker of its own.
             handed.set()
