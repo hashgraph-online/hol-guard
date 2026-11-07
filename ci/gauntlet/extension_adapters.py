@@ -220,10 +220,26 @@ def configure_extension_controls(
     daemon: Any, guard_home: Path, extension_id: str, *, enabled_permissions: list[str]
 ) -> int:
     """Enable an extension with every listed permission explicitly allowed."""
+    return configure_each_extension_controls(daemon, guard_home, {extension_id: enabled_permissions})[extension_id]
+
+
+def configure_each_extension_controls(
+    daemon: Any, guard_home: Path, enabled_permissions: dict[str, list[str]]
+) -> dict[str, int]:
+    """Enable several extensions, each with its permissions, from one authorization.
+
+    Authorizing enrolls the control authority, which only a home still at
+    revision 0 accepts; once a layer is committed a second authorization is
+    refused with `fixture_not_new`. A case that needs more than one extension
+    therefore commits all of them from the single password.
+    """
     password = _authorize_extension_controls(daemon, guard_home)
-    return _commit_extension_controls(
-        daemon, password, extension_id, tuple((permission, True) for permission in enabled_permissions)
-    )
+    return {
+        extension_id: _commit_extension_controls(
+            daemon, password, extension_id, tuple((permission, True) for permission in permissions)
+        )
+        for extension_id, permissions in enabled_permissions.items()
+    }
 
 
 def configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:

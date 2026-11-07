@@ -58,8 +58,8 @@ def test_the_case_gets_an_offline_origin_without_joining_the_git_control_set() -
     assert EXTENSION_ALLOW_WORKTREE_CASE not in GIT_ALLOW_CASES
 
 
-def signing(monkeypatch) -> list[str]:
-    """Record which extensions the configuration signs, without a live daemon.
+def signing(monkeypatch) -> list[list[str]]:
+    """Record each authorization and the extensions it signed, without a live daemon.
 
     The permission ids come from the installed catalog, which only an
     initialised runtime carries, so these checks measure the choice of
@@ -68,23 +68,25 @@ def signing(monkeypatch) -> list[str]:
     """
     from ci.gauntlet import extension_adapters, extension_allow_fixtures
 
-    signed: list[str] = []
+    authorizations: list[list[str]] = []
 
-    def configure(_daemon, _guard_home, extension_id, *, enabled_permissions):
-        assert enabled_permissions, extension_id
-        signed.append(extension_id)
-        return len(signed)
+    def configure(_daemon, _guard_home, enabled_permissions):
+        assert all(enabled_permissions.values()), enabled_permissions
+        authorizations.append(list(enabled_permissions))
+        return {extension_id: index for index, extension_id in enumerate(enabled_permissions, start=1)}
 
     monkeypatch.setattr(extension_allow_fixtures, "_declared_permissions", lambda extension_id: [f"{extension_id}.all"])
-    monkeypatch.setattr(extension_adapters, "configure_extension_controls", configure)
-    return signed
+    monkeypatch.setattr(extension_adapters, "configure_each_extension_controls", configure)
+    return authorizations
 
 
 def test_the_case_allows_the_contributed_extension_and_the_git_step_before_it(monkeypatch) -> None:
-    signed = signing(monkeypatch)
+    authorizations = signing(monkeypatch)
     record = configure_extension_allow_controls(object(), Path("guard-home"), EXTENSION_ALLOW_WORKTREE_CASE)
 
-    assert signed == [GIT_EXTENSION_ID, EXTENSION_ALLOW_ID]
+    # Enrolling the control authority is accepted only while the home is still
+    # at revision 0, so both extensions are committed from one authorization.
+    assert authorizations == [[GIT_EXTENSION_ID, EXTENSION_ALLOW_ID]]
     # The contributed extension stays the subject of the record every reader
     # already expects, and the list names what else had to be enabled.
     assert record["extension_id"] == EXTENSION_ALLOW_ID
@@ -92,10 +94,10 @@ def test_the_case_allows_the_contributed_extension_and_the_git_step_before_it(mo
 
 
 def test_the_other_allow_cases_still_sign_only_the_contributed_extension(monkeypatch) -> None:
-    signed = signing(monkeypatch)
+    authorizations = signing(monkeypatch)
     record = configure_extension_allow_controls(object(), Path("guard-home"), "external-extension-allow-solo-action")
 
-    assert signed == [EXTENSION_ALLOW_ID]
+    assert authorizations == [[EXTENSION_ALLOW_ID]]
     assert record["enabled_extensions"] == [EXTENSION_ALLOW_ID]
 
 
@@ -114,3 +116,35 @@ def test_the_oracle_asks_for_the_worktree_as_well_as_the_executed_flag(tmp_path,
 
     assert checks["external-extension-allow-executed"] is True
     assert checks["external-extension-allow-worktree-created"] is worktree_present
+
+
+def test_several_extensions_are_committed_from_one_authorization(monkeypatch) -> None:
+    """`provision` accepts a home only at revision 0, so authorizing twice fails.
+
+    Enrolling the control authority is what the first committed layer makes
+    impossible to repeat, and the runner reaches it during setup, before the
+    case's command ever runs.
+    """
+    from ci.gauntlet import extension_adapters
+
+    authorizations: list[object] = []
+    committed: list[tuple[str, tuple[tuple[str, bool], ...]]] = []
+
+    def authorize(_daemon, guard_home):
+        authorizations.append(guard_home)
+        return "password"
+
+    def commit(_daemon, _password, extension_id, permissions):
+        committed.append((extension_id, permissions))
+        return len(committed)
+
+    monkeypatch.setattr(extension_adapters, "_authorize_extension_controls", authorize)
+    monkeypatch.setattr(extension_adapters, "_commit_extension_controls", commit)
+
+    revisions = extension_adapters.configure_each_extension_controls(
+        object(), Path("guard-home"), {GIT_EXTENSION_ID: ["git.read"], EXTENSION_ALLOW_ID: ["ollama.manage"]}
+    )
+
+    assert len(authorizations) == 1
+    assert committed == [(GIT_EXTENSION_ID, (("git.read", True),)), (EXTENSION_ALLOW_ID, (("ollama.manage", True),))]
+    assert revisions == {GIT_EXTENSION_ID: 1, EXTENSION_ALLOW_ID: 2}

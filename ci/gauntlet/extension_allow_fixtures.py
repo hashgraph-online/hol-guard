@@ -70,7 +70,7 @@ def configure_extension_allow_controls(
     daemon: object, guard_home: Path, scenario_id: str | None = None
 ) -> dict[str, object]:
     """Sign the contributed extension and every permission it declares as enabled."""
-    from .extension_adapters import configure_extension_controls
+    from .extension_adapters import configure_each_extension_controls
 
     extension_ids = [EXTENSION_ALLOW_ID]
     if scenario_id == EXTENSION_ALLOW_WORKTREE_CASE:
@@ -81,18 +81,17 @@ def configure_extension_allow_controls(
         from .git_allow_fixtures import GIT_EXTENSION_ID
 
         extension_ids.insert(0, GIT_EXTENSION_ID)
-    controls: list[dict[str, object]] = []
-    for extension_id in extension_ids:
-        permissions = _declared_permissions(extension_id)
-        revision = configure_extension_controls(daemon, guard_home, extension_id, enabled_permissions=permissions)
-        controls.append(
-            {
-                "extension_id": extension_id,
-                "enabled_permissions": permissions,
-                "control_revision": revision,
-            }
-        )
+    permissions = {extension_id: _declared_permissions(extension_id) for extension_id in extension_ids}
+    # One authorization for the whole case: enrolling the control authority a
+    # second time is refused once a layer is committed.
+    revisions = configure_each_extension_controls(daemon, guard_home, permissions)
+    subject = extension_ids[-1]
     # The contributed extension is the subject, so its own record stays the
     # shape every reader already expects; the list names whatever else the
     # case had to enable to reach it.
-    return {**controls[-1], "enabled_extensions": [control["extension_id"] for control in controls]}
+    return {
+        "extension_id": subject,
+        "enabled_permissions": permissions[subject],
+        "control_revision": revisions[subject],
+        "enabled_extensions": extension_ids,
+    }
