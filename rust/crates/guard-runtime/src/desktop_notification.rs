@@ -153,6 +153,23 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     Ok(answer.to_string().into_bytes())
 }
 
+/// `send_desktop_approval_notification` from this process: whether the
+/// notice was shown.
+pub(crate) fn send_approval(
+    request_id: &str,
+    title: &str,
+    message: &str,
+    approval_url: &str,
+) -> bool {
+    let notification = Notification {
+        request_id: request_id.to_owned(),
+        title: title.to_owned(),
+        message: message.to_owned(),
+        approval_url: approval_url.to_owned(),
+    };
+    send(&notification, Platform::current(), &mut SystemHost)
+}
+
 fn invalid() -> String {
     "desktop_notification_request_invalid".to_owned()
 }
