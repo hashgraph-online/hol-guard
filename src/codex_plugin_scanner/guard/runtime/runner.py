@@ -1787,7 +1787,22 @@ def _retryable_gateway_http_error(error: urllib.error.HTTPError) -> bool:
     return error.code in _SYNC_RETRYABLE_GATEWAY_STATUS_CODES
 
 
-def _retry_after_sleep_seconds(error: urllib.error.HTTPError, retry_timeout_seconds: int) -> int:
+def _retry_after_sleep_seconds(
+    error: urllib.error.HTTPError,
+    retry_timeout_seconds: int,
+    *,
+    unhinted_gateway_retry_seconds: float | None = None,
+) -> float:
+    """How long to wait before retrying a gateway error.
+
+    A response without ``Retry-After`` waits the default 429 delay unless the
+    caller names a shorter one; a gateway error that gives no hint is usually
+    a proxy that lost its upstream, such as a server replaced during a deploy,
+    and the next request reaches a live one.
+    """
+
+    if unhinted_gateway_retry_seconds is not None and not (error.headers and error.headers.get("Retry-After")):
+        return max(unhinted_gateway_retry_seconds, 0.0)
     return min(_parse_retry_after_header(error), retry_timeout_seconds)
 
 
@@ -3503,6 +3518,7 @@ def _urlopen_with_sync_retries(
     parse_json_response: bool,
     nonce_fast_path: bool,
     max_response_bytes: int | None = None,
+    unhinted_gateway_retry_seconds: float | None = None,
 ) -> object:
     """Drive one Guard Cloud request through the shared sync retry policies.
 
@@ -3551,7 +3567,9 @@ def _urlopen_with_sync_retries(
                 retried_timeout = False
                 continue
             if _retryable_gateway_http_error(error) and gateway_retry_count < _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS:
-                retry_after = _retry_after_sleep_seconds(error, retry_timeout_seconds)
+                retry_after = _retry_after_sleep_seconds(
+                    error, retry_timeout_seconds, unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds
+                )
                 time.sleep(retry_after)
                 gateway_retry_count += 1
                 current_request = _request_for_gateway_retry(current_request)
@@ -3590,6 +3608,7 @@ def _urlopen_json_with_timeout_retry(
     timeout_seconds: int,
     retry_timeout_seconds: int,
     max_response_bytes: int | None = None,
+    unhinted_gateway_retry_seconds: float | None = None,
 ) -> dict[str, object]:
     payload = _urlopen_with_sync_retries(
         request=request,
@@ -3598,6 +3617,7 @@ def _urlopen_json_with_timeout_retry(
         parse_json_response=True,
         nonce_fast_path=False,
         max_response_bytes=max_response_bytes,
+        unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds,
     )
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
