@@ -138,34 +138,6 @@ fn the_row_must_answer_its_resolved_request() {
 }
 
 #[test]
-fn a_sibling_allow_that_moves_the_revision_leaves_this_allow_spendable() {
-    let connection = connection();
-    insert_row(
-        &connection,
-        crate::local_once_store::EXACT_CLOUD_INTEGRITY_PURPOSE,
-    );
-    let decision = peek_with(&connection, Some(KEY));
-    // A bulk approval stores the next request's allow before this hook spends.
-    connection
-        .execute_batch("update guard_approval_authority_revision set revision = 8")
-        .unwrap();
-
-    let spend = || {
-        crate::continuation_grants::consume_exact_cloud_package(
-            &connection,
-            "req-1",
-            &decision,
-            NOW,
-            KEY,
-            KEY_ID,
-        )
-        .unwrap()
-    };
-    assert!(spend());
-    assert!(!spend(), "an exact Cloud allow is spent once");
-}
-
-#[test]
 fn an_exact_allow_is_still_reverified_when_spent() {
     for change in [
         "update approval_requests set policy_action = 'block'",

@@ -53,51 +53,105 @@ pub(crate) fn complete(
     ) {
         return Ok(failure("policy_no_longer_reviewable"));
     }
-    let previous = resume(connection, request_id)?;
-    let replayed = previous
-        .filter(|previous| terminal_matches(previous, action))
-        .map(|previous| json!({"action": action, "completed": true, "continuation": previous, "replayed": true}));
-    let decision = if action == "allow" {
-        if !args.flag("fresh_allow_authorized")? {
-            return Ok(failure("fresh_policy_revalidation_failed"));
-        }
-        if let Some(replayed) = replayed {
-            return Ok(replayed);
-        }
-        if !args.flag("authority_gathered")? && !args.flag("native_evidence")? {
-            // Nothing is written yet: the caller reads the policy store and
-            // the keyring only once no recorded resume answers, then asks
-            // again with the authority's evidence.
-            return Ok(failure(EVIDENCE_REQUIRED));
-        }
-        // The evidence the daemon published answers first; when the resident
-        // cannot read it, it refuses before any lookup, so asking again with
-        // the gathered evidence repeats nothing.
-        let decision = match live_authority::resolve(connection, guard_home, args, owner) {
-            Err(StoreError::Invalid(reason)) if reason == EVIDENCE_REQUIRED => {
-                return Ok(failure(EVIDENCE_REQUIRED));
-            }
-            decision => decision?,
-        };
-        if decision.is_null() {
-            return Ok(failure("exact_approval_authority_missing"));
-        }
-        decision
-    } else if let Some(replayed) = replayed {
-        return Ok(replayed);
-    } else {
-        Value::Null
-    };
-    let completion = record_with(connection, guard_home, args, &request, action, &decision)?;
     let expected = if action == "allow" {
         "resumed"
     } else {
         "blocked_not_resumed"
     };
-    if completion["continuationStatus"] != expected {
-        return Ok(failure("continuation_not_recorded"));
+    settle_on_fresh_authority(
+        || read_decision(connection, guard_home, args, owner, request_id, action),
+        |decision| {
+            let completion = record_with(connection, guard_home, args, &request, action, decision)?;
+            Ok((completion["continuationStatus"] == expected).then(|| {
+                json!({"action": action, "completed": true, "continuation": completion, "replayed": false})
+            }))
+        },
+        |decision| authority_moved(connection, decision),
+    )
+}
+
+/// How many times one completion reads its allow's authority.
+const AUTHORITY_READS: usize = 4;
+
+/// Read the decision's authority, then record the continuation and spend it.
+///
+/// The authority is read before the write lock is taken, and every allow
+/// stored or spent moves the shared approval authority revision. When a
+/// reviewer approves several requests at once, another request's allow can
+/// move it in between, and the spend then refuses this one. Only then is the
+/// authority read again, at the new revision, so a block saved in between
+/// still wins.
+fn settle_on_fresh_authority(
+    mut read: impl FnMut() -> StoreResult<Result<Value, Value>>,
+    mut record: impl FnMut(&Value) -> StoreResult<Option<Value>>,
+    mut moved: impl FnMut(&Value) -> StoreResult<bool>,
+) -> StoreResult<Value> {
+    for attempt in 1..=AUTHORITY_READS {
+        let decision = match read()? {
+            Ok(decision) => decision,
+            Err(answer) => return Ok(answer),
+        };
+        if let Some(completed) = record(&decision)? {
+            return Ok(completed);
+        }
+        if attempt == AUTHORITY_READS || !moved(&decision)? {
+            break;
+        }
     }
-    Ok(json!({"action": action, "completed": true, "continuation": completion, "replayed": false}))
+    Ok(failure("continuation_not_recorded"))
+}
+
+/// The authority to spend for the request's terminal decision: `Ok` with the
+/// allow's authority (`Null` for a block), or `Err` with the answer to return
+/// instead.
+fn read_decision(
+    connection: &Connection,
+    guard_home: &str,
+    args: &Args<'_>,
+    owner: Option<&PolicySnapshotStore>,
+    request_id: &str,
+    action: &str,
+) -> StoreResult<Result<Value, Value>> {
+    let previous = resume(connection, request_id)?;
+    let replayed = previous
+        .filter(|previous| terminal_matches(previous, action))
+        .map(|previous| json!({"action": action, "completed": true, "continuation": previous, "replayed": true}));
+    if action != "allow" {
+        return Ok(replayed.map_or(Ok(Value::Null), Err));
+    }
+    if !args.flag("fresh_allow_authorized")? {
+        return Ok(Err(failure("fresh_policy_revalidation_failed")));
+    }
+    if let Some(replayed) = replayed {
+        return Ok(Err(replayed));
+    }
+    if !args.flag("authority_gathered")? && !args.flag("native_evidence")? {
+        // Nothing is written yet: the caller reads the policy store and
+        // the keyring only once no recorded resume answers, then asks
+        // again with the authority's evidence.
+        return Ok(Err(failure(EVIDENCE_REQUIRED)));
+    }
+    // The evidence the daemon published answers first; when the resident
+    // cannot read it, it refuses before any lookup, so asking again with
+    // the gathered evidence repeats nothing.
+    let decision = match live_authority::resolve(connection, guard_home, args, owner) {
+        Err(StoreError::Invalid(reason)) if reason == EVIDENCE_REQUIRED => {
+            return Ok(Err(failure(EVIDENCE_REQUIRED)));
+        }
+        decision => decision?,
+    };
+    if decision.is_null() {
+        return Ok(Err(failure("exact_approval_authority_missing")));
+    }
+    Ok(Ok(decision))
+}
+
+/// Whether the approval authority revision moved since `decision` was read.
+fn authority_moved(connection: &Connection, decision: &Value) -> StoreResult<bool> {
+    let Some(revision) = decision["_approval_authority_revision"].as_i64() else {
+        return Ok(false);
+    };
+    Ok(crate::claim_reuse::approval_authority_revision(connection)? != revision)
 }
 
 /// `record_live_hook_completion` without authority: the continuation payload,
