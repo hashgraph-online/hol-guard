@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.kyte",
+  "version": "1.0.0",
+  "name": "Kyte options market",
+  "description": "Reviews the hosted Kyte MCP server for the non-custodial options market on Robinhood Chain. Reads return public on-chain market data: tokens, offers, prices, charts, positions, staking, fee proof and Pons launchpad graduations. Prepare tools only return a kyte.sh link for the user to review and sign in their own wallet; the server holds no keys and sends no transactions. Prepares and unknown tools need review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "sh.kyte",
+    "displayName": "Kyte",
+    "url": "https://kyte.sh"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0B1A14"
+  },
+  "homepage": "https://kyte.sh/mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://kyte.sh/api/mcp",
+    "serverNames": [
+      "kyte"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "financial-data-read"
+  ],
+  "tools": [
+    {
+      "name": "list_tokens",
+      "state": "inherit"
+    },
+    {
+      "name": "find_offers",
+      "state": "inherit"
+    },
+    {
+      "name": "get_offer",
+      "state": "inherit"
+    },
+    {
+      "name": "get_positions",
+      "state": "inherit"
+    },
+    {
+      "name": "get_prices",
+      "state": "inherit"
+    },
+    {
+      "name": "get_chart",
+      "state": "inherit"
+    },
+    {
+      "name": "get_staking",
+      "state": "inherit"
+    },
+    {
+      "name": "get_protocol_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "get_proof",
+      "state": "inherit"
+    },
+    {
+      "name": "get_activity",
+      "state": "inherit"
+    },
+    {
+      "name": "explain_offer",
+      "state": "inherit"
+    },
+    {
+      "name": "compare_offers",
+      "state": "inherit"
+    },
+    {
+      "name": "list_graduated",
+      "state": "inherit"
+    },
+    {
+      "name": "prepare_buy",
+      "state": "review"
+    },
+    {
+      "name": "prepare_covered_call",
+      "state": "review"
+    },
+    {
+      "name": "prepare_cash_secured_put",
+      "state": "review"
+    },
+    {
+      "name": "prepare_exercise",
+      "state": "review"
+    },
+    {
+      "name": "prepare_stake",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://kyte.sh/mcp",
+    "https://github.com/usekyte",
+    "https://kyte.sh/docs"
+  ],
+  "saferAlternatives": [
+    "Every prepare tool returns a link only: open it, check the amounts on kyte.sh and sign in your own wallet; nothing is executed by the server.",
+    "Use read tools alone for research; no account, key, signature or payment is needed to call any Kyte tool.",
+    "Options are risky and can expire worthless; the server provides information, not financial advice."
+  ]
+}
