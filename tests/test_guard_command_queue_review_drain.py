@@ -412,6 +412,28 @@ def test_pending_drain_result_is_found_for_restart(tmp_path: Path) -> None:
     assert command_queue_drain.review_drain_has_pending_result(store) is True
 
 
+def test_unreadable_drain_lane_does_not_hide_another_lanes_pending_result(tmp_path: Path, caplog) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        command_queue_drain.review_drain_lane(2).state_key,
+        {"state": "result_pending", "pending_result": {"job": {"id": "job-2"}, "payload": {}}},
+        "2000-01-01T00:00:00+00:00",
+    )
+    broken_key = command_queue_drain.review_drain_lane(0).state_key
+    read = store.get_sync_payload
+
+    def get_sync_payload(state_key: str) -> object:
+        if state_key == broken_key:
+            raise ValueError("corrupt lane state")
+        return read(state_key)
+
+    store.get_sync_payload = get_sync_payload
+
+    with caplog.at_level("WARNING"):
+        assert command_queue_drain.review_drain_has_pending_result(store) is True
+    assert "drain state unreadable: slot=0 error=ValueError" in caplog.text
+
+
 def test_pool_start_survives_a_thread_that_cannot_start(tmp_path: Path, monkeypatch, caplog) -> None:
     def refuse(_self: threading.Thread) -> None:
         raise RuntimeError("can't start new thread")
