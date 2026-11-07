@@ -537,10 +537,18 @@ fn takes_next_value(token: &str, merge: bool) -> bool {
 /// A class the glob check reads differently from the shell and Git is
 /// screened as `?`; see [`readable_pattern`].
 fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+    // A `git config --get-regexp` operand names configuration keys, so the
+    // wider path questions -- which refuse every pattern holding a `.*` --
+    // would floor an ordinary `remote.*url` read. The pattern still faces the
+    // markers the glob's own text names, the screen a search pattern faces.
+    let patterns = git_config_reads::configuration_patterns(segment);
     arguments_outside_message(segment).any(|argument| {
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
             return false;
+        }
+        if patterns.contains(&argument.as_str()) {
+            return search::literal_glob_names_sensitive_path(&readable_pattern(argument).0);
         }
         match argument.split_once('=') {
             Some((name, _))
