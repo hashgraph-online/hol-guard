@@ -292,6 +292,60 @@ def test_a_watch_that_finds_jobs_hands_them_over_and_keeps_watching(tmp_path: Pa
     assert not pool.has_handoff()
 
 
+def test_a_watch_that_finds_jobs_passes_the_watch_on_while_it_settles(tmp_path: Path) -> None:
+    # A watch lease that returns jobs leaves its worker settling the first one
+    # for most of a second. The rest of a bulk approval keeps landing in that
+    # time, so another worker has to hold the lease open meanwhile.
+    polls: list[str] = []
+    lock = threading.Lock()
+    passed_on = threading.Event()
+    seen_while_settling: list[bool] = []
+
+    def poll_once(
+        _store: object,
+        _context: object,
+        *,
+        leased_item: dict[str, object] | None = None,
+        on_exact_review_lease=None,
+    ):
+        watching = (current_command_queue_lane().wait_ms or 0) > 0
+        if leased_item is not None:
+            kind = str(leased_item["id"])
+        elif watching:
+            kind = "watch"
+        else:
+            kind = "lease"
+        with lock:
+            polls.append(kind)
+            first_watch = watching and polls.count("watch") == 1
+        if leased_item is not None:
+            return {"state": "idle", "last_poll_was_empty": False}
+        if first_watch:
+            assert on_exact_review_lease is not None
+            on_exact_review_lease(command_queue_drain.ReviewLeaseBatch(jobs=(), more_may_be_ready=False))
+            # Settling the job this watch leased.
+            seen_while_settling.append(passed_on.wait(2))
+            return {"state": "idle", "last_poll_was_empty": False}
+        if watching:
+            passed_on.set()
+        return {"state": "idle", "last_poll_was_empty": True}
+
+    pool = command_queue_drain.ReviewDrainPool(
+        FakeStore(tmp_path / "guard-home"),
+        _context(tmp_path),
+        stop_event=threading.Event(),
+        poll_once=poll_once,
+        format_error=str,
+    )
+
+    pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(), more_may_be_ready=False))
+    _settle(pool, polls, ["watch", "watch"])
+
+    assert seen_while_settling == [True]
+    assert sorted(polls) == ["watch", "watch"]
+    assert pool._handoff.watcher is None
+
+
 def test_only_one_worker_watches_at_a_time(tmp_path: Path) -> None:
     pool = _recording_pool(tmp_path, [], threading.Lock())
     pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(), more_may_be_ready=False))
