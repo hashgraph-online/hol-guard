@@ -22,9 +22,11 @@
 //! value stay out), `@` outside a bare rendering format (so `@sh` and a
 //! `@fmt "string"` template stay out), `;` (which every multi-argument and
 //! binding builtin needs: `def`, `reduce`, `foreach`, `limit`, `range`,
-//! `getpath`), string interpolation, a `:` outside an object or a subscript,
-//! computed object keys, and every builtin outside the lists below are all
-//! rejected.
+//! `getpath`), a `:` outside an object or a subscript, computed object keys,
+//! and every builtin outside the lists below are all rejected.
+//! A string may render admitted filters into its text
+//! (`"\(.name) \(.state)"`): each interpolation is read as a filter over the
+//! same value, so the whole string stays a pure function of it.
 //! A shorthand object entry (`{number, title}`) names a field of the value
 //! read, so it is admitted under the same key rules as `{number: .number}`.
 
@@ -355,6 +357,7 @@ fn stage(part: &str) -> bool {
         || array(part)
         || group(part)
         || format(part)
+        || interpolated_string(part)
         || variable(part)
 }
 
@@ -373,6 +376,46 @@ fn variable(part: &str) -> bool {
         && (suffix.is_empty()
             || (suffix.starts_with('.') && projection(suffix))
             || (suffix.starts_with('[') && projection(&format!(".{suffix}"))))
+}
+
+/// `"\(.type)\t\(.name)"`: text with admitted filters rendered into it.
+/// Each interpolation is read as a filter over the value jq already read, so
+/// the string is a pure function of that value exactly as `join` and `@tsv`
+/// are. A template a format is applied to — `@sh "\(.x)"`, whose output is
+/// shell-quoted words meant to be run — never reaches here: `@sh` fails
+/// [`valid_characters`], and a format followed by a string is neither a bare
+/// format nor a string, so [`stage`] refuses it.
+///
+/// A string with no interpolation is a plain literal, which stays an operand
+/// of a comparison or a `//` fallback and never a stage of its own.
+fn interpolated_string(stage: &str) -> bool {
+    let bytes = stage.as_bytes();
+    if bytes.first() != Some(&b'"') || string_end(bytes, 0) != Some(bytes.len() - 1) {
+        return false;
+    }
+    let mut interpolations = 0usize;
+    let mut index = 1;
+    while index + 1 < bytes.len() {
+        if bytes[index] != b'\\' {
+            index += 1;
+            continue;
+        }
+        if bytes[index + 1] != b'(' {
+            // `\n`, `\t` or `\\`, already checked by `string_end`.
+            index += 2;
+            continue;
+        }
+        let Some(close) = interpolation_end(bytes, index + 1) else {
+            return false;
+        };
+        let code = &stage[index + 2..close];
+        if code.trim().is_empty() || !valid_characters(code) || !pipeline(code) {
+            return false;
+        }
+        interpolations += 1;
+        index = close + 1;
+    }
+    interpolations > 0 && interpolations <= MAX_STAGES
 }
 
 /// `@tsv`, `@base64`: a bare rendering format, applied to the value read.
@@ -461,10 +504,18 @@ fn valid_characters(filter: &str) -> bool {
 }
 
 /// The index of the closing quote of the string literal opening at `start`.
+///
+/// An interpolation is skipped whole, so a quote, bracket or marker in the
+/// filter it carries is never read as part of the text around the string.
+/// Its code is checked by [`interpolated_string`], which reads it as a
+/// filter rather than as text.
 fn string_end(bytes: &[u8], start: usize) -> Option<usize> {
     let mut index = start + 1;
     while bytes.get(index) != Some(&b'"') {
         match bytes.get(index)? {
+            b'\\' if bytes.get(index + 1) == Some(&b'(') => {
+                index = interpolation_end(bytes, index + 1)? + 1;
+            }
             b'\\' if matches!(bytes.get(index + 1)?, b'n' | b't' | b'\\') => index += 2,
             b'\\' => return None,
             byte if (b' '..=b'~').contains(byte) => index += 1,
@@ -472,6 +523,29 @@ fn string_end(bytes: &[u8], start: usize) -> Option<usize> {
         }
     }
     Some(index)
+}
+
+/// The index of the `)` closing the interpolation whose `(` stands at
+/// `start`. A string inside it is skipped whole, so a parenthesis written in
+/// one does not close the interpolation early.
+fn interpolation_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut index = start;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => index = string_end(bytes, index)?,
+            b'(' => depth += 1,
+            b')' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
 }
 
 /// Splits on `marker` outside string literals and brackets, trimming each
@@ -606,8 +680,10 @@ fn call(stage: &str) -> Option<(&str, &str)> {
     Some((name.trim_end(), rest.strip_suffix(')')?))
 }
 
-/// A plain value: a bounded string with no inner quote, a jq number, or a
-/// JSON keyword. The number is jq's own literal — an optional minus, digits
+/// A plain value: a bounded string with no inner quote and no interpolation,
+/// a jq number, or a JSON keyword. An interpolated string carries a filter,
+/// which [`interpolated_string`] reads as one; admitting it here would take
+/// its code for text. The number is jq's own literal — an optional minus, digits
 /// or a leading fraction, and an optional exponent — and nothing else. A
 /// `+` or `-` standing between two operands is arithmetic, which [`stage`]
 /// never reads, so allowing the signs through [`valid_characters`] does not
@@ -618,7 +694,7 @@ fn literal(part: &str) -> bool {
             && part
                 .strip_prefix('"')
                 .and_then(|value| value.strip_suffix('"'))
-                .is_some_and(|value| !value.contains('"')))
+                .is_some_and(|value| !value.contains('"') && !value.contains("\\(")))
         || numeric_literal(part)
 }
 
