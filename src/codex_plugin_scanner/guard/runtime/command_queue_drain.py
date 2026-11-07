@@ -110,7 +110,7 @@ def drain_review_jobs(
     stop_event: Any,
     poll_once: PollOnce,
     format_error: Callable[[BaseException], str],
-    take_job: Callable[[int], object] | None = None,
+    take_job: Callable[[int, bool], object] | None = None,
     release: Callable[[int], bool] | None = None,
     on_watch_lease: Callable[[ReviewLeaseBatch], object] | None = None,
 ) -> None:
@@ -129,8 +129,9 @@ def drain_review_jobs(
 
     enter_command_queue_lane(review_drain_lane(slot))
     failures = 0
+    lane_clear = False
     while not stop_event.is_set():
-        job = take_job(slot) if take_job is not None else None
+        job = take_job(slot, lane_clear) if take_job is not None else None
         if job is STOP_DRAIN:
             return
         try:
@@ -152,6 +153,10 @@ def drain_review_jobs(
             # goes stale; a result it could not send stays in its state.
             _LOGGER.warning("Guard Review drain poll failed: error=%s", format_error(error))
             status = None
+        # The poll ends by reading this lane's own state, and only this worker
+        # writes it, so the next turn need not read it again to know that no
+        # result is waiting.
+        lane_clear = status is not None and "pending_result" in status and status["pending_result"] is None
         if status is not None and status.get("state") == "idle":
             if status.get("last_poll_was_empty") is True and (release is None or release(slot)):
                 return
@@ -211,14 +216,18 @@ class ReviewDrainPool:
         with self._lock:
             return bool(self._handoff.jobs)
 
-    def _take_job(self, slot: int) -> object:
-        """A handed-over job for worker ``slot``, ``None`` to poll, a ``ReviewWatch``, or ``STOP_DRAIN``."""
+    def _take_job(self, slot: int, lane_clear: bool = False) -> object:
+        """A handed-over job for worker ``slot``, ``None`` to poll, a ``ReviewWatch``, or ``STOP_DRAIN``.
+
+        ``lane_clear`` says the worker's last poll already saw no unsent result
+        in its lane.
+        """
 
         # A lane still holding an unsent result sends it first; a job handed to
         # it now would have nowhere to keep its own result if that upload failed.
         # A lane whose state cannot be read is treated the same way: a handed
         # job skips the pending-result retry and could overwrite that result.
-        if _lane_has_pending_result(self._store, slot, unreadable=True):
+        if not lane_clear and _lane_has_pending_result(self._store, slot, unreadable=True):
             return None
         with self._lock:
             if self._handoff.jobs:
