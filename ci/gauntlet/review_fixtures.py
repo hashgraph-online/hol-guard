@@ -23,6 +23,7 @@ GITHUB_METADATA_CONTROL = "github-metadata-mutation-control"
 # A directory change carrying an allowed mutation and a read split by `;`, the shape a user
 # who allowed the GitHub extension runs when they merge a pull request and then read it back.
 GITHUB_DIRECTORY_CHANGE_CASE = "github-allow-directory-change-then-merge-with-read-tail"
+GITHUB_SIBLING_CLIMB_CASE = "github-allow-sibling-climb-then-merge-with-read-tail"
 GITHUB_STUB_CASES = frozenset(
     {
         GITHUB_REVIEW_CASE,
@@ -32,10 +33,18 @@ GITHUB_STUB_CASES = frozenset(
         GITHUB_METADATA_CASE,
         GITHUB_METADATA_CONTROL,
         GITHUB_DIRECTORY_CHANGE_CASE,
+        GITHUB_SIBLING_CLIMB_CASE,
     }
 )
 # Cases that run with the GitHub extension and every one of its permissions enabled.
-GITHUB_ENABLED_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_GUARD_NAMED_REPOSITORY_CASE, GITHUB_DIRECTORY_CHANGE_CASE})
+GITHUB_ENABLED_CASES = frozenset(
+    {
+        GITHUB_REVIEW_CASE,
+        GITHUB_GUARD_NAMED_REPOSITORY_CASE,
+        GITHUB_DIRECTORY_CHANGE_CASE,
+        GITHUB_SIBLING_CLIMB_CASE,
+    }
+)
 METADATA_CALLS = (
     ("cache", "list", "--limit", "5"),
     ("label", "list", "--json", "name"),
@@ -119,6 +128,13 @@ DIRECTORY_CHANGE_CALLS = (
     ("pr", "merge", "12", "--repo", "example-org/example-repo", "--squash"),
     ("pr", "view", "12", "--repo", "example-org/example-repo", "--json", "state,mergedAt"),
 )
+# The same line spelled as a climb into the checkout beside this one. An absolute
+# `cd` and a `~` `cd` already reach the stand-in; a relative `../` climb names the
+# same directory, so the rules the user allowed must cover it too.
+SIBLING_CLIMB_CALLS = (
+    ("pr", "merge", "13", "--repo", "example-org/example-repo", "--squash"),
+    ("pr", "view", "13", "--repo", "example-org/example-repo", "--json", "state,mergedAt"),
+)
 
 
 def gh_stub_script(log: Path) -> str:
@@ -199,6 +215,9 @@ def github_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     if scenario_id == GITHUB_DIRECTORY_CHANGE_CASE:
         calls = recorded_gh_calls(workspace)
         return {"github-directory-change-calls-exact": calls == list(DIRECTORY_CHANGE_CALLS)}
+    if scenario_id == GITHUB_SIBLING_CLIMB_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-sibling-climb-calls-exact": calls == list(SIBLING_CLIMB_CALLS)}
     if scenario_id == GITHUB_LOOKUP_CASE:
         calls = recorded_gh_calls(workspace)
         return {"github-lookup-ran-once": calls is not None and len(calls) == 1 and _is_lookup_call(calls[0])}

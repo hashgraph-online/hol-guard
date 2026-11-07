@@ -121,6 +121,15 @@ fn cwd_list_context(
 /// the list runs, it runs unconditionally, and a verified target neither
 /// reads nor creates anything. Only that one step is answered here; nothing
 /// after it is proved against the directory it names.
+///
+/// A target that climbs out of the cwd counts too, under the read screens
+/// [`directory_targets::verified_climb_target`] applies. `cd ../other` is the
+/// same single step as `cd /abs/other` or `cd ~/other`: it names a directory
+/// and stops. Holding the climb to a linked worktree would make the rules a
+/// user allowed cover `cd /abs/other && gh pr merge 1; gh pr view 1` while
+/// the same command spelled `cd ../other` kept a review, for the one step
+/// nobody doubts. The steps after it stay unproved either way, and the
+/// write, Git write and contained-run routes keep the stricter proof.
 pub(in crate::pretool) fn verified_leading_cd_target(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
@@ -140,6 +149,7 @@ pub(in crate::pretool) fn verified_leading_cd_target(
         return None;
     };
     safe_reads::verified_cwd_target(target, context)
+        .or_else(|| directory_targets::verified_climb_target(target, context))
 }
 
 /// `cd <dir> && <reads>`, then more of the same, with a read outside a group
