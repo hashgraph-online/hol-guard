@@ -141,6 +141,44 @@ def clear_exact_route_failure(state: dict[str, object]) -> None:
     state.pop("exact_review_route_error_at", None)
 
 
+EXACT_LEASE_BATCH_LIMIT_KEY = "exact_lease_batch_limit"
+
+
+def exact_lease_batch_limit(state: dict[str, object]) -> int:
+    """How many exact Review jobs Guard Cloud last said one lease may return."""
+
+    value = state.get(EXACT_LEASE_BATCH_LIMIT_KEY)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return 1
+    return value
+
+
+def lane_exact_lease_batch_limit(store: GuardStore, state: dict[str, object]) -> int:
+    """The lease batch limit for this lane's state.
+
+    A drain lane that has not leased a batch of its own yet uses the limit the
+    main worker recorded, so its first batch is not cut to one job.
+    """
+
+    if EXACT_LEASE_BATCH_LIMIT_KEY in state or not current_command_queue_lane().is_drain:
+        return exact_lease_batch_limit(state)
+    main = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    return exact_lease_batch_limit(main if isinstance(main, dict) else {})
+
+
+def record_exact_lease_batch_limit(store: GuardStore, state: dict[str, object], limit: int) -> None:
+    """Remember Guard Cloud's lease batch limit, saving at once when it changes.
+
+    A limit that drops back to one is saved even when the poll then fails, so a
+    Guard Cloud that stopped accepting batches is never asked for one again.
+    """
+
+    if exact_lease_batch_limit(state) == limit and EXACT_LEASE_BATCH_LIMIT_KEY in state:
+        return
+    state[EXACT_LEASE_BATCH_LIMIT_KEY] = limit
+    save_command_queue_state(store, state)
+
+
 def command_queue_status(
     store: GuardStore,
     *,
@@ -167,6 +205,22 @@ def command_queue_status(
         "cloud_review": exact_cloud_review_status(store),
         "granted_operations": list(operation_resolver(store)),
         "supported_operations": list(SUPPORTED_COMMAND_OPERATIONS),
+    }
+
+
+def command_queue_brief_status(store: GuardStore) -> dict[str, object]:
+    """The lane's queue state alone, for the daemon's own loops between jobs.
+
+    The full status also reports capability, Cloud Review and grant details.
+    Building it costs a native round trip per job, and the loops read none of it.
+    """
+
+    state = load_command_queue_state(store)
+    return {
+        "state": state.get("state", "idle"),
+        "last_error": state.get("last_error"),
+        "last_poll_was_empty": bool(state.get("last_poll_was_empty")),
+        "pending_result": state.get("pending_result"),
     }
 
 
@@ -197,6 +251,7 @@ def command_queue_lease_payload(
     *,
     operations: tuple[str, ...] | None = None,
     wait_ms: int | None = None,
+    max_jobs: int = 1,
     operation_resolver: Callable[[GuardStore], tuple[str, ...]] = command_queue_operations,
 ) -> dict[str, object]:
     machine_id, workspace_id = command_queue_oauth_target(store)
@@ -217,7 +272,8 @@ def command_queue_lease_payload(
         "deviceId": machine_id,
         "daemonVersion": __version__,
         "capabilities": capabilities,
-        "maxJobs": 1,
+        # Only the exact Review route leases more than one job at a time.
+        "maxJobs": max_jobs if exact_only else 1,
         "waitMs": command_queue_lease_wait_ms() if wait_ms is None else wait_ms,
     }
     if exact_only:
@@ -235,6 +291,7 @@ __all__ = [
     "COMMAND_QUEUE_STATE_KEY",
     "CommandQueueLane",
     "clear_exact_route_failure",
+    "command_queue_brief_status",
     "command_queue_enabled",
     "command_queue_lease_payload",
     "command_queue_now",
