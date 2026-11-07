@@ -43,7 +43,7 @@ def _fingerprint(path: Path, *, follow: bool) -> _Fingerprint | None:
     return (*full_stat_identity(metadata), int(metadata.st_uid), int(metadata.st_gid))
 
 
-def _directory_identity(path: Path) -> tuple[int, int] | None:
+def _parent_directory_key(path: Path) -> tuple[int, int] | None:
     try:
         metadata = path.stat()
     except OSError:
@@ -97,7 +97,7 @@ def remember_process_status(
             status,
             binary,
             manifest if status.manifest is not None else None,
-            _directory_identity(path.parent),
+            _parent_directory_key(path.parent),
         )
 
 
@@ -122,7 +122,7 @@ def _still_names(candidate: Path, path: Path, binary: _Fingerprint, parent: tupl
         literal
         and parent is not None
         and _fingerprint(path, follow=False) == binary
-        and _directory_identity(path.parent) == parent
+        and _parent_directory_key(path.parent) == parent
     ):
         return True
     return _resolved_candidate_path(candidate) == path
