@@ -1075,6 +1075,24 @@ pub fn redacted_command(tokens: &[String]) -> String {
     shlex_join(&redacted)
 }
 
+/// Whether a redacted argv carries the flags the raw argv carried.
+///
+/// Redaction rewrites any token holding a URL, and `strip_query_fragment` cuts
+/// such a token at its first `?` or `#`. `--ignore-scripts#https://host` is
+/// therefore redacted to exactly `--ignore-scripts`, a flag the raw argv never
+/// carried and the package manager never reads. A proof read over the redacted
+/// argv only speaks for the raw one when the two carry the same flags, and
+/// `flags` is `flag_tokens` over the raw tokens, so this compares them.
+pub fn redacted_command_keeps_flags(redacted_command: &str, flags: &[String]) -> bool {
+    let Some(tokens) = crate::codex_output_py::shlex_split(redacted_command) else {
+        return false;
+    };
+    let Some((_, arguments)) = tokens.split_first() else {
+        return false;
+    };
+    flag_tokens(arguments) == flags
+}
+
 /// `redact_package_request_token` (:343-346).
 pub fn redact_package_request_token(value: &str) -> String {
     sanitize_url(value)
@@ -2891,6 +2909,37 @@ mod tests {
             .collect();
         // --registry=... keeps only the flag name; positional ignored.
         assert_eq!(flag_tokens(&tokens), vec!["--registry", "--dry-run"]);
+    }
+
+    #[test]
+    fn redaction_that_creates_a_flag_does_not_keep_the_raw_flags() {
+        let tokens: Vec<String> = ["npm", "ci", "--ignore-scripts#https://example.com"]
+            .iter()
+            .map(|token| (*token).to_owned())
+            .collect();
+        let redacted = redacted_command(&tokens);
+        assert_eq!(redacted, "npm ci --ignore-scripts");
+        assert!(!redacted_command_keeps_flags(
+            &redacted,
+            &flag_tokens(&tokens[1..])
+        ));
+    }
+
+    #[test]
+    fn redaction_inside_a_flag_value_keeps_the_raw_flags() {
+        let tokens: Vec<String> = [
+            "npm",
+            "ci",
+            "--ignore-scripts",
+            "--registry=https://r.test/",
+        ]
+        .iter()
+        .map(|token| (*token).to_owned())
+        .collect();
+        assert!(redacted_command_keeps_flags(
+            &redacted_command(&tokens),
+            &flag_tokens(&tokens[1..])
+        ));
     }
 
     #[test]

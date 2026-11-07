@@ -940,6 +940,7 @@ mod opencode_proxy_entry;
 mod opencode_server_id;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
+mod package_approval_action;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
