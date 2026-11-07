@@ -149,9 +149,11 @@ fn entered_directories(
 }
 
 /// The directories a Git step resolves relative words against (its `-C`
-/// directories applied to `bases`) and the words to screen: the checkout
-/// directory itself, every word after the subcommand, the value of every
-/// `--option=value`, and the global `--git-dir` and `--work-tree` values.
+/// directories applied to `bases`) and the words to screen: every word after
+/// the subcommand, the value of every
+/// `--option=value`, the global `--git-dir` and `--work-tree` values, and,
+/// for `git init` alone, the working directory the step would turn into a
+/// checkout.
 /// Option names and the repository of a clone or submodule add are not
 /// paths and are skipped; the directory Git names after that repository is
 /// screened in its place.
@@ -164,7 +166,16 @@ fn step_words(
     let arguments = &segment.arguments;
     let index = crate::command_compatibility::git_command_index(arguments)?;
     let mut step_bases = bases.to_vec();
-    let mut words = vec![".".to_owned()];
+    // Only `git init` can turn the directory it runs in into a checkout.
+    // Every other checkout subcommand names where the tree lands, so the
+    // working directory is not a destination there. Screening it anyway made
+    // an ordinary sibling worktree a floor in any repository that configures
+    // a hooks directory inside itself, which no extension permission could
+    // then settle.
+    let mut words = Vec::new();
+    if arguments[index] == "init" {
+        words.push(".".to_owned());
+    }
     let mut position = 0;
     while position < index {
         let argument = &arguments[position];
