@@ -801,11 +801,17 @@ fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
         "git config --get-regexp '[^a]-file=*' x",
         "git config --get-regexp '[[:punct:]]-file=*' x",
         "git config --get-regexp '[\\-]-file=*' x",
-        // The shell expands a brace before the class is a class, so these
-        // members are not the ones that run: bash turns this one into
-        // `[!a]-file=*`, which matches a `--file=secret` in the checkout.
+        // The shell runs an expansion before the class is a class, so these
+        // members are not the ones that run: bash turns the first into
+        // `[!a]-file=*`, which matches a `--file=secret` in the checkout, and
+        // the parameter and substitution forms carry whatever they expand to.
         "git config --get-regexp '[!{a,-}]-file=*' x",
         "git config --get-regexp '[{a}]-file=*' x",
+        "git config --get-regexp '[$x]-file=*' x",
+        "git config --get-regexp '[!$x]-file=*' x",
+        "git config --get-regexp '[${x}]-file=*' x",
+        "git config --get-regexp '[$(printf -)]-file=*' x",
+        "git config --get-regexp '[`printf -`]-file=*' x",
         // Only an ASCII alphanumeric span holds the characters between its
         // ends whatever the shell's collation. glibc's table puts `-` inside
         // `[_-z]`, so such a range keeps the path screen.

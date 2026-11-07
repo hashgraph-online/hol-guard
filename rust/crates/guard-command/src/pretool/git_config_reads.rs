@@ -122,9 +122,10 @@ fn could_expand_into_an_option(operand: &str) -> bool {
 /// and `[^a]-file=*` can each produce a dash and keep the path screen.
 ///
 /// Two shapes are read as classes that could hold a dash rather than taken
-/// apart. A brace inside the class is expanded by the shell before the class
+/// apart. An expansion inside the class is run by the shell before the class
 /// is ever a class, so `[!{a,-}]-file=*` is two words by the time Git sees it
-/// and the members written here are not the members that run. And a range only
+/// and `[$x]-file=*` carries whatever `x` holds; the members written here are
+/// not the members that run. And a range only
 /// holds the characters between its ends under ASCII ordering: a shell
 /// collating with `strcoll` under a UTF-8 locale follows the locale's order
 /// instead, which in glibc's table puts `-` inside spans such as `[_-z]`. A
@@ -146,9 +147,12 @@ fn leading_class_can_match_a_dash(operand: &str) -> bool {
     }
     let negated = matches!(chars.get(1), Some('!' | '^'));
     let members = &chars[usize::from(negated) + 1..end];
-    if members.iter().any(|member| matches!(member, '{' | '}')) {
-        // The shell expands braces before it reads a class, so these members
-        // are not the ones that run.
+    if members
+        .iter()
+        .any(|member| matches!(member, '{' | '}' | '$' | '`'))
+    {
+        // The shell expands braces, parameters and command substitutions
+        // before it reads a class, so these members are not the ones that run.
         return true;
     }
     let mut listed = false;
