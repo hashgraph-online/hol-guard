@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import urllib.error
 from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +41,40 @@ COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
 _LOGGER = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class CommandQueueLane:
+    """Which queue state a worker owns and which jobs it may lease.
+
+    The daemon's main worker uses the defaults: the shared state key, every
+    ready operation and the configured long-poll wait. A Review drain worker
+    keeps its own state key, so a result it could not upload is retried by
+    that worker instead of being overwritten by another, and leases exact
+    Review jobs without waiting.
+    """
+
+    state_key: str = COMMAND_QUEUE_STATE_KEY
+    operations: tuple[str, ...] | None = None
+    wait_ms: int | None = None
+
+    @property
+    def is_drain(self) -> bool:
+        return self.state_key != COMMAND_QUEUE_STATE_KEY
+
+
+_MAIN_LANE = CommandQueueLane()
+_CURRENT_LANE: ContextVar[CommandQueueLane] = ContextVar("guard_command_queue_lane", default=_MAIN_LANE)
+
+
+def current_command_queue_lane() -> CommandQueueLane:
+    return _CURRENT_LANE.get()
+
+
+def enter_command_queue_lane(lane: CommandQueueLane) -> None:
+    """Bind ``lane`` to the calling thread's context for the rest of its run."""
+
+    _CURRENT_LANE.set(lane)
+
+
 def command_queue_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -69,12 +105,12 @@ def command_queue_enabled(
 
 
 def load_command_queue_state(store: GuardStore) -> dict[str, object]:
-    payload = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    payload = store.get_sync_payload(current_command_queue_lane().state_key)
     return dict(payload) if isinstance(payload, dict) else {}
 
 
 def save_command_queue_state(store: GuardStore, payload: dict[str, object]) -> None:
-    store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, payload, command_queue_now())
+    store.set_sync_payload(current_command_queue_lane().state_key, payload, command_queue_now())
 
 
 def record_exact_route_failure(state: dict[str, object], error: urllib.error.HTTPError) -> None:
@@ -184,13 +220,16 @@ __all__ = [
     "COMMAND_QUEUE_ENABLED_ENV",
     "COMMAND_QUEUE_LEASE_WAIT_MS_ENV",
     "COMMAND_QUEUE_STATE_KEY",
+    "CommandQueueLane",
     "clear_exact_route_failure",
     "command_queue_enabled",
     "command_queue_lease_payload",
     "command_queue_now",
     "command_queue_operations",
     "command_queue_status",
+    "current_command_queue_lane",
     "default_command_context",
+    "enter_command_queue_lane",
     "load_command_queue_state",
     "record_exact_route_failure",
     "repair_command_queue_state",

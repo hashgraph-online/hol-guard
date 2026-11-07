@@ -36,6 +36,7 @@ from .command_queue_activation import (
 )
 from .command_queue_auth import resolve_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
+from .command_queue_drain import ReviewDrainPool, review_drain_has_pending_result
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
 from .command_queue_http import request_json as _json_request
@@ -62,6 +63,7 @@ from .command_queue_state import (
 from .command_queue_state import clear_exact_route_failure as _clear_exact_route_failure
 from .command_queue_state import command_queue_now as _now
 from .command_queue_state import command_queue_status as _state_command_queue_status
+from .command_queue_state import current_command_queue_lane as _current_lane
 from .command_queue_state import load_command_queue_state as _load_state
 from .command_queue_state import record_exact_route_failure as _record_exact_route_failure
 from .command_queue_state import save_command_queue_state as _save_state
@@ -207,6 +209,14 @@ def _lease_next_job(
     state: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
     operations = lease_ready_operations(store)
+    wait_ms = _command_queue_lease_wait_ms()
+    lane = _current_lane()
+    if lane.operations is not None:
+        operations = tuple(operation for operation in lane.operations if operation in operations)
+        if not operations:
+            return None
+    if lane.wait_ms is not None:
+        wait_ms = lane.wait_ms
     exact_route_failure: Callable[[urllib.error.HTTPError], None] | None = None
     exact_route_success: Callable[[], None] | None = None
     if state is not None:
@@ -214,7 +224,7 @@ def _lease_next_job(
         exact_route_success = partial(_clear_exact_route_failure, state)
     return lease_next_job(
         operations=operations,
-        wait_ms=_command_queue_lease_wait_ms(),
+        wait_ms=wait_ms,
         exact_request=lambda options: _exact_json_request(
             auth_context,
             method="POST",
@@ -316,7 +326,12 @@ def _lease_job_with_401_retry(
     return _lease_next_job(store, refreshed_auth_context, state=state)
 
 
-def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[str, object]:
+def poll_command_queue_once(
+    store: GuardStore,
+    context: HarnessContext,
+    *,
+    on_exact_review_lease: Callable[[], object] | None = None,
+) -> dict[str, object]:
     if not command_queue_should_poll(store):
         state = _load_state(store)
         state.update(
@@ -353,10 +368,15 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
             }
         )
         _save_state(store, state)
-        maybe_auto_update(store, context)
+        if not _current_lane().is_drain:
+            maybe_auto_update(store, context)
         return command_queue_status(store)
     auth_context = _resolve_command_queue_auth_context(store)
     _record_leased_job(store, state, item)
+    if on_exact_review_lease is not None and uses_exact_transport(item):
+        # A Review decision rarely comes alone: a bulk approval queues one
+        # job per request. Settle the rest beside this one.
+        on_exact_review_lease()
     try:
         _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
@@ -527,12 +547,21 @@ def command_queue_loop(
     *,
     stop_event: Any,
 ) -> None:
+    drains = ReviewDrainPool(
+        store,
+        context,
+        stop_event=stop_event,
+        poll_once=poll_command_queue_once,
+        format_error=_redacted_error,
+    )
+    if command_queue_should_poll(store) and review_drain_has_pending_result(store):
+        drains.start()
     run_command_queue_loop(
         store,
         context,
         stop_event=stop_event,
         enabled=command_queue_should_poll,
-        poll_once=poll_command_queue_once,
+        poll_once=partial(poll_command_queue_once, on_exact_review_lease=drains.start),
         load_state=_load_state,
         save_state=_save_state,
         format_error=_redacted_error,
