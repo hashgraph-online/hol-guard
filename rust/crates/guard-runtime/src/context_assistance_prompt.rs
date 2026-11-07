@@ -205,7 +205,7 @@ fn attach(
         return;
     }
     let searched = walk(&root, &words, &quoted, &named(prompt), budget);
-    let found = searched.files.clone();
+    let found = searched.found(&words);
     if found.is_empty() {
         return;
     }

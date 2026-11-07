@@ -129,6 +129,18 @@ pub(crate) struct Walk {
     pub(crate) words: Vec<usize>,
 }
 
+impl Walk {
+    /// The files to read when no map is sent: the matched files, and the
+    /// tests kept apart from them when the request is about tests.
+    pub(crate) fn found(&self, terms: &[String]) -> Vec<String> {
+        let mut found = self.files.clone();
+        if asks_for_tests(terms) {
+            found.extend(self.tests.iter().cloned());
+        }
+        found
+    }
+}
+
 /// Project files the prompt names, then the ones that mention its words or
 /// quoted phrases, best first. An empty result means nothing in the project
 /// matched, so no context is added. The walk stops after `budget` or its own

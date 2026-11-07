@@ -206,9 +206,12 @@ pub(super) fn map(
     asked: &Asked,
     until: Instant,
 ) -> Option<Rendered> {
-    let files: Vec<File> = texts.iter().map(|(path, text)| file(path, text)).collect();
-    if Instant::now() >= until {
-        return None;
+    let mut files: Vec<File> = Vec::with_capacity(texts.len());
+    for (path, text) in texts {
+        if Instant::now() >= until {
+            return None;
+        }
+        files.push(file(path, text));
     }
     // A plain word a source file defines is a name too, unless it is common
     // or the prompt reviews its changes, where "naming and style" say how to
@@ -269,13 +272,7 @@ pub(super) fn map(
 fn file<'a>(path: &'a str, text: &'a str) -> File<'a> {
     let lines: Vec<&str> = text.lines().collect();
     let sections = sections(path, &lines);
-    let parent = (0..sections.len())
-        .map(|at| {
-            (0..sections.len())
-                .filter(|&outer| outer != at && around(&sections[outer], &sections[at]))
-                .min_by_key(|&outer| sections[outer].end - sections[outer].start)
-        })
-        .collect();
+    let parent = parents(&sections);
     File {
         path,
         kind: kind(path),
@@ -283,6 +280,26 @@ fn file<'a>(path: &'a str, text: &'a str) -> File<'a> {
         sections,
         parent,
     }
+}
+
+/// The smallest section holding each one, in one pass: visited by start, a
+/// section's parent is the innermost still-open section around it.
+fn parents(sections: &[Section]) -> Vec<Option<usize>> {
+    let mut order: Vec<usize> = (0..sections.len()).collect();
+    order.sort_by_key(|&at| (sections[at].start, std::cmp::Reverse(sections[at].end)));
+    let mut parent = vec![None; sections.len()];
+    let mut open: Vec<usize> = Vec::new();
+    for at in order {
+        while open
+            .last()
+            .is_some_and(|&outer| !around(&sections[outer], &sections[at]))
+        {
+            open.pop();
+        }
+        parent[at] = open.last().copied();
+        open.push(at);
+    }
+    parent
 }
 
 /// Whether `outer` holds `inner` and is larger.
@@ -443,3 +460,7 @@ fn render(blocks: &[(String, Vec<String>)]) -> Option<Rendered> {
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_nested_tests.rs"]
+mod nested_tests;

@@ -2,7 +2,7 @@
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
 use super::super::sections::{headed_sections, written_name};
-use super::{around, Asked, File, Kind};
+use super::{Asked, File, Kind};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
 use std::collections::BTreeSet;
@@ -70,11 +70,19 @@ pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
                 .is_some_and(|name| name.to_lowercase().starts_with("test"))
         };
         let tests: Vec<usize> = (0..file.sections.len()).filter(named_test).collect();
-        // A test class counts by the tests inside it.
-        let single = |at: &usize| {
-            !(tests.iter()).any(|other| around(&file.sections[*at], &file.sections[*other]))
-        };
-        for at in tests.iter().copied().filter(single) {
+        // A test class counts by the tests inside it: mark every section
+        // above a test, walking up the parents once.
+        let mut holds = vec![false; file.sections.len()];
+        for &test in &tests {
+            let mut up = file.parent[test];
+            while let Some(outer) = up {
+                if std::mem::replace(&mut holds[outer], true) {
+                    break;
+                }
+                up = file.parent[outer];
+            }
+        }
+        for at in tests.iter().copied().filter(|&at| !holds[at]) {
             let section = &file.sections[at];
             let body = file
                 .lines
