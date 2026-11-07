@@ -9,8 +9,11 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import command_queue, command_queue_drain, command_queue_state
 from codex_plugin_scanner.guard.runtime.command_queue_state import (
+    COMMAND_QUEUE_STATE_KEY,
     current_command_queue_lane,
+    enter_command_queue_lane,
     exact_lease_batch_limit,
+    lane_exact_lease_batch_limit,
     load_command_queue_state,
     record_exact_lease_batch_limit,
 )
@@ -191,11 +194,33 @@ def test_drain_poll_settles_a_handed_job_without_leasing(tmp_path: Path, monkeyp
     assert heartbeats == ["job-2"]
 
 
-def _recording_pool(tmp_path: Path, polls: list[str], lock: threading.Lock) -> command_queue_drain.ReviewDrainPool:
-    def poll_once(_store: object, _context: object, *, leased_item: dict[str, object] | None = None):
+def _recording_pool(
+    tmp_path: Path,
+    polls: list[str],
+    lock: threading.Lock,
+    watch_hits: list[command_queue_drain.ReviewLeaseBatch] | None = None,
+) -> command_queue_drain.ReviewDrainPool:
+    """A pool whose polls record what they did: a job id, ``lease`` or ``watch``.
+
+    A watch takes the next batch from ``watch_hits`` and hands it over the way
+    a real watch lease that returned jobs would; an empty list ends the watch.
+    """
+
+    def poll_once(
+        _store: object,
+        _context: object,
+        *,
+        leased_item: dict[str, object] | None = None,
+        on_exact_review_lease=None,
+    ):
+        watching = (current_command_queue_lane().wait_ms or 0) > 0
         with lock:
-            polls.append(str(leased_item["id"]) if leased_item else "lease")
+            polls.append(str(leased_item["id"]) if leased_item else "watch" if watching else "lease")
         if leased_item is not None:
+            return {"state": "idle", "last_poll_was_empty": False}
+        if watching and watch_hits:
+            assert on_exact_review_lease is not None
+            on_exact_review_lease(watch_hits.pop(0))
             return {"state": "idle", "last_poll_was_empty": False}
         return {"state": "idle", "last_poll_was_empty": True}
 
@@ -214,18 +239,88 @@ def _join(pool: command_queue_drain.ReviewDrainPool) -> None:
             thread.join(5)
 
 
-def test_partial_batch_settles_its_jobs_without_another_lease(tmp_path: Path) -> None:
+def test_partial_batch_settles_its_jobs_and_watches_once_for_the_rest(tmp_path: Path) -> None:
     polls: list[str] = []
     pool = _recording_pool(tmp_path, polls, threading.Lock())
     batch = command_queue_drain.ReviewLeaseBatch(
         jobs=(_exact_job("job-2"), _exact_job("job-3")), more_may_be_ready=False
     )
 
-    assert pool.start(batch) == 2
+    assert pool.start(batch) == 3
     _join(pool)
 
-    assert sorted(polls) == ["job-2", "job-3"]
+    # No drain worker leases without holding the lease open for the burst.
+    assert sorted(polls) == ["job-2", "job-3", "watch"]
     assert not pool.has_handoff()
+
+
+def test_partial_batch_does_not_watch_once_the_window_has_passed(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(command_queue_drain, "REVIEW_WATCH_SECONDS", 0.0)
+    polls: list[str] = []
+    pool = _recording_pool(tmp_path, polls, threading.Lock())
+
+    pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(_exact_job("job-2"),), more_may_be_ready=False))
+    _join(pool)
+
+    assert polls == ["job-2"]
+
+
+def test_a_watch_that_finds_jobs_hands_them_over_and_keeps_watching(tmp_path: Path) -> None:
+    polls: list[str] = []
+    lock = threading.Lock()
+    # The rest of a bulk approval lands while the main worker settles its job.
+    hits = [
+        command_queue_drain.ReviewLeaseBatch(jobs=(_exact_job("job-3"),), more_may_be_ready=False),
+        command_queue_drain.ReviewLeaseBatch(jobs=(), more_may_be_ready=False),
+    ]
+    pool = _recording_pool(tmp_path, polls, lock, hits)
+
+    pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(_exact_job("job-2"),), more_may_be_ready=False))
+    for _ in range(3):
+        _join(pool)
+
+    assert sorted(polls) == ["job-2", "job-3", "watch", "watch", "watch"]
+    assert not pool.has_handoff()
+
+
+def test_only_one_worker_watches_at_a_time(tmp_path: Path) -> None:
+    pool = _recording_pool(tmp_path, [], threading.Lock())
+    pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(), more_may_be_ready=False))
+    _join(pool)
+    pool._handoff.may_lease = False
+    pool._handoff.watch_until = command_queue_drain.time.monotonic() + 5
+
+    first = pool._take_job(0)
+    second = pool._take_job(1)
+
+    assert isinstance(first, command_queue_drain.ReviewWatch) and first.wait_ms > 0
+    assert second is command_queue_drain.STOP_DRAIN
+    # An empty watch ends the burst; the next partial batch opens a new one.
+    assert pool._release(0)
+    assert pool._take_job(1) is command_queue_drain.STOP_DRAIN
+    pool._handoff.watch_until = command_queue_drain.time.monotonic() + 5
+    assert isinstance(pool._take_job(1), command_queue_drain.ReviewWatch)
+
+
+def test_a_drain_lane_batches_with_the_main_workers_limit_until_it_has_its_own(tmp_path: Path) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    store.set_sync_payload(COMMAND_QUEUE_STATE_KEY, {"exact_lease_batch_limit": 4}, "2000-01-01T00:00:00+00:00")
+
+    def in_drain_lane() -> tuple[int, int, int]:
+        enter_command_queue_lane(command_queue_drain.review_drain_lane(0))
+        return (
+            lane_exact_lease_batch_limit(store, {}),
+            lane_exact_lease_batch_limit(store, {"exact_lease_batch_limit": 1}),
+            lane_exact_lease_batch_limit(store, {"exact_lease_batch_limit": 2}),
+        )
+
+    result: list[tuple[int, int, int]] = []
+    thread = threading.Thread(target=lambda: result.append(in_drain_lane()))
+    thread.start()
+    thread.join(5)
+
+    assert result == [(4, 1, 2)]
+    assert lane_exact_lease_batch_limit(store, {}) == 1
 
 
 def test_full_batch_settles_its_jobs_then_drains_by_leasing(tmp_path: Path) -> None:
@@ -240,7 +335,8 @@ def test_full_batch_settles_its_jobs_then_drains_by_leasing(tmp_path: Path) -> N
     assert polls.count("lease") == command_queue_drain.REVIEW_DRAIN_WORKERS
 
 
-def test_job_handed_over_while_a_worker_stops_is_still_settled(tmp_path: Path) -> None:
+def test_job_handed_over_while_a_worker_stops_is_still_settled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(command_queue_drain, "REVIEW_WATCH_SECONDS", 0.0)
     polls: list[str] = []
     lock = threading.Lock()
     pool = _recording_pool(tmp_path, polls, lock)

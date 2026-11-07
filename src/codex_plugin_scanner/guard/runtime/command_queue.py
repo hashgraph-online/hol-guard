@@ -59,7 +59,7 @@ from .command_queue_state import (
     COMMAND_QUEUE_STATE_KEY,  # noqa: F401 - public compatibility export
     command_queue_lease_payload,
     default_command_context,  # noqa: F401 - public compatibility export
-    exact_lease_batch_limit,
+    lane_exact_lease_batch_limit,
     record_exact_lease_batch_limit,
     repair_command_queue_state,  # noqa: F401 - public compatibility export
 )
@@ -370,7 +370,9 @@ def poll_command_queue_once(
     if leased_item is None and _retry_pending_result(store, auth_context, state):
         return command_queue_status(store)
     extras: list[dict[str, object]] = []
-    batch_size = min(exact_lease_batch_limit(state), REVIEW_LEASE_BATCH_SIZE) if on_exact_review_lease else 1
+    batch_size = (
+        min(lane_exact_lease_batch_limit(store, state), REVIEW_LEASE_BATCH_SIZE) if on_exact_review_lease else 1
+    )
     item = leased_item or _lease_job_with_401_retry(
         store,
         state,

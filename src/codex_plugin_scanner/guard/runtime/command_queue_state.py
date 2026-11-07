@@ -153,6 +153,19 @@ def exact_lease_batch_limit(state: dict[str, object]) -> int:
     return value
 
 
+def lane_exact_lease_batch_limit(store: GuardStore, state: dict[str, object]) -> int:
+    """The lease batch limit for this lane's state.
+
+    A drain lane that has not leased a batch of its own yet uses the limit the
+    main worker recorded, so its first batch is not cut to one job.
+    """
+
+    if EXACT_LEASE_BATCH_LIMIT_KEY in state or not current_command_queue_lane().is_drain:
+        return exact_lease_batch_limit(state)
+    main = store.get_sync_payload(COMMAND_QUEUE_STATE_KEY)
+    return exact_lease_batch_limit(main if isinstance(main, dict) else {})
+
+
 def record_exact_lease_batch_limit(store: GuardStore, state: dict[str, object], limit: int) -> None:
     """Remember Guard Cloud's lease batch limit, saving at once when it changes.
 
