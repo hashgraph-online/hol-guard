@@ -120,6 +120,88 @@ def test_failed_claim_repeats_the_request_with_the_failure(monkeypatch: pytest.M
     assert (disposition, reused) == (None, None)
 
 
+class _MovingStore(_Store):
+    """A saved allow whose revision a sibling approval moves before the first claim."""
+
+    def __init__(self, decisions: list[dict[str, object]], outcomes: list[bool]) -> None:
+        super().__init__(decisions[0])
+        self._decisions = iter(decisions)
+        self._outcomes = iter(outcomes)
+
+    def resolve_policy_decision_lookup(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        self.decision = next(self._decisions)
+        return {"decision": self.decision, "ignored_local_integrity": None}
+
+    def claim_approval_reuse_decision(self, decision: object, *, now: str) -> bool:
+        assert isinstance(decision, dict)
+        self.claims.append(str(decision["_approval_authority_revision"]))
+        return next(self._outcomes)
+
+
+def _reuse_store_reply() -> dict[str, object]:
+    reply: dict[str, object] = {
+        "patch": _verdict_patch("allow"),
+        "claim": "store",
+        "claim_disposition": "retained",
+        "reused": True,
+    }
+    return reply
+
+
+def test_a_claim_refused_for_a_moved_revision_reads_the_allow_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests: list[dict[str, object]] = []
+
+    def transport(request: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
+        requests.append(dict(request))
+        return _reuse_store_reply()
+
+    monkeypatch.setattr(bridge, "_transport", transport)
+    monkeypatch.setattr(bridge, "apply_package_evaluation_patch", lambda evaluation, _patch: evaluation)
+    saved: dict[str, object] = {"action": "allow", "decision_id": 7}
+    store = _MovingStore(
+        [{**saved, "_approval_authority_revision": 4}, {**saved, "_approval_authority_revision": 5}],
+        [False, True],
+    )
+
+    _evaluation, disposition, reused = _call(store)
+
+    assert store.claims == ["4", "5"]
+    assert all("claim_succeeded" not in request for request in requests)
+    assert disposition == "retained"
+    assert reused == {**saved, "_approval_authority_revision": 5}
+
+
+def test_a_claim_refused_at_an_unmoved_revision_is_not_tried_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    replies = iter([_reuse_store_reply(), _reply(patch=_verdict_patch("review"))])
+    monkeypatch.setattr(bridge, "_transport", lambda *_args, **_kwargs: next(replies))
+    monkeypatch.setattr(bridge, "apply_package_evaluation_patch", lambda evaluation, _patch: evaluation)
+    saved: dict[str, object] = {"action": "allow", "decision_id": 7, "_approval_authority_revision": 4}
+    store = _MovingStore([saved, saved], [False])
+
+    _evaluation, disposition, reused = _call(store)
+
+    assert store.claims == ["4"]
+    assert (disposition, reused) == (None, None)
+
+
+def test_a_different_row_at_the_new_revision_is_not_claimed_in_its_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    replies = iter([_reuse_store_reply(), _reply(patch=_verdict_patch("review"))])
+    monkeypatch.setattr(bridge, "_transport", lambda *_args, **_kwargs: next(replies))
+    monkeypatch.setattr(bridge, "apply_package_evaluation_patch", lambda evaluation, _patch: evaluation)
+    store = _MovingStore(
+        [
+            {"action": "allow", "decision_id": 7, "_approval_authority_revision": 4},
+            {"action": "allow", "decision_id": 8, "_approval_authority_revision": 5},
+        ],
+        [False],
+    )
+
+    _evaluation, disposition, reused = _call(store)
+
+    assert store.claims == ["4"]
+    assert (disposition, reused) == (None, None)
+
+
 def _reply(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "patch": _verdict_patch("allow"),

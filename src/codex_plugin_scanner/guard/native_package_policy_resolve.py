@@ -25,8 +25,11 @@ _CLAIM_KINDS = frozenset({"daemon", "exact_cloud", "legacy_local", "store"})
 _DISPOSITIONS = frozenset({"consumed", "retained"})
 _SAVED_ACTIONS = frozenset({"allow", "block"})
 _VERDICT_KEYS = ("decision", "risk_summary", "user_copy", "record_monitor_evidence")
-# How many times one install reads a waited Cloud allow's authority.
+# How many times one install reads a saved allow's authority, and the local
+# claims that read it again when the revision moved. A daemon claim carries
+# the daemon's own authority instead.
 _AUTHORITY_READS = 4
+_REREAD_CLAIMS = frozenset({"exact_cloud", "legacy_local", "store"})
 
 
 class NativePackagePolicyResolveError(NativePackageEvaluationComposeError):
@@ -171,23 +174,27 @@ def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: An
 
 
 def _authority_moved(refused: Mapping[str, object], fresh: object) -> bool:
-    """Whether a fresh read found the refused waited allow at a newer revision.
+    """Whether a fresh read offers the refused saved allow at a newer revision.
 
     Every allow stored or spent moves the shared approval authority revision,
-    and the spend refuses a decision read at an older one. When a reviewer
+    and a claim refuses a decision read at an older one. When a reviewer
     approves several requests at once, another request's allow can land
-    between this install reading its Cloud allow and spending it. Only then is
-    the spend tried again, with the authority read at the new revision. The
+    between this install reading its saved allow and claiming it. Only then is
+    the claim tried again, with the authority read at the new revision. The
     fresh read repeats the ordinary lookup, so a block saved in between still
     wins, and an allow already spent reads as nothing.
     """
 
-    return (
-        isinstance(fresh, Mapping)
-        and fresh.get("authority_kind") == "exact-cloud"
-        and fresh.get("approval_id") == refused.get("approval_id")
-        and fresh.get("_approval_authority_revision") != refused.get("_approval_authority_revision")
-    )
+    if not isinstance(fresh, Mapping):
+        return False
+    revision = fresh.get("_approval_authority_revision")
+    if revision is None or revision == refused.get("_approval_authority_revision"):
+        return False
+    approval_id = refused.get("approval_id")
+    if isinstance(approval_id, str) and approval_id:
+        return fresh.get("approval_id") == approval_id
+    decision_id = refused.get("decision_id")
+    return decision_id is not None and fresh.get("decision_id") == decision_id
 
 
 def _invalid() -> NativePackagePolicyResolveError:
@@ -343,7 +350,7 @@ def native_resolve_stored_package_policy(
             raise NativePackagePolicyResolveError("Native package policy claim invalid")
         if _run_claim(claim, store, decision, authority, now):
             break
-        fresh = hydrate() if claim == "exact_cloud" and reads < _AUTHORITY_READS else None
+        fresh = hydrate() if claim in _REREAD_CLAIMS and reads < _AUTHORITY_READS else None
         if fresh is None or not _authority_moved(decision, fresh.get("decision")):
             request["claim_succeeded"] = False
             payload = _call(
