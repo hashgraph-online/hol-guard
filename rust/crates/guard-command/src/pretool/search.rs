@@ -227,11 +227,13 @@ fn glob_intersects_contains_family(pattern: &[u8], needle: &[u8], star_consumes:
 /// follows it: `{x/{.gnupg,b}` is `{x/.gnupg {x/b`, and the component
 /// `.gnupg` is exactly what a sensitive-path check has to see. Pairing the
 /// first `{` with the first `}` instead produced `x/{.gnupg`, which matches
-/// no marker.
+/// no marker. A `}` with no `{` anywhere to its left is literal text to bash,
+/// which still expands the pair after it (`}{.env,x}` is `}.env }x`), so such
+/// a brace is passed over rather than ending the search for a pair.
 fn innermost_brace_pair(candidate: &str) -> Option<(usize, usize)> {
-    let close = candidate.find('}')?;
-    let open = candidate[..close].rfind('{')?;
-    Some((open, close))
+    candidate
+        .match_indices('}')
+        .find_map(|(close, _)| candidate[..close].rfind('{').map(|open| (open, close)))
 }
 
 fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {

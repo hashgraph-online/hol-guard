@@ -62,6 +62,11 @@ fn an_unbalanced_brace_does_not_hide_the_pair_behind_it() {
         "{x/{.gnupg,b}",
         "{a/{.ssh,b}/id_rsa",
         "x{/{.aws,b}/credentials",
+        // A `}` with no `{` to its left is literal text to bash, which
+        // expands the pair after it all the same: `x}/{.gnupg,b}` reaches
+        // the tool as `x}/.gnupg` and `x}/b`.
+        "x}/{.gnupg,b}",
+        "}/{x,.env}",
     ] {
         assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
         assert!(literal_glob_names_sensitive_path(selecting), "{selecting}");
