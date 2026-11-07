@@ -35,6 +35,10 @@ const APPROVAL_KEYS: [&str; 5] = [
 ];
 /// An ask block's decision source.
 const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
+/// The relay harness whose approval flow opens the approval center in the
+/// browser (`approval-center` tier, `auto_open_browser`), which the daemon's
+/// `_open_approval_center` still does for an ask block.
+const BROWSER_APPROVAL_HARNESS: &str = "cline";
 const IDENTITY_KEYS: [&str; 4] = [
     "artifact",
     "runtime_private_metadata",
@@ -168,6 +172,9 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     };
     let text = |key: &str| record.get(key).and_then(Value::as_str);
     let harness = text("harness").filter(|harness| RELAY_HARNESSES.contains(harness))?;
+    if queued && harness == BROWSER_APPROVAL_HARNESS {
+        return None;
+    }
     let source = text("decision_source")?;
     let policy_action = text("policy_action")?;
     let tool_name = text("tool_name")?;

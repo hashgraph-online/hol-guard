@@ -27,9 +27,10 @@ the ``approval-center-pending`` block receipt is written here, and then the
 desktop notice and the approval center the proxy raises once the row exists.
 A current resident raises the desktop notice itself as soon as it writes the
 request and then writes the receipt too, so this drain sees an ask record only
-when the resident could not read its notice, or from an older resident that
-carries the queued notices for this drain to raise. The resident cannot open a
-browser, so the record also carries the workspace the surface policy is
+when the resident could not read its notice, from an older resident that
+carries the queued notices for this drain to raise, or from a harness whose
+approval flow opens the approval center in the browser. The resident cannot
+open a browser, so the record also carries the workspace the surface policy is
 resolved against.
 """
 

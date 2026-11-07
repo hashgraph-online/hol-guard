@@ -283,6 +283,14 @@ fn records_the_daemon_owns_are_not_plain() {
                 record["approval"]["extra"] = json!(true);
             },
         ),
+        // Cline's approval flow opens the approval center in the browser.
+        edited(
+            asked(record("block", "approval-center-pending", "review")),
+            |record| {
+                record["harness"] = json!("cline");
+                record["identity"]["artifact"]["harness"] = json!("cline");
+            },
+        ),
         record("block", "policy-block", "allow"),
         edited(record("forward", "policy", "allow"), |record| {
             record["harness"] = json!("claude-code");

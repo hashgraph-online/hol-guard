@@ -10,11 +10,14 @@
 //! the page that skipped it. A plain record is a forward, a policy block, a
 //! refused inline prompt or an ask block whose identity carries its firewall
 //! evidence. The resident raises an ask block's desktop notice itself as soon
-//! as it writes the request, so its receipt is all that is left to write.
+//! as it writes the request, so for a harness whose approval flow never opens
+//! the browser its receipt is all that is left to write.
 //!
 //! Everything else is still drained to the daemon: a remembered allow writes
-//! the daemon's policy, a safe-alternative block adds an inbox row and an ask
-//! block whose notice the resident could not read still carries it.
+//! the daemon's policy, a safe-alternative block adds an inbox row, an ask
+//! block whose notice the resident could not read still carries it, and an
+//! ask block from a harness whose approval flow opens the approval center in
+//! the browser still needs the daemon to open it.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an
