@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -94,6 +96,10 @@ class FakeStore:
         self.payloads: dict[str, dict[str, object] | list[object]] = {
             "policy_bundle_keyring": review_trusted_keyring_payload(),
         }
+
+    @contextmanager
+    def connection_scope(self) -> Iterator[None]:
+        yield
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
         # The real store answers with no key until one is created; the resident

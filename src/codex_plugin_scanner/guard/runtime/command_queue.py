@@ -167,7 +167,11 @@ def _resolve_command_queue_auth_context(
 
 
 def _execute_job(job: dict[str, object], context: HarnessContext, store: GuardStore) -> dict[str, object]:
-    return execute_guard_command_job(job, context=context, store=store, now=_now)
+    # One job makes dozens of store calls; opening a connection for each one
+    # (and repeating its pragmas) cost more than the work under concurrent
+    # Review drains. Each call still commits on its own.
+    with store.connection_scope():
+        return execute_guard_command_job(job, context=context, store=store, now=_now)
 
 
 def _heartbeat(auth_context: dict[str, object], job: dict[str, object]) -> None:
