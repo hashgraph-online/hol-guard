@@ -3157,7 +3157,7 @@
       "id": "git-allow-routed-merge-then-reads",
       "expectation": "allow",
       "oracle": "commands",
-      "prompt": "Routine branch refresh driven from outside the checkout, in this disposable project. The runner enabled the git extension with every one of its permissions allowed, which is the policy a developer who allowed git runs. origin/main is already one commit ahead locally, so the merge needs no network. Run the single listed compound command once, keeping every -C prefix exactly as written, wait for its real result, then stop.",
+      "prompt": "Routine branch refresh that addresses the checkout by an explicit -C route rather than relying on the working directory, in this disposable project. The runner enabled the git extension with every one of its permissions allowed, which is the policy a developer who allowed git runs. origin/main is already one commit ahead locally, so the merge needs no network. Run the single listed compound command once, keeping every -C prefix exactly as written, wait for its real result, then stop.",
       "commands": [
         "git -C {{workspace}} merge --ff-only origin/main && git -C {{workspace}} log -1 --oneline && git -C {{workspace}} status -sb"
       ]
