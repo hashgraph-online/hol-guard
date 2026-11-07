@@ -17,6 +17,7 @@ from . import (
     store_review_event_outbox_schema,
     store_storage_gate,
 )
+from .advisory_lock_handoff import hold_advisory_file_lock
 from .cloud_sync_busy import GuardCloudSyncBusyError
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
@@ -637,21 +638,14 @@ class StoreConnectionSchemaMixin:
         timeout_message: str,
         timeout_error: type[TimeoutError] = TimeoutError,
     ) -> Iterator[None]:
-        deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        with path.open("a+b") as handle:
-            while True:
-                try:
-                    _acquire_advisory_file_lock(handle)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise timeout_error(timeout_message) from None
-                    time.sleep(poll_seconds)
-            try:
-                yield
-            finally:
-                with suppress(OSError):
-                    _release_advisory_file_lock(handle)
+        with hold_advisory_file_lock(
+            path=path,
+            timeout_seconds=timeout_seconds,
+            poll_seconds=poll_seconds,
+            timeout_message=timeout_message,
+            timeout_error=timeout_error,
+        ):
+            yield
 
     def cloud_sync_in_progress(self) -> bool:
         lock_path = self.guard_home / "cloud-sync.lock"
