@@ -24,7 +24,9 @@ from __future__ import annotations
 import time
 import warnings
 from collections.abc import Callable
+from typing import Any
 
+from ci.gauntlet.approval_rows import approval_rows
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
 
 UNAVAILABLE_REASON = "native_pre_tool_unavailable"
@@ -46,7 +48,56 @@ def _timed(review: Callable[[], dict[str, object]]) -> tuple[dict[str, object], 
     return result, f"after {time.monotonic() - started:.2f}s, client failure {native_resident_client_failure_code()}"
 
 
-def review_with_unavailable_retry(case_id: str, review: Callable[[], dict[str, object]]) -> dict[str, object]:
+def approval_snapshot(store: Any) -> dict[str, int]:
+    """Every queued request id with the number of calls deduplicated onto it so far."""
+    return {
+        str(row.get("request_id")): int(row.get("dedupe_count") or 1)
+        for row in store.list_approval_requests(status=None, limit=500)
+    }
+
+
+class RetryApprovals:
+    """Judge a retried case on the rows its retry wrote, not the interrupted attempt's.
+
+    A missed budget can still queue a review before the hook's clock runs out. That row
+    answers the interrupted attempt, not the case: judging it fails a quiet case the retry
+    allowed, and can rescue a block case the retry allowed. ``mark_retry`` records what the
+    first attempt left behind, and ``rows`` then sets those aside. A row the retry
+    deduplicated onto is the retry's own answer, so it stays and a real review is never
+    hidden. Without a retry the baseline is unchanged, so an ordinary case judges every row
+    it added.
+    """
+
+    def __init__(self, store: Any) -> None:
+        self._store = store
+        self.known = set(approval_snapshot(store))
+        self._interrupted: dict[str, int] = {}
+        self.set_aside = 0
+
+    def mark_retry(self) -> None:
+        self._interrupted = {
+            request_id: count
+            for request_id, count in approval_snapshot(self._store).items()
+            if request_id not in self.known
+        }
+
+    def rows(self) -> list[dict[str, Any]]:
+        if not self._interrupted:
+            return approval_rows(self._store, self.known)
+        current = approval_snapshot(self._store)
+        stale = {
+            request_id for request_id, count in self._interrupted.items() if current.get(request_id, count) == count
+        }
+        self.set_aside = len(stale)
+        return approval_rows(self._store, self.known | stale)
+
+
+def review_with_unavailable_retry(
+    case_id: str,
+    review: Callable[[], dict[str, object]],
+    *,
+    on_retry: Callable[[], None] | None = None,
+) -> dict[str, object]:
     result, detail = _timed(review)
     if result.get("reason_code") not in BUDGET_MISS_REASONS:
         return result
@@ -55,6 +106,9 @@ def review_with_unavailable_retry(case_id: str, review: Callable[[], dict[str, o
         NativeUnavailableRetryWarning,
         stacklevel=2,
     )
+    if on_retry is not None:
+        # The caller judges approval rows, and the interrupted attempt may have queued one.
+        on_retry()
     retried, detail = _timed(review)
     if retried.get("reason_code") in BUDGET_MISS_REASONS:
         warnings.warn(

@@ -7,6 +7,7 @@ from tests.native_gate_retry import (
     REVIEW_DEADLINE_REASON,
     UNAVAILABLE_REASON,
     NativeUnavailableRetryWarning,
+    RetryApprovals,
     review_with_unavailable_retry,
 )
 
@@ -98,3 +99,90 @@ def test_an_extension_evaluation_failure_is_not_retried() -> None:
     review, calls = _scripted(failed)
     assert review_with_unavailable_retry("case", review) == failed
     assert len(calls) == 1
+
+
+def test_on_retry_runs_once_before_the_second_attempt() -> None:
+    seen: list[int] = []
+    review, calls = _scripted(_UNAVAILABLE, _ALLOW)
+
+    def record() -> None:
+        seen.append(len(calls))
+
+    with pytest.warns(NativeUnavailableRetryWarning):
+        review_with_unavailable_retry("case", review, on_retry=record)
+    assert seen == [1]
+
+
+def test_on_retry_stays_silent_when_the_first_answer_is_a_policy_answer() -> None:
+    seen: list[int] = []
+    review, _ = _scripted(_ALLOW)
+    review_with_unavailable_retry("case", review, on_retry=lambda: seen.append(1))
+    assert seen == []
+
+
+def test_on_retry_runs_once_even_when_both_attempts_miss_the_budget() -> None:
+    seen: list[int] = []
+    review, _ = _scripted(_UNAVAILABLE, _DEADLINE)
+    with pytest.warns(NativeUnavailableRetryWarning):
+        review_with_unavailable_retry("case", review, on_retry=lambda: seen.append(1))
+    assert seen == [1]
+
+
+class _Store:
+    """Just the queue read ``RetryApprovals`` makes, over rows a test scripts."""
+
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+
+    def list_approval_requests(self, status: object = None, limit: int = 0) -> list[dict[str, object]]:
+        return list(self.rows)
+
+
+def _row(request_id: str, dedupe_count: int = 1) -> dict[str, object]:
+    return {"request_id": request_id, "dedupe_count": dedupe_count}
+
+
+@pytest.fixture
+def judged_ids(monkeypatch: pytest.MonkeyPatch) -> list[set[str]]:
+    """Record the baseline ``RetryApprovals`` hands the row reader, instead of redacting rows."""
+    recorded: list[set[str]] = []
+
+    def fake(store: object, known_ids: set[str]) -> list[dict[str, object]]:
+        recorded.append(set(known_ids))
+        return [row for row in store.rows if str(row["request_id"]) not in known_ids]  # type: ignore[attr-defined]
+
+    monkeypatch.setattr("tests.native_gate_retry.approval_rows", fake)
+    return recorded
+
+
+def test_a_case_that_never_retried_judges_every_row_it_added(judged_ids: list[set[str]]) -> None:
+    store = _Store([_row("old")])
+    approvals = RetryApprovals(store)
+    store.rows.append(_row("added"))
+    assert [row["request_id"] for row in approvals.rows()] == ["added"]
+    assert judged_ids == [{"old"}]
+    assert approvals.set_aside == 0
+
+
+def test_a_row_the_interrupted_attempt_queued_is_not_judged(judged_ids: list[set[str]]) -> None:
+    store = _Store([_row("old")])
+    approvals = RetryApprovals(store)
+    # The missed budget queued a review before the hook's clock ran out.
+    store.rows.append(_row("interrupted"))
+    approvals.mark_retry()
+    store.rows.append(_row("retried"))
+    assert [row["request_id"] for row in approvals.rows()] == ["retried"]
+    assert judged_ids == [{"old", "interrupted"}]
+    assert approvals.set_aside == 1
+
+
+def test_a_row_the_retry_deduplicated_onto_is_still_judged(judged_ids: list[set[str]]) -> None:
+    store = _Store([_row("old")])
+    approvals = RetryApprovals(store)
+    store.rows.append(_row("shared"))
+    approvals.mark_retry()
+    # The retry reached the same review, so the store counted it onto the same row.
+    store.rows[-1] = _row("shared", dedupe_count=2)
+    assert [row["request_id"] for row in approvals.rows()] == ["shared"]
+    assert judged_ids == [{"old"}]
+    assert approvals.set_aside == 0
