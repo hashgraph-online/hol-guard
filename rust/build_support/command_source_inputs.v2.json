@@ -178,6 +178,7 @@
       "src/launch_identity_node_options.rs",
       "src/launch_identity_stub.rs",
       "src/launch_identity_windows.rs",
+      "src/lifecycle_scripts_flag.rs",
       "src/local_supply_chain.rs",
       "src/mcp_decision.rs",
       "src/mcp_package_sources.rs",
