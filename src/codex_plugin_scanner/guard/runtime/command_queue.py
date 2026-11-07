@@ -36,6 +36,7 @@ from .command_queue_activation import (
 )
 from .command_queue_auth import resolve_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
+from .command_queue_authorization import start_command_authorization
 from .command_queue_drain import with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
@@ -321,7 +322,10 @@ def poll_command_queue_once(
     *,
     on_exact_review_lease: Callable[[], object] | None = None,
 ) -> dict[str, object]:
-    if not command_queue_should_poll(store):
+    # A drain lane only starts beside a main poll that passed the full check,
+    # and its lease scope already requires a ready Review keyring.
+    ready = command_environment_allows_queue() if _current_lane().is_drain else command_queue_should_poll(store)
+    if not ready:
         state = _load_state(store)
         state.update(
             {
@@ -370,6 +374,13 @@ def poll_command_queue_once(
             on_exact_review_lease()
         except Exception as error:
             _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
+    authorization = start_command_authorization(
+        store,
+        item,
+        authorize=lambda auth_store, job: authorize_command_queue_job(
+            auth_store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS
+        ),
+    )
     try:
         _heartbeat(auth_context, item)
     except urllib.error.HTTPError as error:
@@ -392,11 +403,7 @@ def poll_command_queue_once(
         _save_state(store, state)
         raise
     try:
-        authorized = authorize_command_queue_job(
-            store,
-            item,
-            schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
-        )
+        authorized = authorization()
     except (CommandCapabilityError, CommandCapabilityUnavailableError) as error:
         reason = error.code if isinstance(error, CommandCapabilityError) else error.reason
         audit_command_decision(

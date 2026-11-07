@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import command_capability, command_queue, command_queue_drain
+from codex_plugin_scanner.guard.runtime import (
+    command_capability,
+    command_queue,
+    command_queue_authorization,
+    command_queue_drain,
+)
 from codex_plugin_scanner.guard.runtime.command_queue_state import (
     COMMAND_QUEUE_STATE_KEY,
     current_command_queue_lane,
@@ -117,6 +122,31 @@ def test_drain_lane_skips_auto_update_on_an_empty_lease(tmp_path: Path, monkeypa
     assert updates == ["main"]
 
 
+@pytest.mark.parametrize(("opt_out", "expected_state", "expected_leases"), [(None, "idle", 1), ("0", "disabled", 0)])
+def test_drain_lane_skips_the_full_poll_check_but_honors_the_opt_out(
+    tmp_path: Path, monkeypatch, opt_out: str | None, expected_state: str, expected_leases: int
+) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    _enable_queue(store, monkeypatch)
+
+    def full_check(_store: object) -> bool:
+        raise AssertionError("a drain lane must not repeat the full poll check")
+
+    monkeypatch.setattr(command_queue, "command_queue_should_poll", full_check)
+    monkeypatch.setattr(command_queue, "command_queue_status", lambda poll_store: load_command_queue_state(poll_store))
+    leases: list[str] = []
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: leases.append("lease"))
+    if opt_out is None:
+        monkeypatch.delenv("GUARD_CLOUD_COMMAND_QUEUE_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("GUARD_CLOUD_COMMAND_QUEUE_ENABLED", opt_out)
+
+    status = _in_lane(0, lambda: command_queue.poll_command_queue_once(store, _context(tmp_path)))
+
+    assert status["state"] == expected_state
+    assert len(leases) == expected_leases
+
+
 @pytest.mark.parametrize(("job", "expected"), [(_exact_job("job-1"), ["start"]), ({"id": "job-2"}, [])])
 def test_poll_once_starts_drains_when_it_leases_an_exact_review_job(
     tmp_path: Path, monkeypatch, job: dict[str, object], expected: list[str]
@@ -161,6 +191,79 @@ def test_poll_once_settles_the_leased_job_when_drains_fail_to_start(tmp_path: Pa
 
     assert heartbeats == ["job-1"]
     assert "Guard Review drain start failed" in caplog.text
+
+
+def test_poll_once_authorizes_while_acknowledging_and_executes_only_after_the_ack(tmp_path: Path, monkeypatch) -> None:
+    store = FakeStore(tmp_path / "guard-home")
+    _enable_queue(store, monkeypatch)
+    exact_review_job = {**_exact_job("job-1"), "operation": EXACT_CLOUD_REVIEW_OPERATION, "payload": {}}
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: exact_review_job)
+    authorized = threading.Event()
+    authorizing_lanes: list[str] = []
+    executed: list[str] = []
+
+    def authorize(_store: object, job: dict[str, object], **_kwargs: object) -> object:
+        authorizing_lanes.append(current_command_queue_lane().state_key)
+        authorized.set()
+        raise command_capability.CommandCapabilityError("stop after authorize")
+
+    def acknowledge(_auth_context: object, _job: dict[str, object]) -> None:
+        # The ack only returns once authorization has run beside it.
+        assert authorized.wait(5)
+        raise RuntimeError("ack failed")
+
+    monkeypatch.setattr(command_queue, "authorize_command_queue_job", authorize)
+    monkeypatch.setattr(command_queue, "_heartbeat", acknowledge)
+    monkeypatch.setattr(command_queue, "_execute_job", lambda job, *_args: executed.append(str(job["id"])))
+
+    with pytest.raises(RuntimeError, match="ack failed"):
+        _in_lane(1, lambda: command_queue.poll_command_queue_once(store, _context(tmp_path)))
+
+    assert authorizing_lanes == [f"{COMMAND_QUEUE_STATE_KEY}.review_drain.1"]
+    assert executed == []
+
+
+@pytest.mark.parametrize(
+    "job",
+    [
+        pytest.param({"id": "job-1", "operation": "guard.packageShims.repair"}, id="generic"),
+        pytest.param(
+            {"id": "job-1", "operation": EXACT_CLOUD_REVIEW_OPERATION, "payload": {"native": True}},
+            id="native-workspace-review",
+        ),
+    ],
+)
+def test_poll_once_authorizes_a_job_that_is_not_rechecked_on_apply_only_after_the_ack(
+    tmp_path: Path, monkeypatch, job: dict[str, object]
+) -> None:
+    # Only an exact Review apply verifies its authority again when it runs, so
+    # any other job must not act on a verdict older than the acknowledgement.
+    store = FakeStore(tmp_path / "guard-home")
+    _enable_queue(store, monkeypatch)
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: job)
+    monkeypatch.setattr(
+        command_queue_authorization,
+        "is_native_workspace_review_job",
+        lambda leased: leased.get("payload") == {"native": True},
+    )
+    events: list[str] = []
+
+    def authorize(_store: object, _job: dict[str, object], **_kwargs: object) -> object:
+        events.append("authorize")
+        raise command_capability.CommandCapabilityError("stop after authorize")
+
+    def acknowledge(_auth_context: object, _job: dict[str, object]) -> None:
+        time.sleep(0.05)
+        events.append("ack")
+        raise RuntimeError("ack failed")
+
+    monkeypatch.setattr(command_queue, "authorize_command_queue_job", authorize)
+    monkeypatch.setattr(command_queue, "_heartbeat", acknowledge)
+
+    with pytest.raises(RuntimeError, match="ack failed"):
+        command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert events == ["ack"]
 
 
 def _run_drain_worker(tmp_path: Path, poll_once, *, format_error=str) -> None:
