@@ -249,7 +249,9 @@ def run_case(
             if scenario.id in GIT_ALLOW_CASES:
                 case["extension_control"] = configure_git_allow_controls(daemon, fixture.root / "guard-home")
             if scenario.id in EXTENSION_ALLOW_CASES:
-                case["extension_control"] = configure_extension_allow_controls(daemon, fixture.root / "guard-home")
+                case["extension_control"] = configure_extension_allow_controls(
+                    daemon, fixture.root / "guard-home", scenario.id
+                )
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.

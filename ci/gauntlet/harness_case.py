@@ -259,7 +259,7 @@ def run_harness_case(
             if scenario.id in GIT_ALLOW_CASES:
                 case["extension_control"] = configure_git_allow_controls(daemon, guard_home)
             if scenario.id in EXTENSION_ALLOW_CASES:
-                case["extension_control"] = configure_extension_allow_controls(daemon, guard_home)
+                case["extension_control"] = configure_extension_allow_controls(daemon, guard_home, scenario.id)
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, guard_home)
             # Native-tools cases run first-contact, with no pre-bound workspace policy, like a fresh install.
