@@ -134,7 +134,6 @@ pub(in crate::pretool) fn as_cd_list(
     let root_flags = workspace_root_flags(executable);
     if (flags.is_empty() && root_flags.is_empty())
         || first.pipeline_index != 0
-        || !first.environment_names.is_empty()
         || !first.wrapper_chain.is_empty()
         || first.path_overridden
         || !later
@@ -149,7 +148,28 @@ pub(in crate::pretool) fn as_cd_list(
         .get(first.span.start..first.span.end)?
         .iter()
         .collect();
-    let words: Vec<&str> = source.split_whitespace().collect();
+    let all_words: Vec<&str> = source.split_whitespace().collect();
+    // Leading `NAME=value` assignments ride along on the manager in the
+    // rewritten list: `ENV=1 bun --cwd web run build` is exactly
+    // `cd web && ENV=1 bun run build`. The flag beats the environment in
+    // every manager read here, and `PATH` is refused above, so carrying the
+    // assignments over changes nothing about which directory the flag names
+    // or what the rest runs. Dropping them would, which is why the words are
+    // matched against the recorded names rather than skipped.
+    let assignments = first.environment_names.len();
+    if all_words.len() <= assignments {
+        return None;
+    }
+    let (prefix, words) = all_words.split_at(assignments);
+    if prefix
+        .iter()
+        .zip(&first.environment_names)
+        .any(|(word, name)| {
+            !plain(word) || word.split_once('=').map(|(set, _)| set) != Some(name.as_str())
+        })
+    {
+        return None;
+    }
     if !chars
         .get(..first.span.start)?
         .iter()
@@ -208,8 +228,9 @@ pub(in crate::pretool) fn as_cd_list(
     // meets the node-tool containment route, and an implicit script run such
     // as `pnpm build` reaches the containment route the `cd` form reaches.
     let remainder: String = chars[first.span.end..].iter().collect();
+    let prefix: String = prefix.iter().map(|word| format!("{word} ")).collect();
     let text = format!(
-        "cd {directory} && {executable} {}{remainder}",
+        "cd {directory} && {prefix}{executable} {}{remainder}",
         rest.join(" ")
     );
     let projected = crate::parse_command(&CommandModelRequestV1 {

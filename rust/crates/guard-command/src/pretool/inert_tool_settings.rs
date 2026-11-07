@@ -93,7 +93,7 @@ const NPM_DISPLAY_SETTINGS: &[(&str, &[&str])] = &[
 /// word is a literal assignment in front of a command.
 pub(crate) fn inert_tool_setting(name: &str, value: &str) -> bool {
     let upper = name.to_ascii_uppercase();
-    if tool_switch_inert(&upper, value) {
+    if tool_switch_inert(&upper, value) || port_number_setting(&upper, value) {
         return true;
     }
     match upper.as_str() {
@@ -102,6 +102,26 @@ pub(crate) fn inert_tool_setting(name: &str, value: &str) -> bool {
         "RUSTFLAGS" | "RUSTDOCFLAGS" => rust_lint_levels_only(value),
         other => npm_display_setting(other, value),
     }
+}
+
+/// A setting that names a port, carrying only a port number.
+///
+/// The endpoint screen refuses the whole `*_PORT` family by name, because the
+/// value is what decides whose server answers: `PORT=db.example.test:5432`
+/// moves the connection to another machine. A value that is only a port
+/// number cannot. It names no host, so whatever answers it answers on the
+/// host the run was already talking to, and nothing the command sends can
+/// leave that host on the strength of this setting alone.
+///
+/// Agents set these constantly to keep concurrent stacks off each other's
+/// ports (`PORT=3000`, `GUARD_TEST_POSTGRES_PORT=55477`), and reading the
+/// name alone cost every such run the proof the same run had without the
+/// prefix.
+fn port_number_setting(upper: &str, value: &str) -> bool {
+    (upper == "PORT" || upper.ends_with("_PORT"))
+        && !value.is_empty()
+        && value.chars().all(|character| character.is_ascii_digit())
+        && matches!(value.parse::<u32>(), Ok(1..=65_535))
 }
 
 /// One of the switches above, written with one of the words that switch
