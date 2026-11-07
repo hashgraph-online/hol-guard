@@ -12,12 +12,19 @@ A held read keeps one of the daemon's request slots for as long as it waits,
 so only a few are held at once. Beyond that a read is answered immediately,
 and its hook falls back to polling, leaving the remaining slots for hook
 evaluations and decisions.
+
+A hook writes its pending request through the native store, whose commit wake
+fires in the hook's process rather than this one. The hook's first read of the
+request is therefore the daemon's first sign of it, and that read wakes the
+Cloud Review sync worker so the request reaches Guard Cloud now instead of on
+the worker's next safety poll.
 """
 
 from __future__ import annotations
 
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from urllib.parse import parse_qs
 
@@ -30,6 +37,11 @@ MAX_HELD_RESOLUTION_READS = 8
 
 _MAX_RESOLUTION_WAIT_MS = int(MAX_RESOLUTION_WAIT_SECONDS * 1000)
 _held_reads = threading.BoundedSemaphore(MAX_HELD_RESOLUTION_READS)
+# Remembers recent requests whose first read already woke the sync worker, so a
+# hook polling one request wakes it once rather than on every read.
+MAX_WOKEN_REQUESTS = 256
+_woken_lock = threading.Lock()
+_woken_requests: OrderedDict[str, None] = OrderedDict()
 
 
 def requested_resolution_wait_seconds(query: str) -> float:
@@ -57,12 +69,23 @@ def wait_for_request_resolution(
 
     if timeout_seconds <= 0 or approval.get("status") != "pending":
         return approval
+    _wake_review_delivery_once(store, request_id)
     if not _held_reads.acquire(blocking=False):
         return approval
     try:
         return _wait_while_pending(store, request_id, approval, timeout_seconds, monotonic)
     finally:
         _held_reads.release()
+
+
+def _wake_review_delivery_once(store: GuardStore, request_id: str) -> None:
+    with _woken_lock:
+        if request_id in _woken_requests:
+            return
+        _woken_requests[request_id] = None
+        if len(_woken_requests) > MAX_WOKEN_REQUESTS:
+            _woken_requests.popitem(last=False)
+    review_event_wake_signal(store.path).notify()
 
 
 def _wait_while_pending(
