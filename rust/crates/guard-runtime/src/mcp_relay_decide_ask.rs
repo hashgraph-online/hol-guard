@@ -282,7 +282,8 @@ impl Prepared {
             message,
             data,
             // What `_notify_pending_approval` and `_maybe_open_approval_center`
-            // raise once the row is written, which the drain owns.
+            // raise once the row is written: the resident's drain raises the
+            // notices and the daemon's opens the approval center.
             approval: json!({
                 "approval_center_url": center,
                 "review_url": review_url,

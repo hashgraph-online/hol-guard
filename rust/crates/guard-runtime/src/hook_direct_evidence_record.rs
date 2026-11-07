@@ -13,8 +13,10 @@
 //! record it twice. Whatever the writer refuses, or a lane bound without a
 //! source, stays with the daemon.
 //!
-//! A connector-setup review's desktop notice needs no writer, so it is raised
-//! for every paged record that names one and marked `connector_notice_raised`.
+//! A desktop notice needs no writer, so it is raised for every paged record
+//! that names one: a connector-setup review's, marked
+//! `connector_notice_raised`, and those of an MCP call the resident queued for
+//! approval, which are taken off the record so the daemon has none to raise.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -153,16 +155,26 @@ pub(super) fn leftovers(
     paged: &mut [Paged],
 ) -> Option<Value> {
     let home = Path::new(guard_home);
-    // The notice needs no writer, so it is raised whatever the writer does.
+    // A notice needs no writer, so it is raised whatever the writer does.
     let mut notices = Vec::new();
     let mut noticed = Vec::new();
+    let mut asked = Vec::new();
     for paged in paged.iter() {
-        if let Some(notice) = super::notice::pending(&paged.record) {
-            notices.push(notice);
+        if let Some((request_id, connector_name)) = super::notice::pending(&paged.record) {
+            notices.push(super::notice::Notice::Connector {
+                request_id,
+                connector_name,
+            });
             noticed.push((paged.seq, vec![super::notice::NOTICE_RAISED]));
+        }
+        let approvals = super::notice::approval_notices(&paged.record);
+        if !approvals.is_empty() {
+            notices.extend(approvals.into_iter().map(super::notice::Notice::Approval));
+            asked.push(paged.seq);
         }
     }
     super::notice::raise(guard_home, source, notices);
+    take_approval_notices(queue, paged, &asked);
     let capturing = capture_marker_present(home);
     let capture_deadline = Instant::now() + CAPTURE_PAGE_BUDGET;
     let pending = |paged: &Paged| {
@@ -220,6 +232,23 @@ pub(super) fn leftovers(
     let (marks, fatal) = recorded?;
     mark(queue, paged, &marks);
     Some(fatal)
+}
+
+/// Take the raised approval notices off the page and the queued records.
+fn take_approval_notices(queue: &DirectEvidenceQueue, paged: &mut [Paged], asked: &[u64]) {
+    if asked.is_empty() {
+        return;
+    }
+    let mut state = queue.state.lock().ok();
+    for seq in asked {
+        if let Some(state) = state.as_mut() {
+            state.edit(*seq, super::notice::take_approval_notices);
+        }
+        let page = paged.iter_mut().find(|paged| paged.seq == *seq);
+        if let Some(fields) = page.and_then(|paged| paged.record.as_object_mut()) {
+            super::notice::take_approval_notices(fields);
+        }
+    }
 }
 
 /// Mark what was recorded on the page and in the queue.
