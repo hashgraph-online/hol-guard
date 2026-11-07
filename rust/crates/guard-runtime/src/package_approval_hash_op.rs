@@ -104,7 +104,28 @@ fn resolve_config_policy(
     .ok_or_else(invalid)
 }
 
+/// Whether this request is an install proven to run no lifecycle scripts.
+///
+/// The proof is the native command authority's, read over the redacted argv
+/// the artifact already carries. Redaction only rewrites URL-bearing and
+/// `--hash` tokens, and it rewrites them into shapes the proof refuses, so it
+/// can make the proof fail but never make it pass.
+fn package_scripts_disabled(request: &PackageApprovalHashRequestV1) -> bool {
+    field(field(&request.artifact, "metadata"), "redacted_command")
+        .as_str()
+        .is_some_and(guard_command::pretool::no_script_install_command)
+}
+
 /// `most_restrictive_guard_action(policy_action, additional?, config actions…)`.
+///
+/// An install proven to run no lifecycle scripts has nothing for the
+/// `package_script` risk setting to govern, so that setting alone is left out
+/// of the composition. This is the package-approval half of
+/// `policy_enforcement::package_scripts_disabled`, and it is just as narrow:
+/// the evaluation's own action, the caller's additional action and a
+/// configured artifact, publisher or harness override are all still folded in,
+/// so a user's explicit package policy and every other floor still decide this
+/// request.
 fn compose_current_action(
     request: &PackageApprovalHashRequestV1,
     config_policy: &Value,
@@ -113,7 +134,11 @@ fn compose_current_action(
     if let Some(additional) = request.additional_current_action.as_ref() {
         actions.push(additional.clone());
     }
+    let scripts_disabled = package_scripts_disabled(request);
     for key in ["effective_package_script_action", "resolved_override"] {
+        if scripts_disabled && key == "effective_package_script_action" {
+            continue;
+        }
         let action = field(config_policy, key);
         if !action.is_null() {
             actions.push(action.clone());
