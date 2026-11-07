@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, runtime_mcp
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_signed_approval_fixtures import short_signed_link
 from tests.silent_review_assertions import assert_silent_review_recorded
 from tests.test_guard_protect_approval_guidance import _pending_package_payload
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages, _package_artifact
@@ -102,8 +103,8 @@ def test_local_package_denial_prints_signed_link_to_the_running_daemon(tmp_path,
     )
 
     review_url = f"{_LIVE_DAEMON_URL}/requests/{request['request_id']}"
-    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"].startswith(f"{review_url}#guard-token=gld1.")
-    assert f"{review_url}#guard-token=gld1." in output
+    assert short_signed_link(review_url).fullmatch(payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"])
+    assert short_signed_link(review_url).search(output)
     assert request["request_id"] in output
     assert "synthetic-daemon-token" not in output
 
