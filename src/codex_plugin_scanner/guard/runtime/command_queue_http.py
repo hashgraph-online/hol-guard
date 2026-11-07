@@ -14,6 +14,11 @@ from .runner import (
 
 _REQUEST_TIMEOUT_SECONDS = 35
 _RETRY_TIMEOUT_SECONDS = 60
+# A gateway error with no Retry-After is usually a proxy whose upstream went
+# away mid-request, as when Guard Cloud replaces a server during a deploy. The
+# next request reaches a live server, so a decision waiting on this lease, ack
+# or result is retried after a second rather than the minute a sync waits.
+UNHINTED_GATEWAY_RETRY_SECONDS = 1.0
 
 
 def format_redacted_error(error: BaseException) -> str:
@@ -39,7 +44,8 @@ def request_json(
         request=request,
         timeout_seconds=_REQUEST_TIMEOUT_SECONDS,
         retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
+        unhinted_gateway_retry_seconds=UNHINTED_GATEWAY_RETRY_SECONDS,
     )
 
 
-__all__ = ["format_redacted_error", "request_json"]
+__all__ = ["UNHINTED_GATEWAY_RETRY_SECONDS", "format_redacted_error", "request_json"]
