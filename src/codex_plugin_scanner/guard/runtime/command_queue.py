@@ -37,7 +37,7 @@ from .command_queue_activation import (
 from .command_queue_auth import resolve_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
 from .command_queue_authorization import start_command_authorization
-from .command_queue_drain import with_review_drains
+from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
 from .command_queue_http import request_json as _json_request
@@ -59,6 +59,8 @@ from .command_queue_state import (
     COMMAND_QUEUE_STATE_KEY,  # noqa: F401 - public compatibility export
     command_queue_lease_payload,
     default_command_context,  # noqa: F401 - public compatibility export
+    exact_lease_batch_limit,
+    record_exact_lease_batch_limit,
     repair_command_queue_state,  # noqa: F401 - public compatibility export
 )
 from .command_queue_state import clear_exact_route_failure as _clear_exact_route_failure
@@ -135,9 +137,10 @@ def _lease_payload(
     *,
     operations: tuple[str, ...] | None = None,
     wait_ms: int | None = None,
+    max_jobs: int = 1,
 ) -> dict[str, object]:
     return command_queue_lease_payload(
-        store, operations=operations, wait_ms=wait_ms, operation_resolver=command_queue_operations
+        store, operations=operations, wait_ms=wait_ms, max_jobs=max_jobs, operation_resolver=command_queue_operations
     )
 
 
@@ -189,6 +192,8 @@ def _lease_next_job(
     auth_context: dict[str, object],
     *,
     state: dict[str, object] | None = None,
+    max_jobs: int = 1,
+    on_extra_jobs: Callable[[list[dict[str, object]]], object] | None = None,
 ) -> dict[str, object] | None:
     scope = _current_lane().lease_scope(lease_ready_operations(store), _command_queue_lease_wait_ms())
     if scope is None:
@@ -196,9 +201,11 @@ def _lease_next_job(
     operations, wait_ms = scope
     exact_route_failure: Callable[[urllib.error.HTTPError], None] | None = None
     exact_route_success: Callable[[], None] | None = None
+    observe_lease_batch_limit: Callable[[int], None] | None = None
     if state is not None:
         exact_route_failure = partial(_record_exact_route_failure, state)
         exact_route_success = partial(_clear_exact_route_failure, state)
+        observe_lease_batch_limit = partial(record_exact_lease_batch_limit, store, state)
     return lease_next_job(
         operations=operations,
         wait_ms=wait_ms,
@@ -210,6 +217,7 @@ def _lease_next_job(
                 store,
                 operations=options["operations"],  # type: ignore[arg-type]
                 wait_ms=options["wait_ms"],  # type: ignore[arg-type]
+                max_jobs=options["max_jobs"],  # type: ignore[arg-type]
             ),
         ),
         queue_request=lambda options: _json_request(
@@ -225,6 +233,9 @@ def _lease_next_job(
         exact_route_failure=exact_route_failure,
         exact_route_success=exact_route_success,
         observe_response=partial(observe_cloud_policy_revision, cloud_policy_store_key(store)),
+        max_jobs=max_jobs,
+        on_extra_jobs=on_extra_jobs,
+        observe_lease_batch_limit=observe_lease_batch_limit,
     )
 
 
@@ -305,23 +316,32 @@ def _lease_job_with_401_retry(
     store: GuardStore,
     state: dict[str, object],
     auth_context: dict[str, object],
+    **batch: Any,
 ) -> dict[str, object] | None:
     try:
-        return _lease_next_job(store, auth_context, state=state)
+        return _lease_next_job(store, auth_context, state=state, **batch)
     except urllib.error.HTTPError as error:
         if error.code != 401:
             raise
     _LOGGER.warning("Guard command lease 401, attempting OAuth refresh retry.")
     refreshed_auth_context = _resolve_command_queue_auth_context(store, force_refresh=True)
-    return _lease_next_job(store, refreshed_auth_context, state=state)
+    return _lease_next_job(store, refreshed_auth_context, state=state, **batch)
 
 
 def poll_command_queue_once(
     store: GuardStore,
     context: HarnessContext,
     *,
-    on_exact_review_lease: Callable[[], object] | None = None,
+    on_exact_review_lease: Callable[[ReviewLeaseBatch], object] | None = None,
+    leased_item: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    """Settle one command job: lease it, or take ``leased_item`` already leased.
+
+    With ``on_exact_review_lease``, an exact Review lease may return further
+    jobs leased in the same response; they go to the callback to settle on
+    drain workers. ``leased_item`` is how a drain worker settles one of them.
+    """
+
     # A drain lane only starts beside a main poll that passed the full check,
     # and its lease scope already requires a ready Review keyring.
     ready = command_environment_allows_queue() if _current_lane().is_drain else command_queue_should_poll(store)
@@ -347,9 +367,17 @@ def poll_command_queue_once(
         }
     )
     _save_state(store, state)
-    if _retry_pending_result(store, auth_context, state):
+    if leased_item is None and _retry_pending_result(store, auth_context, state):
         return command_queue_status(store)
-    item = _lease_job_with_401_retry(store, state, auth_context)
+    extras: list[dict[str, object]] = []
+    batch_size = min(exact_lease_batch_limit(state), REVIEW_LEASE_BATCH_SIZE) if on_exact_review_lease else 1
+    item = leased_item or _lease_job_with_401_retry(
+        store,
+        state,
+        auth_context,
+        max_jobs=batch_size,
+        on_extra_jobs=extras.extend if batch_size > 1 else None,
+    )
     if item is None:
         empty_at = _now()
         state.update(
@@ -371,7 +399,9 @@ def poll_command_queue_once(
         # job per request. Settle the rest beside this one; this job settles
         # here whether or not they start.
         try:
-            on_exact_review_lease()
+            on_exact_review_lease(
+                ReviewLeaseBatch(jobs=tuple(extras), more_may_be_ready=batch_size == 1 or len(extras) + 1 >= batch_size)
+            )
         except Exception as error:
             _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
     authorization = start_command_authorization(

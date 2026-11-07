@@ -109,7 +109,7 @@ def _enable_queue(store: FakeStore, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_drain_lane_skips_auto_update_on_an_empty_lease(tmp_path: Path, monkeypatch) -> None:
     store = FakeStore(tmp_path / "guard-home")
     _enable_queue(store, monkeypatch)
-    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: None)
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args, **_kwargs: None)
     updates: list[str] = []
     monkeypatch.setattr(command_queue, "maybe_auto_update", lambda *_args: updates.append("main"))
     context = _context(tmp_path)
@@ -135,7 +135,7 @@ def test_drain_lane_skips_the_full_poll_check_but_honors_the_opt_out(
     monkeypatch.setattr(command_queue, "command_queue_should_poll", full_check)
     monkeypatch.setattr(command_queue, "command_queue_status", lambda poll_store: load_command_queue_state(poll_store))
     leases: list[str] = []
-    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: leases.append("lease"))
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args, **_kwargs: leases.append("lease"))
     if opt_out is None:
         monkeypatch.delenv("GUARD_CLOUD_COMMAND_QUEUE_ENABLED", raising=False)
     else:
@@ -153,7 +153,7 @@ def test_poll_once_starts_drains_when_it_leases_an_exact_review_job(
 ) -> None:
     store = FakeStore(tmp_path / "guard-home")
     _enable_queue(store, monkeypatch)
-    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: dict(job))
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args, **_kwargs: dict(job))
     events: list[str] = []
 
     def stop_after_lease(*_args: object) -> None:
@@ -165,7 +165,7 @@ def test_poll_once_starts_drains_when_it_leases_an_exact_review_job(
         command_queue.poll_command_queue_once(
             store,
             _context(tmp_path),
-            on_exact_review_lease=lambda: events.append("start"),
+            on_exact_review_lease=lambda _batch: events.append("start"),
         )
 
     assert events == expected
@@ -174,14 +174,14 @@ def test_poll_once_starts_drains_when_it_leases_an_exact_review_job(
 def test_poll_once_settles_the_leased_job_when_drains_fail_to_start(tmp_path: Path, monkeypatch, caplog) -> None:
     store = FakeStore(tmp_path / "guard-home")
     _enable_queue(store, monkeypatch)
-    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: _exact_job("job-1"))
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args, **_kwargs: _exact_job("job-1"))
     heartbeats: list[str] = []
 
     def stop_after_heartbeat(_auth_context: object, job: dict[str, object]) -> None:
         heartbeats.append(str(job["id"]))
         raise RuntimeError("stop after heartbeat")
 
-    def fail_to_start() -> None:
+    def fail_to_start(_batch: object) -> None:
         raise RuntimeError("can't start new thread")
 
     monkeypatch.setattr(command_queue, "_heartbeat", stop_after_heartbeat)
@@ -197,7 +197,7 @@ def test_poll_once_authorizes_while_acknowledging_and_executes_only_after_the_ac
     store = FakeStore(tmp_path / "guard-home")
     _enable_queue(store, monkeypatch)
     exact_review_job = {**_exact_job("job-1"), "operation": EXACT_CLOUD_REVIEW_OPERATION, "payload": {}}
-    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: exact_review_job)
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args, **_kwargs: exact_review_job)
     authorized = threading.Event()
     authorizing_lanes: list[str] = []
     executed: list[str] = []
@@ -240,7 +240,7 @@ def test_poll_once_authorizes_a_job_that_is_not_rechecked_on_apply_only_after_th
     # any other job must not act on a verdict older than the acknowledgement.
     store = FakeStore(tmp_path / "guard-home")
     _enable_queue(store, monkeypatch)
-    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args: job)
+    monkeypatch.setattr(command_queue, "_lease_job_with_401_retry", lambda *_args, **_kwargs: job)
     monkeypatch.setattr(
         command_queue_authorization,
         "is_native_workspace_review_job",
@@ -419,8 +419,9 @@ def test_pool_runs_one_worker_per_slot_and_restarts_finished_slots(tmp_path: Pat
     for _ in range(command_queue_drain.REVIEW_DRAIN_WORKERS):
         assert started.acquire(timeout=5)
     assert pool.start() == 0
+    threads = list(pool._threads)
     release.set()
-    for thread in pool._threads:
+    for thread in threads:
         assert thread is not None
         thread.join(5)
 
@@ -428,9 +429,10 @@ def test_pool_runs_one_worker_per_slot_and_restarts_finished_slots(tmp_path: Pat
         command_queue_drain.review_drain_lane(slot).state_key
         for slot in range(command_queue_drain.REVIEW_DRAIN_WORKERS)
     )
+    threads = []
     assert pool.start() == command_queue_drain.REVIEW_DRAIN_WORKERS
-    for thread in pool._threads:
-        assert thread is not None
+    threads = [thread for thread in pool._threads if thread is not None]
+    for thread in threads:
         thread.join(5)
 
 
@@ -510,11 +512,13 @@ def test_main_poll_restarts_drains_while_a_result_is_unsent(tmp_path: Path, monk
             "2000-01-01T00:00:00+00:00",
         )
     events: list[str] = []
-    monkeypatch.setattr(command_queue_drain.ReviewDrainPool, "start", lambda _self: events.append("start") or 0)
+    monkeypatch.setattr(
+        command_queue_drain.ReviewDrainPool, "start", lambda _self, _batch=None: events.append("start") or 0
+    )
 
     def poll_once(_store: object, _context: object, *, on_exact_review_lease) -> dict[str, object]:
         events.append("poll")
-        on_exact_review_lease()
+        on_exact_review_lease(command_queue_drain.ReviewLeaseBatch())
         return {"state": "idle"}
 
     poll = command_queue_drain.with_review_drains(
