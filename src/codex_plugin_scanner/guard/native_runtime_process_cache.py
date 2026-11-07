@@ -27,7 +27,7 @@ _MAX_ENTRIES = 8
 _ENABLED = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
 _LOCK = threading.Lock()
 _Fingerprint = tuple[int, ...]
-_STATUSES: dict[_RequestKey, tuple[NativeRuntimeStatus, _Fingerprint, _Fingerprint | None]] = {}
+_STATUSES: dict[_RequestKey, tuple[NativeRuntimeStatus, _Fingerprint, _Fingerprint | None, tuple[int, int] | None]] = {}
 
 
 def _fingerprint(path: Path, *, follow: bool) -> _Fingerprint | None:
@@ -41,6 +41,14 @@ def _fingerprint(path: Path, *, follow: bool) -> _Fingerprint | None:
     if changed_at <= 0 or time.time_ns() - changed_at < _MIN_AGE_NS:
         return None
     return (*full_stat_identity(metadata), int(metadata.st_uid), int(metadata.st_gid))
+
+
+def _directory_identity(path: Path) -> tuple[int, int] | None:
+    try:
+        metadata = path.stat()
+    except OSError:
+        return None
+    return (int(metadata.st_dev), int(metadata.st_ino))
 
 
 def _manifest_path(binary: Path) -> Path:
@@ -85,24 +93,38 @@ def remember_process_status(
     with _LOCK:
         if key not in _STATUSES and len(_STATUSES) >= _MAX_ENTRIES:
             _STATUSES.pop(next(iter(_STATUSES)))
-        _STATUSES[key] = (status, binary, manifest if status.manifest is not None else None)
+        _STATUSES[key] = (
+            status,
+            binary,
+            manifest if status.manifest is not None else None,
+            _directory_identity(path.parent),
+        )
 
 
-def _still_names(candidate: Path, path: Path) -> bool:
+def _still_names(candidate: Path, path: Path, binary: _Fingerprint, parent: tuple[int, int] | None) -> bool:
     """Whether ``candidate`` still leads to the cached runtime ``path``.
 
-    A candidate spelled exactly as the resolved path needs no walk: the binary
-    fingerprint that follows is taken through that same spelling, so it matches
-    only while the spelling still reaches the same file. Resolving stat-ed every
-    path component on each call, and the status is asked for on every resident
-    request.
+    A candidate spelled exactly as the resolved path needs no full walk, which
+    stat-ed every path component on each call; the status is asked for on every
+    resident request. Two stats prove the spelling still names the verified
+    file instead: the last component is not a link (its own stat still matches
+    the binary's), and the directory it reaches is still the one verified.
+    Directories cannot be hard linked, so an ancestor redirected to another
+    tree, even one holding a hard link to the same binary, reaches a different
+    directory and falls back to the full walk.
     """
 
     try:
-        if candidate.expanduser() == path:
-            return True
+        literal = candidate.expanduser() == path
     except RuntimeError:
         return False
+    if (
+        literal
+        and parent is not None
+        and _fingerprint(path, follow=False) == binary
+        and _directory_identity(path.parent) == parent
+    ):
+        return True
     return _resolved_candidate_path(candidate) == path
 
 
@@ -113,12 +135,12 @@ def process_status(key: _RequestKey, candidates: tuple[Path, ...]) -> NativeRunt
         entry = _STATUSES.get(key)
     if entry is None:
         return None
-    status, binary, manifest = entry
+    status, binary, manifest, parent = entry
     identity = status.identity
     if (
         identity is None
         or not candidates
-        or not _still_names(candidates[0], identity.path)
+        or not _still_names(candidates[0], identity.path, binary, parent)
         or _fingerprint(identity.path, follow=True) != binary
         or (manifest is not None and _fingerprint(_manifest_path(identity.path), follow=False) != manifest)
     ):

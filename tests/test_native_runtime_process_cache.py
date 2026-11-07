@@ -111,6 +111,37 @@ def test_a_literal_candidate_whose_directory_now_leads_elsewhere_recomputes(
     assert second is not first
 
 
+def _literal_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """A literal candidate plus a hard link to it, made before the status is cached."""
+
+    home = tmp_path / "runtime"
+    home.mkdir()
+    candidate = home / "hol-guard-runtime"
+    candidate.write_bytes(b"process-cache-runtime")
+    candidate.chmod(0o700)
+    other = tmp_path / "other"
+    other.mkdir()
+    os.link(candidate, other / "hol-guard-runtime")
+    monkeypatch.setattr(native_runtime_module, "_runtime_candidates", lambda: (candidate,))
+    return candidate, other
+
+
+def test_a_literal_candidate_whose_directory_now_leads_to_a_hard_link_recomputes(
+    probe: tuple[Path, Path, list[Path]], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _binary, _manifest, calls = probe
+    candidate, other = _literal_runtime(tmp_path, monkeypatch)
+    first = native_runtime_status()
+    assert first.identity is not None and first.identity.path == candidate
+    # The hard link shares the binary's stat identity, so only the directory
+    # the spelling now reaches shows that it leads somewhere else.
+    candidate.parent.rename(tmp_path / "runtime-old")
+    candidate.parent.symlink_to(other, target_is_directory=True)
+    second = native_runtime_status()
+    assert len(calls) == 2
+    assert second is not first
+
+
 def test_a_touched_binary_recomputes(probe: tuple[Path, Path, list[Path]]) -> None:
     binary, _manifest, calls = probe
     first = native_runtime_status()
