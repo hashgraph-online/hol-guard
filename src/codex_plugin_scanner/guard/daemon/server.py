@@ -3594,6 +3594,7 @@ class GuardDaemonServer:
             self._publish_listen_state()
             self._diagnostics.record("daemon_listen_ready")
             self._warm_desktop_bootstrap_cache()
+            self._warm_codex_live_decision()
             if not continue_after_listen:
                 return
         self._complete_owned_service_after_listen(generation, already_locked=True)
@@ -3689,6 +3690,24 @@ class GuardDaemonServer:
                 return
 
         threading.Thread(target=warm, name="desktop-bootstrap-warm", daemon=True).start()
+
+    def _warm_codex_live_decision(self) -> None:
+        """Load the live-decision hook facade before the first approval lands.
+
+        Revalidation imports this facade on first use so daemon imports stay
+        order-safe. Paid inside a request, that first import holds the import
+        lock for about a tenth of a second while the harness waits on the
+        completion. Loading it once the daemon listens moves the cost off the
+        first approval; a failure leaves the import to the request path.
+        """
+
+        def warm() -> None:
+            try:
+                from ..cli import commands_support_hook_payload  # noqa: F401
+            except Exception:
+                self._diagnostics.record_exception("codex_live_decision_warmup_failed")
+
+        threading.Thread(target=warm, name="codex-live-decision-warm", daemon=True).start()
 
     def refresh_command_queue_worker(self) -> dict[str, object]:
         """Apply changed Cloud connectivity and consent without a daemon restart."""
