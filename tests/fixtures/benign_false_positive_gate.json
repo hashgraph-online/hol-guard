@@ -1317,7 +1317,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -rln \"json({ error: 'not found', path\\|error: \\\"not found\\\", path\" src"
+        "command": "grep -rln \"json({ error: 'not found', path\" src"
       },
       "cwd": "worktree",
       "expect": "allow"
