@@ -17,7 +17,7 @@ const PASSWORD: &str = "correct horse battery";
 
 /// The binding the daemon and CLI send to turn Pulse off.
 fn disable_binding() -> Value {
-    json!({"action": "pulse_disable", "subject": "approval-gate:pulse"})
+    json!({"settings_change": {"kind": "pulse_disable"}})
 }
 
 struct Gate {

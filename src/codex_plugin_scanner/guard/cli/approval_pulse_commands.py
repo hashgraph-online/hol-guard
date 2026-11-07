@@ -24,7 +24,6 @@ from ..approval_gate import (
     recover_pulse,
     require_high_risk,
 )
-from ..approval_gate_types import PULSE_DISABLE_BINDING
 from .approval_gate_prompt import print_pulse_status, prompt_for_approval_gate
 
 PULSE_DOCS_URL = "https://docs.yanez.ai/pulse/"
@@ -130,8 +129,7 @@ def _disable(guard_home: Path) -> dict[str, object]:
         guard_home,
         purpose="settings_write",
         approval_gate_input=gate_input,
-        action=PULSE_DISABLE_BINDING.action,
-        subject=PULSE_DISABLE_BINDING.subject,
+        settings_change={"kind": "pulse_disable"},
     )
     return {"approval_gate": disable_pulse(guard_home, approval_gate_grant=grant).to_dict()}
 

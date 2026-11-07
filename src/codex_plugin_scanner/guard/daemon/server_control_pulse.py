@@ -25,7 +25,6 @@ from ..approval_gate import (
 )
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
 from ..approval_gate import public_config as approval_gate_public_config
-from ..approval_gate_types import PULSE_DISABLE_BINDING
 from ..config import editable_guard_settings, load_guard_config
 from .server_common import _settings_response_payload
 
@@ -110,8 +109,7 @@ class _ControlPulseRoutes:
                     guard_home,
                     purpose="settings_write",
                     approval_gate_input=gate_input,
-                    action=PULSE_DISABLE_BINDING.action,
-                    subject=PULSE_DISABLE_BINDING.subject,
+                    settings_change={"kind": "pulse_disable"},
                 )
                 self._write_json(
                     self._pulse_settings_response(disable_pulse(guard_home, approval_gate_grant=grant).to_dict())

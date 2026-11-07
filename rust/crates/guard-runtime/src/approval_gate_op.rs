@@ -179,7 +179,16 @@ fn evaluate(request: &ApprovalGateRequestV1) -> Result<Value, ApprovalGateErrorV
     }
     let guard_home = PathBuf::from(&request.guard_home);
     let now = request.now.as_deref();
-    let params = request.params.as_ref();
+    // A settings change is named by its caller and bound by the resident.
+    let settings_scoped =
+        crate::approval_gate_settings_binding::is_settings_write(request.purpose.as_deref())
+            || matches!(request.method, ApprovalGateMethodV1::RequireSettingsWrite);
+    let bound = crate::approval_gate_settings_binding::bind(
+        &guard_home,
+        settings_scoped,
+        request.params.as_ref(),
+    )?;
+    let params = bound.as_ref().or(request.params.as_ref());
     // An absent settings payload is an empty one, not "nothing to check".
     let empty_payload = Value::Object(serde_json::Map::new());
     let input = request.approval_gate_input.as_ref().map(input_from_wire);

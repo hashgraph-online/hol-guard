@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Literal, NamedTuple, cast
+from typing import Literal, cast
 
 from .approval_gate_state import ApprovalGatePublicConfig, optional_bool, optional_string
 
@@ -204,57 +201,3 @@ def settings_input_from_payload(payload: object) -> ApprovalGateInput | None:
 
 
 _PULSE_PAYLOAD_KEYS = ("approval_gate_pulse", "approval_pulse_request_id")
-
-# Proof and proof-use fields: they say how the change is approved, not what it is.
-_SETTINGS_PROOF_KEYS = frozenset(
-    {"password", "current_password", "totp_code", "pulse", "pulse_request_id", "use_cooldown"}
-)
-
-
-def settings_write_subject(settings: object, key: str) -> str:
-    """Name one exact settings change, so a grant for it covers no other change.
-
-    The grant's subject is bound into a Pulse request, so an approval in the
-    YID app cannot be resubmitted with different settings. The digest is
-    keyed (the daemon's token), so a new password inside the change cannot be
-    guessed from a subject that reaches a log.
-    """
-    changes = settings if isinstance(settings, dict) else {}
-    gate = changes.get("approval_gate")
-    if isinstance(gate, dict):
-        changes = {
-            **changes,
-            "approval_gate": {name: value for name, value in gate.items() if name not in _SETTINGS_PROOF_KEYS},
-        }
-    canonical = json.dumps(changes, sort_keys=True, separators=(",", ":"), default=str)
-    digest = hmac.new(key.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"settings:{digest}"
-
-
-# Each Pulse-protected settings change names its own operation. The binding is
-# sent when the approval is requested and again when the change is applied, and
-# the resident checks it both times, so an approval for one change (in the YID
-# app or as a grant) cannot complete another.
-SETTINGS_SAVE_ACTION = "settings_save"
-UPDATE_CHANNEL_ACTION = "settings_update_channel"
-SETTINGS_RESET_ACTION = "settings_reset"
-PULSE_DISABLE_ACTION = "pulse_disable"
-PULSE_DISABLE_SUBJECT = "approval-gate:pulse"
-
-
-class SettingsBinding(NamedTuple):
-    """The ``action`` and ``subject`` one settings change is approved under."""
-
-    action: str
-    subject: str
-
-
-def update_channel_binding(update_channel: object) -> SettingsBinding:
-    """The binding for switching to exactly this release channel."""
-    channel = json.dumps(update_channel, sort_keys=True, separators=(",", ":"), default=str)
-    return SettingsBinding(UPDATE_CHANNEL_ACTION, f"update_channel:{channel}")
-
-
-SETTINGS_RESET_BINDING = SettingsBinding(SETTINGS_RESET_ACTION, SETTINGS_RESET_ACTION)
-# The resident requires exactly this binding to turn Pulse off.
-PULSE_DISABLE_BINDING = SettingsBinding(PULSE_DISABLE_ACTION, PULSE_DISABLE_SUBJECT)

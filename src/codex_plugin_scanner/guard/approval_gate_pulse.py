@@ -10,7 +10,7 @@ and hands the request id back to the same grant call.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 
@@ -41,6 +41,7 @@ def request_pulse_approval(
     session_nonce: str | None = None,
     verdict: str | None = None,
     batch_request_ids: tuple[str, ...] = (),
+    settings_change: Mapping[str, object] | None = None,
     now: str | None = None,
 ) -> dict[str, object]:
     """Ask the resident to send one Pulse request for this exact action.
@@ -54,6 +55,8 @@ def request_pulse_approval(
         params["verdict"] = verdict
     if batch_request_ids:
         params["batch_request_ids"] = list(batch_request_ids)
+    if settings_change is not None:
+        params["settings_change"] = dict(settings_change)
     return _gate._native(
         "pulse_request",
         guard_home,
@@ -169,6 +172,7 @@ def _with_pulse(
         subject=_optional_str(params.get("subject")),
         session_nonce=_optional_str(params.get("session_nonce")),
         batch_request_ids=approval_gate_input.pulse_batch_request_ids,
+        settings_change=_optional_mapping(params.get("settings_change")),
         now=now,
     )
     request_id: str | None = None
@@ -193,6 +197,10 @@ def _with_pulse(
 
 def _optional_str(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _optional_mapping(value: object) -> Mapping[str, object] | None:
+    return value if isinstance(value, Mapping) else None
 
 
 def begin_pulse_enrollment(

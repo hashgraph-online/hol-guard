@@ -43,6 +43,7 @@ mod approval_gate_pulse_setup;
 mod approval_gate_pulse_store;
 mod approval_gate_pulse_summary;
 mod approval_gate_settings;
+mod approval_gate_settings_binding;
 mod approval_gate_state;
 mod approval_gate_verify;
 mod approval_link;

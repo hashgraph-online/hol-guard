@@ -7,15 +7,15 @@ use serde_json::json;
 
 use super::*;
 
-const CHANNEL_STABLE: &str = "update_channel:\"stable\"";
-const CHANNEL_BETA: &str = "update_channel:\"beta\"";
+const CHANNEL_STABLE: &str = "stable";
+const CHANNEL_BETA: &str = "beta";
 
-fn update_channel(subject: &str) -> Value {
-    json!({"action": "settings_update_channel", "subject": subject})
+fn update_channel(channel: &str) -> Value {
+    json!({"settings_change": {"kind": "update_channel", "update_channel": channel}})
 }
 
 fn reset() -> Value {
-    json!({"action": "settings_reset", "subject": "settings_reset"})
+    json!({"settings_change": {"kind": "reset"}})
 }
 
 /// Start a Pulse approval for `binding` and let the YID app approve it.

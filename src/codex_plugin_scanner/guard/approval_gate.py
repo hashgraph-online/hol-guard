@@ -14,7 +14,7 @@ checks on it succeed without a resident.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -341,10 +341,18 @@ def require_settings_write(
     approval_gate_grant: ApprovalGateGrant | None = None,
     action: str | None = None,
     subject: str | None = None,
+    settings_change: Mapping[str, object] | None = None,
     now: str | None = None,
 ) -> None:
-    """With ``action`` and ``subject``, the grant must name exactly that change."""
-    params = {key: value for key, value in (("action", action), ("subject", subject)) if value is not None}
+    """With a ``settings_change`` (or ``action`` and ``subject``), the grant must name exactly that change.
+
+    The resident derives the binding from a ``settings_change``.
+    """
+    params: dict[str, object] = {
+        key: value for key, value in (("action", action), ("subject", subject)) if value is not None
+    }
+    if settings_change is not None:
+        params["settings_change"] = dict(settings_change)
     _native_or_unconfigured(
         "require_settings_write",
         guard_home,
@@ -364,14 +372,19 @@ def require_high_risk(
     scope: str | None = None,
     subject: str | None = None,
     session_nonce: str | None = None,
+    settings_change: Mapping[str, object] | None = None,
     now: str | None = None,
 ) -> ApprovalGateGrant | None:
+    """A settings write names its change as ``settings_change``; the resident binds the grant to it."""
+    params: dict[str, object] = {"action": action, "scope": scope, "subject": subject, "session_nonce": session_nonce}
+    if settings_change is not None:
+        params["settings_change"] = dict(settings_change)
     payload = _with_pulse(
         "require_high_risk",
         guard_home,
         pulse_purpose=purpose,
         pulse_strict=True,
-        params={"action": action, "scope": scope, "subject": subject, "session_nonce": session_nonce},
+        params=params,
         approval_gate_input=approval_gate_input,
         approval_gate_grant=approval_gate_grant,
         purpose=purpose,

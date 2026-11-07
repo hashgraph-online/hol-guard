@@ -443,22 +443,12 @@ def test_json_works_before_or_after_the_subcommand(argv: list[str]) -> None:
     assert root.parse_args(["approval-pulse", "status"]).json is False
 
 
-def test_a_settings_subject_ignores_the_proof_and_hides_a_new_password() -> None:
-    from codex_plugin_scanner.guard.approval_gate_types import settings_write_subject
-
-    change = {"approval_gate": {"new_password": "hunter2-new", "confirm_password": "hunter2-new"}}
-    with_proof = {"approval_gate": {**change["approval_gate"], "password": "old", "pulse_request_id": "azr_1"}}
-    subject = settings_write_subject(change, "k")
-    assert subject == settings_write_subject(with_proof, "k"), "how it is approved is not part of the change"
-    assert subject != settings_write_subject({"approval_gate": {"new_password": "other"}}, "k")
-    assert subject != settings_write_subject(change, "another key")
-    assert "hunter2" not in subject and subject.startswith("settings:")
-
-
 # Michael's review of #7352: every Pulse-protected settings change names its own
-# operation. The Pulse request round trip is covered end to end in Rust
-# (approval_gate_pulse_binding_tests.rs); these check the Python side sends the
-# binding and that the real resident enforces it when the change is applied.
+# operation. The resident derives the binding from the change the caller names;
+# the Pulse request round trip and the derivation are covered in Rust
+# (approval_gate_pulse_binding_tests.rs, approval_gate_settings_binding_tests.rs).
+# These check the Python side names the change and that the real resident
+# enforces the binding when the change is applied.
 
 _PASSWORD = "correct horse battery"
 
@@ -469,24 +459,24 @@ def _password_gate(guard_home: Path) -> None:
     )
 
 
-def _grant_for(guard_home: Path, binding: object | None) -> object:
-    action = getattr(binding, "action", None)
-    subject = getattr(binding, "subject", None)
+_PULSE_DISABLE = {"kind": "pulse_disable"}
+_RESET = {"kind": "reset"}
+
+
+def _channel(update_channel: str) -> dict[str, object]:
+    return {"kind": "update_channel", "update_channel": update_channel}
+
+
+def _grant_for(guard_home: Path, change: dict[str, object] | None) -> object:
     return approval_gate.require_high_risk(
         guard_home,
         purpose="settings_write",
         approval_gate_input=ApprovalGateInput(password=_PASSWORD),
-        action=action,
-        subject=subject,
+        settings_change=change,
     )
 
 
 def test_a_settings_grant_applies_only_the_change_it_was_issued_for(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.approval_gate_types import (
-        PULSE_DISABLE_BINDING,
-        SETTINGS_RESET_BINDING,
-        update_channel_binding,
-    )
     from codex_plugin_scanner.guard.config import (
         load_guard_config,
         reset_guard_settings,
@@ -494,18 +484,18 @@ def test_a_settings_grant_applies_only_the_change_it_was_issued_for(tmp_path: Pa
     )
 
     _password_gate(tmp_path)
-    to_alpha = update_channel_binding("alpha")
-    for binding in (None, PULSE_DISABLE_BINDING, SETTINGS_RESET_BINDING, update_channel_binding("stable")):
+    to_alpha = _channel("alpha")
+    for binding in (None, _PULSE_DISABLE, _RESET, _channel("stable")):
         with pytest.raises(ApprovalGateError):
             update_guard_update_channel(tmp_path, "alpha", approval_gate_grant=_grant_for(tmp_path, binding))
     assert load_guard_config(tmp_path).update_channel == "stable", "no refused grant changed the channel"
-    for binding in (None, PULSE_DISABLE_BINDING, to_alpha):
+    for binding in (None, _PULSE_DISABLE, to_alpha):
         with pytest.raises(ApprovalGateError):
             reset_guard_settings(tmp_path, approval_gate_grant=_grant_for(tmp_path, binding))
 
     update_guard_update_channel(tmp_path, "alpha", approval_gate_grant=_grant_for(tmp_path, to_alpha))
     assert load_guard_config(tmp_path).update_channel == "alpha"
-    reset_guard_settings(tmp_path, approval_gate_grant=_grant_for(tmp_path, SETTINGS_RESET_BINDING))
+    reset_guard_settings(tmp_path, approval_gate_grant=_grant_for(tmp_path, _RESET))
 
 
 def test_each_settings_route_asks_for_its_own_binding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -516,11 +506,12 @@ def test_each_settings_route_asks_for_its_own_binding(tmp_path: Path, monkeypatc
     from codex_plugin_scanner.guard.daemon import GuardDaemonServer, server_control_pulse, server_control_repair
     from codex_plugin_scanner.guard.store import GuardStore
 
-    asked: dict[str, tuple[object, object]] = {}
+    asked: dict[str, object] = {}
 
     def recorder(route: str):
         def gate(*_args: object, **kwargs: object) -> None:
-            asked[route] = (kwargs.get("action"), kwargs.get("subject"))
+            assert kwargs.get("action") is None and kwargs.get("subject") is None, "the resident derives the binding"
+            asked[route] = kwargs.get("settings_change")
             raise ApprovalGateError("approval_gate_required", "stop here")
 
         return gate
@@ -550,9 +541,13 @@ def test_each_settings_route_asks_for_its_own_binding(tmp_path: Path, monkeypatc
     finally:
         daemon.stop()
     assert set(asked) == {"save", "stable", "alpha", "reset", "disable"}, asked
-    assert all(action and subject for action, subject in asked.values()), asked
-    assert len(set(asked.values())) == len(asked), f"two routes share a binding: {asked}"
-    assert len({action for action, _ in asked.values()}) == 4, "one action per kind of change"
+    assert all(isinstance(change, dict) for change in asked.values()), asked
+    assert len({json.dumps(change, sort_keys=True) for change in asked.values()}) == len(asked), (
+        f"two routes name the same change: {asked}"
+    )
+    assert {change["kind"] for change in asked.values()} == {"save", "update_channel", "reset", "pulse_disable"}
+    assert asked["save"] == {"kind": "save", "settings": {"receipt_redaction_level": "none"}}
+    assert asked["alpha"] == _channel("alpha")
 
 
 def test_the_cli_and_the_dashboard_turn_pulse_off_under_the_binding_the_resident_requires(
@@ -560,15 +555,15 @@ def test_the_cli_and_the_dashboard_turn_pulse_off_under_the_binding_the_resident
 ) -> None:
     from codex_plugin_scanner.guard.cli import approval_pulse_commands
 
-    asked: list[tuple[object, object]] = []
+    asked: list[object] = []
 
     def gate(*_args: object, **kwargs: object) -> None:
-        asked.append((kwargs.get("action"), kwargs.get("subject")))
+        asked.append(kwargs.get("settings_change"))
         raise ApprovalGateError("approval_gate_required", "stop here")
 
     monkeypatch.setattr(approval_pulse_commands, "prompt_for_approval_gate", lambda *_a, **_k: None)
     monkeypatch.setattr(approval_pulse_commands, "require_high_risk", gate)
     with pytest.raises(ApprovalGateError):
         approval_pulse_commands._disable(tmp_path)
-    # The values the Rust disable_pulse consumer requires.
-    assert asked == [("pulse_disable", "approval-gate:pulse")]
+    # The resident binds this change to what its disable_pulse consumer requires.
+    assert asked == [_PULSE_DISABLE]

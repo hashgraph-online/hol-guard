@@ -23,13 +23,7 @@ from ..approval_gate import (
 from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
-from ..approval_gate_types import (
-    SETTINGS_RESET_BINDING,
-    SETTINGS_SAVE_ACTION,
-    settings_input_from_payload,
-    settings_write_subject,
-    update_channel_binding,
-)
+from ..approval_gate_types import settings_input_from_payload
 from ..cli.update_commands import build_guard_update_status_payload
 from ..config import (
     editable_guard_settings,
@@ -344,8 +338,7 @@ class _RepairSettingsRoutes:
                     approval_gate_input=gate_input,
                     # One approval covers exactly these settings, so a Pulse
                     # approval cannot be resubmitted with a different change.
-                    action=SETTINGS_SAVE_ACTION,
-                    subject=settings_write_subject(settings, str(getattr(self.server, "auth_token", ""))),
+                    settings_change={"kind": "save", "settings": settings},
                 )
             )
             if isinstance(gate_payload, dict):
@@ -388,14 +381,12 @@ class _RepairSettingsRoutes:
 
     def _handle_update_channel(self, payload: dict[str, object]) -> None:
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        binding = update_channel_binding(payload.get("update_channel"))
         try:
             approval_gate_grant = require_high_risk(
                 guard_home,
                 purpose="settings_write",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
-                action=binding.action,
-                subject=binding.subject,
+                settings_change={"kind": "update_channel", "update_channel": payload.get("update_channel")},
             )
             update_guard_update_channel(
                 guard_home,
@@ -428,8 +419,7 @@ class _RepairSettingsRoutes:
                 guard_home,
                 purpose="settings_write",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
-                action=SETTINGS_RESET_BINDING.action,
-                subject=SETTINGS_RESET_BINDING.subject,
+                settings_change={"kind": "reset"},
             )
             config = reset_guard_settings(guard_home, approval_gate_grant=approval_gate_grant)
             if config.receipt_redaction_level != previous_redaction_level:
