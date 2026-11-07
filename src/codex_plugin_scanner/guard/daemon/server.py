@@ -2760,7 +2760,8 @@ class _GuardDaemonHandler(
 
     def _refresh_dashboard_session_token(self, *, surface: str) -> str | None:
         claims = self._refreshable_dashboard_session_claims()
-        if claims is None:
+        if claims is None or claims.get("request_id") is not None:
+            # A session bound to one request ends with the link that opened it.
             return None
         started_at = self._optional_string(claims.get(LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM))
         if started_at is None:

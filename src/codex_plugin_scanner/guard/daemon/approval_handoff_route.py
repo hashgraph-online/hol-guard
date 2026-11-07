@@ -18,7 +18,8 @@ def approval_handoff_location(path: str, *, auth_token: str, now: float | None =
     A valid code lands on the request page with an approval session in the
     fragment. That session ends when the code does and keeps the code's issue
     time as its start, so opening the link again later never extends access
-    past what the agent was handed. A stale or forged code still lands on the
+    past what the agent was handed. The session is bound to this request: it
+    can read the approval page but decide only this request. A stale or forged code still lands on the
     request page, unsigned, so the daemon's normal sign-in applies.
     """
 
@@ -37,5 +38,6 @@ def approval_handoff_location(path: str, *, auth_token: str, now: float | None =
         surface="approval-center",
         expires_in_seconds=max(1, int(expires - current)),
         session_started_at=issued_at.isoformat(),
+        extra_claims={"request_id": request_id},
     )
     return f"{request_page}#guard-token={session}"
