@@ -47,3 +47,73 @@ fn text_that_is_not_a_template_argument_is_left_alone() {
         );
     }
 }
+
+/// A second template in the same command is read at its own offset.
+///
+/// The offset of `jsonpath` was taken from the remainder still being walked
+/// and then used to index the whole command, so from the second occurrence on
+/// the screen read the wrong preceding character: a quoted template was split
+/// at the blank inside its loop and kept its selector.
+#[test]
+fn a_second_names_only_template_in_the_same_command_loses_its_selector_too() {
+    let command = concat!(
+        "kubectl -n alpha-namespace get pods -o ",
+        r#"'jsonpath={range .items[*]}{.metadata.name}{"\n"}{end}'"#,
+        " && kubectl -n alpha-namespace get deployment alpha-frontend -o ",
+        r#"'jsonpath={range .spec.template.spec.containers[*].env[*]}{.name}{"\n"}{end}'"#
+    );
+    let stripped = without_names_only_jsonpath_templates(command);
+    assert!(!stripped.contains(".env"), "{stripped}");
+    assert!(!stripped.contains(".items"), "{stripped}");
+    assert_eq!(stripped.matches("jsonpath=").count(), 2, "{stripped}");
+}
+
+/// Text before a template may be multibyte without panicking.
+///
+/// Indexing the whole command with an offset into the remainder could land
+/// inside a multibyte character. This runs on the pre-tool path, so the panic
+/// would break the decision for the command rather than fail it closed.
+#[test]
+fn multibyte_text_before_two_templates_does_not_panic() {
+    let command = concat!(
+        "echo 'é' && kubectl get pods -o ",
+        r#"'jsonpath={range .items[*]}{.metadata.name}{"\n"}{end}'"#,
+        " && kubectl get deployment alpha-frontend -o ",
+        r#"'jsonpath={range .spec.template.spec.containers[*].env[*]}{.name}{"\n"}{end}'"#
+    );
+    let stripped = without_names_only_jsonpath_templates(command);
+    assert!(!stripped.contains(".env"), "{stripped}");
+}
+
+/// The shell may quote the value instead of the whole argument.
+///
+/// `-o jsonpath='{range …}'` is as valid as `-o 'jsonpath={range …}'`. The
+/// screen resolved only the outer spelling, so the inner one stopped at the
+/// blank after `range` and kept the selector that looks like a dotenv path.
+#[test]
+fn a_template_quoted_after_the_equals_sign_loses_its_selector() {
+    for command in [
+        concat!(
+            "kubectl -n alpha-namespace get deployment alpha-frontend -o jsonpath=",
+            r#"'{range .spec.template.spec.containers[*].env[*]}{.name}{"\n"}{end}'"#
+        ),
+        concat!(
+            "kubectl -n alpha-namespace get deployment alpha-frontend -o jsonpath=",
+            r#""{range .spec.template.spec.containers[*].env[*]}{.name}{'\n'}{end}""#
+        ),
+    ] {
+        let stripped = without_names_only_jsonpath_templates(command);
+        assert!(!stripped.contains(".env"), "{stripped}");
+        assert!(stripped.contains("jsonpath="), "{stripped}");
+    }
+}
+
+/// A value-rendering template keeps its text however it is quoted.
+#[test]
+fn a_template_quoted_after_the_equals_sign_that_renders_a_value_is_left_alone() {
+    let command = concat!(
+        "kubectl -n alpha-namespace get deployment alpha-frontend -o jsonpath=",
+        r#"'{range .spec.template.spec.containers[*].env[*]}{.name}{"="}{.value}{end}'"#
+    );
+    assert_eq!(without_names_only_jsonpath_templates(command), command);
+}

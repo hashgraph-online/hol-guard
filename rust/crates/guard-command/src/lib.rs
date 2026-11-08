@@ -320,6 +320,7 @@ mod sfrs_kubernetes_commands_tests;
 mod sfrs_kubernetes_cp;
 mod sfrs_kubernetes_heredoc;
 mod sfrs_kubernetes_heredoc_scan;
+mod sfrs_kubernetes_jsonpath;
 mod sfrs_kubernetes_options;
 mod sfrs_kubernetes_support;
 #[cfg(test)]

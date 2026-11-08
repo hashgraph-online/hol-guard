@@ -299,6 +299,8 @@ mod sfrs_interpreter_scripts;
 mod sfrs_jq;
 #[path = "../../guard-command/src/sfrs_json.rs"]
 mod sfrs_json;
+#[path = "../../guard-command/src/sfrs_kubernetes_jsonpath.rs"]
+mod sfrs_kubernetes_jsonpath;
 #[path = "../../guard-command/src/sfrs_kubernetes_options.rs"]
 mod sfrs_kubernetes_options;
 #[path = "../../guard-command/src/sfrs_kubernetes_support.rs"]

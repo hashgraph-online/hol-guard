@@ -745,6 +745,7 @@
       "src/sfrs_jq.rs",
       "src/sfrs_json.rs",
       "src/sfrs_kubernetes_options.rs",
+      "src/sfrs_kubernetes_jsonpath.rs",
       "src/sfrs_kubernetes_support.rs",
       "src/sfrs_node_redaction.rs",
       "src/sfrs_path_word_lookups.rs",
