@@ -1231,6 +1231,24 @@ fn wait_for_stats(
     }
 }
 
+/// Block until the journal holds no records, or a bounded deadline passes.
+///
+/// A dropped record leaves the journal in the batch settle that follows the
+/// store pass, after the statistics reporting the drop are already published.
+/// Reading the journal the moment `receipt_dropped` rises therefore races that
+/// settle rather than observing it, so the wait is what proves the record was
+/// cleared; a journal that never empties still fails here.
+fn wait_for_empty_journal(journal: &RecordingJournal) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !journal.records().is_empty() && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        journal.records().is_empty(),
+        "the dropped record was never cleared from the journal"
+    );
+}
+
 /// A receipt waiting out its backoff keeps its place in the queue without
 /// holding the worker: one submitted behind it is written before the waiting
 /// receipt gets another attempt.
@@ -1271,7 +1289,7 @@ fn a_receipt_the_store_never_takes_is_dropped_after_its_last_attempt() {
     assert_eq!(dropped.receipt_failures, 8);
     assert_eq!(dropped.receipt_durable_pending, 0);
     assert!(dropped.degraded);
-    assert!(journal.records().is_empty());
+    wait_for_empty_journal(&journal);
 
     assert!(writer.stop(DRAIN_BUDGET_SECONDS));
 }
