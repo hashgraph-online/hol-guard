@@ -723,6 +723,7 @@
       "src/safe_decode/inflate.rs",
       "src/safe_decode/mod.rs",
       "src/secret_path_probe.rs",
+      "src/sed_substitution.rs",
       "src/sfrs_constants.rs",
       "src/sfrs_developer_graph.rs",
       "src/sfrs_developer_inspection.rs",
