@@ -2,6 +2,7 @@
 //! changes fall in, by the file's current text, then the commits, then the
 //! whole diff when it is small.
 use super::super::sections::{headed, opening, sections, written_name, Section};
+use super::code::{changed_lines, code, holding};
 use super::{clean, commit_id, hunks, shown_files, Git, Hunk, DIFF};
 use std::collections::BTreeSet;
 use std::time::Instant;
@@ -399,6 +400,10 @@ pub(super) fn render(
             whole.command, whole.diff
         ));
     }
+    // A commit that broke something is fixed in the definitions it changed.
+    if matches!(since, Since::Newest(_)) {
+        out.push_str(&code(changed, texts).unwrap_or_default());
+    }
     Some(out)
 }
 
@@ -406,25 +411,13 @@ pub(super) fn render(
 /// it as `Outer.name start-end`, or the changed lines inside a long one;
 /// a prose file's section as `'Title' start-end`; otherwise the lines.
 fn label(path: &str, lines: &[&str], found: &[Section], hunk: &Hunk) -> String {
-    let start = hunk.start.max(1);
-    let added = hunk
-        .body
-        .lines()
-        .filter(|line| line.starts_with('+'))
-        .count();
-    let end = start + added.max(1) - 1;
+    let (start, end) = changed_lines(hunk);
     let lines_text = if start == end {
         format!("line {start}")
     } else {
         format!("lines {start}-{end}")
     };
-    let holding = |line: usize| {
-        found
-            .iter()
-            .filter(|section| section.start <= line && line <= section.end)
-            .min_by_key(|section| section.end - section.start)
-    };
-    let Some(section) = holding(start).or_else(|| holding(end)) else {
+    let Some(section) = holding(found, (start, end)) else {
         return lines_text;
     };
     let first = opening(lines, section);

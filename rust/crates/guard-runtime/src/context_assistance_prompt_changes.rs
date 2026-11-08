@@ -479,6 +479,8 @@ fn clean(text: &str) -> bool {
     !scan.budget_exhausted && scan.bytes_scanned == text.len() && scan.matches.is_empty()
 }
 
+#[path = "context_assistance_prompt_changes_code.rs"]
+mod code;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
 
