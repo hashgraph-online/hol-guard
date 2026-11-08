@@ -6,7 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ACTION = ROOT / "guarded-repository" / "action.yml"
 WORKFLOW = ROOT / ".github" / "workflows" / "guarded-repository.yml"
-SECRET_WORD_BOUNDARY_FIX_SHA = "09c6f67cb59c9453981b2ae3f5675155eb003874"
+# v3.58.0 descends from the v3.0.1 secret-word-boundary fix (09c6f67c).
+GUARDED_REPOSITORY_ACTION_SHA = "3a28326dad8c9eebfdc4eb61066db8c4f479f469"
 GUARDED_ACTION_USE = re.compile(r"(?m)^[ \t]*(?:-[ \t]+)?uses:[ \t]*hashgraph-online/hol-guard/guarded-repository@(\S+)")
 
 
@@ -44,7 +45,7 @@ def test_reusable_workflow_is_least_privilege_and_trusted() -> None:
 def test_reusable_workflow_pins_action_with_secret_word_boundary_fix() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
     matches = GUARDED_ACTION_USE.findall(text)
-    assert matches == [SECRET_WORD_BOUNDARY_FIX_SHA]
+    assert matches == [GUARDED_REPOSITORY_ACTION_SHA]
 
 
 def test_reusable_workflow_checkout_does_not_persist_credentials() -> None:
