@@ -231,6 +231,7 @@ pub mod rich_command_model_api;
 use parser_executables::*;
 use parser_segments::*;
 pub mod developer_inspection_authority;
+pub(crate) mod environment_name_filters;
 pub mod environment_secret_dump;
 pub mod pretool;
 pub mod runtime_artifact_identity;
