@@ -6,8 +6,10 @@
 //! arrives, and for an older daemon that never sends it, the edge relays every
 //! connection exactly as before.
 //!
-//! With a handshake the edge reads the head of each new connection. It
-//! answers a request itself only when it is a `GET` for one of the store reads
+//! With a handshake the edge peeks at the head of each new connection, without
+//! consuming it, for a few milliseconds. A head that has not fully arrived by
+//! then, or that is followed by more bytes, leaves the connection untouched for
+//! the daemon. The edge answers a request itself only when it is a `GET` for one of the store reads
 //! below, carries no `Origin` and presents the daemon's token in a single
 //! `X-Guard-Token` header. Every other request, including one whose token does
 //! not match, is replayed byte for byte to the daemon, which keeps every
@@ -36,7 +38,11 @@ use crate::resident_transport::constant_time_eq;
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";
 pub(super) const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
 const MAX_HEAD_BYTES: usize = 16 * 1024;
-const HEAD_READ_TIMEOUT: Duration = Duration::from_secs(5);
+// A client that has not sent its whole head this soon after the edge accepted
+// it goes to the daemon untouched, so the daemon's own partial-header
+// admission and deadlines see it as before.
+const HEAD_PEEK_WINDOW: Duration = Duration::from_millis(25);
+const HEAD_PEEK_PAUSE: Duration = Duration::from_millis(1);
 const ACTIVITY_INTERVAL: Duration = Duration::from_millis(500);
 const ACTIVITY_WRITE_TIMEOUT: Duration = Duration::from_millis(10);
 const MAX_BUSY_TIMEOUT_MS: u64 = 60_000;
@@ -198,15 +204,9 @@ pub(super) fn answer(
     reads: &NativeReads,
     stalled_write: Duration,
 ) -> Outcome {
-    let head = read_head(client);
-    let Some(end) = head_end(&head) else {
-        return Outcome::Relay(head);
+    let Some(head) = take_head(client) else {
+        return Outcome::Relay(Vec::new());
     };
-    // Bytes after the head belong to a body or a pipelined request: only the
-    // daemon reads those.
-    if end != head.len() {
-        return Outcome::Relay(head);
-    }
     let Some((status, body)) =
         parse_get(&head).and_then(|request| respond(&request, config, reads))
     else {
@@ -221,25 +221,46 @@ pub(super) fn answer(
     Outcome::Answered
 }
 
-/// The bytes a client sends up to the end of its head, a size cap, a pause or
-/// the end of its stream, whichever comes first.
-fn read_head(client: &TcpStream) -> Vec<u8> {
-    let mut head = Vec::new();
-    if client.set_read_timeout(Some(HEAD_READ_TIMEOUT)).is_err() {
-        return head;
-    }
-    let mut chunk = [0u8; 4096];
-    let mut reader = client;
-    while head.len() < MAX_HEAD_BYTES && head_end(&head).is_none() {
-        match reader.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(read) => head.extend_from_slice(&chunk[..read]),
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(_) => break,
-        }
-    }
+/// The client's whole head, read off the socket only once a peek shows it
+/// has fully arrived with nothing after it. `None` leaves every byte unread.
+fn take_head(client: &TcpStream) -> Option<Vec<u8>> {
+    let peeked = peek_head(client);
     let _ = client.set_read_timeout(None);
-    head
+    let mut head = peeked?;
+    let mut reader = client;
+    reader.read_exact(&mut head).ok()?;
+    Some(head)
+}
+
+/// A zeroed buffer as long as the complete head waiting on `client`.
+fn peek_head(client: &TcpStream) -> Option<Vec<u8>> {
+    let deadline = Instant::now() + HEAD_PEEK_WINDOW;
+    let mut buffer = vec![0u8; MAX_HEAD_BYTES];
+    let mut seen = 0;
+    let peeked = loop {
+        let remaining = deadline.checked_duration_since(Instant::now())?;
+        if remaining.is_zero() || client.set_read_timeout(Some(remaining)).is_err() {
+            return None;
+        }
+        let peeked = match client.peek(&mut buffer) {
+            Ok(0) => return None,
+            Ok(peeked) => peeked,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => return None,
+        };
+        if head_end(&buffer[..peeked]).is_some() || peeked == buffer.len() {
+            break peeked;
+        }
+        // A peek returns at once while any bytes wait, so pause rather than
+        // spin until more of the head arrives.
+        if peeked == seen {
+            std::thread::sleep(HEAD_PEEK_PAUSE);
+        }
+        seen = peeked;
+    };
+    // Bytes after the head belong to a body or a pipelined request: only the
+    // daemon reads those.
+    (head_end(&buffer[..peeked])? == peeked).then(|| vec![0u8; peeked])
 }
 
 fn respond(

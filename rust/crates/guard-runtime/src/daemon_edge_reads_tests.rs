@@ -247,3 +247,22 @@ fn replays_everything_else_to_the_daemon_byte_for_byte() {
         assert_eq!(relayed, request.as_bytes());
     }
 }
+
+#[test]
+fn leaves_a_head_still_arriving_to_the_daemon() {
+    let edge = spawn_configured_edge();
+    let request = format!("GET /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n");
+    let (first, rest) = request.split_at(20);
+    let mut client = TcpStream::connect(edge.address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .unwrap();
+    client.write_all(first.as_bytes()).unwrap();
+    thread::sleep(HEAD_PEEK_WINDOW * 8);
+    client.write_all(rest.as_bytes()).unwrap();
+    let mut response = String::new();
+    client.read_to_string(&mut response).unwrap();
+    assert_eq!(response, "daemon");
+    let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
+    assert_eq!(relayed, request.as_bytes());
+}
