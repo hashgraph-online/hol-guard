@@ -157,6 +157,37 @@ implementation; the docstring and tests describe the expected behavior.";
     );
 }
 
+/// A rename of `_batched` lists the lines naming `_batched` as the whole
+/// list, not those naming the public `batched` beside it, which the rename
+/// leaves alone.
+#[test]
+fn a_rename_lists_the_name_as_the_prompt_spells_it() {
+    let recipes = "def _batched(iterable, n):\n    return iterable\n\n\n\
+batched = _batched\n\n\ndef matrix(rows):\n    return batched(rows, 2)\n";
+    let list = [
+        ("pkg/recipes.py", recipes),
+        (
+            "tests/test_recipes.py",
+            "def test_batched():\n    mi.batched([1], 1)\n",
+        ),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the internal helper `_batched` to `_batched_impl` everywhere in the \
+project, including tests. Behavior must not change.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(
+        text.contains(
+            "\n\nEvery line naming `_batched`; no other project file holds it:\n\
+pkg/recipes.py:1: def _batched(iterable, n):\npkg/recipes.py:5: batched = _batched\n"
+        ),
+        "{text}"
+    );
+    assert!(
+        !text.contains("pkg/recipes.py:9:") && !text.contains("test_recipes.py:2:"),
+        "{text}"
+    );
+}
+
 /// Prompts from varied tasks reach the definition they mean: a method named as
 /// code is a named definition, and a rename lists every line naming it, in
 /// source, tests and docs, as the whole list; a file the prompt names wins over another defining the same

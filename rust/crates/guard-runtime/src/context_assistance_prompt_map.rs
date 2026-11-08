@@ -19,7 +19,7 @@ use super::seen::Span;
 use super::Rendered;
 use crate::context_assistance_engine::{prose, screened_texts};
 use crate::context_assistance_prompt_files::{test_file, Walk};
-use crate::context_assistance_prompt_words::{named, term_form};
+use crate::context_assistance_prompt_words::{named, spellings, term_form};
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::Instant;
@@ -100,6 +100,8 @@ pub(super) struct Asked {
     /// What earlier prompts of the session were shown, which is not shown
     /// again.
     pub(super) earlier: Vec<Span>,
+    /// Names the prompt writes as code, as written (`_batched`).
+    pub(super) spellings: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -179,6 +181,7 @@ pub(super) fn mapped(
         changes: about_changes,
         everywhere: more::asks_everywhere(prompt),
         earlier: earlier.to_vec(),
+        spellings: spellings(prompt),
     };
     map(&texts, &sought, &asked, until)
 }
@@ -251,7 +254,7 @@ pub(super) fn map(
         entries.into_iter().map(code).collect()
     };
     // A rename lists every line naming the old name instead.
-    let renamed = rename::blocks(&files, sought, asked.everywhere, until);
+    let renamed = rename::blocks(&files, sought, asked, until);
     if renamed.is_empty() {
         blocks.push((format!("Where {title} appear in source:"), plain(uses)));
     }

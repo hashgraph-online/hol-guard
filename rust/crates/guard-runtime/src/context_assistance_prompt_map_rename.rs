@@ -3,7 +3,7 @@
 //! the agent need not search or open them again before editing. For a stubbed-out
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
-use super::{File, Pick, Sought, Span, CHECK_EVERY};
+use super::{Asked, File, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
 
@@ -31,23 +31,34 @@ const STUB_MARKS: [&str; 4] = [
 pub(super) fn blocks(
     files: &[File],
     sought: &[Sought],
-    everywhere: bool,
+    asked: &Asked,
     until: Instant,
 ) -> Vec<(String, Vec<String>)> {
-    if !everywhere {
+    if !asked.everywhere {
         return Vec::new();
     }
     (sought.iter())
         .filter(|item| item.name && !item.phrase)
-        .filter_map(|item| every_line(files, item, until))
+        .filter_map(|item| {
+            // `_batched` is renamed, not `batched` beside it: the lines
+            // naming it as the prompt spells it, when any file does.
+            let spelled = (asked.spellings.iter()).find(|word| term_form(word) == item.text);
+            (spelled.and_then(|word| every_line(files, item, Some(word.as_str()), until)))
+                .or_else(|| every_line(files, item, None, until))
+        })
         .take(MAX_NAMES)
         .collect()
 }
 
 /// In `file`, whether any line holds `term` with `_` and `-` dropped, and
-/// the lines naming it whole with the first spelling written; `None` once
-/// `until` passes.
-fn naming(file: &File, term: &str, until: Instant) -> Option<(bool, Vec<usize>, Option<String>)> {
+/// the lines naming it whole, or `exact` where given, with the first
+/// spelling written; `None` once `until` passes.
+fn naming(
+    file: &File,
+    term: &str,
+    exact: Option<&str>,
+    until: Instant,
+) -> Option<(bool, Vec<usize>, Option<String>)> {
     let mut held = false;
     let mut lines = Vec::new();
     let mut written = None;
@@ -61,7 +72,7 @@ fn naming(file: &File, term: &str, until: Instant) -> Option<(bool, Vec<usize>, 
         held = true;
         let named = line
             .split(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-')))
-            .find(|word| term_form(word) == term);
+            .find(|word| exact.map_or_else(|| term_form(word) == term, |exact| *word == exact));
         if let Some(word) = named {
             if written.is_none() {
                 written = Some(word.to_owned());
@@ -77,14 +88,19 @@ fn naming(file: &File, term: &str, until: Instant) -> Option<(bool, Vec<usize>, 
 /// can be written without opening them. The list says it is complete only
 /// when the walk read every project file, found no file holding it beyond
 /// these, and every line fits.
-fn every_line(files: &[File], item: &Sought, until: Instant) -> Option<(String, Vec<String>)> {
+fn every_line(
+    files: &[File],
+    item: &Sought,
+    exact: Option<&str>,
+    until: Instant,
+) -> Option<(String, Vec<String>)> {
     let mut written = None;
     let mut holding = 0;
     let mut entries = Vec::new();
     let mut length = 0;
     let mut whole = true;
     for file in files {
-        let (held, lines, spelling) = naming(file, &item.text, until)?;
+        let (held, lines, spelling) = naming(file, &item.text, exact, until)?;
         written = written.or(spelling);
         holding += usize::from(held);
         for number in lines {
@@ -156,7 +172,7 @@ pub(super) fn stub(
     let mut length = 0;
     let mut whole = true;
     'files: for other in files {
-        let (_, lines, _) = naming(other, name, until)?;
+        let (_, lines, _) = naming(other, name, None, until)?;
         for number in lines.into_iter().filter(|&n| !inside(other.path, n)) {
             let entry = line_entry(other, number);
             if entries.len() == MAX_STUB_LINES || length + entry.len() > MAX_STUB_CHARS {

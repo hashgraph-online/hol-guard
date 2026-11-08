@@ -223,6 +223,15 @@ fn file_name(token: &str) -> Option<(&str, &str)> {
         .then_some((stem, extension))
 }
 
+/// The names the prompt writes as code, spelled as written: `_batched`,
+/// which `terms` reads as `batched`.
+pub(crate) fn spellings(prompt: &str) -> Vec<String> {
+    (words(prompt).into_iter())
+        .filter(|(_, shaped)| *shaped)
+        .map(|(word, _)| word)
+        .collect()
+}
+
 /// Files the prompt names, as typed (`CHANGES.rst`, `src/app/cli.py`).
 pub(crate) fn named(prompt: &str) -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
