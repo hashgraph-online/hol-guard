@@ -115,8 +115,20 @@ def test_wakes_while_pending_read_only_the_status(tmp_path: Path, monkeypatch) -
     approval = store.get_approval_request("req-wakes")
     assert approval is not None
     signal = review_event_wake_signal(store.path)
+    first_status_read = threading.Event()
+    read_status = store.get_approval_request_status
+
+    def read_status_once_seen(request_id: str) -> str | None:
+        status = read_status(request_id)
+        first_status_read.set()
+        return status
+
+    monkeypatch.setattr(store, "get_approval_request_status", read_status_once_seen)
 
     def other_events_then_decide() -> None:
+        # Start only once the wait has seen the request pending, so the wakes
+        # below land on a held read rather than racing its first check.
+        assert first_status_read.wait(5.0)
         for _ in range(20):
             time.sleep(0.005)
             signal.notify()
