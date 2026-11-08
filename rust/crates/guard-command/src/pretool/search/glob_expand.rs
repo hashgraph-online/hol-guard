@@ -26,7 +26,7 @@ const GLOB_CHARACTERS: [char; 3] = ['*', '?', '['];
 /// and a single `*` without it. A wildcard before the last component only
 /// descends into directories, as the shell does.
 pub(super) fn expand_glob_matches(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
-    expand(value, context, Mode::SHELL)
+    expand(value, context, Mode::SHELL, Screen::Contents)
 }
 
 /// [`expand_glob_matches`] under the strict superset model, so an empty list
@@ -35,7 +35,7 @@ pub(super) fn expand_glob_matches_strict(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<Vec<PathBuf>> {
-    expand(value, context, Mode::STRICT)
+    expand(value, context, Mode::STRICT, Screen::Contents)
 }
 
 /// [`expand_glob_matches`] with the strict model's case folding but without
@@ -46,7 +46,37 @@ pub(super) fn expand_glob_matches_folded(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<Vec<PathBuf>> {
-    expand(value, context, Mode::FOLDED)
+    expand(value, context, Mode::FOLDED, Screen::Contents)
+}
+
+/// [`expand_glob_matches`] for a command that prints the matched names and
+/// never their contents, such as `ls` or `echo`.
+///
+/// A listing of the directory itself already prints every name it holds, and
+/// a literal operand naming one of those files is listed the same way, so
+/// `ls docs/*.md` must not lose that proof because one match is called
+/// `credential-rotation-runbook.md`. Only the credential-shaped name steps
+/// aside. The screens that answer for a stored secret rather than for the
+/// shape of a name still apply: the sensitive families, the secret
+/// extensions that mark a match as a key container, the links between the
+/// screening root and the match, and where the resolved path is allowed to
+/// be.
+pub(super) fn expand_glob_matches_listing(
+    value: &str,
+    context: ReadContext<'_>,
+) -> Option<Vec<PathBuf>> {
+    expand(value, context, Mode::SHELL, Screen::Names)
+}
+
+/// What the command does with a match: read its bytes, or print its name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Screen {
+    /// The match may be opened, so a credential-shaped name keeps its
+    /// review.
+    Contents,
+    /// Only the name is printed, which a listing of the parent directory
+    /// prints anyway.
+    Names,
 }
 
 /// How closely a component has to match the name of an entry.
@@ -74,7 +104,12 @@ impl Mode {
     };
 }
 
-fn expand(value: &str, context: ReadContext<'_>, mode: Mode) -> Option<Vec<PathBuf>> {
+fn expand(
+    value: &str,
+    context: ReadContext<'_>,
+    mode: Mode,
+    screen: Screen,
+) -> Option<Vec<PathBuf>> {
     if value.is_empty()
         || value.len() > 4096
         || value.contains(HAZARDS)
@@ -148,7 +183,7 @@ fn expand(value: &str, context: ReadContext<'_>, mode: Mode) -> Option<Vec<PathB
     for path in current {
         let sibling =
             !scope.siblings || glob_scope::in_sibling_repository(&path, &scope.root, context)?;
-        if !sibling || !screened_match(&path, &scope.root, context)? {
+        if !sibling || !screened_match(&path, &scope.root, context, screen)? {
             return None;
         }
         matches.push(path);
@@ -181,7 +216,12 @@ fn component_matches(component: &str, name: &str, fold_case: bool) -> Option<boo
 /// directories, and clears the sensitive-path and credential-name screens.
 /// Credential names are judged below `root`, so the screen covers the literal
 /// prefix of a repository glob as well as the expanded part.
-fn screened_match(path: &Path, root: &Path, context: ReadContext<'_>) -> Option<bool> {
+fn screened_match(
+    path: &Path,
+    root: &Path,
+    context: ReadContext<'_>,
+    screen: Screen,
+) -> Option<bool> {
     let metadata = std::fs::symlink_metadata(path).ok()?;
     if !(metadata.is_dir() || metadata.is_file()) {
         return None;
@@ -204,7 +244,7 @@ fn screened_match(path: &Path, root: &Path, context: ReadContext<'_>) -> Option<
             });
     Some(
         guard_secure_fs::sensitive_path_family(path).is_none()
-            && !guard_secure_fs::credential_named_path(relative)
+            && (screen == Screen::Names || !guard_secure_fs::credential_named_path(relative))
             && !secret_extension
             && crate::pretool::read_paths::resolved_path_allowed(
                 &std::fs::canonicalize(path).ok()?,

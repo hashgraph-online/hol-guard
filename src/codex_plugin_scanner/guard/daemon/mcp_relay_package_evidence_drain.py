@@ -39,8 +39,8 @@ than an inbox row. The ``ask`` branch of ``_queue_package_approval_response``
 leaves the ``approval-center-pending`` block receipt against the package
 artifact and nothing else: it projects the call without the artifact and so
 records no risk categories, and it writes no unprompted review. What is left
-for the drain is the desktop notice and the approval center the proxy raises
-once the row is written, which is best effort there and here.
+for the drain is the desktop notice the proxy raises once the row is written,
+which is best effort there and here.
 
 Under ``mode = "observe"`` the call is forwarded under the action the policies
 would have *executed* and the requests the enforced actions would have blocked
@@ -53,12 +53,13 @@ child.
 
 The resident writes the receipts of plain package records itself -- a forward
 under its own action, an observed forward whose notices it already raised, a
-``policy-block`` block, and an ``ask`` block whose notice it already raised
-from a harness that opens no approval center -- once this drain acknowledges
-the page that skipped them (``mcp_relay_receipt_package.rs``). The records that
-reach this drain are the safe-alternative and refused ones, the observed
-forwards and ask blocks still carrying a notice or opening the approval center,
-and any plain record the store would not take there.
+``policy-block`` block, an ``ask`` block whose notice it already raised, and a
+safe-alternative block whose record names the approval center its inbox row
+links to -- once this drain acknowledges the page that skipped them
+(``mcp_relay_receipt_package.rs``). The records that reach this drain are the
+refused ones, the safe-alternative blocks from a binding with no approval
+center, the observed forwards and ask blocks still carrying a notice, and any
+plain record the store would not take there.
 """
 
 from __future__ import annotations
@@ -250,7 +251,7 @@ def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: o
         if queued is not None:
             # After the receipt, as the proxy raises it: the request is
             # written and the call is already blocked on it, so the notice
-            # and the approval center are best effort.
+            # is best effort.
             _raise_approval_surface(store, guard_home, harness, queued)
         if observed:
             # `_queue_observed_approval_requests` queues with the `notify=True`

@@ -63,6 +63,18 @@ fn composed(record: &Value) -> Map<String, Value> {
     args
 }
 
+const CENTER: &str = "http://127.0.0.1:4781";
+
+/// A safe-alternative block whose record names the center its row links to.
+fn reviewed(workspace: &Path) -> Value {
+    edited(
+        record(workspace, "block", "policy-safe-alternative", "review"),
+        |record| {
+            record["review"] = json!({"redaction_level": "full", "approval_center_url": CENTER})
+        },
+    )
+}
+
 fn edited(mut record: Value, edit: impl FnOnce(&mut Value)) -> Value {
     edit(&mut record);
     record
@@ -198,12 +210,13 @@ fn ask_blocks_the_daemon_still_surfaces_are_not_plain() {
     let workspace = temp_home("relay-package-ask-owned");
     let ask = asked(&workspace);
     assert!(is_plain(&ask));
+    // The daemon opens no approval center for a relayed call, so an ask block
+    // from Cline is the resident's to record as well.
+    assert!(is_plain(&edited(ask.clone(), |r| {
+        r["harness"] = json!("cline");
+        r["identity"]["artifact"]["harness"] = json!("cline");
+    })));
     let cases = [
-        // The browser approval flow still opens the approval center.
-        edited(ask.clone(), |r| {
-            r["harness"] = json!("cline");
-            r["identity"]["artifact"]["harness"] = json!("cline");
-        }),
         // A notice the resident could not raise is the daemon's to raise.
         edited(ask.clone(), |r| {
             r["approval"]["notices"] = json!([{"request_id": "req-1"}])
@@ -312,7 +325,8 @@ fn package_records_the_daemon_owns_are_not_plain() {
         edited(forward.clone(), |r| {
             r["decision_source"] = json!("policy-warn")
         }),
-        // A queued request still writes its inbox row or approval surface.
+        // A queued request from a binding with no center still writes its
+        // inbox row, and an ask block still raises its approval surface.
         edited(block.clone(), |r| {
             r["decision_source"] = json!("policy-safe-alternative");
             r["policy_action"] = json!("review");
@@ -370,5 +384,97 @@ fn plain_package_records_land_in_the_store() {
     assert_eq!(count(&home, "runtime_receipts"), before + 2);
     assert_eq!(count(&home, "guard_events"), 2);
     let _ = std::fs::remove_dir_all(&home);
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
+#[test]
+fn a_safe_alternative_block_writes_its_receipt_then_a_silent_row() {
+    let workspace = temp_home("relay-package-safe-alternative");
+    let expected = artifact(&workspace);
+    let (args, row) =
+        compose(HOME, &reviewed(&workspace), &stamp()).expect("a plain package record composes");
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    let receipt = &args["receipt"];
+    assert_eq!(receipt["artifact_id"], expected.artifact_id);
+    assert_eq!(receipt["artifact_hash"], PACKAGE_HASH);
+    assert_eq!(
+        receipt["changed_capabilities"],
+        json!([
+            "runtime_tool_call",
+            "policy-safe-alternative",
+            "package-install"
+        ])
+    );
+    assert_eq!(args["inventory"]["approved"], false);
+    // Projected with the artifact, so the receipt records its risk categories.
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert!(payload["risk_categories"].is_array());
+    let row = row.expect("a safe-alternative block adds a row");
+    assert_eq!(row["harness"], "codex");
+    assert_eq!(row["prompt_shown"], false);
+    assert_eq!(row["redaction_level"], "full");
+    assert_eq!(row["now"], stamp().now);
+    assert_eq!(row["approval_center_url"], CENTER);
+    let item = &row["items"][0];
+    assert_eq!(item["artifact_id"], expected.artifact_id);
+    assert_eq!(item["artifact_type"], "package_request");
+    assert_eq!(item["artifact_hash"], PACKAGE_HASH);
+    assert_eq!(item["policy_action"], "review");
+    assert_eq!(item["risk_signals"], json!(["package-install"]));
+    // The decision's evidence and the package's, without the firewall entry.
+    let evidence = item["scanner_evidence"].as_array().unwrap();
+    assert_eq!(
+        evidence.last(),
+        Some(&json!({"source": "execution_context", "cwd": "/work"}))
+    );
+    assert!(evidence
+        .iter()
+        .all(|entry| entry.get("mcpSkillFirewall").is_none()));
+    let artifacts = row["artifacts"].as_object().unwrap();
+    assert!(artifacts.contains_key(&expected.artifact_id));
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
+#[test]
+fn safe_alternative_blocks_the_daemon_still_writes_are_not_plain() {
+    let workspace = temp_home("relay-package-safe-alternative-owned");
+    let block = reviewed(&workspace);
+    assert!(is_plain(&block));
+    let cases = [
+        // A binding with no center leaves the row to the daemon's origin.
+        edited(block.clone(), |r| {
+            r["review"] = json!({"redaction_level": "full"})
+        }),
+        edited(block.clone(), |r| {
+            r["review"]["redaction_level"] = json!("secret")
+        }),
+        edited(block.clone(), |r| r["review"]["extra"] = json!(true)),
+        // A safe-alternative block is recorded under its own source.
+        edited(block.clone(), |r| {
+            r["decision_source"] = json!("policy-block")
+        }),
+        edited(block.clone(), |r| r["observed"] = json!({"notices": []})),
+        edited(block, |r| {
+            r["outcome"] = json!("forward");
+            r["decision_source"] = json!("policy-allow");
+            r["policy_action"] = json!("allow");
+            r["package"]["policy_workspace"] = json!("/work");
+        }),
+    ];
+    for case in cases {
+        assert!(!is_plain(&case), "{case}");
+    }
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
+#[test]
+fn a_safe_alternative_block_that_is_not_reviewable_adds_no_row() {
+    let workspace = temp_home("relay-package-safe-alternative-block");
+    let block = edited(reviewed(&workspace), |r| {
+        r["policy_action"] = json!("block")
+    });
+    let (_, row) = compose(HOME, &block, &stamp()).expect("a plain package record composes");
+    assert!(row.is_none());
     let _ = std::fs::remove_dir_all(&workspace);
 }

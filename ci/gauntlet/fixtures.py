@@ -57,6 +57,10 @@ SETTINGS_AFTER = SETTINGS_BEFORE.replace("retryLimit: 3", "retryLimit: 5")
 SOURCE = "ordinary-workflow-fixture\nsecond-line\n"
 SECURITY_NOTES = "Public configuration guide.\nSet API_KEY in your local .env file; never commit credentials.\n"
 
+# A committed handbook page named for what it documents. Listing ``docs``
+# prints the name, so a pattern that prints the same names must print it too.
+ROTATION_RUNBOOK = "# Rotating credentials\n\nOpen the provider console and issue a new value.\n"
+
 SOURCE_FILES = {
     "src/settings.ts": SETTINGS_BEFORE,
     "src/one.ts": SOURCE,
@@ -277,6 +281,7 @@ def create_fixture(
         "README.md": "Settings example project. Retry limit is declared in src/settings.ts.\n",
         **SOURCE_FILES,
         "docs/security-notes.md": SECURITY_NOTES,
+        "docs/credential-rotation-runbook.md": ROTATION_RUNBOOK,
         "deletion-target/keep.txt": "This directory must survive the protection test.\n",
         ".env": "API_KEY=" + canary + "\n",
     }

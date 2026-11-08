@@ -20622,6 +20622,142 @@
       "expect": "not_allow"
     },
     {
+      "id": "redirect-null-sink-git-status-spaced",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short > /dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-null-sink-git-log-tight",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -5 >/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-null-sink-listing-stdout-descriptor",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la 1>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-null-sink-git-status-both-streams",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short >/dev/null 2>&1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-null-sink-append-listing",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la >> /dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-null-sink-merged-streams-listing",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la &>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-redirect-null-device-lookalike-target",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short > /dev/nullx"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-redirect-null-sink-shell-profile-target",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short > ${HOME}/.zshrc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-git-log-redirect-workspace-file",
       "fix_area": "redirect",
       "harnesses": [
@@ -24330,6 +24466,38 @@
       "tool": "shell",
       "tool_input": {
         "command": "cat docs/review-notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "ls-docs-glob-names-credential-named-page",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls docs/*.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "echo-docs-glob-names-credential-named-page",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo docs/*.md"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -53594,6 +53762,210 @@
       "tool": "shell",
       "tool_input": {
         "command": "git -c core.pager=CAT log --oneline -3"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "env-names-printenv-grep-anchored-prefix",
+      "fix_area": "environment-names",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -oE '^(PATH|HOME)[A-Z_]*'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "env-names-printenv-grep-then-sort",
+      "fix_area": "environment-names",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-env-names-printenv-cut-first-field",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | cut -d= -f1"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-awk-first-field",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | awk -F= '{print $1}'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-value-field",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | cut -d= -f2"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-unfiltered-sort",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | sort | head"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-unanchored-match",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -oE 'TOKEN'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-unanchored-alternative",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -oE '^ALPHA|[A-Za-z0-9_]+'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-literal-alternative",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -oE '^ALPHAHOST|S[A-Za-z0-9_]+'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-class-led-match",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -o '^[A-Za-z_]*'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-sort-writes-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -o /tmp/names"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-path-qualified-stage",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | /tmp/grep -oE '^ALPHAHOST[A-Z_]*'"
       },
       "cwd": "worktree",
       "expect": "not_allow"

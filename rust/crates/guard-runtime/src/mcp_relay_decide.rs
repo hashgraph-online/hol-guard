@@ -934,6 +934,7 @@ fn settle_package(
         &packaged.artifact,
         &packaged.workspace,
         answer,
+        admitted.binding.review.approval_center_origin.as_deref(),
     )?;
     match answer.block.clone() {
         // As for a tool call, the relay commits the ticket once the child
