@@ -253,6 +253,8 @@ pub mod redacted_command_tokens;
 mod runtime_read_paths;
 #[path = "../../guard-command/src/secret_path_probe.rs"]
 pub mod secret_path_probe;
+#[path = "../../guard-command/src/sed_substitution.rs"]
+mod sed_substitution;
 #[path = "../../guard-command/src/sfrs_constants.rs"]
 mod sfrs_constants;
 #[path = "../../guard-command/src/sfrs_developer_graph.rs"]

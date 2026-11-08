@@ -238,6 +238,7 @@ pub mod runtime_artifact_identity;
 mod runtime_artifact_identity_tests;
 mod runtime_read_paths;
 pub mod secret_path_probe;
+mod sed_substitution;
 pub mod sensitive_request;
 mod sfrs_agent_guidance;
 mod sfrs_benign_reads;
