@@ -110,6 +110,7 @@ mod clone_siblings;
 mod compound_reason;
 mod control_flow_chain;
 mod control_flow_flatten;
+mod environment_names;
 mod fanout_reads;
 mod filter_pattern_text;
 mod find_reads;
@@ -739,7 +740,8 @@ fn sensitive_location_text(value: &str) -> bool {
         ".env",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
-        || crate::environment_secret_dump::printenv_may_print_secret(&lowered)
+        || (crate::environment_secret_dump::printenv_may_print_secret(&lowered)
+            && !crate::environment_name_filters::printenv_renders_only_names(value))
         || lowered.contains("os.environ")
         || lowered.contains("process.env")
 }
@@ -1268,6 +1270,14 @@ fn evaluate_single_command(
             "allow",
             "native_exact_safe_command",
             "The Rust command authority proved this Bun program only prints constants and no preload can run first.",
+        ));
+    }
+    if environment_names::exact_safe_command(&model) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this pipeline prints variable names with their values removed.",
         ));
     }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {

@@ -128,6 +128,8 @@ pub mod egress_broker;
 mod egress_spool;
 #[path = "../../guard-command/src/env_wrapper.rs"]
 mod env_wrapper;
+#[path = "../../guard-command/src/environment_name_filters.rs"]
+pub(crate) mod environment_name_filters;
 #[path = "../../guard-command/src/environment_secret_dump.rs"]
 pub mod environment_secret_dump;
 #[path = "../../guard-command/src/executable_flag_contract.rs"]

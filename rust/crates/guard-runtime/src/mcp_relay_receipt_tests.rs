@@ -338,6 +338,15 @@ fn records_the_daemon_owns_are_not_plain() {
         "approval-center-pending",
         "review"
     ))));
+    // The daemon opens no approval center for a relayed call, so an ask block
+    // from Cline is the resident's to record as well.
+    assert!(is_plain(&edited(
+        asked(record("block", "approval-center-pending", "review")),
+        |record| {
+            record["harness"] = json!("cline");
+            record["identity"]["artifact"]["harness"] = json!("cline");
+        },
+    )));
     let not_plain = [
         record("remember", "policy", "allow"),
         record("forward", "policy", "review"),
@@ -366,14 +375,6 @@ fn records_the_daemon_owns_are_not_plain() {
             asked(record("block", "approval-center-pending", "review")),
             |record| {
                 record["approval"]["extra"] = json!(true);
-            },
-        ),
-        // Cline's approval flow opens the approval center in the browser.
-        edited(
-            asked(record("block", "approval-center-pending", "review")),
-            |record| {
-                record["harness"] = json!("cline");
-                record["identity"]["artifact"]["harness"] = json!("cline");
             },
         ),
         // A safe-alternative block without its row is the daemon's to write.
