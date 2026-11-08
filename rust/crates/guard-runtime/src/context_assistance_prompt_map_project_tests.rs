@@ -131,6 +131,32 @@ fn a_change_prompt_naming_a_function_shows_it() {
     );
 }
 
+/// A prompt naming a file and a function too common a word to look for, as
+/// in "last is not implemented", is shown that file's function left to be
+/// written, whole, and the tests that call it, not the file's outline.
+#[test]
+fn a_stub_named_by_its_file_is_shown_whole() {
+    let more = "def first(iterable):\n    return next(iter(iterable))\n\n\n\
+def last(iterable):\n    \"\"\"Return the last item.\"\"\"\n    raise NotImplementedError\n\n\n\
+def nth(iterable, n):\n    return list(iterable)[n]\n";
+    let tests =
+        "class FirstTests:\n    def test_basic(self):\n        assert mi.first([1]) == 1\n\n\n\
+class LastTests:\n    def test_basic(self):\n        assert mi.last([1, 2]) == 2\n";
+    let list = [("pkg/more.py", more), ("tests/test_more.py", tests)];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Tests fail because last is not implemented (pkg/more.py). Write the \
+implementation; the docstring and tests describe the expected behavior.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(
+        text.contains("```\ndef last(iterable):") && text.contains("mi.last([1, 2]) == 2"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("def first(") && !text.contains("mi.first("),
+        "{text}"
+    );
+}
+
 /// Prompts from varied tasks reach the definition they mean: a method named as
 /// code is a named definition, and a rename lists every line naming it, in
 /// source, tests and docs, as the whole list; a file the prompt names wins over another defining the same

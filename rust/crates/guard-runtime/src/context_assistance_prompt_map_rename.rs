@@ -115,6 +115,15 @@ fn line_entry(file: &File, number: usize) -> String {
     format!("{}:{number}: {text}", file.path)
 }
 
+/// Whether section `at` of `file` is a body left to be written.
+pub(super) fn stubbed(file: &File, at: usize) -> bool {
+    let section = &file.sections[at];
+    let body = (file.lines)
+        .get(section.start - 1..section.end.min(file.lines.len()))
+        .unwrap_or_default();
+    (body.iter()).any(|line| STUB_MARKS.iter().any(|mark| line.contains(mark)))
+}
+
 /// For the first chosen definition whose body is left to be written, the
 /// other lines in the files read naming it, with their text, leaving out
 /// the code the map already shows.
@@ -126,14 +135,7 @@ pub(super) fn stub(
 ) -> Option<(String, Vec<String>)> {
     let (file, section) = chosen.iter().find_map(|pick| {
         let file = &files[pick.file];
-        let section = &file.sections[pick.at];
-        let body = file
-            .lines
-            .get(section.start - 1..section.end.min(file.lines.len()))?;
-        let empty = body
-            .iter()
-            .any(|line| STUB_MARKS.iter().any(|mark| line.contains(mark)));
-        (pick.whole && empty).then_some((file, section))
+        (pick.whole && stubbed(file, pick.at)).then_some((file, &file.sections[pick.at]))
     })?;
     let name = section.name.as_deref()?;
     // Spelled as its definition writes it.

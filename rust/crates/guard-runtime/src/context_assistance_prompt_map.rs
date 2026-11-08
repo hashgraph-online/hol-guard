@@ -49,6 +49,8 @@ const MAX_LINE_CHARS: usize = 90;
 /// to place anything.
 const MAX_PLAIN_FILES: usize = 8;
 const MAX_NAMED_DEFINITIONS: usize = 6;
+/// Functions left to be written that stand in for a named file's outline.
+const MAX_STUBS: usize = 2;
 /// Words named in the title of the uses list.
 const MAX_TITLE_WORDS: usize = 4;
 /// How many lines the map handles between looks at the clock.
@@ -388,12 +390,22 @@ fn named_definitions(files: &[File], names: &[(&str, bool)], named: &[String]) -
     }
     if picks.is_empty() {
         for (file, item) in files.iter().enumerate().filter(|(_, item)| in_named(item)) {
-            picks.extend(more::outline(item).map(|at| Pick {
+            // A function left to be written is the one a prompt naming only
+            // its file means: "last is not implemented (more.py)".
+            let pick = |at, whole| Pick {
                 file,
                 at,
                 base: false,
-                whole: false,
-            }));
+                whole,
+            };
+            let stubs: Vec<usize> = (0..item.sections.len())
+                .filter(|&at| !item.container(at) && rename::stubbed(item, at))
+                .take(MAX_STUBS)
+                .collect();
+            if stubs.is_empty() {
+                picks.extend(more::outline(item).map(|at| pick(at, false)));
+            }
+            picks.extend(stubs.into_iter().map(|at| pick(at, true)));
         }
     }
     let mut bases = Vec::new();
