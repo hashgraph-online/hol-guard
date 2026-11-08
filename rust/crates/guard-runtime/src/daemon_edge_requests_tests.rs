@@ -127,3 +127,28 @@ fn reads_the_queue_answer_as_the_daemon_reader_does() {
         assert_eq!(queue_answer_empty(&relayed), None, "{relayed}");
     }
 }
+
+/// Store reads run on the edge connection worker, not the test runner's much
+/// larger default stack. Keep the populated-page path on that actual budget.
+#[test]
+fn populated_pages_fit_the_connection_worker_stack() {
+    let store = store("page_mixed");
+    std::thread::Builder::new()
+        .name("edge-page-stack-regression".into())
+        .stack_size(super::super::super::CONNECTION_THREAD_STACK)
+        .spawn(move || {
+            let call = &store.scenario["calls"][0];
+            let (status, body, no_store) =
+                list(&query_for(&call["args"]), true, &store.config, &store.reads)
+                    .expect("native page response");
+            assert_eq!((status, no_store), (200, true));
+            let long_string = store.vectors["long_string"].as_u64().unwrap() as usize;
+            assert_eq!(
+                Ok(normalized(body, long_string)),
+                expected(call, long_string)
+            );
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
