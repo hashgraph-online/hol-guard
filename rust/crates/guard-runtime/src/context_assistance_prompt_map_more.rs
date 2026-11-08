@@ -176,7 +176,7 @@ pub(super) fn tests(
         .map(|(file, at, used)| (*file, *at, used.iter().map(|word| weight(word)).sum()))
         .filter(|(_, _, score)| *score > 0.0)
         .collect();
-    let mut found: Vec<(f64, usize, String, Vec<(&File, usize, f64)>)> = Vec::new();
+    let mut found = Vec::new();
     for file in files.iter().filter(|file| file.kind == Kind::Test) {
         let own: Vec<&(&File, usize, f64)> = (scored.iter())
             .filter(|(of, _, _)| std::ptr::eq(*of, file))
