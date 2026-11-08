@@ -12,6 +12,11 @@ from codex_plugin_scanner.guard.daemon.request_resolution_wait import (
     wait_for_request_resolution,
 )
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
+from tests.guard_exact_cloud_review_support import (
+    add_review_request,
+    connected_exact_review_store,
+    review_request,
+)
 
 
 class _ScriptedStore:
@@ -20,6 +25,7 @@ class _ScriptedStore:
     def __init__(self, path: Path, request_id: str) -> None:
         self.path = path
         self.reads = 0
+        self.status_reads = 0
         self._lock = threading.Lock()
         self._row: dict[str, object] = {"request_id": request_id, "status": "pending"}
 
@@ -27,6 +33,11 @@ class _ScriptedStore:
         with self._lock:
             self.reads += 1
             return dict(self._row) if request_id == self._row["request_id"] else None
+
+    def get_approval_request_status(self, request_id: str) -> str | None:
+        with self._lock:
+            self.status_reads += 1
+            return str(self._row["status"]) if request_id == self._row["request_id"] else None
 
     def resolve(self) -> None:
         with self._lock:
@@ -75,22 +86,69 @@ def test_a_decision_without_a_wake_is_seen_on_the_next_recheck(tmp_path: Path, m
     approval = store.get_approval_request("req-recheck")
     assert approval is not None
     monkeypatch.setattr(wait_module, "RESOLUTION_RECHECK_SECONDS", 0.01)
-    original_read = store.get_approval_request
+    original_status = store.get_approval_request_status
 
-    def read(request_id: str) -> dict[str, object] | None:
-        row = original_read(request_id)
-        if store.reads == 2:
+    def read_status(request_id: str) -> str | None:
+        status = original_status(request_id)
+        if store.status_reads == 2:
             # Another process decided: the row changed but this daemon heard nothing.
             store.resolve()
-        return row
+        return status
 
-    monkeypatch.setattr(store, "get_approval_request", read)
+    monkeypatch.setattr(store, "get_approval_request_status", read_status)
 
     result = wait_for_request_resolution(store, "req-recheck", approval, 5.0)
 
     assert result is not None
     assert result["status"] == "resolved"
-    assert store.reads == 3
+    assert store.status_reads == 3
+    # The hook's own read, then the decided request.
+    assert store.reads == 2
+
+
+def test_wakes_while_pending_read_only_the_status(tmp_path: Path, monkeypatch) -> None:
+    # A bulk approval wakes every held read once per review event. Those wakes
+    # must not each build the full request, or the waiting hooks slow the
+    # approvals they wait on.
+    monkeypatch.setattr(wait_module, "RESOLUTION_RECHECK_SECONDS", 30.0)
+    store = _ScriptedStore(tmp_path / "guard.db", "req-wakes")
+    approval = store.get_approval_request("req-wakes")
+    assert approval is not None
+    signal = review_event_wake_signal(store.path)
+    first_status_read = threading.Event()
+    woken_status_read = threading.Event()
+    read_status = store.get_approval_request_status
+
+    def read_status_once_seen(request_id: str) -> str | None:
+        status = read_status(request_id)
+        if first_status_read.is_set():
+            woken_status_read.set()
+        first_status_read.set()
+        return status
+
+    monkeypatch.setattr(store, "get_approval_request_status", read_status_once_seen)
+
+    def other_events_then_decide() -> None:
+        # Start only once the wait has seen the request pending, so the wakes
+        # below land on a held read rather than racing its first check, and
+        # decide only after one of them has rechecked a still-pending request.
+        assert first_status_read.wait(5.0)
+        for _ in range(20):
+            time.sleep(0.005)
+            signal.notify()
+        assert woken_status_read.wait(5.0)
+        store.resolve()
+        signal.notify()
+
+    decider = threading.Thread(target=other_events_then_decide)
+    decider.start()
+    result = wait_for_request_resolution(store, "req-wakes", approval, 5.0)
+    decider.join()
+
+    assert result is not None
+    assert result["status"] == "resolved"
+    assert store.status_reads >= 3
+    assert store.reads == 2
 
 
 def test_a_request_still_pending_is_returned_at_the_deadline(tmp_path: Path, monkeypatch) -> None:
@@ -225,3 +283,14 @@ def test_a_first_read_wakes_delivery_even_when_every_held_slot_is_busy(tmp_path:
     assert result == approval
     assert elapsed < 1.0
     assert signal.generation() == before + 1
+
+
+def test_the_store_reads_a_request_status_without_its_review_payload(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("req-status"))
+
+    assert store.get_approval_request_status("req-status") == "pending"
+    request = store.get_approval_request("req-status")
+    assert request is not None
+    assert request["status"] == "pending"
+    assert store.get_approval_request_status("req-missing") is None

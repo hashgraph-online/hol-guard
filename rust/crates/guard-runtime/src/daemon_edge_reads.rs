@@ -63,6 +63,8 @@ struct Handshake {
     busy_timeout_ms: u64,
     #[serde(default)]
     dashboard_build: Option<String>,
+    #[serde(default)]
+    user_home: Option<String>,
 }
 
 pub(super) struct ReadConfig {
@@ -72,6 +74,8 @@ pub(super) struct ReadConfig {
     source: String,
     busy_timeout_ms: u64,
     dashboard_build: Option<String>,
+    /// `str(Path.home())` in the daemon, which evidence reads shorten to `~`.
+    user_home: Option<String>,
 }
 
 impl ReadConfig {
@@ -99,6 +103,7 @@ impl ReadConfig {
             source: handshake.source,
             busy_timeout_ms: handshake.busy_timeout_ms,
             dashboard_build,
+            user_home: handshake.user_home,
         })
     }
 }
@@ -327,6 +332,7 @@ fn route(
             })
         }
         "/v1/read-state" => read_state(config, reads).map(|ids| (200, json!({"ids": ids}))),
+        "/v1/evidence" => evidence::list(query, config, reads),
         _ => {
             // The daemon serves `/v1/receipts/analytics` itself, ahead of its
             // receipt lookup.
@@ -430,6 +436,9 @@ pub(super) fn json_response(
     bytes.extend_from_slice(&escaped);
     bytes
 }
+
+#[path = "daemon_edge_evidence.rs"]
+mod evidence;
 
 #[cfg(test)]
 #[path = "daemon_edge_reads_tests.rs"]

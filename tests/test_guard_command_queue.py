@@ -23,11 +23,13 @@ from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,
     build_local_review_request_claim,
     guard_review_oauth_metadata,
-    payload_hash_for_decision_memory_bundle,
     payload_hash_for_remote_approval_envelope,
     validate_remote_approval_request_binding,
-    validated_decision_memory_bundle,
     validated_remote_approval_envelope,
+)
+from codex_plugin_scanner.guard.review_decision_memory import (
+    payload_hash_for_decision_memory_bundle,
+    validated_decision_memory_bundle,
 )
 from codex_plugin_scanner.guard.runtime import (
     command_executors,

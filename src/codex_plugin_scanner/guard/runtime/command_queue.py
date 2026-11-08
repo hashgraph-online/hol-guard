@@ -44,6 +44,7 @@ from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, with
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
 from .command_queue_http import request_json as _json_request
+from .command_queue_lease_ready import lane_lease_ready_operations
 from .command_queue_loop import (
     COMMAND_QUEUE_ERROR_BACKOFF_ENV,  # noqa: F401 - public compatibility export
     COMMAND_QUEUE_POLL_INTERVAL_ENV,  # noqa: F401 - public compatibility export
@@ -211,7 +212,9 @@ def _lease_next_job(
     max_jobs: int = 1,
     on_extra_jobs: Callable[[list[dict[str, object]]], object] | None = None,
 ) -> dict[str, object] | None:
-    scope = _current_lane().lease_scope(lease_ready_operations(store), _command_queue_lease_wait_ms())
+    lane = _current_lane()
+    ready = lane_lease_ready_operations(store, drain=lane.is_drain, check=lease_ready_operations)
+    scope = lane.lease_scope(ready, _command_queue_lease_wait_ms())
     if scope is None:
         return None
     operations, wait_ms = scope
