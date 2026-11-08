@@ -75,7 +75,7 @@ fn a_test_class_counts_by_the_tests_inside_it() {
     .unwrap()
     .text;
     assert!(
-        text.contains("tests/test_types.py: 2 related tests, last test_b 6-7"),
+        text.contains("tests/test_types.py: 2 related tests, last TestChoice.test_b 6-7"),
         "{text}"
     );
 }
@@ -146,6 +146,39 @@ fn helper() {
     .text;
     assert!(
         text.contains("tests/convert.rs: 2 related tests, last rejects_values 8-11"),
+        "{text}"
+    );
+}
+
+/// A renamed helper no test names is checked by the tests of the code
+/// calling it, listed by class and name as a runner selects them.
+#[test]
+fn a_renamed_helper_lists_the_tests_of_its_callers() {
+    let source =
+        "def _sumprod(a, b):\n    return a * b\n\n\ndef dft(xs):\n    return _sumprod(xs, xs)\n";
+    let tests = "class DftTests(TestCase):\n    def test_dft(self):\n        self.assertTrue(fft.dft([1]))\n";
+    let walk = Walk {
+        checked: 200,
+        holding: vec![1],
+        words: vec![1],
+        ..Walk::default()
+    };
+    let text = map(
+        &[
+            ("pkg/fft.py".to_owned(), source.to_owned()),
+            ("tests/test_fft.py".to_owned(), tests.to_owned()),
+        ],
+        &sought(&walk, &[("sumprod".to_owned(), true)], &[]),
+        &Asked {
+            everywhere: true,
+            ..Asked::default()
+        },
+        Instant::now() + Duration::from_secs(10),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        text.contains("tests/test_fft.py: 1 related tests, last DftTests.test_dft 2-3"),
         "{text}"
     );
 }

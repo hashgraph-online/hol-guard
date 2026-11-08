@@ -3,7 +3,7 @@
 //! the agent need not search or open them again before editing. For a stubbed-out
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
-use super::{Asked, File, Pick, Sought, Span, CHECK_EVERY};
+use super::{Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
 
@@ -12,6 +12,8 @@ const MAX_NAMES: usize = 2;
 /// Lines listed with their text for a rename, and their length.
 const MAX_RENAME_LINES: usize = 40;
 const MAX_RENAME_CHARS: usize = 3_600;
+/// Definitions calling a renamed one whose tests are looked for.
+const MAX_CALLERS: usize = 3;
 /// Lines listed with their text for a stub, and their length.
 const MAX_STUB_LINES: usize = 24;
 const MAX_STUB_CHARS: usize = 2_000;
@@ -137,6 +139,44 @@ fn every_line(
         format!("Lines naming `{name}` in the files read; other files may hold it too:")
     };
     Some((title, entries))
+}
+
+/// For a rename of a definition no test names, the source definitions
+/// naming it, whose tests check it instead: `_complex_sumprod` is tested
+/// through `dft` and `idft`. Empty once `until` passes.
+pub(super) fn callers(files: &[File], chosen: &[Pick], until: Instant) -> Vec<String> {
+    let Some(pick) = chosen.iter().find(|pick| !pick.base) else {
+        return Vec::new();
+    };
+    let Some(name) = files[pick.file].sections[pick.at].name.as_deref() else {
+        return Vec::new();
+    };
+    let tested = (files.iter().filter(|file| file.kind == Kind::Test))
+        .any(|file| naming(file, name, None, until).is_none_or(|(_, lines, _)| !lines.is_empty()));
+    let mut found: Vec<String> = Vec::new();
+    for file in files
+        .iter()
+        .filter(|file| file.kind == Kind::Source && !tested)
+    {
+        let Some((_, lines, _)) = naming(file, name, None, until) else {
+            return Vec::new();
+        };
+        for number in lines {
+            let holder = (0..file.sections.len())
+                .filter(|&at| !file.container(at))
+                .filter(|&at| (file.sections[at].start..=file.sections[at].end).contains(&number))
+                .max_by_key(|&at| file.sections[at].start);
+            let caller = holder.and_then(|at| file.sections[at].name.clone());
+            if let Some(caller) = caller.filter(|caller| caller != name && !found.contains(caller))
+            {
+                found.push(caller);
+            }
+            if found.len() == MAX_CALLERS {
+                return found;
+            }
+        }
+    }
+    found
 }
 
 /// Line `number` of `file` as a search prints it: path, number and text.

@@ -5,6 +5,10 @@ use super::{more, rename, term_form, written_name, Asked, File, Kind};
 const MAX_NAMED_DEFINITIONS: usize = 6;
 /// Functions left to be written that stand in for a named file's outline.
 const MAX_STUBS: usize = 2;
+/// Definitions shown beside a function left to be written.
+const MAX_HELPERS: usize = 3;
+/// Section names, as `term_form` gives them, of a class's constructor.
+const CONSTRUCTORS: [&str; 3] = ["init", "constructor", "new"];
 
 pub(super) struct Pick {
     pub(super) file: usize,
@@ -127,6 +131,24 @@ pub(super) fn named_definitions(
             picks.extend(stubs.into_iter().map(|at| pick(at, true)));
         }
     }
+    let helping = picks
+        .iter()
+        .find(|pick| {
+            let file = &files[pick.file];
+            pick.whole && !file.container(pick.at) && rename::stubbed(file, pick.at)
+        })
+        .map(|stub| helpers(files, stub, |name| best(name, false, true)))
+        .unwrap_or_default();
+    for (file, at) in helping {
+        if !picks.iter().any(|pick| pick.file == file && pick.at == at) {
+            picks.push(Pick {
+                file,
+                at,
+                base: true,
+                whole: true,
+            });
+        }
+    }
     let mut bases = Vec::new();
     for pick in picks
         .iter()
@@ -153,4 +175,69 @@ pub(super) fn named_definitions(
     picks.extend(bases);
     picks.truncate(MAX_NAMED_DEFINITIONS);
     picks
+}
+
+/// What a function left to be written builds on: the constructor of the
+/// class holding it, where the state it reads is set up (`ManyToMany.update`
+/// needs `__init__`), and the definitions its docstring writes as code
+/// (`zip_broadcast` raises ``UnequalIterablesError``), a method of the same
+/// class first, then any found by `find`.
+fn helpers(
+    files: &[File],
+    stub: &Pick,
+    find: impl Fn(&str) -> Option<(usize, usize)>,
+) -> Vec<(usize, usize)> {
+    let file = &files[stub.file];
+    let section = &file.sections[stub.at];
+    let sibling = |name: &str| {
+        let outer = file.parent[stub.at]?;
+        (0..file.sections.len())
+            .find(|&at| {
+                at != stub.at
+                    && file.parent[at] == Some(outer)
+                    && file.sections[at].name.as_deref() == Some(name)
+            })
+            .map(|at| (stub.file, at))
+    };
+    let mut found: Vec<(usize, usize)> = CONSTRUCTORS
+        .iter()
+        .find_map(|&name| sibling(name))
+        .into_iter()
+        .collect();
+    let body = (file.lines)
+        .get(section.start - 1..section.end.min(file.lines.len()))
+        .unwrap_or_default();
+    for word in body.iter().flat_map(|line| written_as_code(line)) {
+        let name = term_form(word);
+        if found.len() == MAX_HELPERS || section.name.as_deref() == Some(name.as_str()) {
+            continue;
+        }
+        let at = sibling(&name).or_else(|| find(&name));
+        if let Some(at) = at.filter(|at| *at != (stub.file, stub.at) && !found.contains(at)) {
+            found.push(at);
+        }
+    }
+    found
+}
+
+/// The names `line` writes between backticks: `name`, ``name``,
+/// :func:`name` or `module.name()`, by their last part.
+fn written_as_code(line: &str) -> impl Iterator<Item = &str> {
+    let parts: Vec<&str> = line.split('`').collect();
+    let last = parts.len().saturating_sub(1);
+    (parts.into_iter().enumerate())
+        .filter(move |(index, _)| (1..last).contains(index))
+        .map(|(_, part)| part.trim_end_matches("()"))
+        .filter(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.'))
+        })
+        .filter_map(|part| part.rsplit('.').next())
+        .filter(|name| {
+            name.chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_')
+        })
 }

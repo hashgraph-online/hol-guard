@@ -228,6 +228,31 @@ keeping tests passing.";
     assert!(!text.contains("naming `peekable`"), "{text}");
 }
 
+/// A method left to be written comes with what it builds on: its class's
+/// constructor, and the method and error its docstring writes as code.
+#[test]
+fn a_stub_comes_with_what_its_docstring_names() {
+    let dicts = "class ManyToMany:\n    def __init__(self):\n        self.data = {}\n\n    \
+def add(self, key, val):\n        self.data.setdefault(key, set()).add(val)\n\n    \
+def update(self, iterable):\n        \"\"\"Add each pair as :meth:`add` does, raising\n        \
+``PairError`` for anything else.\"\"\"\n        raise NotImplementedError\n";
+    let list = [
+        ("pkg/dictutils.py", dicts),
+        (
+            "pkg/errors.py",
+            "class PairError(ValueError):\n    \"\"\"Raised by ManyToMany.update.\"\"\"\n",
+        ),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "`ManyToMany.update` in pkg/dictutils.py was stubbed out and now raises \
+NotImplementedError. Implement it again so it does what its docstring says.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(text.contains("pkg/dictutils.py:8-11"), "{text}");
+    assert!(text.contains("self.data = {}"), "{text}");
+    assert!(text.contains("setdefault(key"), "{text}");
+    assert!(text.contains("pkg/errors.py:1-"), "{text}");
+}
+
 /// Prompts from varied tasks reach the definition they mean: a method named as
 /// code is a named definition, and a rename lists every line naming it, in
 /// source, tests and docs, as the whole list; a file the prompt names wins over another defining the same

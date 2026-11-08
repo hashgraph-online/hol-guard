@@ -226,12 +226,15 @@ pub(super) fn map(
         .filter(|item| !asked.changes || item.phrase || item.name)
         .collect();
     let (used, uses) = uses::uses(&files, &rare, asked.everywhere, until)?;
-    let mentioned: Vec<String> = (chosen.iter())
+    let mut mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)
         .take(2)
         .filter_map(|pick| files[pick.file].sections[pick.at].name.clone())
         .chain(used.iter().take(3).map(|word| (*word).to_owned()))
         .collect();
+    if asked.everywhere {
+        mentioned.extend(rename::callers(&files, &chosen, until));
+    }
     let mut blocks: Vec<(String, Vec<Entry>)> = Vec::new();
     let listed = more::listed(&files, &chosen, asked);
     let earlier: Vec<Span> = (asked.earlier.iter().cloned())

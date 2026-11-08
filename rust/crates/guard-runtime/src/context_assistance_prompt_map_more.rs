@@ -201,7 +201,13 @@ pub(super) fn tests(
             continue;
         };
         let section = &file.sections[*at];
-        let name = written_name(file.opening(*at)).unwrap_or_default();
+        // A test in a test class by both names, as a runner selects it.
+        let name = match file.parent[*at].and_then(|outer| written_name(file.opening(outer))) {
+            Some(outer) if outer.starts_with("Test") || outer.ends_with("Tests") => {
+                file.qualified(*at)
+            }
+            _ => written_name(file.opening(*at)).unwrap_or_default(),
+        };
         found.push((
             best,
             close,
