@@ -73,3 +73,55 @@ fn every_short_definition_a_change_spans_is_shown_to_its_closing_brace() {
     );
     assert!(note.ends_with(shown), "{note}");
 }
+
+/// The note about the newest commit `changed` makes, with `path` holding
+/// `text`.
+fn newest(path: &str, text: &str, changed: &[(usize, &str)]) -> String {
+    let changed: Vec<Hunk> = (changed.iter())
+        .map(|&(start, body)| Hunk {
+            path: path.into(),
+            start,
+            body: body.into(),
+        })
+        .collect();
+    let texts = vec![(path.to_owned(), text.to_owned())];
+    let base = "0123456789abcdef0123456789abcdef01234567";
+    render(Since::Newest(base), &changed, &texts, &[], [None; 2], None).unwrap()
+}
+
+/// A change to a short class and a method inside it shows the class once,
+/// without the method again on its own.
+#[test]
+fn a_definition_inside_one_shown_is_not_shown_again() {
+    let text = "class Box:\n    size = 1\n\n    def grow(self):\n        return 2\n";
+    let note = newest(
+        "src/box.py",
+        text,
+        &[(1, " class Box:\n+    size = 1\n \n \n+        return 2\n")],
+    );
+    assert_eq!(note.matches("def grow(").count(), 1, "{note}");
+    assert!(note.contains("src/box.py:1-5\n```\nclass Box:"), "{note}");
+}
+
+/// A change after a context line is labelled by the definition it is in,
+/// not the one the context line is in.
+#[test]
+fn a_change_is_labelled_past_the_context_before_it() {
+    let text = "def a():\n    return 1\ndef b():\n    return 2\n";
+    let note = newest(
+        "src/ab.py",
+        text,
+        &[(2, "     return 1\n-def c():\n+def b():\n")],
+    );
+    assert!(note.contains("src/ab.py: b 3-4"), "{note}");
+    assert!(!note.contains("a 1-2"), "{note}");
+}
+
+/// In Rust a lifetime's `'` opens no quote, so a character literal after
+/// lifetimes does not hide the brace before it.
+#[test]
+fn a_rust_function_with_lifetimes_is_shown_to_its_closing_brace() {
+    let text = "fn pick<'a>(x: &'a str, y: &'a str) -> char { let c = 'x';\n    c\n}\n";
+    let note = newest("src/lib.rs", text, &[(2, "+    c\n")]);
+    assert!(note.ends_with("src/lib.rs:1-3\n```\nfn pick<'a>(x: &'a str, y: &'a str) -> char { let c = 'x';\n    c\n}\n```"), "{note}");
+}

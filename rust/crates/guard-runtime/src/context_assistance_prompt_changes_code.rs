@@ -10,14 +10,12 @@ const MAX_LINES: usize = 40;
 const MAX_CODE: usize = 2_500;
 const TITLE: &str = "Changed definitions as they read now:";
 
-/// The lines a change covers in the current text: those it adds, or the
-/// line it removes at.
+/// The lines a change covers in the current text: the first to the last it
+/// adds, or the line it removes at.
 pub(super) fn changed_lines(hunk: &Hunk) -> (usize, usize) {
-    let start = hunk.start.max(1);
-    let added = (hunk.body.lines())
-        .filter(|line| line.starts_with('+'))
-        .count();
-    (start, start + added.max(1) - 1)
+    let lines = touched(hunk);
+    let start = lines.first().copied().unwrap_or(hunk.start.max(1));
+    (start, lines.last().copied().unwrap_or(start))
 }
 
 /// The smallest definition holding the start of a change, or else its end.
@@ -63,7 +61,7 @@ pub(super) fn code(changed: &[Hunk], texts: &[(String, String)]) -> Option<Strin
     for (path, text) in texts.iter().filter(|(path, _)| !headed(path)) {
         let lines: Vec<&str> = text.lines().collect();
         let found = sections(path, &lines);
-        let mut shown: Vec<(usize, usize)> = Vec::new();
+        let mut spans: Vec<(usize, usize)> = Vec::new();
         let touched = (changed.iter())
             .filter(|hunk| hunk.path == *path)
             .flat_map(touched);
@@ -72,18 +70,23 @@ pub(super) fn code(changed: &[Hunk], texts: &[(String, String)]) -> Option<Strin
                 continue;
             };
             let span = (section.start, section.end);
-            if section.name.is_none()
-                || shown.contains(&span)
-                || section.end + 1 - section.start > MAX_LINES
+            if section.name.is_some()
+                && !spans.contains(&span)
+                && section.end + 1 - section.start <= MAX_LINES
             {
-                continue;
+                spans.push(span);
             }
-            shown.push(span);
-            let Some(body) = lines.get(section.start - 1..section.end.min(lines.len())) else {
+        }
+        // A definition inside another one shown is shown with it.
+        let inside = |(start, end): (usize, usize)| {
+            (spans.iter()).any(|&outer| outer != (start, end) && outer.0 <= start && end <= outer.1)
+        };
+        for &(start, end) in spans.iter().filter(|&&span| !inside(span)) {
+            let Some(body) = lines.get(start - 1..end.min(lines.len())) else {
                 continue;
             };
             let body = body.join("\n");
-            let part = format!("\n{path}:{}-{}\n```\n{body}\n```", span.0, span.1);
+            let part = format!("\n{path}:{start}-{end}\n```\n{body}\n```");
             if out.len() + part.len() <= MAX_CODE && clean(&body) {
                 out.push_str(&part);
             }
