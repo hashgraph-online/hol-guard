@@ -125,3 +125,23 @@ fn a_rust_function_with_lifetimes_is_shown_to_its_closing_brace() {
     let note = newest("src/lib.rs", text, &[(2, "+    c\n")]);
     assert!(note.ends_with("src/lib.rs:1-3\n```\nfn pick<'a>(x: &'a str, y: &'a str) -> char { let c = 'x';\n    c\n}\n```"), "{note}");
 }
+
+/// When the definition holding a changed one is too long for the note, the
+/// changed one inside it is still shown on its own.
+#[test]
+fn a_definition_inside_one_too_long_to_show_is_shown_alone() {
+    let field = format!("    note = '{}'\n", "x".repeat(100));
+    let text = format!(
+        "class Box:\n{}\n    def grow(self):\n        return 2\n",
+        field.repeat(30)
+    );
+    let added = format!("+{field}");
+    let note = newest(
+        "src/box.py",
+        &text,
+        &[(2, &added), (34, "+        return 2\n")],
+    );
+    let shown = "src/box.py:33-34\n```\n    def grow(self):\n        return 2\n```";
+    assert!(note.ends_with(shown), "{note}");
+    assert!(!note.contains("note = 'x"), "{note}");
+}

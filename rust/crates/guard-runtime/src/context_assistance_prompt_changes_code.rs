@@ -77,11 +77,14 @@ pub(super) fn code(changed: &[Hunk], texts: &[(String, String)]) -> Option<Strin
                 spans.push(span);
             }
         }
-        // A definition inside another one shown is shown with it.
-        let inside = |(start, end): (usize, usize)| {
-            (spans.iter()).any(|&outer| outer != (start, end) && outer.0 <= start && end <= outer.1)
-        };
-        for &(start, end) in spans.iter().filter(|&&span| !inside(span)) {
+        // In file order, each enclosing definition before those inside it,
+        // which are left out once it is shown.
+        spans.sort_by_key(|&(start, end)| (start, std::cmp::Reverse(end)));
+        let mut shown: Vec<(usize, usize)> = Vec::new();
+        for (start, end) in spans {
+            if (shown.iter()).any(|&(outer, last)| outer <= start && end <= last) {
+                continue;
+            }
             let Some(body) = lines.get(start - 1..end.min(lines.len())) else {
                 continue;
             };
@@ -89,6 +92,7 @@ pub(super) fn code(changed: &[Hunk], texts: &[(String, String)]) -> Option<Strin
             let part = format!("\n{path}:{start}-{end}\n```\n{body}\n```");
             if out.len() + part.len() <= MAX_CODE && clean(&body) {
                 out.push_str(&part);
+                shown.push((start, end));
             }
         }
     }
