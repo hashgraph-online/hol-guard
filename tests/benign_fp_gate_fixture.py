@@ -325,6 +325,12 @@ def build_fixture(root: Path) -> BenignFixture:
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.
     _write(parent / "docs" / "large-guide.md", "# Guide\n" + "Plain guide paragraph text.\n" * 1600)
+    # A committed handbook page named for what it documents. Listing `docs`
+    # prints the name, so a pattern that prints the same names must too.
+    _write(
+        parent / "docs" / "credential-rotation-runbook.md",
+        "# Rotating credentials\n\nOpen the provider console and issue a new value.\n",
+    )
     _write(parent / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic skill body.\n")
     _write(parent / "integrations" / "app" / ".claude-plugin" / "plugin.json", '{"author": "Example"}\n')
     # Git treats a link as a file: `node_modules/` alone leaves the `dashboard/node_modules` link unignored.
