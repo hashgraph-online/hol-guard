@@ -2851,7 +2851,7 @@
       ],
       "prompt": "I need the list of environment variable names this shell was given, without their values. Run the listed command once, exactly as written, and show me the names it prints. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
       "commands": [
-        "printenv | cut -d= -f1"
+        "printenv | grep -oE '^(PATH|HOME)[A-Z_]*'"
       ]
     },
     {
@@ -3599,6 +3599,5 @@
         "npm ci"
       ]
     }
-
   ]
 }
