@@ -44,7 +44,7 @@ const CUT_VALUED: &[&str] = &["-b", "-c", "-f", "-d"];
 const CAT_SWITCHES: &str = "AbeEnstTuv";
 
 #[path = "contained_sed_script.rs"]
-mod sed_script;
+pub(in crate::pretool) mod sed_script;
 
 /// `sed`'s own switches, none of which names anything to open: `-n` prints
 /// only what the script selects, `-E` and `-r` read the script's patterns as
