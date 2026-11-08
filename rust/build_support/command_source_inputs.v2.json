@@ -319,6 +319,7 @@
       "src/pretool/chain_temporary.rs",
       "src/pretool/checkout_destination_floor.rs",
       "src/pretool/checkout_destination_options.rs",
+      "src/pretool/checkout_destination_repository.rs",
       "src/pretool/clone_siblings.rs",
       "src/pretool/command_sequences.rs",
       "src/pretool/compound_reason.rs",
