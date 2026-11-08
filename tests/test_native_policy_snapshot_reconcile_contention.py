@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.native_policy_snapshot_reconcile import reconcile_policy_inputs
+from codex_plugin_scanner.guard.sqlite_connection_cache import close_idle_store_connections
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .native_policy_snapshot_test_fixtures import _DeterministicClock
@@ -161,6 +162,9 @@ def test_periodic_recheck_reads_the_store_over_one_connection(
         connects.append(None)
         return connect(*args, **kwargs)
 
+    # Count from a cold start: a connection kept from setup would hide an
+    # extra open.
+    close_idle_store_connections()
     monkeypatch.setattr(sqlite3, "connect", counting_connect)
     publisher._reconcile_due_monotonic = clock.monotonic
     try:
