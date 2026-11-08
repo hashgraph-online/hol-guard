@@ -52,3 +52,24 @@ fn the_newest_commits_short_changed_definitions_are_shown_whole() {
     let session = render(Since::Start(base), &changed, &texts, &[], [None; 2], None).unwrap();
     assert!(!session.contains("as they read now"), "{session}");
 }
+
+/// A change spanning two short functions shows both, and a closing brace
+/// after a line quoting one still ends the function shown.
+#[test]
+fn every_short_definition_a_change_spans_is_shown_to_its_closing_brace() {
+    let text = "function f() {\n  return \"}\";\n}\n\nfunction g() {\n  return 2;\n}\n";
+    let body: String = text.lines().map(|line| format!("+{line}\n")).collect();
+    let changed = vec![Hunk {
+        path: "src/f.js".into(),
+        start: 1,
+        body,
+    }];
+    let texts = vec![("src/f.js".to_owned(), text.to_owned())];
+    let base = "0123456789abcdef0123456789abcdef01234567";
+    let note = render(Since::Newest(base), &changed, &texts, &[], [None; 2], None).unwrap();
+    let shown = concat!(
+        "src/f.js:1-3\n```\nfunction f() {\n  return \"}\";\n}\n```\n",
+        "src/f.js:5-7\n```\nfunction g() {\n  return 2;\n}\n```",
+    );
+    assert!(note.ends_with(shown), "{note}");
+}

@@ -95,15 +95,32 @@ fn block_end(lines: &[&str], at: usize) -> usize {
     last
 }
 
-/// Opening braces on `line` less closing ones.
+/// Opening braces on `line` less closing ones, outside quoted text and a
+/// `//` comment.
 fn braces(line: &str) -> isize {
-    line.chars()
-        .map(|c| match c {
-            '{' => 1,
-            '}' => -1,
-            _ => 0,
-        })
-        .sum()
+    let chars: Vec<char> = line.chars().collect();
+    let mut open = 0;
+    let mut quote = None;
+    let mut at = 0;
+    while at < chars.len() {
+        let c = chars[at];
+        match quote {
+            Some(_) if c == '\\' => at += 1,
+            Some(mark) if c == mark => quote = None,
+            Some(_) => {}
+            None => match c {
+                '"' | '`' => quote = Some(c),
+                // A `'` with none after it is a Rust lifetime, not a quote.
+                '\'' if chars[at + 1..].contains(&'\'') => quote = Some(c),
+                '/' if chars.get(at + 1) == Some(&'/') => break,
+                '{' => open += 1,
+                '}' => open -= 1,
+                _ => {}
+            },
+        }
+        at += 1;
+    }
+    open
 }
 
 fn indent(line: &str) -> usize {
