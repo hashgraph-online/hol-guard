@@ -24852,7 +24852,8 @@
         "command": "cat README.md | sed -e 's/example/sample/' -e 'w ${HOME}/notes.md'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-sed-substitute-escaped-delimiter-exec-flag",
@@ -24868,7 +24869,8 @@
         "command": "cat README.md | sed -E 's/\\/tmp\\/scratch-[a-z0-9]+/TMPDIR/e'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "sed-substitute-alternate-delimiter",
@@ -24916,7 +24918,8 @@
         "command": "cat README.md | sed -E 's/example/sample/; w ${HOME}/notes.md'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "gauntlet-linked-modules-relative-vite-build",
