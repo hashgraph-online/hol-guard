@@ -23,7 +23,7 @@ def other():
 
 /// What the map looks for when `checked` files were walked and each term,
 /// marked when the prompt wrote it as a name, is in that many code files.
-fn looking_for(terms: &[(&str, bool, usize)]) -> Vec<Sought> {
+pub(super) fn looking_for(terms: &[(&str, bool, usize)]) -> Vec<Sought> {
     let holding: Vec<usize> = terms.iter().map(|(_, _, holding)| *holding).collect();
     let walk = Walk {
         checked: 200,
@@ -38,13 +38,13 @@ fn looking_for(terms: &[(&str, bool, usize)]) -> Vec<Sought> {
     sought(&walk, &terms, &[])
 }
 
-fn files(list: &[(&str, &str)]) -> Vec<(String, String)> {
+pub(super) fn files(list: &[(&str, &str)]) -> Vec<(String, String)> {
     list.iter()
         .map(|(path, text)| ((*path).to_owned(), (*text).to_owned()))
         .collect()
 }
 
-fn later() -> Instant {
+pub(super) fn later() -> Instant {
     Instant::now() + Duration::from_secs(10)
 }
 
@@ -129,6 +129,7 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
+        earlier: Vec::new(),
     };
     let text = map(
         &files(&[
@@ -402,6 +403,7 @@ fn a_named_changelog_stays_on_the_map() {
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
+        earlier: Vec::new(),
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(

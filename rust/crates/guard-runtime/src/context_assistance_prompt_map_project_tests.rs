@@ -1,6 +1,6 @@
 //! The map from a typed prompt, through the walk and Guard's own read of a
 //! project on disk.
-use super::tests::CORE;
+use super::tests::{files, later, looking_for, CORE};
 use super::*;
 use crate::context_assistance_prompt_files::{plain, walk};
 use std::path::PathBuf;
@@ -51,6 +51,7 @@ fn changes_map(home: &Path, root: &Path, prompt: &str, about_changes: bool) -> O
         &quoted,
         prompt,
         about_changes,
+        &[],
         until,
     );
     map.map(|rendered| rendered.text)
@@ -163,12 +164,17 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         text.contains("CodeGenerator.visit_FromImport (lines 10)"),
         "{text}"
     );
+    assert!(!text.contains("```"), "{text}");
     let text = map("Tests fail: `getchar` in src/pkg/termui.py raises NotImplementedError.");
     assert!(
         text.contains("\nsrc/pkg/termui.py:1-2 def getchar"),
         "{text}"
     );
     assert!(!text.contains("_termui_impl.py:1-2"), "{text}");
+    assert!(
+        text.contains("def getchar(echo=False):\n```\ndef getchar(echo=False):\n    return _getchar(echo)\n```"),
+        "{text}"
+    );
     let text = map("Add a usage example to the docstring of `test_undefined` in src/pkg/tests.py.");
     assert!(
         text.contains("\nsrc/pkg/tests.py:1-2 def test_undefined(value):"),
@@ -183,4 +189,60 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
     let text = map("Make parse strip whitespace before returning.");
     assert!(text.contains("\nsrc/pkg/parse.py:1-2 def parse"), "{text}");
     assert!(!text.contains("examples/aliases/parse.py:1-2"), "{text}");
+}
+
+/// A short function the prompt names is shown whole, so the agent need not
+/// read it, and only once a session. A rename asks where it is used, and a
+/// long function or a class is given by its lines.
+#[test]
+fn a_short_named_function_is_shown_whole_once_a_session() {
+    let long = format!("def long_one():\n{}", "    x = 1\n".repeat(45));
+    let list = files(&[("src/core.py", CORE), ("src/long.py", &long)]);
+    let other = looking_for(&[("other", true, 1)]);
+    let first = map(&list, &other, &Asked::default(), later()).unwrap();
+    assert!(
+        first.text.contains(
+            "Definitions this request names:\nsrc/core.py:17-18 def other():\n\
+             ```\ndef other():\n    return 1\n```"
+        ),
+        "{}",
+        first.text
+    );
+    assert!(first.text.starts_with(&format!("{HEADER} {SHOWN_NOTE}")));
+    assert_eq!(first.shown.len(), 1);
+    let again = Asked {
+        earlier: first.shown.clone(),
+        ..Asked::default()
+    };
+    let next = map(&list, &other, &again, later()).unwrap().text;
+    assert!(next.contains("\nsrc/core.py:17-18 def other():"), "{next}");
+    assert!(
+        !next.contains("```") && !next.contains(SHOWN_NOTE),
+        "{next}"
+    );
+    let rename = Asked {
+        everywhere: true,
+        ..Asked::default()
+    };
+    let text = map(&list, &other, &rename, later()).unwrap().text;
+    assert!(!text.contains("```"), "{text}");
+    let text = map(
+        &list,
+        &looking_for(&[("longone", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(text.contains("\nsrc/long.py:1-"), "{text}");
+    assert!(!text.contains("```"), "{text}");
+    let text = map(
+        &list,
+        &looking_for(&[("choice", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(!text.contains("```"), "{text}");
 }

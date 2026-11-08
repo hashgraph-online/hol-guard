@@ -2,7 +2,8 @@
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
 use super::super::sections::{headed_sections, marked_test, written_name, Section};
-use super::{Asked, File, Kind};
+use super::super::seen::Span;
+use super::{entry, Asked, File, Kind, Pick};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
 use std::collections::BTreeSet;
@@ -16,6 +17,11 @@ const MAX_DOC_SECTION: usize = 200;
 const MAX_TITLE_CHARS: usize = 60;
 /// How many of a named file's definitions stand in for its outline.
 const MAX_OUTLINE: usize = 8;
+/// The most lines of a definition shown whole.
+const MAX_SHOWN_LINES: usize = 40;
+/// The most characters of code one map shows whole; the named definitions
+/// come first, so this always fits the map.
+const MAX_SHOWN_CHARS: usize = 1_600;
 /// How much a long doc section is marked down, as BM25's `k1`.
 const LENGTH_K: f64 = 1.2;
 
@@ -359,4 +365,51 @@ fn around(outer: &Section, inner: &Section) -> bool {
     outer.start <= inner.start
         && inner.end <= outer.end
         && (outer.start, outer.end) != (inner.start, inner.end)
+}
+
+/// Each named definition's entry and the spans shown whole. A short function
+/// or method the prompt names is shown whole, but not for a rename or a
+/// review of changes, which ask where code is, nor when an earlier prompt of
+/// the session was shown it.
+pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> (Vec<String>, Vec<Span>) {
+    let mut listed = Vec::new();
+    let mut shown = Vec::new();
+    let mut room = if asked.everywhere || asked.changes {
+        0
+    } else {
+        MAX_SHOWN_CHARS
+    };
+    for pick in chosen {
+        let mut text = entry(files, pick);
+        let code = pick.whole.then(|| whole(&files[pick.file], pick.at));
+        if let Some((span, code)) = code.flatten() {
+            if code.len() <= room && !asked.earlier.contains(&span) {
+                room -= code.len();
+                text.push_str(&fenced(&code));
+                shown.push(span);
+            }
+        }
+        listed.push(text);
+    }
+    (listed, shown)
+}
+
+/// A short function or method's own lines, to show whole, with the span they
+/// fill. A class or a longer definition is given by its lines only.
+fn whole(file: &File, at: usize) -> Option<(Span, String)> {
+    let section = &file.sections[at];
+    if file.container(at) || section.end + 1 - section.start > MAX_SHOWN_LINES {
+        return None;
+    }
+    let code = (file.lines.get(section.start.checked_sub(1)?..section.end)?).join("\n");
+    let span = Span::new(file.path, section.start as u64, section.end as u64, &code);
+    Some((span, code))
+}
+
+/// `code` on the lines after an entry, in a fence longer than any run of
+/// backticks it holds.
+fn fenced(code: &str) -> String {
+    let longest = code.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    let fence = "`".repeat(longest.max(2) + 1);
+    format!("\n{fence}\n{code}\n{fence}")
 }

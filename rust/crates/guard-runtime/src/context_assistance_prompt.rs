@@ -230,6 +230,7 @@ fn attach(
                 &quoted,
                 prompt,
                 about_changes,
+                &earlier,
                 deadline,
             )
         })
