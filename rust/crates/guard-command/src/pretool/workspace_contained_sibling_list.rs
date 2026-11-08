@@ -85,17 +85,36 @@ fn words_without_stderr(segment: &CommandSegmentV1) -> &[String] {
 fn bounded_stderr_sinks(model: &CanonicalCommandV1) -> bool {
     model.segments.iter().enumerate().all(|(index, segment)| {
         segment.pipeline_index != 0
-            || !sends_stderr_to_the_null_device(&segment.text)
-            || model
-                .segments
-                .get(index + 1)
-                .is_some_and(|next| next.pipeline_index == 1)
+            || (!holds_a_sink_the_peel_cannot_write_back(&segment.text)
+                && (!sends_stderr_to_the_null_device(&segment.text)
+                    || model
+                        .segments
+                        .get(index + 1)
+                        .is_some_and(|next| next.pipeline_index == 1)))
     })
 }
 
-/// Whether a segment's text holds the one stderr sink the parse drops.
+/// Whether a segment's text holds the one stderr sink the parse drops and the
+/// peel resolves itself.
 fn sends_stderr_to_the_null_device(text: &str) -> bool {
     let characters: Vec<char> = text.chars().collect();
     (0..characters.len())
         .any(|start| crate::parser_segments::is_stderr_to_null_redirect(&characters, start, false))
+}
+
+/// Whether a segment's text holds a redirect to the null device that the
+/// parse drops but `sink_peel` cannot write back.
+///
+/// The parse drops every inert spelling -- `>`, `>>`, `1>`, `&>` and a `2>`
+/// with blanks before its target. `sink_peel::stderr_redirect` resolves only
+/// the contiguous `2>/dev/null`, and `joined_list` refuses the `>` operator
+/// its own lexer finds in the raw text. Admitting one of the other spellings
+/// here would approve a list the sink then declines to rejoin -- a review the
+/// user cannot clear by approving it -- so the rejoin is refused instead.
+fn holds_a_sink_the_peel_cannot_write_back(text: &str) -> bool {
+    let characters: Vec<char> = text.chars().collect();
+    (0..characters.len()).any(|start| {
+        crate::parser_segments::null_sink_redirect_end(&characters, start, false).is_some()
+            && !crate::parser_segments::is_stderr_to_null_redirect(&characters, start, false)
+    })
 }
