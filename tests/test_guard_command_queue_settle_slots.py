@@ -4,46 +4,64 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 
 import pytest
 
 from codex_plugin_scanner.guard.runtime.command_queue_settle_slots import SettleSlots
 
 
-def _run_holders(slots: SettleSlots, count: int, *, hold_seconds: float) -> tuple[list[int], int]:
-    order: list[int] = []
-    peak = 0
-    active = 0
-    lock = threading.Lock()
-
-    def holder(index: int) -> None:
-        nonlocal peak, active
-        with slots.hold():
-            with lock:
-                order.append(index)
-                active += 1
-                peak = max(peak, active)
-            time.sleep(hold_seconds)
-            with lock:
-                active -= 1
-
-    threads = []
-    for index in range(count):
-        thread = threading.Thread(target=holder, args=(index,))
-        thread.start()
-        threads.append(thread)
-        # Each holder reaches the slots before the next one starts.
-        time.sleep(0.01)
-    for thread in threads:
-        thread.join(timeout=10)
-    return order, peak
+def _wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.001)
 
 
 def test_holders_are_admitted_in_arrival_order_two_at_a_time() -> None:
-    order, peak = _run_holders(SettleSlots(2, max_wait_seconds=10), 8, hold_seconds=0.05)
+    slots = SettleSlots(2, max_wait_seconds=30)
+    admitted: list[int] = []
+    lock = threading.Lock()
+    releases = [threading.Event() for _ in range(6)]
 
-    assert order == list(range(8))
-    assert peak == 2
+    def holder(index: int) -> None:
+        with slots.hold():
+            with lock:
+                admitted.append(index)
+            releases[index].wait(timeout=10)
+
+    def admitted_count() -> int:
+        with lock:
+            return len(admitted)
+
+    threads = []
+    for index in range(6):
+        thread = threading.Thread(target=holder, args=(index,), daemon=True)
+        thread.start()
+        threads.append(thread)
+        # Each holder has its ticket before the next one asks for one.
+        _wait_until(lambda index=index: slots._issued > index)
+
+    try:
+        _wait_until(lambda: admitted_count() == 2)
+        # Both slots are taken; nobody else gets in until one frees.
+        time.sleep(0.05)
+        assert sorted(admitted) == [0, 1]
+        releases[0].set()
+        _wait_until(lambda: admitted_count() == 3)
+        releases[1].set()
+        _wait_until(lambda: admitted_count() == 4)
+        time.sleep(0.05)
+        assert admitted[2:] == [2, 3]
+        releases[2].set()
+        releases[3].set()
+        _wait_until(lambda: admitted_count() == 6)
+        assert sorted(admitted[4:]) == [4, 5]
+    finally:
+        for release in releases:
+            release.set()
+        for thread in threads:
+            thread.join(timeout=5)
 
 
 def test_a_stalled_holder_does_not_strand_the_jobs_behind_it() -> None:

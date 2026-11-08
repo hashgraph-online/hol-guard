@@ -526,7 +526,12 @@ def poll_command_queue_once(
         # closes, after the job ran and its grant was spent. It still reached
         # recovery there; here it becomes the posted result so the lease closes.
         try:
-            with settle_slots.hold(), _review_connection_scope(store, item):
+            # Only Review jobs queue for a settle slot: a bulk approval leases
+            # them together. A generic command settles straight after its
+            # capability check, as it always has, so no wait can separate the
+            # two.
+            slot = settle_slots.hold() if item.get("operation") == EXACT_CLOUD_REVIEW_OPERATION else nullcontext()
+            with slot, _review_connection_scope(store, item):
                 execution = _settle_authorized_job(store, context, item, authorized)
         except sqlite3.DatabaseError as error:
             _LOGGER.warning("Guard command settle storage failure: error=%s", _redacted_error(error))
