@@ -13,11 +13,12 @@ const MAX_USE_LINES: usize = 3;
 /// The functions in source that hold the prompt's rarer words in code, or
 /// quoted text anywhere, each with the lines that hold them: those holding
 /// quoted text first, then the most lines. A function needs two such lines
-/// or quoted text. Also the words found, rarest first. `None` once `until`
-/// passes.
+/// or quoted text, or, for a rename, one line naming it as code. Also the
+/// words found, rarest first. `None` once `until` passes.
 pub(super) fn uses<'a>(
     files: &[File],
     rare: &[&'a Sought],
+    everywhere: bool,
     until: Instant,
 ) -> Option<(Vec<&'a str>, Vec<String>)> {
     struct Use {
@@ -70,9 +71,9 @@ pub(super) fn uses<'a>(
         }
     }
     let mut kept: Vec<Use> = (found.into_values())
-        // A name written as code is a lead on a single line too: a call to
-        // `_import_common` is where a rename has to change it.
-        .filter(|item| item.phrase || item.named || item.lines.len() >= 2)
+        // For a rename, a name written as code is a lead on a single line
+        // too: a call to `_import_common` is where it has to change.
+        .filter(|item| item.phrase || (everywhere && item.named) || item.lines.len() >= 2)
         .collect();
     kept.sort_by(|a, b| {
         (b.phrase.cmp(&a.phrase))

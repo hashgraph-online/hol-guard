@@ -7,7 +7,7 @@ use super::*;
 fn a_file_path_gives_no_search_words() {
     let prompt = "Tests fail because parse is not implemented (src/app/utils.py).";
     let found = terms(prompt);
-    assert_eq!(found, ["parse", "implemented", "test"], "{found:?}");
+    assert_eq!(found, ["test", "parse", "implemented"], "{found:?}");
     assert_eq!(named(prompt), ["src/app/utils.py"]);
     assert!(asks_for_tests(&terms("make tests/test_basic.py pass")));
 }

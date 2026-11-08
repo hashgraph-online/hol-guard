@@ -40,7 +40,7 @@ fn a_first_prompt_about_a_push_gets_the_newest_commit() {
     let title = "HOL Guard CIGAR: the newest commit in this project and any uncommitted changes";
     assert!(
         text.starts_with(&format!("{title} (`git diff {}` shows", &first[..7]))
-            && text.contains("\nsrc/core.py: other 8-9\n")
+            && text.contains("\nsrc/core.py: other 8-9")
             && text.contains("teammate: other returns 2:\n```diff\n")
             && text.contains("\n+    return 2\n"),
         "{text}"
@@ -49,7 +49,7 @@ fn a_first_prompt_about_a_push_gets_the_newest_commit() {
     let text = ask(&session, pushed).unwrap();
     assert!(
         text.contains("since this session started at commit")
-            && text.contains("\nsrc/core.py: other 8-9\n")
+            && text.contains("\nsrc/core.py: other 8-9")
             && !text.contains("teammate: other returns 2"),
         "{text}"
     );

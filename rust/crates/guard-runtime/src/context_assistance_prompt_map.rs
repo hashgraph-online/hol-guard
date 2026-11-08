@@ -252,7 +252,7 @@ pub(super) fn map(
         .filter(|item| item.phrase || (!item.common && !placed.contains(item.text.as_str())))
         .filter(|item| !asked.changes || item.phrase || item.name)
         .collect();
-    let (used, uses) = uses::uses(&files, &rare, until)?;
+    let (used, uses) = uses::uses(&files, &rare, asked.everywhere, until)?;
     let mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)
         .take(2)
