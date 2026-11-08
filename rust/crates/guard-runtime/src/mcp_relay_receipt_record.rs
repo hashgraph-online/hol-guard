@@ -44,10 +44,6 @@ const REDACTION_LEVELS: [&str; 3] = ["full", "partial", "none"];
 pub(super) const SAFE_ALTERNATIVE_SOURCE: &str = "policy-safe-alternative";
 /// `_needs_review`: the actions `queue_blocked_approvals` writes a row for.
 pub(super) const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
-/// The relay harness whose approval flow opens the approval center in the
-/// browser (`approval-center` tier, `auto_open_browser`), which the daemon's
-/// `_open_approval_center` still does for an ask block.
-pub(super) const BROWSER_APPROVAL_HARNESS: &str = "cline";
 const IDENTITY_KEYS: [&str; 4] = [
     "artifact",
     "runtime_private_metadata",
@@ -207,9 +203,6 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         Some(_) => return None,
     };
     let call = relayed(record, KIND)?;
-    if queued && call.harness == BROWSER_APPROVAL_HARNESS {
-        return None;
-    }
     let forward = match call.outcome {
         "forward" if !queued && !reviewed && FORWARD_ACTIONS.contains(&call.policy_action) => true,
         "block"

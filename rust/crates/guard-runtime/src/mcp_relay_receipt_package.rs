@@ -18,15 +18,15 @@
 //!
 //! A plain package record is a forward under its own action, an observed
 //! forward whose notices the resident already raised, a policy block, an ask
-//! block whose desktop notice the resident already raised, from a harness
-//! whose approval flow never opens the browser, or a safe-alternative block
+//! block whose desktop notice the resident already raised, or a
+//! safe-alternative block
 //! whose record names the approval center its inbox row links to. The `ask`
 //! branch of `_queue_package_approval_response` and the unqueued routes
 //! project the call without the artifact, so their receipts record no risk
 //! categories. A safe-alternative block projects it with the artifact, as
 //! `_queue_approval_center_response` does, and its silent inbox row follows
 //! the receipt (`_record_unprompted_review`). An ask block still carrying its
-//! notice or opening the approval center, an observed forward still carrying
+//! notice, an observed forward still carrying
 //! notices, and a safe-alternative block from a binding with no center are
 //! still the daemon's to write.
 
@@ -43,8 +43,8 @@ use serde_json::{json, Map, Value};
 use super::event::{store_args, Artifact, Receipt};
 use super::record::{
     approval_fits, block_taxonomy, keys_fit, relayed, review_fields, string_list, Relayed,
-    APPROVAL_KEY, APPROVAL_PENDING_SOURCE, BROWSER_APPROVAL_HARNESS, FORWARD_ACTIONS, RECORD_KEYS,
-    REVIEWABLE, REVIEW_KEY, SAFE_ALTERNATIVE_SOURCE,
+    APPROVAL_KEY, APPROVAL_PENDING_SOURCE, FORWARD_ACTIONS, RECORD_KEYS, REVIEWABLE, REVIEW_KEY,
+    SAFE_ALTERNATIVE_SOURCE,
 };
 use super::{decision_evidence, receipt_evidence, strings, Args, Call, Stamp};
 use crate::mcp_relay_decide::ask_row::{package_silent_review_args, projection, Queue};
@@ -113,9 +113,6 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
         return None;
     }
     let call = relayed(record, KIND)?;
-    if queued && call.harness == BROWSER_APPROVAL_HARNESS {
-        return None;
-    }
     // `_record_package_forward` records the action it forwarded with as the
     // source, or the mode for an observed forward. A block the package policy
     // settled is a `policy-block`, an ask block is recorded as pending in the
