@@ -55,10 +55,39 @@ fn daemon_edge_only_relays_to_another_port_on_the_loopback_listener() {
 }
 
 fn spawn_edge(upstream: SocketAddr) -> SocketAddr {
+    spawn_edge_with(upstream, 4, Duration::from_secs(30))
+}
+
+fn spawn_edge_with(upstream: SocketAddr, limit: usize, stalled_write: Duration) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
-    thread::spawn(move || serve(&listener, upstream, 4));
+    thread::spawn(move || serve(&listener, upstream, limit, stalled_write));
     address
+}
+
+/// Echoes one byte, then holds the connection until the client closes it.
+fn spawn_holding_daemon() -> SocketAddr {
+    let daemon = TcpListener::bind("127.0.0.1:0").unwrap();
+    let upstream = daemon.local_addr().unwrap();
+    thread::spawn(move || {
+        for stream in daemon.incoming() {
+            let mut stream = stream.unwrap();
+            thread::spawn(move || {
+                let mut byte = [0u8; 1];
+                if stream.read_exact(&mut byte).is_ok() && stream.write_all(&byte).is_ok() {
+                    let _ = io::copy(&mut stream, &mut io::sink());
+                }
+            });
+        }
+    });
+    upstream
+}
+
+fn echo(client: &mut TcpStream, byte: u8) -> io::Result<u8> {
+    client.write_all(&[byte])?;
+    let mut answer = [0u8; 1];
+    client.read_exact(&mut answer)?;
+    Ok(answer[0])
 }
 
 #[test]
@@ -144,4 +173,53 @@ fn daemon_edge_keeps_serving_more_connections_than_its_slot_limit() {
         client.read_to_end(&mut response).unwrap();
         assert_eq!(response, [round]);
     }
+}
+
+#[test]
+fn daemon_edge_serves_a_waiting_connection_once_a_slot_frees() {
+    let edge = spawn_edge(spawn_holding_daemon());
+    let mut held = Vec::new();
+    for round in 0..4u8 {
+        let mut client = TcpStream::connect(edge).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        assert_eq!(echo(&mut client, round).unwrap(), round);
+        held.push(client);
+    }
+    let mut waiting = TcpStream::connect(edge).unwrap();
+    waiting
+        .set_read_timeout(Some(Duration::from_millis(300)))
+        .unwrap();
+    assert!(
+        echo(&mut waiting, 9).is_err(),
+        "a fifth connection was relayed while every slot was busy"
+    );
+    drop(held.remove(0));
+    waiting
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    let mut answer = [0u8; 1];
+    waiting.read_exact(&mut answer).unwrap();
+    assert_eq!(answer, [9]);
+}
+
+#[test]
+fn daemon_edge_frees_the_slot_of_a_client_that_stops_reading() {
+    let flooding = TcpListener::bind("127.0.0.1:0").unwrap();
+    let flood_upstream = flooding.local_addr().unwrap();
+    let (flood_ended, ended) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let (mut stream, _) = flooding.accept().unwrap();
+        let chunk = vec![0u8; 64 * 1024];
+        while stream.write_all(&chunk).is_ok() {}
+        flood_ended.send(()).unwrap();
+    });
+    let edge = spawn_edge_with(flood_upstream, 1, Duration::from_millis(200));
+    // Never reads, so the edge's writes to it stall once the buffers fill.
+    let stalled = TcpStream::connect(edge).unwrap();
+    ended
+        .recv_timeout(Duration::from_secs(20))
+        .expect("the stalled connection was never closed");
+    drop(stalled);
 }

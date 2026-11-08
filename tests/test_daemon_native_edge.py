@@ -45,6 +45,12 @@ def _listener() -> socket.socket:
     return listener
 
 
+def _edge_process(code: str) -> native_edge._EdgeProcess:
+    liveness, child_end = socket.socketpair()
+    child_end.close()
+    return native_edge._EdgeProcess(subprocess.Popen((sys.executable, "-c", code)), liveness)
+
+
 def test_no_edge_leaves_the_server_on_its_public_socket(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     public = _listener()
     server = _RecordingServer(public)
@@ -83,9 +89,9 @@ def test_edge_moves_the_server_to_a_private_port_and_passes_the_public_socket(
     monkeypatch.delenv(native_edge.EDGE_ENV, raising=False)
     monkeypatch.setattr(native_edge, "_resolve_executable", lambda guard_home: Path(sys.executable))
 
-    def fake_spawn(executable: Path, listener: socket.socket, upstream_port: int) -> subprocess.Popen[bytes]:
+    def fake_spawn(executable: Path, listener: socket.socket, upstream_port: int) -> native_edge._EdgeProcess:
         spawned.append((listener.getsockname()[1], upstream_port))
-        return subprocess.Popen((sys.executable, "-c", "import time; time.sleep(30)"))
+        return _edge_process("import time; time.sleep(30)")
 
     monkeypatch.setattr(native_edge, "_spawn", fake_spawn)
     edge = native_edge.start_native_daemon_edge(server, guard_home=tmp_path, host="127.0.0.1")
@@ -115,13 +121,13 @@ def test_daemon_serves_the_public_port_itself_when_the_edge_keeps_failing(
     monkeypatch.setattr(
         native_edge,
         "_spawn",
-        lambda executable, listener, upstream_port: subprocess.Popen((sys.executable, "-c", "pass")),
+        lambda executable, listener, upstream_port: _edge_process("pass"),
     )
     edge = native_edge.NativeDaemonEdge(
         server=server,
         public=public,
         upstream_port=server.socket.getsockname()[1],
-        process=subprocess.Popen((sys.executable, "-c", "pass")),
+        process=_edge_process("pass"),
         resolve_executable=lambda: Path(sys.executable),
     )
     try:
@@ -135,3 +141,31 @@ def test_daemon_serves_the_public_port_itself_when_the_edge_keeps_failing(
     finally:
         edge.close()
         server.socket.close()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the native edge runs on POSIX only")
+def test_edge_that_cannot_start_its_supervisor_leaves_the_public_socket(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    public = _listener()
+    server = _RecordingServer(public)
+    started: list[native_edge._EdgeProcess] = []
+    monkeypatch.delenv(native_edge.EDGE_ENV, raising=False)
+    monkeypatch.setattr(native_edge, "_resolve_executable", lambda guard_home: Path(sys.executable))
+
+    def fake_spawn(executable: Path, listener: socket.socket, upstream_port: int) -> native_edge._EdgeProcess:
+        started.append(_edge_process("import time; time.sleep(30)"))
+        return started[-1]
+
+    def no_thread(self: threading.Thread) -> None:
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(native_edge, "_spawn", fake_spawn)
+    monkeypatch.setattr(threading.Thread, "start", no_thread)
+    try:
+        assert native_edge.start_native_daemon_edge(server, guard_home=tmp_path, host="127.0.0.1") is None
+        assert server.socket is public
+        assert public.fileno() != -1
+        assert started[0].process.poll() is not None
+    finally:
+        public.close()

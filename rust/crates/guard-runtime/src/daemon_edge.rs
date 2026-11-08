@@ -13,13 +13,20 @@
 //! the same loopback address, and the daemon still applies its own loopback and
 //! authentication checks to every request.
 //!
-//! The edge exits once its parent is no longer the daemon that started it.
-//! The daemon keeps its own copy of the listening socket open, so connections
-//! queued while an edge restarts are not lost.
+//! Standard output is one end of a socket pair whose other end only the daemon
+//! holds. The edge exits the moment that end closes, so its port stops
+//! accepting as soon as the daemon dies. The daemon keeps its own copy of the
+//! listening socket open, so connections queued while an edge restarts are not
+//! lost.
+//!
+//! A write that makes no progress for [`STALLED_WRITE_TIMEOUT`] ends its
+//! connection, so a peer that stops reading cannot hold a slot. Idle
+//! connections are not affected: the timeout only runs while a write waits.
 
-use std::io;
+use std::io::{self, Read};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::os::fd::AsFd;
+use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -31,8 +38,8 @@ pub(crate) const EDGE_FEATURE: &str = "daemon-edge-v1";
 /// connections wait in the listen backlog until one closes.
 const MAX_ACTIVE_CONNECTIONS: usize = 256;
 const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
-const PARENT_CHECK_INTERVAL: Duration = Duration::from_millis(500);
 const RELAY_THREAD_STACK: usize = 64 * 1024;
+const STALLED_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 
 const EXIT_USAGE: i32 = 2;
 const EXIT_LISTENER: i32 = 3;
@@ -64,8 +71,16 @@ pub(crate) fn run(args: &[String]) -> i32 {
         eprintln!("daemon-edge: standard input is not a loopback listener");
         return EXIT_LISTENER;
     };
-    watch_parent(parsed.parent_pid);
-    match serve(&listener, upstream, MAX_ACTIVE_CONNECTIONS) {
+    let Ok(liveness) = io::stdout().as_fd().try_clone_to_owned() else {
+        return EXIT_LISTENER;
+    };
+    watch_parent(UnixStream::from(liveness));
+    match serve(
+        &listener,
+        upstream,
+        MAX_ACTIVE_CONNECTIONS,
+        STALLED_WRITE_TIMEOUT,
+    ) {
         Ok(()) => 0,
         Err(error) => {
             eprintln!("daemon-edge: listener failed: {error}");
@@ -106,16 +121,23 @@ fn upstream_address(listener: &TcpListener, upstream_port: u16) -> Option<Socket
     Some(SocketAddr::new(local.ip(), upstream_port))
 }
 
-/// Exits the process once the daemon that started it has gone; the edge is
-/// then reparented and its parent changes.
-fn watch_parent(parent_pid: u32) {
+/// Exits the process as soon as the daemon's end of the liveness socket on
+/// standard output closes. The kernel closes it when the daemon exits for any
+/// reason, so a daemon killed outright leaves no edge accepting on its port.
+fn watch_parent(liveness: UnixStream) {
     let _ = thread::Builder::new()
         .name("daemon-edge-parent".into())
         .stack_size(RELAY_THREAD_STACK)
-        .spawn(move || loop {
-            thread::sleep(PARENT_CHECK_INTERVAL);
-            if std::os::unix::process::parent_id() != parent_pid {
-                std::process::exit(0);
+        .spawn(move || {
+            let mut sink = [0u8; 64];
+            let mut reader = &liveness;
+            loop {
+                match reader.read(&mut sink) {
+                    Ok(0) => std::process::exit(0),
+                    Ok(_) => continue,
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(_) => std::process::exit(0),
+                }
             }
         });
 }
@@ -151,7 +173,12 @@ impl Slots {
     }
 }
 
-fn serve(listener: &TcpListener, upstream: SocketAddr, limit: usize) -> io::Result<()> {
+fn serve(
+    listener: &TcpListener,
+    upstream: SocketAddr,
+    limit: usize,
+    stalled_write: Duration,
+) -> io::Result<()> {
     let slots = Arc::new(Slots {
         active: Mutex::new(0),
         freed: Condvar::new(),
@@ -180,7 +207,7 @@ fn serve(listener: &TcpListener, upstream: SocketAddr, limit: usize) -> io::Resu
             .name("daemon-edge-conn".into())
             .stack_size(RELAY_THREAD_STACK)
             .spawn(move || {
-                relay_connection(client, upstream);
+                relay_connection(client, upstream, stalled_write);
                 relay_slots.release();
             });
         if spawned.is_err() {
@@ -203,13 +230,20 @@ fn accept_error_is_transient(error: &io::Error) -> bool {
 }
 
 /// Relays one connection both ways until each side has finished.
-fn relay_connection(client: TcpStream, upstream: SocketAddr) {
+fn relay_connection(client: TcpStream, upstream: SocketAddr, stalled_write: Duration) {
     let Ok(server) = TcpStream::connect_timeout(&upstream, UPSTREAM_CONNECT_TIMEOUT) else {
         let _ = client.shutdown(Shutdown::Both);
         return;
     };
     let _ = client.set_nodelay(true);
     let _ = server.set_nodelay(true);
+    if client.set_write_timeout(Some(stalled_write)).is_err()
+        || server.set_write_timeout(Some(stalled_write)).is_err()
+    {
+        let _ = client.shutdown(Shutdown::Both);
+        let _ = server.shutdown(Shutdown::Both);
+        return;
+    }
     let (Ok(client_reader), Ok(server_writer)) = (client.try_clone(), server.try_clone()) else {
         let _ = client.shutdown(Shutdown::Both);
         let _ = server.shutdown(Shutdown::Both);

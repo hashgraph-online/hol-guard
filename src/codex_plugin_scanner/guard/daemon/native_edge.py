@@ -7,7 +7,9 @@ listening socket as its standard input. The edge accepts every connection on
 the public port and relays it to the private one, so routes can move into the
 runtime without changing the address any client, hook or state file names.
 
-The daemon keeps its own copy of the public socket. Connections queue in its
+The edge's standard output is one end of a socket pair that only the daemon
+otherwise holds, so the edge stops accepting the moment the daemon exits,
+however it exits. The daemon keeps its own copy of the public socket. Connections queue in its
 backlog while an edge restarts, and when no edge can run the daemon accepts on
 the public socket itself, exactly as it did before the edge existed.
 """
@@ -64,9 +66,37 @@ def _resolve_executable(guard_home: Path) -> Path | None:
         return None
 
 
-def _spawn(executable: Path, public: socket.socket, upstream_port: int) -> subprocess.Popen[bytes] | None:
+class _EdgeProcess:
+    """An edge child and the daemon's end of its liveness socket.
+
+    The edge exits as soon as this end closes, which the kernel does when the
+    daemon exits for any reason.
+    """
+
+    def __init__(self, process: subprocess.Popen[bytes], liveness: socket.socket) -> None:
+        self.process = process
+        self.liveness = liveness
+
+    @property
+    def pid(self) -> int:
+        return self.process.pid
+
+    def wait(self) -> None:
+        self.process.wait()
+
+    def stop(self) -> None:
+        with suppress(OSError):
+            self.liveness.close()
+        _stop_process(self.process)
+
+
+def _spawn(executable: Path, public: socket.socket, upstream_port: int) -> _EdgeProcess | None:
     try:
-        return subprocess.Popen(
+        liveness, child_end = socket.socketpair()
+    except OSError:
+        return None
+    try:
+        process = subprocess.Popen(
             (
                 str(executable),
                 EDGE_COMMAND,
@@ -78,13 +108,17 @@ def _spawn(executable: Path, public: socket.socket, upstream_port: int) -> subpr
             cwd=executable.parent,
             env={},
             stdin=public.fileno(),
-            stdout=subprocess.DEVNULL,
+            stdout=child_end.fileno(),
             stderr=subprocess.DEVNULL,
             close_fds=True,
             start_new_session=True,
         )
     except (OSError, ValueError, subprocess.SubprocessError):
+        liveness.close()
         return None
+    finally:
+        child_end.close()
+    return _EdgeProcess(process, liveness)
 
 
 class NativeDaemonEdge:
@@ -96,13 +130,13 @@ class NativeDaemonEdge:
         server: _EdgeServer,
         public: socket.socket,
         upstream_port: int,
-        process: subprocess.Popen[bytes],
+        process: _EdgeProcess,
         resolve_executable: Callable[[], Path | None],
     ) -> None:
         self._server = server
         self._public = public
         self._upstream_port = upstream_port
-        self._process: subprocess.Popen[bytes] | None = process
+        self._process: _EdgeProcess | None = process
         self._started_at = time.monotonic()
         self._resolve_executable = resolve_executable
         self._lock = threading.Lock()
@@ -125,6 +159,8 @@ class NativeDaemonEdge:
                 break
             with suppress(Exception):
                 process.wait()
+            with suppress(OSError):
+                process.liveness.close()
             if self._closing.is_set():
                 return
             if time.monotonic() - self._started_at < _QUICK_EXIT_SECONDS:
@@ -145,7 +181,7 @@ class NativeDaemonEdge:
             with self._lock:
                 if self._closing.is_set():
                     if replacement is not None:
-                        _stop_process(replacement)
+                        replacement.stop()
                     return
                 self._process = replacement
                 self._started_at = time.monotonic()
@@ -187,7 +223,7 @@ class NativeDaemonEdge:
             process = self._process
             self._process = None
         if process is not None:
-            _stop_process(process)
+            process.stop()
         with suppress(OSError):
             self._public.close()
         if self._thread is not threading.current_thread():
@@ -232,13 +268,23 @@ def start_native_daemon_edge(server: _EdgeServer, *, guard_home: Path, host: str
         private.close()
         return None
     server.socket = private
-    return NativeDaemonEdge(
-        server=server,
-        public=public,
-        upstream_port=upstream_port,
-        process=process,
-        resolve_executable=lambda: _resolve_executable(guard_home),
-    )
+    try:
+        return NativeDaemonEdge(
+            server=server,
+            public=public,
+            upstream_port=upstream_port,
+            process=process,
+            resolve_executable=lambda: _resolve_executable(guard_home),
+        )
+    except BaseException as error:
+        # Without a supervisor nothing would own the child or the public
+        # socket, so stop the child and keep serving the public port.
+        server.socket = public
+        process.stop()
+        private.close()
+        if isinstance(error, Exception):
+            return None
+        raise
 
 
 __all__ = ["EDGE_ENV", "EDGE_FEATURE", "NativeDaemonEdge", "start_native_daemon_edge"]
