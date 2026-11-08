@@ -13,15 +13,17 @@ leases it, so parallel leases never receive the same job.
 
 Guard Cloud can lease the ready jobs in one response: the main worker asks
 for up to ``REVIEW_LEASE_BATCH_SIZE`` and hands every job after its own to the
-drain workers, so those jobs skip a lease round trip of their own. When the
-response held fewer jobs than asked for, nothing else was ready, so only as
-many workers start as there are jobs to hand over, plus one watch worker. A
-bulk approval submits its decisions a few at a time, so the rest arrive while
-the main worker is still settling its job; the watch worker holds one lease
-open for up to ``REVIEW_WATCH_SECONDS`` to take them as they land, instead of
-leaving them for the main worker's next long poll. Each partial batch restarts
-the watch, and at most one worker watches at a time. A watch that returns jobs
-passes the watch to another worker while it settles the first of them.
+drain workers, so those jobs skip a lease round trip of their own. A bulk
+approval's decisions keep landing while the batch settles, so every batch
+also starts a watch: one worker holds a lease open for up to
+``REVIEW_WATCH_SECONDS`` to take the rest as they land, instead of leaving
+them for a worker that frees up only once its own job has settled and its
+result is sent. The batch is one job smaller than the pool, so even a full
+batch leaves a worker free to watch. When the response held fewer jobs than
+asked for, nothing else was ready, so only as many workers start as there are
+jobs to hand over, plus the watch worker. Each batch restarts the watch, and at
+most one worker watches at a time. A watch that returns jobs passes the watch
+to another worker while it settles the first of them.
 
 Each drain worker keeps its own queue state. A worker whose result upload
 fails retries it with a short backoff. A result still unsent when the worker
@@ -50,11 +52,12 @@ from .command_queue_state import (
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
 
 REVIEW_DRAIN_WORKERS = 7
-# The main worker's job plus one handed to each drain worker.
-REVIEW_LEASE_BATCH_SIZE = 1 + REVIEW_DRAIN_WORKERS
+# The main worker's job plus one handed to every drain worker but one, which
+# stays free to watch for the rest of the burst.
+REVIEW_LEASE_BATCH_SIZE = REVIEW_DRAIN_WORKERS
 STOP_DRAIN: Final = object()
-# How long after a partial batch one worker keeps a lease open for the rest of
-# a bulk approval.
+# How long after a batch one worker keeps a lease open for the rest of a bulk
+# approval.
 REVIEW_WATCH_SECONDS = 1.5
 # A watch with less time than this left stops rather than lease.
 _REVIEW_WATCH_MIN_SECONDS = 0.05
@@ -308,14 +311,16 @@ class ReviewDrainPool:
         with self._lock:
             if self._handoff.jobs:
                 return self._handoff.jobs.popleft()
-            if self._handoff.may_lease:
-                return None
+            # A watch lease answers at once when jobs are ready, so the worker
+            # that takes up the watch loses nothing over a plain lease.
             self._drop_dead_watcher()
             if self._handoff.watcher in (None, slot):
                 remaining = self._handoff.watch_until - time.monotonic()
                 if remaining >= _REVIEW_WATCH_MIN_SECONDS:
                     self._handoff.watcher = slot
                     return ReviewWatch(wait_ms=int(remaining * 1000))
+            if self._handoff.may_lease:
+                return None
             self._free(slot)
             return STOP_DRAIN
 
@@ -348,21 +353,22 @@ class ReviewDrainPool:
     def start(self, batch: ReviewLeaseBatch | None = None) -> int:
         """Hand over ``batch``'s jobs and start idle slots; return how many started.
 
-        Without a batch, or when more jobs may be ready, every idle slot starts
-        and leases. Otherwise enough slots start to take the handed jobs, and
-        one more to watch for the rest of the burst unless a worker already is.
+        Every batch opens a watch for the rest of the burst. Without a batch,
+        or when more jobs may be ready, every idle slot starts: one watches and
+        the rest lease. Otherwise enough slots start to take the handed jobs,
+        and one more to watch unless a worker already is.
         """
 
         started = 0
         with self._lock:
             if batch is not None:
                 self._handoff.jobs.extend(batch.jobs)
+                self._handoff.watch_until = time.monotonic() + REVIEW_WATCH_SECONDS
             if batch is None or batch.more_may_be_ready:
                 self._handoff.may_lease = True
             else:
                 # Cloud returned fewer jobs than asked for, so the queue is
                 # empty; workers finish what they hold and one watches.
-                self._handoff.watch_until = time.monotonic() + REVIEW_WATCH_SECONDS
                 self._handoff.may_lease = False
             wanted = len(self._threads)
             self._drop_dead_watcher()
