@@ -177,6 +177,7 @@ from .manager import (
     release_guard_daemon_owner_lock,
     write_guard_daemon_state,
 )
+from .native_edge import NativeDaemonEdge, start_native_daemon_edge
 from .release_feed_read import (
     MAX_RELEASE_FEED_PAGE_SIZE,
     RELEASE_FEED_REQUEST_INVALID,
@@ -482,6 +483,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         capture_writer = getattr(self, "codex_binding_capture_writer", None)
         if capture_writer is not None:
             capture_writer.stop_capture()
+        native_edge = getattr(self, "native_edge", None)
+        if native_edge is not None:
+            native_edge.close()
         super().server_close()
 
     def __init__(
@@ -503,6 +507,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         # TCPServer calls server_close() when bind/activation fails. Treat the
         # request executors as already stopped until their construction finishes.
         self.request_executors_stopped = True
+        self.native_edge: NativeDaemonEdge | None = None
         self.store = store
         self.runtime = GuardSurfaceRuntime(store)
         self.auth_token = auth_token
@@ -594,6 +599,13 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
         self._socket_bound = True
+        try:
+            self.native_edge = start_native_daemon_edge(
+                self, guard_home=store.guard_home, host=str(self.server_address[0])
+            )
+        except BaseException:
+            self.server_close()
+            raise
 
     def _initialize_request_services(self) -> None:
         from .hook_direct_counters import bind_hook_counter_sink
