@@ -1,6 +1,6 @@
 use serde_json::{json, Map, Value};
 
-use super::{compose, diff_summary, is_plain, write, Stamp};
+use super::{compose, event::diff_summary, is_plain, write, Stamp};
 use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
 

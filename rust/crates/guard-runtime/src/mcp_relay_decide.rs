@@ -1021,6 +1021,7 @@ pub(crate) mod inline;
 mod observe;
 #[path = "mcp_relay_decide_package.rs"]
 mod package;
+pub(crate) use package::parse_intent as parse_package_intent;
 #[path = "mcp_relay_decide_package_answer.rs"]
 mod package_answer;
 #[path = "mcp_relay_decide_package_archive.rs"]

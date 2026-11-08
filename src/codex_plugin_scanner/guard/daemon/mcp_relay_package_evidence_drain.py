@@ -50,6 +50,12 @@ rather than the action's own source, so its record names that source and carries
 the desktop notices those rows raised. There is no approval center to open for
 them: nothing is waiting on an answer, because the call already reached the
 child.
+
+The resident writes the receipts of plain package records itself -- a forward
+under its own action and a ``policy-block`` block -- once this drain
+acknowledges the page that skipped them (``mcp_relay_receipt_package.rs``).
+The records that reach this drain are the queued, observed and refused ones,
+and any plain record the store would not take there.
 """
 
 from __future__ import annotations
