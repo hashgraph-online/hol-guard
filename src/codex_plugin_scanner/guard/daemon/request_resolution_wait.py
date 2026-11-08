@@ -8,6 +8,12 @@ review-event wake. A decision written by another process raises no wake in this
 one, so the request is read again on a short interval as well, and such a
 decision is seen no later than a polling hook would have seen it.
 
+While it waits, a held read checks only the request's stored status. Every
+review event in the daemon wakes every held read, and a bulk approval raises
+many of them, so building the full request on each wake made the waiting hooks
+compete with the approvals they were waiting for. The full request is read once
+the status changes, or at the deadline.
+
 A held read keeps one of the daemon's request slots for as long as it waits,
 so only a few are held at once. Beyond that a read is answered immediately,
 and its hook falls back to polling, leaving the remaining slots for hook
@@ -73,7 +79,7 @@ def wait_for_request_resolution(
     if not _held_reads.acquire(blocking=False):
         return approval
     try:
-        return _wait_while_pending(store, request_id, approval, timeout_seconds, monotonic)
+        return _wait_while_pending(store, request_id, timeout_seconds, monotonic)
     finally:
         _held_reads.release()
 
@@ -91,21 +97,18 @@ def _wake_review_delivery_once(store: GuardStore, request_id: str) -> None:
 def _wait_while_pending(
     store: GuardStore,
     request_id: str,
-    approval: dict[str, object],
     timeout_seconds: float,
     monotonic: Callable[[], float],
 ) -> dict[str, object] | None:
     signal = review_event_wake_signal(store.path)
     deadline = monotonic() + timeout_seconds
-    current: dict[str, object] | None = approval
     while True:
         # Take the generation before reading, so a decision committed between
         # the read and the wait still ends the wait.
         generation = signal.generation()
-        current = store.get_approval_request(request_id)
-        if current is None or current.get("status") != "pending":
-            return current
+        if store.get_approval_request_status(request_id) != "pending":
+            return store.get_approval_request(request_id)
         remaining = deadline - monotonic()
         if remaining <= 0:
-            return current
+            return store.get_approval_request(request_id)
         signal.wait(generation, min(remaining, RESOLUTION_RECHECK_SECONDS))
