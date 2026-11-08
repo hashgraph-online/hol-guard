@@ -134,20 +134,16 @@ pub(super) fn tests(
                 || written_name(file.opening(*at))
                     .is_some_and(|name| name.to_lowercase().starts_with("test"))
         };
-        let tests: Vec<usize> = (0..file.sections.len()).filter(named_test).collect();
-        // A test class counts by the tests inside it: mark every section
-        // above a test, walking up the parents once.
-        let mut holds = vec![false; file.sections.len()];
-        for &test in &tests {
-            let mut up = file.parent[test];
-            while let Some(outer) = up {
-                if std::mem::replace(&mut holds[outer], true) {
-                    break;
-                }
-                up = file.parent[outer];
-            }
-        }
-        for at in tests.iter().copied().filter(|&at| !holds[at]) {
+        let named: Vec<usize> = (0..file.sections.len()).filter(named_test).collect();
+        let above = |at: usize| std::iter::successors(file.parent[at], |&outer| file.parent[outer]);
+        let test = |at: usize| named.binary_search(&at).is_ok();
+        // A helper inside a test (`def test(): raise ...`) is part of it.
+        let tests: Vec<usize> = (named.iter().copied())
+            .filter(|&at| !above(at).any(|outer| test(outer) && !file.container(outer)))
+            .collect();
+        // A test class counts by the tests inside it.
+        let holds: BTreeSet<usize> = tests.iter().flat_map(|&at| above(at)).collect();
+        for at in tests.iter().copied().filter(|at| !holds.contains(at)) {
             let section = &file.sections[at];
             let body = file
                 .lines

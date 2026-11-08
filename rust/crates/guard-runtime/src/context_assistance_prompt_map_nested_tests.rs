@@ -80,6 +80,43 @@ fn a_test_class_counts_by_the_tests_inside_it() {
     );
 }
 
+/// A helper defined inside a test is part of that test: the test that
+/// calls `print_exception` is listed, not its `def test()` helper.
+#[test]
+fn a_helper_inside_a_test_is_part_of_it() {
+    let tests = "def test_exception_info():
+    def test():
+        raise ValueError('yay fun')
+
+    print_exception(ValueError, None, None)
+";
+    let walk = Walk {
+        checked: 200,
+        holding: vec![2],
+        words: vec![2],
+        ..Walk::default()
+    };
+    let text = map(
+        &[
+            (
+                "src/tb.py".to_owned(),
+                "def print_exception(etype, value, tb):\n    raise NotImplementedError\n"
+                    .to_owned(),
+            ),
+            ("tests/test_tb.py".to_owned(), tests.to_owned()),
+        ],
+        &sought(&walk, &[("printexception".to_owned(), true)], &[]),
+        &Asked::default(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        text.contains("tests/test_tb.py: 1 related tests, last test_exception_info 1-5"),
+        "{text}"
+    );
+}
+
 /// With no map, a request about tests still reads the tests the walk kept
 /// apart; other requests read the matched files alone.
 #[test]
