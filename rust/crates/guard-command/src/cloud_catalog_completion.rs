@@ -8,7 +8,7 @@ const MAX_PENDING_COMPLETIONS: usize = 8;
 const PENDING_COMPLETION_TTL: u64 = 120_000_000;
 // The receipt time comes from the server clock. The nonce already binds it to
 // this challenge, so tolerate ordinary skew between device and server clocks.
-const SERVER_CLOCK_SKEW: u64 = 300_000_000;
+pub const SERVER_CLOCK_SKEW: u64 = 300_000_000;
 
 fn pending(root: &Path, key: &hmac::Key, current_time: u64) -> Result<Vec<Value>> {
     if !root.join("completion-pending.json").try_exists()? {

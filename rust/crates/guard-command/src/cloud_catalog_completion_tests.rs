@@ -76,7 +76,7 @@ fn completion_is_bound_fresh_durable_and_rejects_races() {
 }
 
 #[test]
-fn completion_accepts_a_receipt_from_a_server_clock_a_little_ahead_or_behind() {
+fn completion_accepts_a_server_clock_within_the_skew_and_rejects_one_past_it() {
     let home = home();
     let view = prepare(home.path(), 166);
     let mut request = json!({"guard_home":home.path(),"token":view["token"],
@@ -86,9 +86,12 @@ fn completion_accepts_a_receipt_from_a_server_clock_a_little_ahead_or_behind() {
         "identity":{"ownerUserId":"owner","workspaceId":"workspace","deviceId":"device","runtimeId":"runtime"}});
     let manifest = view["manifest"].clone();
     let two_seconds = std::time::Duration::from_secs(2);
-    for server_clock in [
-        now_since_epoch() + two_seconds,
-        now_since_epoch() - two_seconds,
+    let past_skew = std::time::Duration::from_secs(305);
+    for (server_clock, accepted) in [
+        (now_since_epoch() + two_seconds, true),
+        (now_since_epoch() - two_seconds, true),
+        (now_since_epoch() + past_skew, false),
+        (now_since_epoch() - past_skew, false),
     ] {
         request["action"] = json!("completion_begin");
         let begun = evaluate(&request);
@@ -102,8 +105,12 @@ fn completion_accepts_a_receipt_from_a_server_clock_a_little_ahead_or_behind() {
         request["response"] = json!({"schemaVersion":"guard.extension-catalog-sync.v2",
             "catalogDigest":manifest["catalogDigest"],"accepted":true,"complete":true,
             "observation":observation});
-        let accepted = evaluate(&request);
-        assert!(accepted.get("error").is_none(), "{accepted}");
+        let result = evaluate(&request);
+        if !accepted {
+            assert!(result.get("error").is_some(), "{result}");
+            continue;
+        }
+        assert!(result.get("error").is_none(), "{result}");
         request["action"] = json!("completion_read");
         assert_eq!(evaluate(&request)["payload"], observation);
     }
