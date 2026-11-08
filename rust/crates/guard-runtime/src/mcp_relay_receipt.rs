@@ -14,9 +14,9 @@
 //! whose approval flow never opens the browser its receipt is all that is left
 //! to write. A safe-alternative block's silent inbox row follows its receipt
 //! through the same `queue_blocked_approvals` store operation the daemon's
-//! `record_unprompted_review` calls. A relayed package call's forward or
-//! policy block is plain too: its receipt is written against the package
-//! request's artifact, which the resident rebuilds from the record
+//! `record_unprompted_review` calls. A relayed package call's forward, policy
+//! block or ask block is plain too: its receipt is written against the
+//! package request's artifact, which the resident rebuilds from the record
 //! (`mcp_relay_receipt_package.rs`).
 //!
 //! Everything else is still drained to the daemon: a remembered allow writes
