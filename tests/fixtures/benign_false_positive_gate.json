@@ -3704,6 +3704,125 @@
       "expect": "allow"
     },
     {
+      "id": "shell-kubectl-jsonpath-selects-container-environment-names",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n web get deploy api -o jsonpath='{.spec.template.spec.containers[0].env[*].name}'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-kubectl-jsonpath-range-over-container-environment",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n web get deploy api -o 'jsonpath={range .spec.template.spec.containers[0].env[*]}{.name}{\"\\n\"}{end}'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-kubectl-go-template-reads-container-environment",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n web get deploy api -o go-template='{{range .spec.template.spec.containers}}{{range .env}}{{.name}}{{end}}{{end}}'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-kubectl-custom-columns-name-an-environment-field",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n web get deploy api -o custom-columns=ENV:.spec.template.spec.containers[0].env[0].name"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-kubectl-jsonpath-cannot-reach-a-secret",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n web get secret api -o jsonpath='{.data.token}'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-kubectl-jsonpath-selector-asks-for-a-credential",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n web get deploy api -o 'jsonpath={.spec.template.spec.containers[0].env[?(@.name==\"PASSWORD\")].value}'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-kubectl-output-template-file-reads-a-local-path",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n web get deploy api -o custom-columns-file=./columns.txt"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-kubectl-get-usage-text",
       "fix_area": "queue",
       "harnesses": [
