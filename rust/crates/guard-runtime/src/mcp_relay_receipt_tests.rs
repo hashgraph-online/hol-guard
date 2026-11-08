@@ -5,6 +5,7 @@ use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
 
 const HOME: &str = "/home/guard/.hol-guard";
+const CENTER: &str = "http://127.0.0.1:4781";
 const HASH: &str = "guard-approval-context:v1:0123456789abcdef";
 
 /// A queued relay record as the native relay leaves it.
@@ -68,7 +69,16 @@ fn stamp() -> Stamp {
 }
 
 fn composed(record: &Value) -> Map<String, Value> {
-    compose(HOME, record, &stamp()).expect("a plain record composes")
+    compose(HOME, record, &stamp())
+        .expect("a plain record composes")
+        .0
+}
+
+/// The silent inbox row a composed record adds, if any.
+fn row(record: &Value) -> Option<Map<String, Value>> {
+    compose(HOME, record, &stamp())
+        .expect("a plain record composes")
+        .1
 }
 
 fn edited(mut record: Value, edit: impl FnOnce(&mut Value)) -> Value {
@@ -232,7 +242,7 @@ fn an_ask_block_writes_the_pending_receipt_with_projected_risk() {
         crate::mcp_proxy_projection::call_projection(&guard_contracts::McpCallProjectionQueryV1 {
             tool_name: "run_command".to_owned(),
             params: record["params"].clone(),
-            risk: super::record::plain(&record).unwrap().queued_risk,
+            risk: super::record::plain(&record).unwrap().projected_risk,
         })
         .unwrap();
     let payload: Value =
@@ -242,6 +252,81 @@ fn an_ask_block_writes_the_pending_receipt_with_projected_risk() {
         projected["risk"]["risk_categories"]
     );
     assert_ne!(payload["risk_categories"], json!(["decision-only"]));
+}
+
+/// A safe-alternative block, which the proxy records with a silent inbox row.
+fn reviewed(record: Value) -> Value {
+    edited(record, |record| {
+        record["review"] = json!({
+            "redaction_level": "full",
+            "approval_center_url": CENTER,
+        });
+    })
+}
+
+#[test]
+fn a_safe_alternative_block_writes_its_receipt_then_a_silent_row() {
+    let record = reviewed(record("block", "policy-safe-alternative", "review"));
+    let args = composed(&record);
+    assert_eq!(args["receipt"]["approval_source"], "policy");
+    assert_eq!(args["receipt"]["policy_decision"], "review");
+    assert_eq!(args["inventory"]["approved"], false);
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    let projected =
+        crate::mcp_proxy_projection::call_projection(&guard_contracts::McpCallProjectionQueryV1 {
+            tool_name: "run_command".to_owned(),
+            params: record["params"].clone(),
+            risk: super::record::plain(&record).unwrap().projected_risk,
+        })
+        .unwrap();
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        payload["risk_categories"],
+        projected["risk"]["risk_categories"]
+    );
+
+    let row = row(&record).expect("a safe-alternative block adds a row");
+    assert_eq!(row["harness"], "codex");
+    assert_eq!(row["prompt_shown"], false);
+    assert_eq!(row["redaction_level"], "full");
+    assert_eq!(row["now"], stamp().now);
+    // The origin the daemon listens on, as the relay's binding carried it.
+    assert_eq!(row["approval_center_url"], CENTER);
+    assert_eq!(row["continuation"]["harness"], "codex");
+    assert_eq!(row["continuation"]["now"], stamp().now);
+    let items = row["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    let artifacts = row["artifacts"].as_object().unwrap();
+    assert!(artifacts.contains_key("codex:project:shell:run_command"));
+    // The row records the decision's evidence without the firewall verdict.
+    assert!(items[0].get("scanner_evidence").is_none(), "{}", items[0]);
+}
+
+#[test]
+fn a_silent_row_carries_the_decision_and_appended_evidence() {
+    let record = edited(
+        reviewed(record(
+            "block",
+            "policy-safe-alternative",
+            "require-reapproval",
+        )),
+        |record| record["evidence_append"] = json!([{"source": "post_claim_check"}]),
+    );
+    let row = row(&record).expect("a reapproval block adds a row");
+    assert_eq!(
+        row["items"][0]["scanner_evidence"],
+        json!([{"source": "post_claim_check"}])
+    );
+}
+
+#[test]
+fn only_a_reviewable_safe_alternative_adds_a_row() {
+    let blocked = reviewed(record("block", "policy-safe-alternative", "block"));
+    assert!(is_plain(&blocked));
+    assert!(row(&blocked).is_none());
+    assert!(row(&record("block", "policy-block", "review")).is_none());
+    assert!(row(&asked(record("block", "approval-center-pending", "review"))).is_none());
 }
 
 #[test]
@@ -290,6 +375,40 @@ fn records_the_daemon_owns_are_not_plain() {
                 record["harness"] = json!("cline");
                 record["identity"]["artifact"]["harness"] = json!("cline");
             },
+        ),
+        // A safe-alternative block without its row is the daemon's to write.
+        record("block", "policy-safe-alternative", "review"),
+        reviewed(record("block", "policy-block", "review")),
+        reviewed(record("forward", "policy", "allow")),
+        reviewed(asked(record("block", "approval-center-pending", "review"))),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["redaction_level"] = json!("secret"),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["extra"] = json!(true),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"] = json!("full"),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| {
+                record["review"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("approval_center_url");
+            },
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["approval_center_url"] = json!(4781),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["approval_center_url"] = json!(" "),
         ),
         record("block", "policy-block", "allow"),
         edited(record("forward", "policy", "allow"), |record| {
@@ -364,6 +483,40 @@ fn plain_records_land_in_the_store() {
     assert!(unwritten.is_empty(), "{unwritten:?}");
     assert_eq!(count(&home, "runtime_receipts"), before + 2);
     assert_eq!(count(&home, "guard_events"), 2);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_safe_alternative_block_lands_its_receipt_and_its_silent_row() {
+    let (receipts, inventory) = vectors();
+    let home = temp_home("relay-receipt-silent-row");
+    build_database(&home.join("guard.db"), &receipts, &inventory);
+    // The approval tables the receipt vectors leave out, from the queue
+    // write's own schema.
+    let store: Value = serde_json::from_str(include_str!(
+        "../testdata/guard_store/approval_request_write_vectors.json"
+    ))
+    .unwrap();
+    let connection = rusqlite::Connection::open(home.join("guard.db")).unwrap();
+    for statement in store["schema_sql"].as_array().unwrap() {
+        let sql = statement.as_str().unwrap();
+        if !sql.contains("TRIGGER guard_review_outbox_after_") {
+            let _ = connection.execute_batch(sql);
+        }
+    }
+    drop(connection);
+    let before = count(&home, "runtime_receipts");
+    let unwritten = write(
+        home.to_str().unwrap(),
+        vec![reviewed(record(
+            "block",
+            "policy-safe-alternative",
+            "review",
+        ))],
+    );
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    assert_eq!(count(&home, "approval_requests"), 1);
     let _ = std::fs::remove_dir_all(&home);
 }
 

@@ -19,7 +19,9 @@ blocked-request mode is blocked by the resident, and its record carries the
 receipt redaction level the proxy's config binds. It is recorded as
 ``_queue_approval_center_response`` records it: the ``policy-safe-alternative``
 block receipt with the risk categories of the call projected with its
-artifact, then the silent inbox row ``record_unprompted_review`` writes.
+artifact, then the silent inbox row ``record_unprompted_review`` writes. A
+current resident writes both itself, so only an older resident still hands
+those records here.
 
 Under the ``ask`` mode the resident writes the call's approval request itself
 and blocks on it, so its record carries that request instead of an inbox row:
@@ -64,6 +66,7 @@ _RECORD_KEYS = frozenset(
 _APPEND_KEY = "evidence_append"
 # The silent inbox row, present only on a safe-alternative block's record.
 _REVIEW_KEY = "review"
+_REVIEW_FIELDS = frozenset({"redaction_level", "approval_center_url"})
 # The written approval request, present only on an ask block's record.
 _APPROVAL_KEY = "approval"
 # The remembered allow, present only on an inline-approved forward's record.
@@ -216,9 +219,16 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
 
 
 def _redaction_level(review: object) -> str | None:
-    """The redaction level a safe-alternative block's inbox row is written with."""
+    """The redaction level a safe-alternative block's inbox row is written with.
 
-    if not isinstance(review, Mapping) or set(review) != {"redaction_level"}:
+    A current resident also carries the approval center origin it writes the
+    row with itself; the daemon links the row to its own origin instead.
+    """
+
+    if not isinstance(review, Mapping) or not {"redaction_level"} <= set(review) <= _REVIEW_FIELDS:
+        return None
+    center = review.get("approval_center_url")
+    if center is not None and not isinstance(center, str):
         return None
     level = review["redaction_level"]
     return level if isinstance(level, str) and level in _REDACTION_LEVELS else None

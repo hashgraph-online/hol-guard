@@ -289,6 +289,9 @@ enum Routed {
     SafeAlternative {
         policy_action: String,
         redaction_level: String,
+        /// The approval center origin the daemon listens on, which the
+        /// block's silent inbox row links to.
+        center: Option<String>,
     },
     /// The queue route's approval-center block under `ask`, whose request row
     /// is already written (`mcp_relay_decide_ask.rs`).
@@ -570,6 +573,7 @@ fn decide(
                 _ => queue::safe_alternative(
                     mode,
                     resolved.redaction_level.as_deref(),
+                    admitted.binding.review.approval_center_origin.as_deref(),
                     policy_action,
                 )?,
             };
@@ -756,8 +760,15 @@ fn settle(
         Routed::SafeAlternative {
             policy_action,
             redaction_level,
+            center,
         } => {
-            review = Some(json!({"redaction_level": redaction_level}));
+            // The center lets the resident write the row itself; the daemon
+            // links a row to its own origin and ignores it.
+            let mut fields = json!({"redaction_level": redaction_level});
+            if let Some(center) = center {
+                fields["approval_center_url"] = json!(center);
+            }
+            review = Some(fields);
             let (message, data) = queue::safe_alternative_block(tool, server, &decision.signals);
             (
                 Some(Answer::Block { message, data }),
@@ -906,6 +917,7 @@ fn settle_package(
                         _ => queue::safe_alternative(
                             mode,
                             resolved.redaction_level.as_deref(),
+                            admitted.binding.review.approval_center_origin.as_deref(),
                             policy_action.clone(),
                         )?,
                     }
@@ -999,7 +1011,7 @@ fn provider_catalog_hash(
 #[path = "mcp_relay_decide_ask.rs"]
 mod ask;
 #[path = "mcp_relay_decide_ask_row.rs"]
-mod ask_row;
+pub(crate) mod ask_row;
 #[path = "mcp_relay_decide_claim.rs"]
 mod claim;
 pub(crate) use claim::claim;
