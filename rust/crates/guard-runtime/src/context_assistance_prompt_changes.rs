@@ -1,11 +1,10 @@
 //! What changed in the project since a session's first prompt, for a prompt
 //! that asks about changes: each changed file with the definitions or
 //! sections the changes fall in, at their current lines, then each commit
-//! made since that prompt, newest first. An agent reviewing a teammate's push
-//! opens those lines instead of running `git` and reading each file. A small
-//! commit's diff is shown too when the prompt is about someone else's push or
-//! a failure, since then the diff itself is what the agent needs; otherwise
-//! the agent made the changes and already has them in its session.
+//! made since that prompt, newest first, and the whole diff when it is small.
+//! An agent reviewing changes reads them here instead of running `git` and
+//! reading each file. When the whole diff is too big, a small commit's diff is
+//! shown when the prompt is about someone else's push or a failure.
 //!
 //! This is the one part of prompt context that runs a program. Only a Git
 //! Guard trusts runs (never one from the project, the home folder or a temp
@@ -25,7 +24,7 @@ use crate::context_assistance_engine::screened_texts;
 use crate::git_execution_safety_binary::resolve_trusted_git;
 use crate::git_execution_safety_config::Environment;
 use crate::git_execution_safety_probe::Prober;
-use labels::{render, Commit};
+use labels::{commits, render, uncommitted, Commit, Named, Since};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -35,8 +34,6 @@ use std::time::{Duration, Instant};
 const BUDGET: usize = 2_000;
 /// The longest commit diff shown.
 const MAX_SHOWN_DIFF: usize = 1_500;
-const MAX_COMMITS: &str = "8";
-const MAX_SUBJECT_CHARS: usize = 80;
 const MAX_SESSIONS: usize = 64;
 /// A Git call starts only with at least this much of the wait left.
 const MIN_LEFT: Duration = Duration::from_millis(150);
@@ -57,12 +54,14 @@ const DIFF: [&str; 7] = [
     "--dst-prefix=b/",
     "--ignore-submodules=all",
 ];
-const WORDS: [&str; 8] = [
-    "change", "changed", "changes", "pushed", "teammate", "review", "diff", "broke",
-];
+const WORDS: &str =
+    "change changed changes pushed teammate review diff broke commit commits committed recently";
 /// Words for a prompt about a change the agent did not make, or one that
 /// broke something: then a commit's own diff is worth showing.
 const OTHERS: [&str; 5] = ["teammate", "pushed", "broke", "broken", "failing"];
+
+/// Words that, just before a change word, say there is none to look at.
+const NOT: [&str; 5] = ["no", "not", "without", "don", "dont"];
 
 /// Whether `prompt` asks about what changed.
 pub(super) fn about_changes(prompt: &str) -> bool {
@@ -71,10 +70,15 @@ pub(super) fn about_changes(prompt: &str) -> bool {
         .split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .collect();
-    words
-        .iter()
-        .any(|word| WORDS.contains(word) || word.starts_with("regress"))
-        || words.windows(2).any(|pair| pair == ["this", "session"])
+    // "no code changes" or "don't change anything" rules changes out.
+    let denied = |at: usize| {
+        words[at.saturating_sub(2)..at]
+            .iter()
+            .any(|word| NOT.contains(word))
+    };
+    (words.iter().enumerate()).any(|(at, word)| {
+        (WORDS.split(' ').any(|known| known == *word) || word.starts_with("regress")) && !denied(at)
+    }) || words.windows(2).any(|pair| pair == ["this", "session"])
 }
 
 /// Whether `prompt` is about someone else's change or a failure.
@@ -88,7 +92,10 @@ pub(super) fn about_others(prompt: &str) -> bool {
 }
 
 /// Records the commit `session` started at, on its first prompt, and for a
-/// prompt about changes returns what changed since then.
+/// prompt about changes returns what changed since then. A prompt about
+/// someone else's change or a failure gets the newest commit instead: what
+/// was just pulled or pushed, not the session's own edits, which the agent
+/// made and already holds.
 pub(super) fn since_start(
     guard_home: &Path,
     home: &Path,
@@ -108,13 +115,15 @@ pub(super) fn since_start(
         return None;
     }
     let git = git.or_else(|| Git::find(root, home))?;
-    changes(
-        &git,
-        base.as_deref(),
-        about_others(prompt),
-        until,
-        |paths| screened_texts(guard_home, root, app, paths, paths.len(), until),
-    )
+    let parent = newest(&git, prompt, until);
+    let since = match (&parent, &base) {
+        (Some(parent), _) => Since::Newest(parent),
+        (None, Some(base)) => Since::Start(base),
+        (None, None) => Since::Nothing,
+    };
+    changes(&git, since, about_others(prompt), until, |paths| {
+        screened_texts(guard_home, root, app, paths, paths.len(), until)
+    })
 }
 
 /// A trusted Git, run in one project with a bare environment.
@@ -188,6 +197,16 @@ fn started(session: &Session, git: &Git, until: Instant) -> Option<String> {
     }
     bases.push_back((session.clone(), head.to_owned()));
     Some(head.to_owned())
+}
+
+/// The newest commit's parent, for a prompt about someone else's change or
+/// a failure.
+fn newest(git: &Git, prompt: &str, until: Instant) -> Option<String> {
+    if !about_others(prompt) {
+        return None;
+    }
+    let parent = git.run(&["rev-parse", "--verify", "--quiet", "HEAD^"], until)?;
+    Some(parent.trim().to_owned()).filter(|parent| commit_id(parent))
 }
 
 fn recorded(session: &Session) -> Option<String> {
@@ -322,12 +341,13 @@ fn header_counts(header: &str) -> Option<((usize, usize), usize)> {
 }
 
 /// The changed definitions of each file changed since `base`, uncommitted
-/// edits included, then each commit since `base`, newest first, with its
-/// diff when `show_diffs` and it is small. `screen` returns the text of each
-/// changed file Guard's read accepts; any other file is left out.
+/// edits included, then each commit since `base`, newest first, then the
+/// whole diff when it is small, or else each commit's when `show_diffs`.
+/// `screen` returns the text of each file Guard's read accepts; any other
+/// file is left out, and counted rather than named.
 pub(super) fn changes(
     git: &Git,
-    base: Option<&str>,
+    since: Since,
     show_diffs: bool,
     until: Instant,
     screen: impl FnOnce(&[String]) -> Vec<(String, String)>,
@@ -336,7 +356,8 @@ pub(super) fn changes(
     if allowed == Allowed::Nothing {
         return None;
     }
-    let base = base.filter(|base| commit_id(base));
+    let since = since.checked();
+    let base = since.base();
     // Comparing the working tree runs clean filters; with one configured,
     // only the commits are compared.
     let against: Vec<&str> = match (&allowed, base) {
@@ -350,29 +371,54 @@ pub(super) fn changes(
         let diff: Vec<&str> = ["diff", "-U0"]
             .into_iter()
             .chain(DIFF)
-            .chain(against)
+            .chain(against.iter().copied())
             .collect();
         if let Some(diff) = git.run(&diff, until) {
             changed = hunks(&diff);
         }
     }
     let commits = commits(git, base, until);
-    let paths: Vec<String> = changed
-        .iter()
-        .map(|hunk| hunk.path.clone())
+    // Which changes are committed is what an agent runs `git status` for.
+    let pending = (allowed == Allowed::Everything && !commits.is_empty())
+        .then(|| uncommitted(git, until))
+        .flatten();
+    let paths: BTreeSet<&str> = changed.iter().map(|hunk| hunk.path.as_str()).collect();
+    // A file a commit or the working tree changes back is named too, when
+    // Guard's read accepts it.
+    let listed_names: BTreeSet<&String> =
+        (commits.iter()).flat_map(|(_, _, names)| names).collect();
+    let named: Vec<String> = (paths.iter().copied())
+        .chain(
+            commits
+                .iter()
+                .flat_map(|(_, _, names)| names.iter().map(String::as_str)),
+        )
+        .chain(pending.iter().flatten().map(String::as_str))
         .collect::<BTreeSet<_>>()
         .into_iter()
+        .map(str::to_owned)
         .collect();
-    let texts = if paths.is_empty() {
+    let read = if named.is_empty() {
         Vec::new()
     } else {
-        screen(&paths)
+        screen(&named)
     };
+    let readable: Vec<&str> = read.iter().map(|(path, _)| path.as_str()).collect();
+    // Seen only in commits, a change that was undone reads as a leftover.
+    let back: Vec<String> = (named.iter())
+        .filter(|name| !paths.contains(name.as_str()) && listed_names.contains(*name))
+        .cloned()
+        .collect();
+    let texts: Vec<(String, String)> = (read.iter())
+        .filter(|(path, _)| paths.contains(path.as_str()))
+        .cloned()
+        .collect();
+    let whole = labels::whole(git, &against, &texts, until);
     let mut listed: Vec<Commit> = Vec::new();
     let mut used = 0;
-    for (commit, subject) in commits {
+    for (commit, subject, names) in commits {
         let mut diff = None;
-        if show_diffs && used < BUDGET {
+        if show_diffs && whole.is_none() && used < BUDGET {
             let show: Vec<&str> = ["show", "--format=", "--no-show-signature", "-U1"]
                 .into_iter()
                 .chain(DIFF)
@@ -388,10 +434,20 @@ pub(super) fn changes(
         listed.push(Commit {
             id: commit,
             subject,
+            files: Named::new(&names, &readable),
             diff,
         });
     }
-    render(base, &changed, &texts, &listed)
+    let pending = pending.map(|names| Named::new(&names, &readable));
+    let back = (!against.is_empty() && !back.is_empty()).then(|| Named::new(&back, &readable));
+    render(
+        since,
+        &changed,
+        &texts,
+        &listed,
+        [pending.as_ref(), back.as_ref()],
+        whole.as_ref(),
+    )
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file
@@ -406,46 +462,6 @@ fn shown_files(diff: &str, texts: &[(String, String)]) -> bool {
     !paths.is_empty()
         && headers == paths.len()
         && (paths.iter()).all(|changed| texts.iter().any(|(path, _)| path == changed))
-}
-
-/// The commits since `base`, newest first, leaving out merges.
-fn commits(git: &Git, base: Option<&str>, until: Instant) -> Vec<(String, String)> {
-    let Some(base) = base.filter(|base| commit_id(base)) else {
-        return Vec::new();
-    };
-    let range = format!("{base}..HEAD");
-    let log = [
-        "log",
-        "--no-show-signature",
-        "--no-color",
-        "--no-merges",
-        "--format=%H %s",
-        "-n",
-        MAX_COMMITS,
-        range.as_str(),
-    ];
-    let Some(listed) = git.run(&log, until) else {
-        return Vec::new();
-    };
-    listed
-        .lines()
-        .filter_map(|line| {
-            let (commit, subject) = line.split_once(' ').unwrap_or((line, ""));
-            commit_id(commit).then(|| {
-                let subject: String = subject
-                    .chars()
-                    .filter(|c| !c.is_control())
-                    .take(MAX_SUBJECT_CHARS)
-                    .collect();
-                let subject = if clean(&subject) {
-                    subject
-                } else {
-                    String::new()
-                };
-                (commit.to_owned(), subject)
-            })
-        })
-        .collect()
 }
 
 /// Whether Guard's secret scan finds nothing in `text`, having read it all.

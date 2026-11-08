@@ -34,6 +34,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
+#[path = "daemon_edge_auth.rs"]
+mod auth;
 #[path = "daemon_edge_http.rs"]
 mod http;
 #[path = "daemon_edge_reads.rs"]

@@ -387,3 +387,23 @@ fn a_template_default_holds_no_more_than_a_quoted_one() {
     }
     assert!(!flagged("const token = settings.get('TOKEN', `none`);"));
 }
+
+#[test]
+fn a_value_wrapped_onto_the_next_line_is_read_without_its_open_bracket() {
+    let wrapped = "\
+class URL:
+    def __init__(self, ud):
+        self.password = (unquote(ud['password'])
+                         if ud['password'] is not None else None)
+";
+    assert!(!flagged(wrapped));
+    let sample = ["a1b2c3d4", "e5f6g7h8i9j0"].concat();
+    for text in [
+        "password = (hunter2production".to_string(),
+        "auth_token = (decode(c2VjcmV0dG9rZW4xMjM0NQ)".to_string(),
+        format!("auth_token = (get_auth_token(\"{sample}\")"),
+        format!("auth_token = (decode(\n    \"{sample}\"))\n"),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}

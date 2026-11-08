@@ -58,6 +58,11 @@ session. Open the files if those excerpts are no longer in view.";
 const BATCHING: &str = "Each tool call re-sends this whole conversation. When you already know \
 several ranges to read or several edits to make, make those tool calls together in one response, \
 not one per turn.";
+/// Codex models tend to read again lines a note already shows, then patch and
+/// test in separate turns; each turn re-sends the whole conversation.
+const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: work from \
+them instead of reading those lines again. When you can, make the edit and run its check in the \
+same tool call (one exec script can apply the patch and run the tests).";
 
 /// A prompt's context and the excerpts it shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -96,9 +101,7 @@ pub(crate) fn harness_response(
     if let Some(store) = store {
         let before = context_len(&response);
         attach(&mut response, envelope, harness, store, started);
-        if harness == "claude-code" {
-            ask_for_batching(&mut response, before);
-        }
+        end_note(&mut response, harness, before);
     }
     Some(response)
 }
@@ -230,6 +233,7 @@ fn attach(
                 &quoted,
                 prompt,
                 about_changes,
+                &earlier,
                 deadline,
             )
         })
@@ -552,11 +556,16 @@ fn add_context(response: &mut Value, context: &str) {
     output.insert("additionalContext".into(), Value::String(combined));
 }
 
-/// Ends a note Guard added to this prompt with the request to batch tool
-/// calls; a prompt Guard added nothing to gets nothing.
-fn ask_for_batching(response: &mut Value, before: usize) {
+/// Ends a note Guard added to this prompt with how to spend fewer turns on
+/// it, worded for the harness; a prompt Guard added nothing to gets nothing.
+fn end_note(response: &mut Value, harness: &str, before: usize) {
+    let ending = match harness {
+        "claude-code" => BATCHING,
+        "codex" => ACT_ON_IT,
+        _ => return,
+    };
     if context_len(response) > before {
-        add_context(response, BATCHING);
+        add_context(response, ending);
     }
 }
 

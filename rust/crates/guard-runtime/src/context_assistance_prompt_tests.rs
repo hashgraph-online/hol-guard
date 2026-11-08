@@ -235,18 +235,31 @@ fn context_is_appended_after_any_existing_context() {
     );
 }
 
+/// A note Guard added ends with how to spend fewer turns on it, worded for
+/// the harness: Claude Code is asked to batch its calls, Codex to work from
+/// the code shown and to edit and test in one call. Other harnesses, and a
+/// prompt Guard added nothing to, get no ending.
 #[test]
-fn only_a_note_guard_added_asks_for_batched_calls() {
-    let mut notice = json!({"hookSpecificOutput": {"additionalContext": "notice"}});
-    let before = context_len(&notice);
-    ask_for_batching(&mut notice, before);
-    assert_eq!(notice["hookSpecificOutput"]["additionalContext"], "notice");
-    add_context(&mut notice, "map");
-    ask_for_batching(&mut notice, before);
-    assert_eq!(
-        notice["hookSpecificOutput"]["additionalContext"],
-        format!("notice\n\nmap\n\n{BATCHING}")
-    );
+fn only_a_note_guard_added_ends_with_the_harness_hint() {
+    for (harness, ending) in [
+        ("claude-code", Some(BATCHING)),
+        ("codex", Some(ACT_ON_IT)),
+        ("omp", None),
+    ] {
+        let mut notice = json!({"hookSpecificOutput": {"additionalContext": "notice"}});
+        let before = context_len(&notice);
+        end_note(&mut notice, harness, before);
+        assert_eq!(notice["hookSpecificOutput"]["additionalContext"], "notice");
+        add_context(&mut notice, "map");
+        end_note(&mut notice, harness, before);
+        let expected = ending.map_or("notice\n\nmap".to_owned(), |ending| {
+            format!("notice\n\nmap\n\n{ending}")
+        });
+        assert_eq!(
+            notice["hookSpecificOutput"]["additionalContext"], expected,
+            "{harness}"
+        );
+    }
 }
 
 #[test]

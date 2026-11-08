@@ -23,7 +23,7 @@ def other():
 
 /// What the map looks for when `checked` files were walked and each term,
 /// marked when the prompt wrote it as a name, is in that many code files.
-fn looking_for(terms: &[(&str, bool, usize)]) -> Vec<Sought> {
+pub(super) fn looking_for(terms: &[(&str, bool, usize)]) -> Vec<Sought> {
     let holding: Vec<usize> = terms.iter().map(|(_, _, holding)| *holding).collect();
     let walk = Walk {
         checked: 200,
@@ -38,13 +38,13 @@ fn looking_for(terms: &[(&str, bool, usize)]) -> Vec<Sought> {
     sought(&walk, &terms, &[])
 }
 
-fn files(list: &[(&str, &str)]) -> Vec<(String, String)> {
+pub(super) fn files(list: &[(&str, &str)]) -> Vec<(String, String)> {
     list.iter()
         .map(|(path, text)| ((*path).to_owned(), (*text).to_owned()))
         .collect()
 }
 
-fn later() -> Instant {
+pub(super) fn later() -> Instant {
     Instant::now() + Duration::from_secs(10)
 }
 
@@ -128,6 +128,10 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
+        everywhere: false,
+        earlier: Vec::new(),
+        spellings: Vec::new(),
+        renames: Vec::new(),
     };
     let text = map(
         &files(&[
@@ -169,7 +173,8 @@ def test_other():\n    return 1\n";
 }
 
 /// The few tests that use the request's rare word come before the many that
-/// only use the class it names.
+/// only use the class it names, and are shown whole, once a session. A rename
+/// or a review asks where code is, so it gets their lines only.
 #[test]
 fn tests_using_a_rare_word_come_first() {
     let mut many = String::new();
@@ -179,22 +184,45 @@ fn tests_using_a_rare_word_come_first() {
     let rare = "def test_plain():\n    Choice(['a'])\n\n\
 def test_sensitive_a():\n    Choice(['a'], case_sensitive=False)\n\n\
 def test_sensitive_b():\n    Choice(['b'], case_sensitive=False)\n";
-    let text = mapped_text(
-        &[
-            ("src/core.py", CORE),
-            ("tests/test_many.py", &many),
-            ("tests/test_rare.py", rare),
-        ],
-        &[("choice", true, 3), ("casesensitive", true, 2)],
-    )
-    .unwrap();
+    let list = files(&[
+        ("src/core.py", CORE),
+        ("tests/test_many.py", &many),
+        ("tests/test_rare.py", rare),
+    ]);
+    let terms = looking_for(&[("choice", true, 3), ("casesensitive", true, 2)]);
+    let first = map(&list, &terms, &Asked::default(), later()).unwrap();
     assert!(
-        text.contains(
+        first.text.contains(
             "Tests:\ntests/test_rare.py: 2 related tests, last test_sensitive_b 7-8\n\
+tests/test_rare.py:4-5\n```\ndef test_sensitive_a():\n    Choice(['a'], case_sensitive=False)\n```\n\
+tests/test_rare.py:7-8\n```\ndef test_sensitive_b():\n    Choice(['b'], case_sensitive=False)\n```\n\
 tests/test_many.py: 6 related tests"
         ),
-        "{text}"
+        "{}",
+        first.text
     );
+    assert!(first.text.starts_with(&format!("{HEADER} {SHOWN_NOTE}")));
+    assert_eq!(first.shown.len(), 2);
+    assert!(!first.text.contains("test_choice_0():"), "{}", first.text);
+    let again = Asked {
+        earlier: first.shown.clone(),
+        ..Asked::default()
+    };
+    let rename = Asked {
+        everywhere: true,
+        ..Asked::default()
+    };
+    let review = Asked {
+        changes: true,
+        ..Asked::default()
+    };
+    for asked in [again, rename, review] {
+        let text = map(&list, &terms, &asked, later()).unwrap().text;
+        assert!(
+            text.contains("tests/test_rare.py: 2 related tests") && !text.contains("```"),
+            "{text}"
+        );
+    }
 }
 
 /// The doc section that quotes the request's rare name wins over sections
@@ -283,6 +311,22 @@ fn a_common_plain_word_places_nothing() {
     // defined, but its uses place nothing.
     let used_only = files(&[("src/read.py", uses)]);
     assert!(map(&used_only, &named, &Asked::default(), later()).is_none());
+}
+
+/// A plain word an example script defines is not a name: "commit" in a
+/// prompt does not name `examples/aliases/aliases.py`'s `commit`. Library code
+/// defining the word still counts, and so does the word written as a name.
+#[test]
+fn a_plain_word_defined_only_in_examples_names_nothing() {
+    let example = "def commit(repo):\n    repo.save()\n";
+    let plain = [("commit", false, 1)];
+    let named = [("commit", true, 1)];
+    let text = mapped_text(&[("examples/aliases/aliases.py", example)], &plain);
+    assert!(!text.unwrap_or_default().contains(NAMED_TITLE));
+    let text = mapped_text(&[("examples/aliases/aliases.py", example)], &named).unwrap();
+    assert!(text.contains(NAMED_TITLE), "{text}");
+    let text = mapped_text(&[("src/vcs/commit.py", example)], &plain).unwrap();
+    assert!(text.contains(NAMED_TITLE), "{text}");
 }
 
 /// A plain word only in comments and docstrings is prose about the code and
@@ -384,6 +428,10 @@ fn a_named_changelog_stays_on_the_map() {
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
+        everywhere: false,
+        earlier: Vec::new(),
+        spellings: Vec::new(),
+        renames: Vec::new(),
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(
