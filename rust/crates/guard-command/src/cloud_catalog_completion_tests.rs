@@ -9,8 +9,6 @@ fn completion_is_bound_fresh_durable_and_rejects_races() {
         "origin":"https://example.test/api/guard/runtime/extension-catalog/sync-v2",
         "credential_binding":"d".repeat(64),
         "identity":{"ownerUserId":"owner","workspaceId":"workspace","deviceId":"device","runtimeId":"runtime"}});
-    // Produce an exact current UTC timestamp without introducing a test clock
-    // parameter into the production acceptance boundary.
     request["action"] = json!("completion_begin");
     let begun = evaluate(&request);
     assert!(begun.get("error").is_none(), "{begun}");
@@ -20,43 +18,7 @@ fn completion_is_bound_fresh_durable_and_rejects_races() {
         begun["payload"]["idempotencyKey"],
         overlapping["payload"]["idempotencyKey"]
     );
-    let clock = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap();
-    let unix = clock.as_secs();
-    let mut days = unix / 86400;
-    let mut year = 1970;
-    let leap = |y| y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
-    loop {
-        let n = if leap(year) { 366 } else { 365 };
-        if days < n {
-            break;
-        }
-        days -= n;
-        year += 1;
-    }
-    let mut month = 1;
-    loop {
-        let n = match month {
-            2 if leap(year) => 29,
-            2 => 28,
-            4 | 6 | 9 | 11 => 30,
-            _ => 31,
-        };
-        if days < n {
-            break;
-        }
-        days -= n;
-        month += 1;
-    }
-    let date = format!(
-        "{year:04}-{month:02}-{:02}T{:02}:{:02}:{:02}.{:06}Z",
-        days + 1,
-        unix % 86400 / 3600,
-        unix % 3600 / 60,
-        unix % 60,
-        clock.subsec_micros()
-    );
+    let date = utc_timestamp(now_since_epoch());
     let manifest = &view["manifest"];
     let response = json!({"schemaVersion":"guard.extension-catalog-sync.v2","catalogDigest":manifest["catalogDigest"],
         "accepted":true,"complete":true,"observation":{"schemaVersion":"guard.catalog-observation.v2",
@@ -111,4 +73,83 @@ fn completion_is_bound_fresh_durable_and_rejects_races() {
         evaluate(&request).get("error").is_some(),
         "CAS/cache cannot forge completion"
     );
+}
+
+#[test]
+fn completion_accepts_a_receipt_from_a_server_clock_a_little_ahead_or_behind() {
+    let home = home();
+    let view = prepare(home.path(), 166);
+    let mut request = json!({"guard_home":home.path(),"token":view["token"],
+        "observation":observation(home.path()),
+        "origin":"https://example.test/api/guard/runtime/extension-catalog/sync-v2",
+        "credential_binding":"d".repeat(64),
+        "identity":{"ownerUserId":"owner","workspaceId":"workspace","deviceId":"device","runtimeId":"runtime"}});
+    let manifest = view["manifest"].clone();
+    let two_seconds = std::time::Duration::from_secs(2);
+    for server_clock in [
+        now_since_epoch() + two_seconds,
+        now_since_epoch() - two_seconds,
+    ] {
+        request["action"] = json!("completion_begin");
+        let begun = evaluate(&request);
+        assert!(begun.get("error").is_none(), "{begun}");
+        let observation = json!({"schemaVersion":"guard.catalog-observation.v2",
+            "nonce":begun["payload"]["idempotencyKey"],"credentialBinding":request["credential_binding"],
+            "identity":request["identity"],"catalogDigest":manifest["catalogDigest"],
+            "enforcementCatalogDigest":manifest["enforcementCatalogDigest"],"guardVersion":manifest["guardVersion"],
+            "controlSchemaVersion":manifest["controlSchemaVersion"],"observedAt":utc_timestamp(server_clock)});
+        request["action"] = json!("completion_accept");
+        request["response"] = json!({"schemaVersion":"guard.extension-catalog-sync.v2",
+            "catalogDigest":manifest["catalogDigest"],"accepted":true,"complete":true,
+            "observation":observation});
+        let accepted = evaluate(&request);
+        assert!(accepted.get("error").is_none(), "{accepted}");
+        request["action"] = json!("completion_read");
+        assert_eq!(evaluate(&request)["payload"], observation);
+    }
+}
+
+fn now_since_epoch() -> std::time::Duration {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+}
+
+// Produce an exact UTC timestamp without introducing a test clock parameter
+// into the production acceptance boundary.
+fn utc_timestamp(clock: std::time::Duration) -> String {
+    let unix = clock.as_secs();
+    let mut days = unix / 86400;
+    let mut year = 1970;
+    let leap = |y| y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    loop {
+        let n = if leap(year) { 366 } else { 365 };
+        if days < n {
+            break;
+        }
+        days -= n;
+        year += 1;
+    }
+    let mut month = 1;
+    loop {
+        let n = match month {
+            2 if leap(year) => 29,
+            2 => 28,
+            4 | 6 | 9 | 11 => 30,
+            _ => 31,
+        };
+        if days < n {
+            break;
+        }
+        days -= n;
+        month += 1;
+    }
+    format!(
+        "{year:04}-{month:02}-{:02}T{:02}:{:02}:{:02}.{:06}Z",
+        days + 1,
+        unix % 86400 / 3600,
+        unix % 3600 / 60,
+        unix % 60,
+        clock.subsec_micros()
+    )
 }
