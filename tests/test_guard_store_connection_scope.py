@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import store_review_event_outbox_schema
+from codex_plugin_scanner.guard import sqlite_connection_cache, store_review_event_outbox_schema
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -14,11 +14,13 @@ def fixture_store(tmp_path: Path) -> GuardStore:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
     with store._connect() as connection:
         connection.execute("create table scope_fixture (value integer)")
+    # Start each test with no connection kept from setup.
+    sqlite_connection_cache.close_idle_store_connections()
     return store
 
 
 @pytest.mark.parametrize("unrelated_connections", [0, 4])
-def test_scope_reuses_connection_only_within_one_operation(
+def test_scope_reuses_one_connection_within_an_operation(
     tmp_path: Path, monkeypatch, unrelated_connections: int
 ) -> None:
     store = fixture_store(tmp_path)
@@ -43,9 +45,15 @@ def test_scope_reuses_connection_only_within_one_operation(
             with store.connection_scope(), store._connect() as second:
                 assert second is first
                 second.execute("select count(*) from scope_fixture").fetchone()
+        assert first.in_transaction is False
+    if sqlite_connection_cache._CACHE_ENABLED:
+        # The connection a clean scope hands back is kept for the next one.
+        assert len(opened) == 1
+        assert tuple(first.execute("select 1").fetchone()) == (1,)
+    else:
+        assert len(opened) == 2
         with pytest.raises(sqlite3.ProgrammingError, match="closed"):
             first.execute("select 1")
-    assert len(opened) == 2
 
 
 def test_committed_claim_survives_later_scope_failure(tmp_path: Path) -> None:
@@ -71,9 +79,7 @@ def test_failed_transaction_rolls_back_before_next_method(tmp_path: Path) -> Non
             assert connection.execute("select count(*) from scope_fixture").fetchone()[0] == 0
 
 
-def test_commit_failure_rolls_back_discards_notification_and_records_contention(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_commit_failure_rolls_back_discards_notification_and_records_contention(tmp_path: Path, monkeypatch) -> None:
     store = fixture_store(tmp_path)
     before = store.sqlite_profile()
     original_commit = store_review_event_outbox_schema.commit_review_event_transaction
@@ -239,9 +245,12 @@ def test_scope_records_pragma_contention_and_closes_failed_connection(tmp_path: 
         assert connection.execute("select count(*) from scope_fixture").fetchone()[0] == 0
     assert len(opened) == 2
     assert store.sqlite_profile()["busy_locked"] == before["busy_locked"] + 1
-    for connection in opened:
-        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
-            connection.execute("select 1")
+    failed, retried = opened
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        failed.execute("select 1")
+    sqlite_connection_cache.close_idle_store_connections()
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        retried.execute("select 1")
 
 
 def test_extended_io_error_code_poisoning_does_not_depend_on_error_text(tmp_path: Path, monkeypatch) -> None:
