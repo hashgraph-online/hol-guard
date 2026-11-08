@@ -28,6 +28,7 @@ from .cursor_actions import (
     cursor_protected_surfaces_from_store,
 )
 from .install_targets import _resolve_targets
+from .install_workspace import require_supported_codex_workspace
 from .managed_install_payload import managed_install_payload as _managed_install_payload
 from .native_install_checks import _grok_event_has_command_hook as _grok_event_has_command_hook
 from .native_install_checks import _grok_hook_command_is_guard as _grok_hook_command_is_guard
@@ -121,6 +122,8 @@ def _apply_managed_install_owned(
     assert_transition_mutation_allowed(context.guard_home)
     targets = _resolve_targets(command, requested_harness, install_all, context, store)
     active = command == "install"
+    if active and "codex" in targets:
+        require_supported_codex_workspace(context)
     managed_installs: list[dict[str, object]] = []
     for harness in targets:
         adapter = get_adapter(harness)

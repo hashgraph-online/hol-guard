@@ -113,3 +113,46 @@ fn a_receipt_that_is_not_json_is_invalid() {
     assert_eq!(reply["code"], "native_guard_store_value_error");
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[test]
+fn listing_includes_both_native_tables_in_time_order_and_is_bounded() {
+    let vectors = vectors();
+    let home = temp_home("native-receipt-list");
+    build_database(&home.join("guard.db"), &vectors);
+    let now = vectors["recorded_at"].as_str().unwrap();
+    for scenario in vectors["scenarios"].as_array().unwrap() {
+        if !scenario["error"].is_null() {
+            continue;
+        }
+        for receipt in scenario["receipt_texts"].as_array().unwrap() {
+            assert_eq!(
+                record(&home, receipt.as_str().unwrap(), now)["status"],
+                "ok"
+            );
+        }
+    }
+    let connection = Connection::open(home.join("guard.db")).unwrap();
+    let args = json!({"limit": 200});
+    let listed = super::guard_store_native_receipts::list_native_decision_receipts(
+        &connection,
+        &crate::guard_store_args::Args(args.as_object().unwrap()),
+    )
+    .unwrap();
+    let rows = listed.as_array().unwrap();
+    assert!(rows
+        .iter()
+        .any(|row| row["event_name"] == "UserPromptSubmit"));
+    assert!(rows
+        .iter()
+        .any(|row| row["event_name"] != "UserPromptSubmit"));
+    assert!(rows
+        .windows(2)
+        .all(|pair| pair[0]["decision_id"].as_str() <= pair[1]["decision_id"].as_str()));
+    let args = json!({"limit": 1});
+    let listed = super::guard_store_native_receipts::list_native_decision_receipts(
+        &connection,
+        &crate::guard_store_args::Args(args.as_object().unwrap()),
+    )
+    .unwrap();
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+}

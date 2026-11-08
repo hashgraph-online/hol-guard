@@ -2783,3 +2783,106 @@ def test_approval_queue_persists_exact_v1_context_instead_of_legacy_content_hash
     assert approval_context_token_is_well_formed(queued[0]["artifact_hash"])
     assert queued[0]["artifact_hash"] != evaluation["artifacts"][0]["artifact_hash"]
     assert queued[0]["workspace"] == str((tmp_path / "workspace").resolve())
+
+
+@pytest.mark.parametrize("change_server_after_review", [False, True])
+def test_codex_node_repl_and_five_skills_allow_once_rechecks_exact_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change_server_after_review: bool
+) -> None:
+    """Field retest: six Allow once answers must not strand an unchanged MCP server."""
+    import io
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from codex_plugin_scanner.guard.cli import prompt as prompt_module
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    script = workspace / "node_repl.js"
+    script.write_text("console.log('fixture');\n", encoding="utf-8")
+    server = GuardArtifact(
+        artifact_id="codex:project:node_repl",
+        name="node_repl",
+        harness="codex",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path=str(workspace / ".codex" / "config.toml"),
+        command="node",
+        args=(str(script),),
+        transport="stdio",
+        # Environment exposure without a credential-name signal that correctly
+        # raises a terminal sandbox-required floor rather than a review.
+        metadata={"env_keys": ["NODE_ENV"]},
+    )
+    from tests.artifact_risk_support import artifact_risk_signals
+
+    assert "receives environment variables that may contain secrets" in artifact_risk_signals(server)
+    skills = tuple(
+        GuardArtifact(
+            artifact_id=f"codex:project:skill-{index}",
+            name=f"skill-{index}",
+            harness="codex",
+            artifact_type="skill",
+            source_scope="project",
+            config_path=str(workspace / f"skill-{index}" / "SKILL.md"),
+            metadata={"content_hash": f"fixture-{index}"},
+        )
+        for index in range(5)
+    )
+    detection = replace(_detection(server), artifacts=(server, *skills))
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+        artifact_actions={artifact.artifact_id: "require-reapproval" for artifact in detection.artifacts},
+    )
+    store = GuardStore(config.guard_home)
+    reviewed = []
+
+    monkeypatch.setattr(prompt_module, "_interactive_gate_grant", lambda *_args, **_kwargs: None)
+
+    def allow_once(_detection, evaluation):
+        for item in evaluation["artifacts"]:
+            assert item["policy_action"] == "require-reapproval", item
+            reviewed.append(item["artifact_id"])
+        evaluation = prompt_module.resolve_interactive_decisions(
+            store,
+            evaluation,
+            prompt_module.build_prompt_artifacts(
+                harness="codex",
+                artifacts=list(detection.artifacts),
+                evaluation_artifacts=evaluation["artifacts"],
+            ),
+            workspace=str(workspace),
+            now="2026-11-08T12:00:00+00:00",
+            console=Console(file=io.StringIO()),
+            input_func=lambda _prompt: "1",
+        )
+        if change_server_after_review:
+            script.write_text("console.log('changed fixture');\n", encoding="utf-8")
+        return evaluation
+
+    launches = []
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda *_args: detection)
+    monkeypatch.setattr(
+        wrapper_run_finish.subprocess,
+        "run",
+        lambda *args, **kwargs: launches.append((args, kwargs)) or SimpleNamespace(returncode=0),
+    )
+    result = wrapper_run.guard_run(
+        "codex",
+        HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=config.guard_home),
+        store,
+        config,
+        dry_run=False,
+        passthrough_args=[],
+        interactive_resolver=allow_once,
+        current_config_provider=lambda: config,
+    )
+    assert len(reviewed) == 6
+    assert result["blocked"] is change_server_after_review, result
+    assert result["launched"] is not change_server_after_review, result
+    assert len(launches) == (0 if change_server_after_review else 1)
+    node_result = next(item for item in result["artifacts"] if item["artifact_id"] == server.artifact_id)
+    assert node_result["trusted_request_override"]["applied"] is not change_server_after_review
+    assert len(store.list_receipts(limit=10)) == 6

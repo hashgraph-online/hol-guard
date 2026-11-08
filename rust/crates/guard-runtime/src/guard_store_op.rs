@@ -419,6 +419,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_artifact_inventory"
         | "find_artifact_inventory_item"
         | "get_artifact_capability"
+        | "list_native_decision_receipts"
         | "list_receipts"
         | "observed_mcp_discovery"
         | "list_receipts_since_rowid"
@@ -792,6 +793,9 @@ fn dispatch(
         }
         "update_receipt_approval_context" => {
             receipt_writes::update_approval_context(connection, args)
+        }
+        "list_native_decision_receipts" => {
+            native_receipts::list_native_decision_receipts(connection, args)
         }
         "list_receipts" => receipt_reads::list_receipts(connection, args),
         "list_receipts_since_rowid" => receipt_reads::list_since_rowid(connection, args),

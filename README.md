@@ -82,6 +82,8 @@ hol-guard run codex
 
 The dry run records the current artifact state before launch. For Codex, Guard installs native pre-tool hooks and refuses a managed launch if those hooks are missing or disabled.
 
+Codex installation is user-wide: it updates `~/.codex/config.toml` for all sessions using that configuration. `--workspace` supplies workspace context; it does not limit installation to that project. After installing or uninstalling, fully quit and reopen Codex Desktop and restart existing Codex CLI sessions. Open sessions can cache the old hooks. After uninstall, those cached hooks fail closed without restarting Guard; stopping the daemon alone does not unload them.
+
 [Agent support matrix](docs/guard/harness-support.md) · [Troubleshooting](docs/guard/troubleshooting.md)
 
 <a id="guard-operations"></a>

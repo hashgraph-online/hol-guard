@@ -92,6 +92,7 @@ from ..codex_hook_trust import (
     record_guard_hook_trust,
     remap_hook_state,
 )
+from ..codex_install_notices import codex_install_notices
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
@@ -1571,7 +1572,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                 "backup_path": str(backup.path),
                 "managed_servers": [server.name for server in managed_servers],
                 "migrated_proxy_servers": list(migrated_proxies),
-                "runtime_restart_required": bool(migrated_proxies),
+                **codex_install_notices(active=True),
                 "skipped_servers": [
                     name for name in skipped_stdio_server_names(detection) if name not in migrated_proxies
                 ],
@@ -1742,7 +1743,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             "backup_path": str(backup_path),
             "managed_servers": [server.name for server in managed_servers],
             "migrated_proxy_servers": list(migrated_proxy_servers),
-            "runtime_restart_required": bool(migrated_proxy_servers),
+            **codex_install_notices(active=True),
             "skipped_servers": list(skipped_servers),
             "source_config_paths": list(detection.config_paths),
         }
@@ -1801,6 +1802,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         return {
             "harness": self.harness,
             "active": False,
+            **codex_install_notices(active=False),
             "config_path": str(target_config_path),
             **shim_manifest,
             "mode": "codex-mcp-proxy",

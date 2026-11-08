@@ -194,3 +194,33 @@ def test_the_plain_windows_launcher_reports_the_hooks_exit_code(tmp_path: Path) 
 
     assert script.endswith("exit /b\r\n")
     assert "%ERRORLEVEL%" not in script
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows command execution contract")
+@pytest.mark.parametrize("inherited_errorlevel", [None, "0"])
+def test_frozen_windows_launcher_preserves_child_failure(tmp_path: Path, inherited_errorlevel: str | None) -> None:
+    """A real CMD child failure must survive even an inherited ERRORLEVEL=0."""
+    guard_cli = tmp_path / "fake guard.cmd"
+    marker = tmp_path / "child-ran.txt"
+    guard_cli.write_text(f'@echo off\r\necho fixture > "{marker}"\r\nexit /b 7\r\n', encoding="utf-8")
+    posix_path = tmp_path / "guard-codex"
+    base_command = [str(guard_cli), "run", "codex", "--guard-home", str(tmp_path / "guard home")]
+    posix_path.write_text(f"#!/bin/sh\n# base_command = {base_command!r}\n", encoding="utf-8")
+    launcher = tmp_path / "guard-codex.cmd"
+    launcher.write_text(build_windows_script("ignored.exe", posix_path), encoding="utf-8")
+    environment = {key: value for key, value in os.environ.items() if key.upper() != "ERRORLEVEL"}
+    if inherited_errorlevel is not None:
+        environment["ERRORLEVEL"] = inherited_errorlevel
+
+    completed = subprocess.run(
+        [str(launcher), "--help"],
+        check=False,
+        shell=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert marker.read_text(encoding="utf-8").strip() == "fixture"
+    assert completed.returncode == 7, (completed.stdout, completed.stderr)

@@ -64,7 +64,8 @@ def test_guard_install_codex_adopts_equivalent_package_with_relocated_interprete
     reinstalled = adapter.install(context)
 
     assert reinstalled["migrated_proxy_servers"] == []
-    assert reinstalled["runtime_restart_required"] is False
+    # Hook configurations may still be cached even when no proxy changed.
+    assert reinstalled["runtime_restart_required"] is True
 
 
 def test_guard_install_codex_ignores_proxy_with_scalar_args(
@@ -85,7 +86,7 @@ def test_guard_install_codex_ignores_proxy_with_scalar_args(
     installed = CodexHarnessAdapter().install(context)
 
     assert installed["migrated_proxy_servers"] == []
-    assert installed["runtime_restart_required"] is False
+    assert installed["runtime_restart_required"] is True
 
 
 def test_reauthentication_rejects_incomplete_package_identity() -> None:

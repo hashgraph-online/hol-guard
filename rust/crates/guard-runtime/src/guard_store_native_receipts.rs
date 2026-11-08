@@ -16,7 +16,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{exec, placeholders, StoreError, StoreResult};
+use crate::guard_store_db::{exec, placeholders, query_all, StoreError, StoreResult};
 use crate::native_decision_receipt::{dumps_sorted, valid};
 use crate::pyjson::{self, PyVal};
 
@@ -134,4 +134,24 @@ fn flag_value(receipt: &PyVal, name: &str) -> Value {
         receipt.get(name),
         Some(PyVal::Bool(true))
     )))
+}
+
+/// Privacy-safe native decisions, separate from artifact and approval receipts.
+/// Native receipts bind workspace identity by digest, not a recoverable path;
+/// this list is scoped to the Guard home and must not invent a workspace filter.
+pub(crate) fn list_native_decision_receipts(
+    connection: &Connection,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    let limit = args.int("limit")?.clamp(0, 200);
+    let rows = query_all(
+        connection,
+        &format!(
+            "select {COLUMNS}, null as prompt_risk_classes_json from native_hook_decision_receipts \
+             union all select {COLUMNS}, prompt_risk_classes_json from native_prompt_decision_receipts \
+             order by recorded_at desc, decision_id asc limit ?"
+        ),
+        &[Value::from(limit)],
+    )?;
+    Ok(Value::Array(rows.into_iter().map(Value::Object).collect()))
 }

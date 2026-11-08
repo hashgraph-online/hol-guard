@@ -133,7 +133,16 @@ def _run_guard_receipts_command(
     output_stream: TextIO | None = None,
 ) -> int:
     store = _require_guard_store(store)
-    _emit("receipts", {"generated_at": _now(), "items": store.list_receipts()}, getattr(args, "json", False))
+    _emit(
+        "receipts",
+        {
+            "generated_at": _now(),
+            "items": store.list_receipts(),
+            "native_decisions": store.list_native_decision_receipts(),
+            "native_decision_scope": "guard-home",
+        },
+        getattr(args, "json", False),
+    )
     return 0
 
 

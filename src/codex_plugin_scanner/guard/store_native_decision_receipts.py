@@ -133,6 +133,16 @@ class StoreNativeDecisionReceiptsMixin:
         )
         return True
 
+    def list_native_decision_receipts(self, limit: int = 50) -> list[dict[str, object]]:
+        """List validated native decisions for this Guard home, newest first."""
+        rows = self._native_store_call("list_native_decision_receipts", {"limit": limit})
+        receipts = []
+        for row in rows:
+            receipt = validate_stored_native_decision_receipt(row, guard_home=getattr(self, "guard_home", None))
+            if receipt is not None:
+                receipts.append({**receipt, "recorded_at": row["recorded_at"]})
+        return receipts
+
     def get_native_decision_receipt(self: _ConnectionOwner, decision_id: str) -> dict[str, object] | None:
         """Read one complete receipt and reject changed identity or binding data."""
         if re.fullmatch(r"[0-9a-f]{64}", decision_id) is None:

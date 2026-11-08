@@ -122,3 +122,33 @@ fn a_policy_deny_overrides_an_updated_input_allow() {
     assert_eq!(output["permissionDecision"], "deny", "{rendered}");
     assert!(output.get("updatedInput").is_none(), "{rendered}");
 }
+
+#[test]
+fn a_review_link_survives_strict_codex_output_filtering() {
+    let reason = "HOL Guard paused this action. Open HOL Guard: http://127.0.0.1:5474/r/req-test#guard-token=gld1.test";
+    let response = serde_json::json!({
+        "policy_action": "review",
+        "approval_url": "http://127.0.0.1:5474/requests/req-test",
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason
+        }
+    });
+    let shaped = codex_hook_response(&entries(&response.to_string()), PRE_TOOL_USE);
+    assert_eq!(
+        shaped
+            .get("hookSpecificOutput")
+            .unwrap()
+            .get("permissionDecisionReason"),
+        Some(&PyVal::Str(reason.to_owned()))
+    );
+    assert!(shaped.get("approval_url").is_none());
+    assert_eq!(
+        shaped
+            .get("hookSpecificOutput")
+            .unwrap()
+            .get("permissionDecision"),
+        Some(&PyVal::Str("deny".to_owned()))
+    );
+}

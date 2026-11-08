@@ -1347,7 +1347,7 @@ def _render_receipts(console: Console, payload: dict[str, object]) -> None:
     receipts = _coerce_dict_list(payload.get("items"))
     console.print(
         Panel.fit(
-            f"[bold]Recent Guard receipts[/bold]\n{len(receipts)} local decisions recorded",
+            f"[bold]Recent Guard receipts[/bold]\n{len(receipts)} artifact decisions recorded",
             border_style="cyan",
         )
     )
@@ -1371,6 +1371,21 @@ def _render_receipts(console: Console, payload: dict[str, object]) -> None:
             ", ".join(_coerce_string_list(receipt.get("changed_capabilities"))) or "none",
         )
     console.print(table)
+    native = _coerce_dict_list(payload.get("native_decisions"))
+    console.print(f"Native hook decisions: {len(native)} (Guard home; not workspace-filtered)")
+    console.print("These record hook verdicts, not approval resolutions or proof a tool ran.")
+    if native:
+        decisions = Table(box=box.SIMPLE_HEAVY, show_header=True)
+        for label in ("Time", "Harness", "Event", "Policy action", "Reason", "Decision ID"):
+            decisions.add_column(label)
+        for receipt in native:
+            decisions.add_row(
+                *(
+                    str(receipt.get(key, ""))
+                    for key in ("recorded_at", "harness", "event_name", "policy_action", "reason_code", "decision_id")
+                )
+            )
+        console.print(decisions)
 
 
 def _render_inventory(console: Console, payload: dict[str, object]) -> None:
