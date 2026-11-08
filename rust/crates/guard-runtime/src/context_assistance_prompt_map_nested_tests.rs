@@ -24,7 +24,7 @@ fn each_section_finds_the_smallest_section_around_it() {
         section(13, 13),
     ];
     assert_eq!(
-        parents(&sections),
+        more::parents(&sections),
         vec![Some(4), None, None, Some(4), Some(1), Some(2)]
     );
 }
@@ -36,7 +36,7 @@ fn many_sections_are_placed_quickly() {
     let mut sections: Vec<Section> = (2..20_002).map(|line| section(line, line)).collect();
     sections.push(section(1, 20_002));
     let started = Instant::now();
-    let parent = parents(&sections);
+    let parent = more::parents(&sections);
     assert!(started.elapsed() < Duration::from_secs(1));
     assert!(parent[..20_000].iter().all(|outer| *outer == Some(20_000)));
     assert_eq!(parent[20_000], None);
