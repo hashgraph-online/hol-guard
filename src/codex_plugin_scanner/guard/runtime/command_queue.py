@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import threading
-import time
 import urllib.error
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
@@ -46,6 +44,7 @@ from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, with
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
 from .command_queue_http import request_json as _json_request
+from .command_queue_lease_ready import lane_lease_ready_operations
 from .command_queue_loop import (
     COMMAND_QUEUE_ERROR_BACKOFF_ENV,  # noqa: F401 - public compatibility export
     COMMAND_QUEUE_POLL_INTERVAL_ENV,  # noqa: F401 - public compatibility export
@@ -104,36 +103,6 @@ def lease_ready_operations(store: GuardStore) -> tuple[str, ...]:
     if review_verification_keyring_ready(store) or native_workspace_review_transport_candidate(store):
         return operations
     return tuple(operation for operation in operations if operation != EXACT_CLOUD_REVIEW_OPERATION)
-
-
-# A drain worker leases only exact Review jobs, and the pool starts right after a
-# main poll has confirmed the Review capability and keyring. Checking both again
-# before every drain lease asked the native runtime to verify the capability
-# twice per lease, which during a bulk approval cost as much interpreter time as
-# settling the jobs did. Drain leases reuse a check made in the last two seconds;
-# each leased job is still authorized on its own before it settles, so a
-# capability revoked inside that window only means a job is leased and refused.
-_LEASE_READY_REUSE_SECONDS = 2.0
-_lease_ready_clock = time.monotonic
-_lease_ready_lock = threading.Lock()
-_lease_ready_checked: dict[str, tuple[float, tuple[str, ...]]] = {}
-
-
-def _lane_lease_ready_operations(store: GuardStore) -> tuple[str, ...]:
-    key = str(store.guard_home)
-    if not _current_lane().is_drain:
-        operations = lease_ready_operations(store)
-        with _lease_ready_lock:
-            _lease_ready_checked[key] = (_lease_ready_clock(), operations)
-        return operations
-    # One drain worker checks while the others wait for its answer.
-    with _lease_ready_lock:
-        checked = _lease_ready_checked.get(key)
-        if checked is not None and _lease_ready_clock() - checked[0] < _LEASE_READY_REUSE_SECONDS:
-            return checked[1]
-        operations = lease_ready_operations(store)
-        _lease_ready_checked[key] = (_lease_ready_clock(), operations)
-        return operations
 
 
 def _generic_command_queue_operations(store: GuardStore) -> tuple[str, ...]:
@@ -243,7 +212,9 @@ def _lease_next_job(
     max_jobs: int = 1,
     on_extra_jobs: Callable[[list[dict[str, object]]], object] | None = None,
 ) -> dict[str, object] | None:
-    scope = _current_lane().lease_scope(_lane_lease_ready_operations(store), _command_queue_lease_wait_ms())
+    lane = _current_lane()
+    ready = lane_lease_ready_operations(store, drain=lane.is_drain, check=lease_ready_operations)
+    scope = lane.lease_scope(ready, _command_queue_lease_wait_ms())
     if scope is None:
         return None
     operations, wait_ms = scope
