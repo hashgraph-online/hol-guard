@@ -3,8 +3,7 @@
 //! the agent need not search or open them again before editing. For a stubbed-out
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
-use super::seen::Span;
-use super::{File, Pick, Sought, CHECK_EVERY};
+use super::{File, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
 
