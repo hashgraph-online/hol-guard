@@ -17,28 +17,37 @@
 //! Python drain drops it.
 //!
 //! A plain package record is a forward under its own action, an observed
-//! forward whose notices the resident already raised, a policy block, or an
-//! ask block whose desktop notice the resident already raised, from a harness
-//! whose approval flow never opens the browser. The `ask` branch of
-//! `_queue_package_approval_response` projects the call without the artifact,
-//! so that block's receipt records no risk categories and is all it leaves.
-//! A safe-alternative block's inbox row, an ask block still carrying its
-//! notice or opening the approval center, and an observed forward still
-//! carrying notices are still the daemon's to write.
+//! forward whose notices the resident already raised, a policy block, an ask
+//! block whose desktop notice the resident already raised, from a harness
+//! whose approval flow never opens the browser, or a safe-alternative block
+//! whose record names the approval center its inbox row links to. The `ask`
+//! branch of `_queue_package_approval_response` and the unqueued routes
+//! project the call without the artifact, so their receipts record no risk
+//! categories. A safe-alternative block projects it with the artifact, as
+//! `_queue_approval_center_response` does, and its silent inbox row follows
+//! the receipt (`_record_unprompted_review`). An ask block still carrying its
+//! notice or opening the approval center, an observed forward still carrying
+//! notices, and a safe-alternative block from a binding with no center are
+//! still the daemon's to write.
 
 use std::path::Path;
 
 use guard_command::mcp_tool_signals::risk_arguments;
-use guard_command::package_intent_common::build_package_request_artifact;
-use guard_contracts::{python_strip, McpToolArgumentsV1};
+use guard_command::package_intent_common::{build_package_request_artifact, GuardArtifact};
+use guard_contracts::{
+    python_strip, BrowserMcpArtifactV1, McpCallProjectionQueryV1, McpToolArgumentsV1,
+    McpToolRiskInputV1,
+};
 use serde_json::{json, Map, Value};
 
 use super::event::{store_args, Artifact, Receipt};
 use super::record::{
-    approval_fits, block_taxonomy, keys_fit, relayed, string_list, Relayed, APPROVAL_KEY,
-    APPROVAL_PENDING_SOURCE, BROWSER_APPROVAL_HARNESS, FORWARD_ACTIONS, RECORD_KEYS,
+    approval_fits, block_taxonomy, keys_fit, relayed, review_fields, string_list, Relayed,
+    APPROVAL_KEY, APPROVAL_PENDING_SOURCE, BROWSER_APPROVAL_HARNESS, FORWARD_ACTIONS, RECORD_KEYS,
+    REVIEWABLE, REVIEW_KEY, SAFE_ALTERNATIVE_SOURCE,
 };
-use super::{decision_evidence, receipt_evidence, strings, Call, Stamp};
+use super::{decision_evidence, receipt_evidence, strings, Args, Call, Stamp};
+use crate::mcp_relay_decide::ask_row::{package_silent_review_args, projection, Queue};
 
 /// The record kind a relayed package call is queued under.
 pub(super) const KIND: &str = "mcp_package_call";
@@ -66,6 +75,8 @@ pub(super) struct PlainPackage<'a> {
     call: Relayed<'a>,
     forward: bool,
     package: &'a Map<String, Value>,
+    /// A safe-alternative block's redaction level and approval center.
+    review: Option<(&'a str, &'a str)>,
 }
 
 pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
@@ -73,7 +84,7 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
     if !keys_fit(
         record,
         &RECORD_KEYS,
-        &[PACKAGE_KEY, APPROVAL_KEY, OBSERVED_KEY],
+        &[PACKAGE_KEY, APPROVAL_KEY, OBSERVED_KEY, REVIEW_KEY],
     ) || !record.contains_key(PACKAGE_KEY)
     {
         return None;
@@ -92,22 +103,34 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
         Some(approval) if approval_fits(approval) => true,
         Some(_) => return None,
     };
+    // A safe-alternative block whose inbox row links to the center the relay
+    // bound; one from a binding with none is the daemon's to write.
+    let review = match record.get(REVIEW_KEY) {
+        None => None,
+        Some(review) => Some(review_fields(review)?),
+    };
+    if review.is_some() && (queued || observed) {
+        return None;
+    }
     let call = relayed(record, KIND)?;
     if queued && call.harness == BROWSER_APPROVAL_HARNESS {
         return None;
     }
     // `_record_package_forward` records the action it forwarded with as the
     // source, or the mode for an observed forward. A block the package policy
-    // settled is a `policy-block`, and an ask block is recorded as pending in
-    // the approval center.
+    // settled is a `policy-block`, an ask block is recorded as pending in the
+    // approval center, and a safe-alternative block under its own source.
     let block_source = if queued {
         APPROVAL_PENDING_SOURCE
+    } else if review.is_some() {
+        SAFE_ALTERNATIVE_SOURCE
     } else {
         BLOCK_SOURCE
     };
     let forward = match call.outcome {
         "forward"
             if !queued
+                && review.is_none()
                 && FORWARD_ACTIONS.contains(&call.policy_action)
                 && if observed {
                     call.source == OBSERVE_SOURCE
@@ -131,6 +154,7 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
         call,
         forward,
         package,
+        review,
     })
 }
 
@@ -163,16 +187,13 @@ fn package_facts(package: &Value, forward: bool) -> Option<&Map<String, Value>> 
 
 /// The `record_tool_call_evidence` arguments `allow_tool_call` or
 /// `block_tool_call` writes for this record against the rebuilt package
-/// artifact.
-pub(super) fn compose(
-    guard_home: &str,
-    record: &Value,
-    stamp: &Stamp,
-) -> Option<Map<String, Value>> {
+/// artifact, and the silent inbox row a safe-alternative block adds after it.
+pub(super) fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     let PlainPackage {
         call,
         forward,
         package,
+        review,
     } = plain(record)?;
     let text = |key: &str| package[key].as_str();
     let arguments: McpToolArgumentsV1 = serde_json::from_value(record["arguments"].clone()).ok()?;
@@ -193,8 +214,22 @@ pub(super) fn compose(
     if artifact.artifact_id != text("artifact_id")? {
         return None;
     }
-    // Projected without the artifact, so no risk categories are recorded.
-    let risk_categories: [String; 0] = [];
+    // Only a safe-alternative block projects the call with the artifact, so
+    // only its receipt records risk categories.
+    let projected = match review {
+        None => None,
+        Some(_) => Some(project(&call, &artifact, &arguments)?),
+    };
+    let risk_categories: Vec<String> = match &projected {
+        None => Vec::new(),
+        Some(projected) => {
+            let categories = projected.get("risk")?.get("risk_categories")?;
+            if !string_list(categories) {
+                return None;
+            }
+            strings(categories).into_iter().map(str::to_owned).collect()
+        }
+    };
     let (raw_command_text, firewall_evidence) = receipt_evidence(
         guard_home,
         &Call {
@@ -210,10 +245,35 @@ pub(super) fn compose(
         stamp,
         &risk_categories,
     )?;
-    // `(*tool_decision_scanner_evidence(decision), *facts["evidence"])`.
+    // `(*tool_decision_scanner_evidence(decision), *facts["evidence"])`,
+    // which the inbox row records as well.
+    let mut call_evidence = decision_evidence(call.decision);
+    call_evidence.extend(package["evidence"].as_array()?.iter().cloned());
+    let signals = strings(&package["signals"]);
+    let row = review
+        .zip(projected.as_ref())
+        .filter(|_| REVIEWABLE.contains(&call.policy_action))
+        .and_then(|((redaction_level, center), projected)| {
+            silent_review(
+                &call,
+                &artifact,
+                text("artifact_hash")?,
+                &signals,
+                projected,
+                call_evidence.clone(),
+                Queue {
+                    harness: call.harness,
+                    cwd: std::env::current_dir()
+                        .map_or(Value::Null, |cwd| json!(cwd.to_string_lossy())),
+                    prompt_shown: false,
+                    center,
+                    now: &stamp.now,
+                    redaction_level,
+                },
+            )
+        });
     let mut scanner_evidence = vec![firewall_evidence];
-    scanner_evidence.extend(decision_evidence(call.decision));
-    scanner_evidence.extend(package["evidence"].as_array()?.iter().cloned());
+    scanner_evidence.extend(call_evidence);
     // `" ".join([command, *args]).strip()`.
     let launch_command = artifact
         .command
@@ -243,12 +303,61 @@ pub(super) fn compose(
             transport: json!(artifact.transport),
         },
         artifact_hash: text("artifact_hash")?,
-        signals: strings(&package["signals"]),
+        signals: signals.clone(),
         risk_categories: &risk_categories,
         scanner_evidence,
         raw_command_text,
     };
-    store_args(&receipt, stamp)
+    Some((store_args(&receipt, stamp)?, row))
+}
+
+/// `projector.project(tool_name, ordered, artifact)`: the call projected with
+/// the package artifact's risk input, from the arguments in host order.
+fn project(
+    call: &Relayed<'_>,
+    artifact: &GuardArtifact,
+    arguments: &McpToolArgumentsV1,
+) -> Option<Value> {
+    crate::mcp_proxy_projection::call_projection(&McpCallProjectionQueryV1 {
+        tool_name: call.tool_name.to_owned(),
+        params: call.params.clone(),
+        risk: Some(McpToolRiskInputV1 {
+            artifact: BrowserMcpArtifactV1 {
+                name: artifact.name.clone(),
+                command: artifact.command.clone(),
+                metadata: artifact.metadata.as_object()?.clone(),
+            },
+            arguments: arguments.clone(),
+            risk_categories: None,
+            summary_code: None,
+        }),
+    })
+    .ok()
+}
+
+/// `_record_unprompted_review`: the `queue_blocked_approvals` arguments of a
+/// safe-alternative block's inbox row against the package artifact. A row
+/// that cannot be composed is left out, and the receipt still written.
+fn silent_review(
+    call: &Relayed<'_>,
+    artifact: &GuardArtifact,
+    artifact_hash: &str,
+    signals: &[&str],
+    projected: &Value,
+    evidence: Vec<Value>,
+    queue: Queue<'_>,
+) -> Option<Map<String, Value>> {
+    let projection = projection(projected)?;
+    let signals: Vec<String> = signals.iter().map(|signal| (*signal).to_owned()).collect();
+    package_silent_review_args(
+        &queue,
+        artifact,
+        artifact_hash,
+        &signals,
+        &projection,
+        call.policy_action,
+        evidence,
+    )
 }
 
 #[cfg(test)]

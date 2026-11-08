@@ -37,13 +37,13 @@ const APPROVAL_KEYS: [&str; 5] = [
 pub(super) const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
 /// The inbox row a safe-alternative block adds, `_redaction_level`, and the
 /// approval center origin the resident links it to.
-const REVIEW_KEY: &str = "review";
+pub(super) const REVIEW_KEY: &str = "review";
 const REVIEW_FIELDS: [&str; 2] = ["redaction_level", "approval_center_url"];
 const REDACTION_LEVELS: [&str; 3] = ["full", "partial", "none"];
 /// A safe-alternative block's decision source.
-const SAFE_ALTERNATIVE_SOURCE: &str = "policy-safe-alternative";
+pub(super) const SAFE_ALTERNATIVE_SOURCE: &str = "policy-safe-alternative";
 /// `_needs_review`: the actions `queue_blocked_approvals` writes a row for.
-const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
+pub(super) const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
 /// The relay harness whose approval flow opens the approval center in the
 /// browser (`approval-center` tier, `auto_open_browser`), which the daemon's
 /// `_open_approval_center` still does for an ask block.
@@ -335,7 +335,7 @@ fn block_source_fits(queued: bool, reviewed: bool, source: &str) -> bool {
 /// `_redaction_level` with the center the resident links the row to: a
 /// known level and a loopback origin. A record from a binding with no center
 /// leaves the row, and so the receipt, to the daemon.
-fn review_fields(review: &Value) -> Option<(&str, &str)> {
+pub(super) fn review_fields(review: &Value) -> Option<(&str, &str)> {
     let review = exact_object(review, &REVIEW_FIELDS)?;
     let level = review["redaction_level"]
         .as_str()

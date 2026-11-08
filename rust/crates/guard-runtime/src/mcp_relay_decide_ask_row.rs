@@ -7,6 +7,7 @@
 //! itself lives beside this module, which only shapes what it writes.
 
 use guard_command::effect_decision::GuardAction;
+use guard_command::package_intent_common::GuardArtifact;
 use guard_contracts::{
     BrowserMcpArtifactV1, McpCallProjectionQueryV1, McpToolCallArtifactV1, McpToolRiskInputV1,
 };
@@ -100,7 +101,7 @@ pub(super) fn review_item(
     decision: &Decision,
 ) -> Map<String, Value> {
     item(
-        artifact,
+        &Named::tool(artifact),
         artifact_hash,
         signals,
         projection,
@@ -109,9 +110,40 @@ pub(super) fn review_item(
     )
 }
 
+/// The artifact fields `review_artifact_payload` names an item with.
+struct Named<'a> {
+    artifact_id: &'a str,
+    name: &'a str,
+    artifact_type: &'a str,
+    source_scope: &'a str,
+    config_path: &'a str,
+}
+
+impl<'a> Named<'a> {
+    fn tool(artifact: &'a McpToolCallArtifactV1) -> Self {
+        Self {
+            artifact_id: &artifact.artifact_id,
+            name: &artifact.name,
+            artifact_type: ARTIFACT_TYPE,
+            source_scope: &artifact.source_scope,
+            config_path: &artifact.config_path,
+        }
+    }
+
+    fn package(artifact: &'a GuardArtifact) -> Self {
+        Self {
+            artifact_id: &artifact.artifact_id,
+            name: &artifact.name,
+            artifact_type: &artifact.artifact_type,
+            source_scope: &artifact.source_scope,
+            config_path: &artifact.config_path,
+        }
+    }
+}
+
 /// The same item with its scanner evidence already drawn.
 fn item(
-    artifact: &McpToolCallArtifactV1,
+    artifact: &Named<'_>,
     artifact_hash: &str,
     signals: &[String],
     projection: &Projection,
@@ -126,7 +158,7 @@ fn item(
     item.insert("artifact_id".to_owned(), json!(artifact.artifact_id));
     item.insert("artifact_name".to_owned(), json!(artifact.name));
     item.insert("artifact_hash".to_owned(), json!(artifact_hash));
-    item.insert("artifact_type".to_owned(), json!(ARTIFACT_TYPE));
+    item.insert("artifact_type".to_owned(), json!(artifact.artifact_type));
     item.insert("source_scope".to_owned(), json!(artifact.source_scope));
     item.insert("config_path".to_owned(), json!(artifact.config_path));
     item.insert("changed_fields".to_owned(), Value::Array(changed_fields));
@@ -230,7 +262,7 @@ pub(crate) fn silent_review_args(
     evidence: Vec<Value>,
 ) -> Map<String, Value> {
     let item = item(
-        artifact,
+        &Named::tool(artifact),
         artifact_hash,
         signals,
         projection,
@@ -238,6 +270,30 @@ pub(crate) fn silent_review_args(
         evidence,
     );
     queue.args(item, &artifact.artifact_id, queue_artifact(artifact))
+}
+
+/// The same silent inbox row for a package request, whose item names the
+/// package artifact and whose queued artifact is that artifact's own
+/// (`package_ask::queue_artifact`).
+pub(crate) fn package_silent_review_args(
+    queue: &Queue<'_>,
+    artifact: &GuardArtifact,
+    artifact_hash: &str,
+    signals: &[String],
+    projection: &Projection,
+    policy_action: &str,
+    evidence: Vec<Value>,
+) -> Option<Map<String, Value>> {
+    let queued = super::package_ask::queue_artifact(artifact).ok()?;
+    let item = item(
+        &Named::package(artifact),
+        artifact_hash,
+        signals,
+        projection,
+        policy_action,
+        evidence,
+    );
+    Some(queue.args(item, &artifact.artifact_id, queued))
 }
 
 /// The `queue_blocked_approvals` arguments shared by every item of one call.

@@ -366,7 +366,7 @@ fn receipt_evidence(
 /// safe-alternative block adds after it.
 fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     if record.get("kind").and_then(Value::as_str) == Some(package::KIND) {
-        return Some((package::compose(guard_home, record, stamp)?, None));
+        return package::compose(guard_home, record, stamp);
     }
     let plain = plain(record)?;
     let artifact = plain.artifact;
