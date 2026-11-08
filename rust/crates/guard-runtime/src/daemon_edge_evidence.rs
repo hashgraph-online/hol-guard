@@ -89,9 +89,12 @@ fn item(row: &Map<String, Value>, home: &str) -> Option<Value> {
 }
 
 /// `_redact_export_value` for a stored scalar. Rows hold no lists or maps, so
-/// one is left to the daemon.
+/// one is left to the daemon. So is any text that is not ASCII: the native
+/// patterns read word and space classes in Unicode, so a mark Python reads as
+/// a boundary could hide a secret from them.
 fn redacted(value: &Value, home: &str) -> Option<Value> {
     match value {
+        Value::String(text) if !text.is_ascii() => None,
         Value::String(text) => {
             let text = redact_local_path(&redact_text(text).text, Some(home));
             Some(Value::String(redact_sensitive_text(&text)))

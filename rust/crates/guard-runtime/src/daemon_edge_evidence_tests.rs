@@ -108,3 +108,18 @@ fn leaves_what_it_cannot_read_the_same_way_to_the_daemon() {
     // Without the daemon's home the edge cannot shorten paths as it does.
     assert!(read(&store(None), "").is_none());
 }
+
+#[test]
+fn leaves_text_that_is_not_ascii_to_the_daemon() {
+    let store = store(Some(HOME));
+    let token = format!("seen \u{301}gh{}_abcdefgh12345678", "p");
+    rusqlite::Connection::open(&store.config.store_path)
+        .unwrap()
+        .execute(
+            "update guard_evidence set summary = ?1 where evidence_id = 'ev-3'",
+            [token],
+        )
+        .unwrap();
+    assert!(read(&store, "harness=cursor").is_none());
+    assert!(read(&store, "harness=codex").is_some());
+}
