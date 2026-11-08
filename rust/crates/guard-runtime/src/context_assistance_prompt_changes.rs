@@ -376,7 +376,7 @@ pub(super) fn changes(
         let diff: Vec<&str> = ["diff", "-U0"]
             .into_iter()
             .chain(DIFF)
-            .chain(against)
+            .chain(against.iter().copied())
             .collect();
         if let Some(diff) = git.run(&diff, until) {
             changed = hunks(&diff);
