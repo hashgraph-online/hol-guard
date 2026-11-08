@@ -79,6 +79,46 @@ def test_drain_lane_does_not_lease_when_exact_review_is_not_ready(tmp_path: Path
     assert calls == []
 
 
+def _count_readiness_checks(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    checks: list[int] = []
+
+    def ready(_store: object) -> tuple[str, ...]:
+        checks.append(1)
+        return (EXACT_CLOUD_REVIEW_OPERATION,)
+
+    monkeypatch.setattr(command_queue, "lease_ready_operations", ready)
+    monkeypatch.setattr(command_queue, "lease_next_job", lambda **_kwargs: None)
+    return checks
+
+
+def test_drain_leases_reuse_a_recent_readiness_check(tmp_path: Path, monkeypatch) -> None:
+    checks = _count_readiness_checks(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(command_queue, "_lease_ready_clock", lambda: clock[0], raising=False)
+    store = FakeStore(tmp_path / "guard-home")
+
+    command_queue._lease_next_job(store, {})
+    for slot in range(3):
+        _in_lane(slot, lambda: command_queue._lease_next_job(store, {}))
+    assert len(checks) == 1
+
+    clock[0] += command_queue._LEASE_READY_REUSE_SECONDS
+    _in_lane(0, lambda: command_queue._lease_next_job(store, {}))
+    _in_lane(1, lambda: command_queue._lease_next_job(store, {}))
+    assert len(checks) == 2
+
+
+def test_main_lane_checks_readiness_before_every_lease(tmp_path: Path, monkeypatch) -> None:
+    checks = _count_readiness_checks(monkeypatch)
+    monkeypatch.setattr(command_queue, "_lease_ready_clock", lambda: 100.0, raising=False)
+    store = FakeStore(tmp_path / "guard-home")
+
+    for _ in range(3):
+        command_queue._lease_next_job(store, {})
+
+    assert len(checks) == 3
+
+
 def test_each_drain_lane_keeps_its_own_queue_state(tmp_path: Path) -> None:
     store = FakeStore(tmp_path / "guard-home")
     save_command_queue_state(store, {"state": "idle", "marker": "main"})
