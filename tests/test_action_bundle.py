@@ -235,3 +235,10 @@ def test_action_online_input_documents_analyzer_credential_gating() -> None:
     assert "MCP_SCANNER_API_KEY" in online["description"]
     assert "MCP_SCANNER_LLM_API_KEY" in online["description"]
     assert "cannot enable external analyzers" in online["description"]
+
+
+def test_attestation_version_matches_hashed_runtime_lock() -> None:
+    version = (ROOT / "action" / "pypi-attestations-version.txt").read_text(encoding="utf-8").strip()
+    runtime_lock = (ROOT / "action" / "pypi-attestations-requirements.txt").read_text(encoding="utf-8")
+
+    assert f"pypi-attestations=={version} " in runtime_lock
