@@ -25,7 +25,7 @@ use crate::context_assistance_engine::screened_texts;
 use crate::git_execution_safety_binary::resolve_trusted_git;
 use crate::git_execution_safety_config::Environment;
 use crate::git_execution_safety_probe::Prober;
-use labels::{render, Commit};
+use labels::{render, Commit, Since};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -57,8 +57,19 @@ const DIFF: [&str; 7] = [
     "--dst-prefix=b/",
     "--ignore-submodules=all",
 ];
-const WORDS: [&str; 8] = [
-    "change", "changed", "changes", "pushed", "teammate", "review", "diff", "broke",
+const WORDS: [&str; 12] = [
+    "change",
+    "changed",
+    "changes",
+    "pushed",
+    "teammate",
+    "review",
+    "diff",
+    "broke",
+    "commit",
+    "commits",
+    "committed",
+    "recently",
 ];
 /// Words for a prompt about a change the agent did not make, or one that
 /// broke something: then a commit's own diff is worth showing.
@@ -88,7 +99,9 @@ pub(super) fn about_others(prompt: &str) -> bool {
 }
 
 /// Records the commit `session` started at, on its first prompt, and for a
-/// prompt about changes returns what changed since then.
+/// prompt about changes returns what changed since then. A first prompt
+/// about someone else's change or a failure has nothing since its own start,
+/// so it gets the newest commit instead: what was just pulled or pushed.
 pub(super) fn since_start(
     guard_home: &Path,
     home: &Path,
@@ -100,6 +113,7 @@ pub(super) fn since_start(
 ) -> Option<String> {
     let mut git = None;
     let mut base = session.and_then(recorded);
+    let first = session.is_some() && base.is_none();
     if let (Some(session), None) = (session, &base) {
         git = Git::find(root, home);
         base = git.as_ref().and_then(|git| started(session, git, until));
@@ -108,13 +122,15 @@ pub(super) fn since_start(
         return None;
     }
     let git = git.or_else(|| Git::find(root, home))?;
-    changes(
-        &git,
-        base.as_deref(),
-        about_others(prompt),
-        until,
-        |paths| screened_texts(guard_home, root, app, paths, paths.len(), until),
-    )
+    let parent = newest(&git, first, prompt, until);
+    let since = match (&parent, &base) {
+        (Some(parent), _) => Since::Newest(parent),
+        (None, Some(base)) => Since::Start(base),
+        (None, None) => Since::Nothing,
+    };
+    changes(&git, since, about_others(prompt), until, |paths| {
+        screened_texts(guard_home, root, app, paths, paths.len(), until)
+    })
 }
 
 /// A trusted Git, run in one project with a bare environment.
@@ -188,6 +204,16 @@ fn started(session: &Session, git: &Git, until: Instant) -> Option<String> {
     }
     bases.push_back((session.clone(), head.to_owned()));
     Some(head.to_owned())
+}
+
+/// The newest commit's parent, for a session's `first` prompt when it is
+/// about someone else's change or a failure.
+fn newest(git: &Git, first: bool, prompt: &str, until: Instant) -> Option<String> {
+    if !(first && about_others(prompt)) {
+        return None;
+    }
+    let parent = git.run(&["rev-parse", "--verify", "--quiet", "HEAD^"], until)?;
+    Some(parent.trim().to_owned()).filter(|parent| commit_id(parent))
 }
 
 fn recorded(session: &Session) -> Option<String> {
@@ -327,7 +353,7 @@ fn header_counts(header: &str) -> Option<((usize, usize), usize)> {
 /// changed file Guard's read accepts; any other file is left out.
 pub(super) fn changes(
     git: &Git,
-    base: Option<&str>,
+    since: Since,
     show_diffs: bool,
     until: Instant,
     screen: impl FnOnce(&[String]) -> Vec<(String, String)>,
@@ -336,7 +362,8 @@ pub(super) fn changes(
     if allowed == Allowed::Nothing {
         return None;
     }
-    let base = base.filter(|base| commit_id(base));
+    let since = since.checked();
+    let base = since.base();
     // Comparing the working tree runs clean filters; with one configured,
     // only the commits are compared.
     let against: Vec<&str> = match (&allowed, base) {
@@ -391,7 +418,7 @@ pub(super) fn changes(
             diff,
         });
     }
-    render(base, &changed, &texts, &listed)
+    render(since, &changed, &texts, &listed)
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file

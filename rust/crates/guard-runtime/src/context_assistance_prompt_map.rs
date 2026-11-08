@@ -215,9 +215,10 @@ pub(super) fn map(
     }
     // A plain word a source file defines is a name too, unless it is common
     // or the prompt reviews its changes, where "naming and style" say how to
-    // review and name no code.
+    // review and name no code. Sample code does not count: an example script
+    // defining `commit` does not make the word a name.
     let defined: BTreeSet<String> = (files.iter())
-        .filter(|file| file.kind == Kind::Source)
+        .filter(|file| file.kind == Kind::Source && !sample(&file.path))
         .flat_map(|file| file.sections.iter().filter_map(|s| s.name.clone()))
         .collect();
     let plain_name = |item: &Sought| !asked.changes && !item.common && defined.contains(&item.text);
@@ -382,6 +383,16 @@ fn named_definitions(files: &[File], names: &[&str]) -> Vec<Pick> {
     picks.extend(bases);
     picks.truncate(MAX_NAMED_DEFINITIONS);
     picks
+}
+
+/// Whether `path` is in a folder of examples or demos.
+fn sample(path: &str) -> bool {
+    (path.split('/').rev().skip(1)).any(|folder| {
+        matches!(
+            folder,
+            "example" | "examples" | "demo" | "demos" | "samples"
+        )
+    })
 }
 
 fn kind(path: &str) -> Kind {

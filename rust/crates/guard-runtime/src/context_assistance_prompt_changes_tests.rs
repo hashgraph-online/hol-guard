@@ -93,7 +93,12 @@ impl Repo {
     }
 
     fn changes_shown(&self, base: Option<&str>, show_diffs: bool) -> Option<String> {
-        changes(&self.found(), base, show_diffs, later(), |paths| {
+        let since = base.map_or(Since::Nothing, Since::Start);
+        self.since(since, show_diffs)
+    }
+
+    fn since(&self, since: Since, show_diffs: bool) -> Option<String> {
+        changes(&self.found(), since, show_diffs, later(), |paths| {
             paths
                 .iter()
                 .filter_map(|path| {
@@ -112,12 +117,15 @@ fn prompts_about_changes_are_recognised() {
         "review the diff before I merge",
         "What changed in convert?",
         "this regression is new",
+        "test_parse started failing after the last commit",
+        "convert started returning None recently",
         "what did we do in this session",
     ] {
         assert!(about_changes(prompt), "{prompt}");
     }
     for prompt in [
         "add a --verbose flag",
+        "Implement parse again so its tests pass",
         "rename convert to parse",
         "session cookies leak",
     ] {
@@ -205,7 +213,7 @@ fn changes_are_named_by_the_definition_they_fall_in() {
             diff: None,
         },
     ];
-    let text = render(Some(base), &changed, &texts, &commits).unwrap();
+    let text = render(Since::Start(base), &changed, &texts, &commits).unwrap();
     assert!(
         text.starts_with(
             "HOL Guard CIGAR: changes in this project since this session started at commit \
@@ -230,8 +238,8 @@ src/big.py: big lines 50-51\nsrc/core.py: convert 4-5, other 8-9\nsrc/store.py: 
         !text.contains("hidden") && !text.contains("value.strip()"),
         "no file the screen refused and no uncommitted diff: {text}"
     );
-    assert_eq!(render(Some(base), &changed, &[], &[]), None);
-    let uncommitted = render(None, &changed[..1], &texts, &[]).unwrap();
+    assert_eq!(render(Since::Start(base), &changed, &[], &[]), None);
+    let uncommitted = render(Since::Nothing, &changed[..1], &texts, &[]).unwrap();
     assert!(
         uncommitted
             .starts_with("HOL Guard CIGAR: uncommitted changes in this project (`git diff HEAD`"),
@@ -285,6 +293,37 @@ fn a_session_gets_its_uncommitted_edits_and_commits_since_its_first_prompt() {
             .map(|text| text.contains("Commit ")),
         Some(false)
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_first_prompt_about_a_push_gets_the_newest_commit() {
+    let repo = Repo::new();
+    let first = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
+    repo.commit("teammate: other returns 2");
+    // The session starts after the push, so nothing changed since its start.
+    let session = repo.session("first-prompt-after-push");
+    let base = started(&session, &repo.found(), later()).unwrap();
+    assert_eq!(repo.changes(Some(&base)), None);
+    let pushed = "A teammate pushed a fix and tests fail";
+    assert_eq!(newest(&repo.found(), false, pushed, later()), None);
+    assert_eq!(
+        newest(&repo.found(), true, "review the diff", later()),
+        None
+    );
+    let parent = newest(&repo.found(), true, pushed, later()).unwrap();
+    assert_eq!(parent, first);
+    let text = repo.since(Since::Newest(&parent), true).unwrap();
+    let title = "HOL Guard CIGAR: the newest commit in this project and any uncommitted changes";
+    assert!(
+        text.starts_with(&format!("{title} (`git diff {}` shows", &first[..7]))
+            && text.contains("\nsrc/core.py: other 8-9\n")
+            && text.contains("teammate: other returns 2:\n```diff\n+    return 2"),
+        "{text}"
+    );
+    let lone = Repo::new();
+    assert_eq!(newest(&lone.found(), true, pushed, later()), None);
 }
 
 #[cfg(unix)]

@@ -285,6 +285,22 @@ fn a_common_plain_word_places_nothing() {
     assert!(map(&used_only, &named, &Asked::default(), later()).is_none());
 }
 
+/// A plain word an example script defines is not a name: "commit" in a
+/// prompt does not name `examples/aliases/aliases.py`'s `commit`. Library code
+/// defining the word still counts, and so does the word written as a name.
+#[test]
+fn a_plain_word_defined_only_in_examples_names_nothing() {
+    let example = "def commit(repo):\n    repo.save()\n";
+    let plain = [("commit", false, 1)];
+    let named = [("commit", true, 1)];
+    let text = mapped_text(&[("examples/aliases/aliases.py", example)], &plain);
+    assert!(!text.unwrap_or_default().contains(NAMED_TITLE));
+    let text = mapped_text(&[("examples/aliases/aliases.py", example)], &named).unwrap();
+    assert!(text.contains(NAMED_TITLE), "{text}");
+    let text = mapped_text(&[("src/vcs/commit.py", example)], &plain).unwrap();
+    assert!(text.contains(NAMED_TITLE), "{text}");
+}
+
 /// A plain word only in comments and docstrings is prose about the code and
 /// places nothing; on a code line it does.
 #[test]

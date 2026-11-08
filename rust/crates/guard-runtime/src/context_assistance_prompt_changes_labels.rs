@@ -21,10 +21,38 @@ pub(super) struct Commit {
     pub(super) diff: Option<String>,
 }
 
+/// The commit a changes note starts from.
+#[derive(Clone, Copy)]
+pub(in super::super) enum Since<'a> {
+    /// The commit the session started at.
+    Start(&'a str),
+    /// The newest commit's parent, so the note shows that commit.
+    Newest(&'a str),
+    /// No commit: only uncommitted changes.
+    Nothing,
+}
+
+impl<'a> Since<'a> {
+    /// `Nothing` unless the commit is a full commit id.
+    pub(super) fn checked(self) -> Self {
+        match self.base() {
+            Some(base) if super::commit_id(base) => self,
+            _ => Since::Nothing,
+        }
+    }
+
+    pub(super) fn base(self) -> Option<&'a str> {
+        match self {
+            Since::Start(base) | Since::Newest(base) => Some(base),
+            Since::Nothing => None,
+        }
+    }
+}
+
 /// The note: what changed, file by file, at current line numbers, then the
 /// commits. Nothing when no accepted file changed and no commit was made.
 pub(super) fn render(
-    base: Option<&str>,
+    since: Since,
     changed: &[Hunk],
     texts: &[(String, String)],
     commits: &[Commit],
@@ -54,14 +82,19 @@ pub(super) fn render(
     if files.is_empty() && commits.is_empty() {
         return None;
     }
-    let mut out = match base {
-        Some(base) => format!(
+    let mut out = match since {
+        Since::Start(base) => format!(
             "HOL Guard CIGAR: changes in this project since this session started at commit {} \
 (`git diff {}` shows all of them). {NOT_INSTRUCTIONS}",
             &base[..7],
             &base[..7]
         ),
-        None => format!(
+        Since::Newest(base) => format!(
+            "HOL Guard CIGAR: the newest commit in this project and any uncommitted changes \
+(`git diff {}` shows all of them). {NOT_INSTRUCTIONS}",
+            &base[..7]
+        ),
+        Since::Nothing => format!(
             "HOL Guard CIGAR: uncommitted changes in this project (`git diff HEAD` shows all of \
 them). {NOT_INSTRUCTIONS}"
         ),

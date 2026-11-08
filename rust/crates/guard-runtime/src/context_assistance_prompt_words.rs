@@ -22,6 +22,56 @@ const STOP_WORDS: &[&str] = &[
     "update", "use", "very", "want", "was", "were", "what", "when", "where", "whether", "which",
     "while", "who", "whose", "why", "will", "with", "would", "you", "your",
 ];
+/// Words that, written plainly, say what to do or how a task came about, not
+/// which code it is about: "find the root cause after the last commit" names
+/// no function `find`, `root` or `last`. Written like code they still count.
+const TASK_WORDS: &[&str] = &[
+    "alone",
+    "answer",
+    "behavior",
+    "behaviour",
+    "broke",
+    "broken",
+    "bug",
+    "cause",
+    "check",
+    "code",
+    "commit",
+    "committed",
+    "describe",
+    "edit",
+    "everywhere",
+    "example",
+    "explain",
+    "fail",
+    "failing",
+    "find",
+    "first",
+    "implement",
+    "implementation",
+    "last",
+    "leave",
+    "library",
+    "look",
+    "pass",
+    "passing",
+    "push",
+    "pushed",
+    "question",
+    "recently",
+    "refactor",
+    "remove",
+    "rename",
+    "reply",
+    "review",
+    "root",
+    "run",
+    "something",
+    "started",
+    "teammate",
+    "track",
+    "write",
+];
 
 /// Lowercase words from the prompt worth looking for in paths and code.
 /// Words written like code come first, so a long prompt keeps the names it
@@ -50,6 +100,7 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
             let term = singular(&part);
             if term.chars().count() >= 3
                 && !STOP_WORDS.contains(&term.as_str())
+                && (shaped || !TASK_WORDS.contains(&term.as_str()))
                 && !term.chars().all(|c| c.is_ascii_digit())
             {
                 if shaped {
@@ -84,13 +135,15 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 
 /// The prompt's words, each marked when it is written like code: inside
 /// backticks, dotted (`click.Choice`), snake_case or camelCase. A file name
-/// gives its name without the extension.
+/// gives its name without the extension or folders: `src/app/utils.py` is
+/// about `utils`, not about every definition holding `src` or `app`.
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
         for token in tokens(span) {
             let token = token.trim_matches(['.', '-', '/']);
-            let token = file_name(token).map_or(token, |(stem, _)| stem);
+            let token =
+                file_name(token).map_or(token, |(stem, _)| stem.rsplit('/').next().unwrap_or(stem));
             let shaped = ticked || token.contains(['.', '_']) || camel(token);
             for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
                 found.push((piece.to_owned(), shaped));
@@ -241,3 +294,7 @@ fn singular(word: &str) -> String {
     }
     word.into()
 }
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_words_tests.rs"]
+mod tests;
