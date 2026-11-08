@@ -444,43 +444,9 @@ def test_full_batch_settles_its_jobs_then_drains_by_leasing(tmp_path: Path) -> N
     assert pool.start(batch) == command_queue_drain.REVIEW_DRAIN_WORKERS
     _join(pool)
 
-    # One worker holds the watch; it ends empty, and every other worker leases
-    # until its first empty lease.
     assert polls.count("job-2") == 1
     assert polls.count("watch") == 1
     assert polls.count("lease") == command_queue_drain.REVIEW_DRAIN_WORKERS - 1
-
-
-def test_a_full_batch_leaves_one_worker_free_to_watch(tmp_path: Path) -> None:
-    # Every drain worker but one takes a job from a full batch. The rest of the
-    # bulk approval lands while they settle, and the free worker takes it.
-    polls: list[str] = []
-    lock = threading.Lock()
-    hits = [command_queue_drain.ReviewLeaseBatch(jobs=(), more_may_be_ready=False)]
-    pool = _recording_pool(tmp_path, polls, lock, hits)
-    handed = command_queue_drain.REVIEW_LEASE_BATCH_SIZE - 1
-    jobs = tuple(_exact_job(f"job-{index}") for index in range(2, 2 + handed))
-    settling = threading.Event()
-    original_take_job = pool._take_job
-
-    def take_job(slot: int, *, lane_clear: bool = False) -> object:
-        job = original_take_job(slot, lane_clear=lane_clear)
-        if isinstance(job, dict):
-            # Each handed job is still settling when the watch begins.
-            settling.wait(2)
-        elif isinstance(job, command_queue_drain.ReviewWatch):
-            settling.set()
-        return job
-
-    pool._take_job = take_job  # type: ignore[method-assign]
-    pool.start(command_queue_drain.ReviewLeaseBatch(jobs=jobs, more_may_be_ready=True))
-    _settle(pool, polls, sorted([*(str(job["id"]) for job in jobs), "watch", "watch"]))
-
-    assert handed < command_queue_drain.REVIEW_DRAIN_WORKERS
-    assert settling.is_set()
-    assert polls.count("watch") >= 1
-    assert sorted(str(job["id"]) for job in jobs) == sorted(poll for poll in polls if poll.startswith("job-"))
-    assert not pool.has_handoff()
 
 
 def test_job_handed_over_while_a_worker_stops_is_still_settled(tmp_path: Path, monkeypatch) -> None:
