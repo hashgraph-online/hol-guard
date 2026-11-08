@@ -289,7 +289,9 @@ class DirectHookEvidenceDrain:
                     self.rejected += 1
             if through is not None:
                 self._ack = through
-            if remaining == 0 or not records:
+            # The resident leaves records it fully recorded off the page, so an
+            # empty page whose cursor moved can still have work queued behind it.
+            if remaining == 0 or through is None:
                 return False
         return True
 
