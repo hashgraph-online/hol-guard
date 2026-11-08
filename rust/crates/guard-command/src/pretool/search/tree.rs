@@ -18,7 +18,7 @@
 use super::ReadContext;
 use crate::pretool::search_pattern_clearance::PatternClearance;
 use glob_expand::expand_glob_matches;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[path = "glob_expand.rs"]
 mod glob_expand;
 
