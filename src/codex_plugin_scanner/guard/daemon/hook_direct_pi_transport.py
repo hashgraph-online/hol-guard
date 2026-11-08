@@ -117,7 +117,7 @@ def pi_direct_answer(
     ):
         return None
     workspace = params.get("workspace", [None])[-1]
-    transport_factory = getattr(getattr(worker, "policy_snapshot_publisher", None), "direct_evidence_transport", None)
+    transport_factory = getattr(getattr(worker, "policy_snapshot_publisher", None), "direct_hook_transport", None)
     if not callable(transport_factory):
         return None
     try:
