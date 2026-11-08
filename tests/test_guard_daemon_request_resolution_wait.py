@@ -116,10 +116,13 @@ def test_wakes_while_pending_read_only_the_status(tmp_path: Path, monkeypatch) -
     assert approval is not None
     signal = review_event_wake_signal(store.path)
     first_status_read = threading.Event()
+    woken_status_read = threading.Event()
     read_status = store.get_approval_request_status
 
     def read_status_once_seen(request_id: str) -> str | None:
         status = read_status(request_id)
+        if first_status_read.is_set():
+            woken_status_read.set()
         first_status_read.set()
         return status
 
@@ -127,11 +130,13 @@ def test_wakes_while_pending_read_only_the_status(tmp_path: Path, monkeypatch) -
 
     def other_events_then_decide() -> None:
         # Start only once the wait has seen the request pending, so the wakes
-        # below land on a held read rather than racing its first check.
+        # below land on a held read rather than racing its first check, and
+        # decide only after one of them has rechecked a still-pending request.
         assert first_status_read.wait(5.0)
         for _ in range(20):
             time.sleep(0.005)
             signal.notify()
+        assert woken_status_read.wait(5.0)
         store.resolve()
         signal.notify()
 
@@ -142,7 +147,7 @@ def test_wakes_while_pending_read_only_the_status(tmp_path: Path, monkeypatch) -
 
     assert result is not None
     assert result["status"] == "resolved"
-    assert store.status_reads >= 2
+    assert store.status_reads >= 3
     assert store.reads == 2
 
 
