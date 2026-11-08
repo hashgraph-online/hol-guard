@@ -55,6 +55,7 @@ fn a_stage_that_could_render_a_value_keeps_the_review() {
         // the match need not begin where the pattern is anchored
         "printenv | grep -o '^[A-Za-z_]*'",
         "printenv | grep -oE '^ALPHA|[A-Za-z0-9_]+'",
+        "printenv | grep -oE '^ALPHA|S[A-Za-z0-9_]+'",
         "printenv | grep -oE '^(ALPHA|[A-Za-z0-9_]+)'",
         "printenv | grep -oE '^[A-Z]?ALPHA'",
         // the pattern is not one this proof can read
@@ -87,15 +88,20 @@ fn a_stage_that_could_render_a_value_keeps_the_review() {
     }
 }
 
-/// Every top-level alternative has to start with a character the pattern
-/// spells out. An alternative that may start with a bracket expression
-/// matches a run of value bytes on a line that carries no name at all.
+/// A match has to begin where the anchor puts it and with a character the
+/// pattern spells out. ERE binds `|` loosest, so a top-level alternation
+/// anchors only its first alternative and is refused outright; inside a group
+/// every alternative is anchored, and each still has to be literal-led,
+/// because one that may start with a bracket expression matches a run of
+/// value bytes on a line that carries no name at all.
 #[test]
 fn a_pattern_whose_match_can_start_anywhere_is_refused() {
     assert!(pattern_matches_inside_a_name("^ALPHA[A-Z_]*"));
     assert!(pattern_matches_inside_a_name("^(ALPHA|BETA)[a-z0-9_]+"));
     assert!(pattern_matches_inside_a_name("^A+[A-Z_]*"));
     assert!(!pattern_matches_inside_a_name("^A|[A-Za-z0-9_]+"));
+    assert!(!pattern_matches_inside_a_name("^ALPHA|BETA"));
+    assert!(!pattern_matches_inside_a_name("^ALPHA|S[A-Za-z0-9_]+"));
     assert!(!pattern_matches_inside_a_name("^(A|[A-Za-z0-9_]+)"));
     assert!(!pattern_matches_inside_a_name("^[A-Z_]*"));
     assert!(!pattern_matches_inside_a_name("^A*B"));

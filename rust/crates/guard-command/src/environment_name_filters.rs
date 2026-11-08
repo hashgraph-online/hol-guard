@@ -96,10 +96,12 @@ impl PatternWalk<'_> {
         self.chars.get(self.index).copied()
     }
 
-    /// `sequence ( '|' sequence )*`. An alternation is literal-led only when
-    /// every one of its alternatives is, which is what keeps a top-level
-    /// `^A|[A-Za-z0-9_]+` out: its second alternative is not anchored at all
-    /// and would print every name-shaped run on the line, values included.
+    /// `sequence ( '|' sequence )*`, read only inside a group. ERE binds `|`
+    /// loosest, so `^A|B` anchors only its first alternative; the top level is
+    /// therefore a single sequence, and a `|` there stops the walk short of the
+    /// end and refuses the pattern. Inside a group every alternative sits at
+    /// the position the anchored sequence puts it, and the group is
+    /// literal-led only when all of them are.
     fn alternation(&mut self) -> Option<LiteralLed> {
         let mut literal_led = self.sequence()?;
         while self.peek() == Some('|') {
@@ -170,8 +172,8 @@ impl PatternWalk<'_> {
 
 /// Whether every match of `pattern` stays inside a variable name and has to
 /// start with a character the pattern spells out. A wildcard, an escape, a
-/// negated class or an unbalanced group refuses the pattern, and so does one
-/// whose match could begin anywhere on a line.
+/// negated class, an unbalanced group or a top-level `|` refuses the pattern,
+/// and so does one whose match could begin anywhere on a line.
 pub(crate) fn pattern_matches_inside_a_name(pattern: &str) -> bool {
     let Some(rest) = pattern.strip_prefix('^') else {
         return false;
@@ -181,7 +183,7 @@ pub(crate) fn pattern_matches_inside_a_name(pattern: &str) -> bool {
         chars: &chars,
         index: 0,
     };
-    let Some(literal_led) = walk.alternation() else {
+    let Some(literal_led) = walk.sequence() else {
         return false;
     };
     walk.index == chars.len() && literal_led
