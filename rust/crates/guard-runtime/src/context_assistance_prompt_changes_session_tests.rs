@@ -6,12 +6,11 @@ const ON: &str = "[context_assistance]\nenabled=true\nruntime_id='selected'\n\
 [context_assistance.features]\nagent_context=true\n\
 [context_assistance.sources]\nworkspace_documents=true\nsource_set_id='selected-workspaces'\n";
 
-/// A session whose first prompt is about a teammate's push gets the newest
-/// commit and its diff. Its later prompts keep the commit the session
-/// started at, and a session whose first prompt is about something else never
-/// gets the newest commit.
+/// A prompt about a teammate's push gets the newest commit and its diff,
+/// first in its session or not, with any uncommitted edits. Other prompts
+/// about changes get what changed since the session started.
 #[test]
-fn a_first_prompt_about_a_push_gets_the_newest_commit() {
+fn a_prompt_about_a_push_gets_the_newest_commit() {
     let repo = Repo::new();
     let first = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
     repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
@@ -34,7 +33,7 @@ fn a_first_prompt_about_a_push_gets_the_newest_commit() {
     let pushed = "A teammate pushed a fix and tests fail";
     let review = repo.session("first-prompt-is-a-review");
     assert_eq!(ask(&review, "review the diff"), None);
-    assert_eq!(ask(&review, pushed), None);
+    assert!(ask(&review, pushed).is_some_and(|text| text.contains("teammate: other returns 2")));
     let session = repo.session("first-prompt-after-push");
     let text = ask(&session, pushed).unwrap();
     let title = "HOL Guard CIGAR: the newest commit in this project and any uncommitted changes";
@@ -50,11 +49,18 @@ fn a_first_prompt_about_a_push_gets_the_newest_commit() {
     repo.write("src/core.py", &CORE.replace("return 1", "return 3"));
     let text = ask(&session, pushed).unwrap();
     assert!(
+        text.starts_with(title)
+            && text.contains(" teammate: other returns 2\n")
+            && text.contains("\n+    return 3\n"),
+        "{text}"
+    );
+    let text = ask(&session, "review the diff").unwrap();
+    assert!(
         text.contains("since this session started at commit")
             && text.contains("\nsrc/core.py: other 8-9")
             && !text.contains("teammate: other returns 2"),
         "{text}"
     );
     let lone = Repo::new();
-    assert_eq!(newest(&lone.found(), true, pushed, later()), None);
+    assert_eq!(newest(&lone.found(), pushed, later()), None);
 }

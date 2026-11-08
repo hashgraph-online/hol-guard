@@ -94,9 +94,10 @@ pub(super) fn about_others(prompt: &str) -> bool {
 }
 
 /// Records the commit `session` started at, on its first prompt, and for a
-/// prompt about changes returns what changed since then. A first prompt
-/// about someone else's change or a failure has nothing since its own start,
-/// so it gets the newest commit instead: what was just pulled or pushed.
+/// prompt about changes returns what changed since then. A prompt about
+/// someone else's change or a failure gets the newest commit instead: what
+/// was just pulled or pushed, not the session's own edits, which the agent
+/// made and already holds.
 pub(super) fn since_start(
     guard_home: &Path,
     home: &Path,
@@ -108,7 +109,6 @@ pub(super) fn since_start(
 ) -> Option<String> {
     let mut git = None;
     let mut base = session.and_then(recorded);
-    let first = session.is_some() && base.is_none();
     if let (Some(session), None) = (session, &base) {
         git = Git::find(root, home);
         base = git.as_ref().and_then(|git| started(session, git, until));
@@ -117,7 +117,7 @@ pub(super) fn since_start(
         return None;
     }
     let git = git.or_else(|| Git::find(root, home))?;
-    let parent = newest(&git, first, prompt, until);
+    let parent = newest(&git, prompt, until);
     let since = match (&parent, &base) {
         (Some(parent), _) => Since::Newest(parent),
         (None, Some(base)) => Since::Start(base),
@@ -201,10 +201,10 @@ fn started(session: &Session, git: &Git, until: Instant) -> Option<String> {
     Some(head.to_owned())
 }
 
-/// The newest commit's parent, for a session's `first` prompt when it is
-/// about someone else's change or a failure.
-fn newest(git: &Git, first: bool, prompt: &str, until: Instant) -> Option<String> {
-    if !(first && about_others(prompt)) {
+/// The newest commit's parent, for a prompt about someone else's change or
+/// a failure.
+fn newest(git: &Git, prompt: &str, until: Instant) -> Option<String> {
+    if !about_others(prompt) {
         return None;
     }
     let parent = git.run(&["rev-parse", "--verify", "--quiet", "HEAD^"], until)?;
