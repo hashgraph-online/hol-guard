@@ -24,11 +24,13 @@ pub(super) struct Pick {
 /// definition holds is a member, such as a method, found the same way, and
 /// so is one the prompt writes after its class (`peekable.prepend`). Then
 /// the types they build on that the same file defines, which the change
-/// usually has to follow.
+/// usually has to follow. With `outline`, a named file where nothing else
+/// is picked stands for its first definitions.
 pub(super) fn named_definitions(
     files: &[File],
     names: &[(&str, bool)],
     asked: &Asked,
+    outline: bool,
 ) -> Vec<Pick> {
     // `cachedmethod` is the function the prompt writes, not the
     // `CachedMethod` class beside it.
@@ -133,7 +135,7 @@ pub(super) fn named_definitions(
                 .filter(|&at| !item.container(at) && rename::stubbed(item, at))
                 .take(MAX_STUBS)
                 .collect();
-            if stubs.is_empty() {
+            if stubs.is_empty() && outline {
                 picks.extend(more::outline(item).map(|at| pick(at, false)));
             }
             picks.extend(stubs.into_iter().map(|at| pick(at, true)));

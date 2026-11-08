@@ -221,7 +221,7 @@ pub(super) fn map(
             }
         })
         .collect();
-    let chosen = named_definitions(&files, &names, asked);
+    let mut chosen = named_definitions(&files, &names, asked, false);
     // A name no definition here holds is looked for where it is used
     // instead, and a renamed one where it is used as well.
     let placed: BTreeSet<&str> = (chosen.iter())
@@ -242,6 +242,12 @@ pub(super) fn map(
         .filter(|item| !asked.changes || item.phrase || item.name)
         .collect();
     let (used, uses) = uses::uses(&files, &rare, asked.everywhere, until)?;
+    // A file the prompt names stands for its outline only when the prompt's
+    // words are placed nowhere: "utils.py where the timeout is ignored" means
+    // the lines using `timeout`, not the file's first definitions.
+    if chosen.is_empty() && uses.is_empty() {
+        chosen = named_definitions(&files, &names, asked, true);
+    }
     let mut mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)
         .take(2)

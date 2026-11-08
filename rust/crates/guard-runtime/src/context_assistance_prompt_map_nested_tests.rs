@@ -195,6 +195,42 @@ fn a_piece_of_a_placed_name_is_not_looked_for_apart() {
     );
 }
 
+/// A file the prompt names stands for its outline only when the prompt's
+/// words are placed nowhere: "utils.py where the timeout is ignored" means
+/// the lines using `timeout`, not the file's first definitions.
+#[test]
+fn a_named_file_is_outlined_only_when_its_words_are_placed_nowhere() {
+    let utils =
+        "def load(path):\n    return path\n\n\ndef fetch(url, timeout=None):\n    return get(url, timeout)\n";
+    let texts = [("pkg/utils.py".to_owned(), utils.to_owned())];
+    let walk = Walk {
+        checked: 200,
+        holding: vec![1],
+        words: vec![1],
+        ..Walk::default()
+    };
+    let asked = Asked {
+        named: vec!["utils.py".into()],
+        ..Asked::default()
+    };
+    let mapped = |term: &str| {
+        let terms = [(term.to_owned(), false)];
+        map(
+            &texts,
+            &sought(&walk, &terms, &[]),
+            &asked,
+            Instant::now() + Duration::from_secs(10),
+        )
+        .unwrap()
+        .text
+    };
+    let text = mapped("timeout");
+    assert!(text.contains("Where 'timeout' appear"), "{text}");
+    assert!(!text.contains("def load"), "{text}");
+    let text = mapped("deadline");
+    assert!(text.contains("pkg/utils.py:1-2 def load"), "{text}");
+}
+
 /// With no map, a request about tests still reads the tests the walk kept
 /// apart; other requests read the matched files alone.
 #[test]
@@ -325,4 +361,23 @@ def chunk_size(n):\n    return n\n";
     assert!(text.contains("pkg/more.py:1-2 def chunked"), "{text}");
     assert!(!text.contains("chunk_size"), "{text}");
     assert!(mapped(1).is_none_or(|text| !text.contains("def chunked")));
+}
+
+/// A file too big or not text may hold a name, so a walk that leaves one
+/// unread has not read the whole project, and a rename cannot say no other
+/// file holds the old name.
+#[test]
+fn a_walk_that_leaves_a_file_unread_is_not_complete() {
+    use crate::context_assistance_prompt_files::{plain, walk};
+    let dir = tempfile::tempdir().unwrap();
+    let root = plain(std::fs::canonicalize(dir.path()).unwrap());
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(root.join("src/app.py"), "def old_name():\n    return 1\n").unwrap();
+    let words = ["oldname".to_owned()];
+    let read = || walk(&root, &words, &[], &[], Duration::from_secs(5)).complete;
+    assert!(read());
+    std::fs::write(root.join("src/data.py"), [0xff_u8; 64]).unwrap();
+    assert!(!read());
+    std::fs::write(root.join("src/data.py"), "old_name = 1\n".repeat(30_000)).unwrap();
+    assert!(!read());
 }

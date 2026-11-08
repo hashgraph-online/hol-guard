@@ -113,7 +113,10 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
             let term = singular(&part);
             if term.chars().count() >= 3
                 && !STOP_WORDS.contains(&term.as_str())
-                && (shaped || !TASK_WORDS.contains(&term.as_str()))
+                // `passes` is a task word whose singular form, `passe`, is not.
+                && (shaped
+                    || !(TASK_WORDS.contains(&term.as_str())
+                        || TASK_WORDS.contains(&part.as_str())))
                 && !term.chars().all(|c| c.is_ascii_digit())
             {
                 if shaped {

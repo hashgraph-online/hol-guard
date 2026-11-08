@@ -78,7 +78,9 @@ pub(crate) fn is_code_expression(matched: &str, rest_of_line: &str) -> bool {
     // matched there.
     mode == Mode::Assign
         && expression.starts_with('(')
-        && expression.matches('(').count() > expression.matches(')').count()
+        // Only the outer bracket may be open: `(decode(` still has a call
+        // whose arguments, perhaps a literal, are on a later line.
+        && expression.matches('(').count() == expression.matches(')').count() + 1
         && reads_as_code(mode, &expression[1..])
 }
 

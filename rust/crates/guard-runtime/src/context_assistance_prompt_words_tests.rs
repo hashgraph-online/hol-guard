@@ -50,7 +50,8 @@ fn task_words_name_nothing_unless_written_as_code() {
         "actually",
         "passes",
     ] {
-        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+        // Terms are singular, so `passes` would be found as `passe`.
+        assert!(!found.contains(&term_form(word)), "{word}: {found:?}");
     }
     assert!(found.contains(&"convert".to_owned()), "{found:?}");
     let found = terms("Fix `last` and `edit` so `toolz.first` keeps working");

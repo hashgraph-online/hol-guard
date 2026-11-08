@@ -402,6 +402,7 @@ class URL:
         "password = (hunter2production".to_string(),
         "auth_token = (decode(c2VjcmV0dG9rZW4xMjM0NQ)".to_string(),
         format!("auth_token = (get_auth_token(\"{sample}\")"),
+        format!("auth_token = (decode(\n    \"{sample}\"))\n"),
     ] {
         assert!(flagged(&text), "{text:?}");
     }

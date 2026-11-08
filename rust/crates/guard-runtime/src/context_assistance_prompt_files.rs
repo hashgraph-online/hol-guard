@@ -129,7 +129,7 @@ pub(crate) struct Walk {
     pub(crate) quoting: Vec<usize>,
     pub(crate) words: Vec<usize>,
     /// How many files hold each term with `_` and `-` dropped, as `_a_b` holds
-    /// `ab`; and whether the walk read every file, so counts are the project's.
+    /// `ab`; and whether the walk read every file, none too big or unreadable.
     pub(crate) spelled: Vec<usize>,
     pub(crate) complete: bool,
 }
@@ -186,6 +186,7 @@ pub(crate) fn walk(
     let mut spelled_in = vec![0_usize; terms.len()];
     while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
+            complete = false;
             continue;
         };
         // Test folders go deepest in the stack, so source is read first when
@@ -199,6 +200,7 @@ pub(crate) fn walk(
             let name = entry.file_name().to_string_lossy().into_owned();
             // `file_type` never follows a link, so a linked folder or file is skipped.
             let Ok(kind) = entry.file_type() else {
+                complete = false;
                 continue;
             };
             if name.starts_with('.') {
@@ -223,6 +225,8 @@ pub(crate) fn walk(
                     if let Ok(inner) = extend(rules.clone(), &path.join(".gitignore"), &relative) {
                         let tests = TEST_DIRS.contains(&name.as_str());
                         inside.push((tests, (path, relative, depth + 1, inner)));
+                    } else {
+                        complete = false;
                     }
                 }
                 continue;
@@ -231,22 +235,23 @@ pub(crate) fn walk(
             {
                 continue;
             }
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
-            if metadata.len() == 0 || metadata.len() > MAX_FILE_BYTES {
+            let metadata = entry.metadata().ok();
+            let size = metadata.as_ref().map_or(u64::MAX, fs::Metadata::len);
+            if size == 0 || size > MAX_FILE_BYTES {
+                complete &= size == 0;
                 continue;
             }
             files += 1;
             let in_path = in_path(&relative, terms);
             let mut text = None;
-            complete &= scanned + metadata.len() <= MAX_SCANNED_BYTES;
-            if scanned + metadata.len() <= MAX_SCANNED_BYTES {
-                scanned += metadata.len();
+            complete &= scanned + size <= MAX_SCANNED_BYTES;
+            if scanned + size <= MAX_SCANNED_BYTES {
+                scanned += size;
                 text = guard_secure_fs::read_bounded(&entry.path(), MAX_FILE_BYTES as usize)
                     .ok()
                     .and_then(|read| String::from_utf8(read.bytes).ok())
                     .map(|text| text.to_lowercase());
+                complete &= text.is_some();
             }
             let text = text.unwrap_or_default();
             let hits: Vec<u8> = terms
@@ -269,7 +274,8 @@ pub(crate) fn walk(
             {
                 seen.push(Seen {
                     relative,
-                    modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+                    modified: (metadata.and_then(|m| m.modified().ok()))
+                        .unwrap_or(SystemTime::UNIX_EPOCH),
                     in_path,
                     hits,
                     whole,
