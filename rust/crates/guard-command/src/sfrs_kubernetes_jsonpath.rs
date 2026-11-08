@@ -127,7 +127,7 @@ pub(crate) fn without_names_only_jsonpath_templates(value: &str) -> String {
         out.push_str(kind);
         let after = &tail[kind.len()..];
         let (payload, consumed) = jsonpath_payload(value, absolute, after);
-        if !jsonpath_renders_only_names(payload) {
+        if !jsonpath_renders_only_names(&payload) {
             out.push_str(&after[..consumed]);
         }
         rest = &after[consumed..];
@@ -144,30 +144,44 @@ pub(crate) fn without_names_only_jsonpath_templates(value: &str) -> String {
 /// was quoted, and reading it at the wrong offset both splits a later
 /// template at the wrong place and can index inside a multibyte character.
 ///
-/// A template holds blanks, so an unquoted one ends at the first blank while a
-/// quoted one runs to its closing quote. The shell accepts the quotes around
-/// either the whole argument (`\'jsonpath={…}\'`) or the value alone
-/// (`jsonpath=\'{…}\'`), so both are resolved here.
-fn jsonpath_payload<'a>(value: &str, at: usize, after: &'a str) -> (&'a str, usize) {
-    let quote = value[..at]
+/// A template holds blanks, so the payload runs to the end of the argument
+/// rather than to the end of a quoted run. The shell joins adjacent quoted
+/// strings into one word, so `jsonpath=\'{range …}{.name}{end}\'\'{..value}\'`
+/// is one template that prints values; stopping at the first closing quote
+/// would read only its names-only half and drop that half from the screen.
+/// Quotes are consumed the way the shell consumes them, so the payload is what
+/// the command actually receives. A quote that opened before `jsonpath`
+/// (`\'jsonpath={…}\'`) is already open when the walk starts, and closing it
+/// ends the argument only if a blank follows; `\'jsonpath={…}\'\'{..value}\'`
+/// is one word too.
+fn jsonpath_payload(value: &str, at: usize, after: &str) -> (String, usize) {
+    let mut payload = String::new();
+    let mut open = value[..at]
         .chars()
         .next_back()
         .filter(|character| *character == '\'' || *character == '"');
-    if let Some(quote) = quote {
-        if let Some(end) = after.find(quote) {
-            return (&after[..end], end + quote.len_utf8());
+    let mut consumed = 0usize;
+    for character in after.chars() {
+        let width = character.len_utf8();
+        match open {
+            Some(quote) if character == quote => {
+                consumed += width;
+                open = None;
+            }
+            Some(_) => {
+                consumed += width;
+                payload.push(character);
+            }
+            None if character == '\'' || character == '"' => {
+                consumed += width;
+                open = Some(character);
+            }
+            None if character.is_whitespace() => return (payload, consumed),
+            None => {
+                consumed += width;
+                payload.push(character);
+            }
         }
     }
-    let inner = after
-        .chars()
-        .next()
-        .filter(|character| *character == '\'' || *character == '"');
-    if let Some(quote) = inner {
-        let body = &after[quote.len_utf8()..];
-        if let Some(end) = body.find(quote) {
-            return (&body[..end], quote.len_utf8() + end + quote.len_utf8());
-        }
-    }
-    let end = after.find(char::is_whitespace).unwrap_or(after.len());
-    (&after[..end], end)
+    (payload, consumed)
 }

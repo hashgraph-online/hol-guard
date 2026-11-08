@@ -53631,6 +53631,23 @@
       },
       "cwd": "org",
       "expect": "not_allow"
+    },
+    {
+      "id": "neg-kubectl-jsonpath-adjacent-quoted-values",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl -n alpha-namespace get deployment alpha-frontend -o jsonpath='{range .spec.template.spec.containers[*].env[*]}{.name}{end}''{..value}'"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

@@ -117,3 +117,44 @@ fn a_template_quoted_after_the_equals_sign_that_renders_a_value_is_left_alone() 
     );
     assert_eq!(without_names_only_jsonpath_templates(command), command);
 }
+
+/// The shell joins adjacent quoted strings into one word.
+///
+/// `jsonpath='{range …}{.name}{end}''{..value}'` is a single template that
+/// prints every value. Reading only as far as the first closing quote found a
+/// names-only template, dropped that half from the credential screen and left
+/// `{..value}`, which names no credential location of its own, so the command
+/// reached the kubectl read screen with nothing left to object to.
+#[test]
+fn a_template_built_from_adjacent_quoted_strings_keeps_its_screen() {
+    for command in [
+        concat!(
+            "kubectl -n alpha-namespace get deployment alpha-frontend -o jsonpath=",
+            r#"'{range .spec.template.spec.containers[*].env[*]}{.name}{end}''{..value}'"#
+        ),
+        concat!(
+            "kubectl -n alpha-namespace get deployment alpha-frontend -o 'jsonpath=",
+            r#"{range .spec.template.spec.containers[*].env[*]}{.name}{end}'"#,
+            r#"'{..value}'"#
+        ),
+        concat!(
+            "kubectl -n alpha-namespace get deployment alpha-frontend -o jsonpath=",
+            r#"'{range .spec.template.spec.containers[*].env[*]}{.name}{end}'{..value}"#
+        ),
+    ] {
+        let stripped = without_names_only_jsonpath_templates(command);
+        assert!(stripped.contains(".env"), "{stripped}");
+    }
+}
+
+/// Joining the pieces must not swallow what follows the argument.
+#[test]
+fn a_names_only_template_still_ends_at_the_blank_after_it() {
+    let command = concat!(
+        "kubectl -n alpha-namespace get deployment alpha-frontend -o jsonpath=",
+        r#"'{range .spec.template.spec.containers[*].env[*]}{.name}{end}' --watch"#
+    );
+    let stripped = without_names_only_jsonpath_templates(command);
+    assert!(!stripped.contains(".env"), "{stripped}");
+    assert!(stripped.ends_with(" --watch"), "{stripped}");
+}
