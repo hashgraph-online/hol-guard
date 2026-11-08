@@ -132,6 +132,7 @@ fn prompts_about_changes_are_recognised() {
         "Implement parse again so its tests pass",
         "rename convert to parse",
         "session cookies leak",
+        "Question, no code changes: which function does this?",
     ] {
         assert!(!about_changes(prompt), "{prompt}");
     }

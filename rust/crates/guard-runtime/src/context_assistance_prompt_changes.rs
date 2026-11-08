@@ -56,23 +56,14 @@ const DIFF: [&str; 7] = [
     "--dst-prefix=b/",
     "--ignore-submodules=all",
 ];
-const WORDS: [&str; 12] = [
-    "change",
-    "changed",
-    "changes",
-    "pushed",
-    "teammate",
-    "review",
-    "diff",
-    "broke",
-    "commit",
-    "commits",
-    "committed",
-    "recently",
-];
+const WORDS: &str =
+    "change changed changes pushed teammate review diff broke commit commits committed recently";
 /// Words for a prompt about a change the agent did not make, or one that
 /// broke something: then a commit's own diff is worth showing.
 const OTHERS: [&str; 5] = ["teammate", "pushed", "broke", "broken", "failing"];
+
+/// Words that, just before a change word, say there is none to look at.
+const NOT: [&str; 5] = ["no", "not", "without", "don", "dont"];
 
 /// Whether `prompt` asks about what changed.
 pub(super) fn about_changes(prompt: &str) -> bool {
@@ -81,10 +72,15 @@ pub(super) fn about_changes(prompt: &str) -> bool {
         .split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .collect();
-    words
-        .iter()
-        .any(|word| WORDS.contains(word) || word.starts_with("regress"))
-        || words.windows(2).any(|pair| pair == ["this", "session"])
+    // "no code changes" or "don't change anything" rules changes out.
+    let denied = |at: usize| {
+        words[at.saturating_sub(2)..at]
+            .iter()
+            .any(|word| NOT.contains(word))
+    };
+    (words.iter().enumerate()).any(|(at, word)| {
+        (WORDS.split(' ').any(|known| known == *word) || word.starts_with("regress")) && !denied(at)
+    }) || words.windows(2).any(|pair| pair == ["this", "session"])
 }
 
 /// Whether `prompt` is about someone else's change or a failure.

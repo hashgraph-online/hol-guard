@@ -443,12 +443,13 @@ pub(super) fn entry(files: &[File], pick: &Pick) -> String {
 }
 
 /// Each named definition's entry and the spans shown whole. A short function
-/// or method the prompt names is shown whole, but not for a rename or a
-/// review of changes, which ask where code is, nor when an earlier prompt of
-/// the session was shown it.
+/// or method the prompt names is shown whole, even when the prompt asks about
+/// changes, since a diff shows only the lines that changed; but not for a
+/// rename, which asks where code is, nor when an earlier prompt of the
+/// session was shown it.
 pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entry> {
     let mut listed = Vec::new();
-    let mut room = if asked.everywhere || asked.changes {
+    let mut room = if asked.everywhere {
         0
     } else {
         MAX_SHOWN_DEFINITION_CHARS

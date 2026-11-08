@@ -118,6 +118,19 @@ CHANGES.rst describes everything.";
     assert!(!text.contains("'original'"), "{text}");
 }
 
+/// A prompt about recent changes that names a function as code is shown its
+/// body, since the diff holds only the lines that changed.
+#[test]
+fn a_change_prompt_naming_a_function_shows_it() {
+    let (home, _project, root) = project(ON, &[("src/core.py", CORE)]);
+    let prompt = "Something in `convert` broke recently. Track it down and fix it.";
+    let text = changes_map(home.path(), &root, prompt, true).unwrap();
+    assert!(
+        text.contains("```") && text.contains("if not self.case_sensitive:"),
+        "{text}"
+    );
+}
+
 /// Prompts from varied tasks reach the definition they mean: a method named as
 /// code is a named definition, and a rename lists every line naming it, in
 /// source, tests and docs, as the whole list; a file the prompt names wins over another defining the same
