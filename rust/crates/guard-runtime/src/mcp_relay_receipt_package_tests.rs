@@ -210,12 +210,13 @@ fn ask_blocks_the_daemon_still_surfaces_are_not_plain() {
     let workspace = temp_home("relay-package-ask-owned");
     let ask = asked(&workspace);
     assert!(is_plain(&ask));
+    // The daemon opens no approval center for a relayed call, so an ask block
+    // from Cline is the resident's to record as well.
+    assert!(is_plain(&edited(ask.clone(), |r| {
+        r["harness"] = json!("cline");
+        r["identity"]["artifact"]["harness"] = json!("cline");
+    })));
     let cases = [
-        // The browser approval flow still opens the approval center.
-        edited(ask.clone(), |r| {
-            r["harness"] = json!("cline");
-            r["identity"]["artifact"]["harness"] = json!("cline");
-        }),
         // A notice the resident could not raise is the daemon's to raise.
         edited(ask.clone(), |r| {
             r["approval"]["notices"] = json!([{"request_id": "req-1"}])
