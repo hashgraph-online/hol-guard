@@ -45,7 +45,9 @@ def test_scope_reuses_one_connection_within_an_operation(
             with store.connection_scope(), store._connect() as second:
                 assert second is first
                 second.execute("select count(*) from scope_fixture").fetchone()
-        assert first.in_transaction is False
+        if sqlite_connection_cache._CACHE_ENABLED:
+            # A kept connection is handed back with no transaction open.
+            assert first.in_transaction is False
     if sqlite_connection_cache._CACHE_ENABLED:
         # The connection a clean scope hands back is kept for the next one.
         assert len(opened) == 1
