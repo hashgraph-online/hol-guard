@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.reright",
+  "version": "1.0.0",
+  "name": "reright",
+  "description": "Hosted MCP server that rewrites text an agent drafted for people (emails, messages, posts, commit and PR text) so it reads human-written, with optional human approval before the agent uses it. rewrite sends the draft text to reright.it and counts against the account's monthly words; rewrite_result and keep_original only act on drafts the agent already sent. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "reright.it",
+    "displayName": "reright",
+    "url": "https://reright.it"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#111827"
+  },
+  "homepage": "https://reright.it",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://app.reright.it/mcp",
+    "serverNames": [
+      "reright"
+    ]
+  },
+  "riskClasses": [
+    "external-shared-state-write",
+    "external-credit-spend"
+  ],
+  "tools": [
+    {
+      "name": "rewrite",
+      "state": "inherit"
+    },
+    {
+      "name": "rewrite_result",
+      "state": "inherit"
+    },
+    {
+      "name": "keep_original",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://reright.it",
+    "https://github.com/interpt-co/reright-cli"
+  ],
+  "saferAlternatives": [
+    "Leave the server off and use the agent's draft as written; no text leaves the machine.",
+    "Use rewrite_result to read the state of a draft already sent, and keep_original to turn down a rewrite; neither sends new text."
+  ]
+}
