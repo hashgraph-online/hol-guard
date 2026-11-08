@@ -17,7 +17,7 @@ pub(super) fn sections(path: &str, lines: &[&str]) -> Vec<Section> {
     if headed(path) {
         headed_sections(lines)
     } else {
-        code_sections(lines)
+        code_sections(lines, path.ends_with(".rs"))
     }
 }
 
@@ -28,8 +28,9 @@ pub(super) fn headed(path: &str) -> bool {
 
 /// Each definition in a code file, from its decorators to the last line
 /// indented under it or the brace that closes it. Lines inside a docstring
-/// or block comment open nothing.
-fn code_sections(lines: &[&str]) -> Vec<Section> {
+/// or block comment open nothing. In Rust, `rust`, a `'` is a lifetime
+/// unless it opens a character literal.
+fn code_sections(lines: &[&str], rust: bool) -> Vec<Section> {
     let mut sections = Vec::new();
     let mut closer: Option<&str> = None;
     for (index, line) in lines.iter().enumerate() {
@@ -43,7 +44,7 @@ fn code_sections(lines: &[&str]) -> Vec<Section> {
                     }
                     sections.push(Section {
                         start: start + 1,
-                        end: block_end(lines, index) + 1,
+                        end: block_end(lines, index, rust) + 1,
                         name: defined_name(line),
                     });
                 }
@@ -64,7 +65,7 @@ fn decorates(line: &str) -> bool {
 /// indented deeper than it, or the closing brace at its own depth when it
 /// left a brace open. A closing parenthesis or bracket at its depth ends a
 /// long signature, not the body.
-fn block_end(lines: &[&str], at: usize) -> usize {
+fn block_end(lines: &[&str], at: usize, rust: bool) -> usize {
     let depth = indent(lines[at]);
     let mut last = at;
     for (index, line) in lines.iter().enumerate().skip(at + 1) {
@@ -80,7 +81,7 @@ fn block_end(lines: &[&str], at: usize) -> usize {
             break;
         }
         if text.starts_with('}') {
-            let open: isize = lines[at..=last].iter().map(|line| braces(line)).sum();
+            let open: isize = lines[at..=last].iter().map(|line| braces(line, rust)).sum();
             return if open > 0 { index } else { last };
         }
         if text == "end" || text.starts_with("end ") {
@@ -95,15 +96,42 @@ fn block_end(lines: &[&str], at: usize) -> usize {
     last
 }
 
-/// Opening braces on `line` less closing ones.
-fn braces(line: &str) -> isize {
-    line.chars()
-        .map(|c| match c {
-            '{' => 1,
-            '}' => -1,
-            _ => 0,
-        })
-        .sum()
+/// Opening braces on `line` less closing ones, outside quoted text and a
+/// `//` comment.
+fn braces(line: &str, rust: bool) -> isize {
+    let chars: Vec<char> = line.chars().collect();
+    let mut open = 0;
+    let mut quote = None;
+    let mut at = 0;
+    while at < chars.len() {
+        let c = chars[at];
+        match quote {
+            Some(_) if c == '\\' => at += 1,
+            Some(mark) if c == mark => quote = None,
+            Some(_) => {}
+            None => match c {
+                '"' | '`' => quote = Some(c),
+                '\'' if rust => at += char_literal(&chars[at..]),
+                '\'' if chars[at + 1..].contains(&'\'') => quote = Some(c),
+                '/' if chars.get(at + 1) == Some(&'/') => break,
+                '{' => open += 1,
+                '}' => open -= 1,
+                _ => {}
+            },
+        }
+        at += 1;
+    }
+    open
+}
+
+/// How far past the `'` opening `rest` its closing `'` is, when `rest`
+/// starts a Rust character literal; 0 for a lifetime.
+fn char_literal(rest: &[char]) -> usize {
+    match rest.get(1) {
+        Some('\\') => (rest.iter().skip(3).position(|&c| c == '\'')).map_or(0, |found| found + 3),
+        _ if rest.get(2) == Some(&'\'') => 2,
+        _ => 0,
+    }
 }
 
 fn indent(line: &str) -> usize {
