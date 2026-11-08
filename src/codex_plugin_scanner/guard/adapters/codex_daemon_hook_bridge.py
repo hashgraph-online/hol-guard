@@ -122,9 +122,8 @@ def main(
             manifest_path=manifest_path,
             config_json=config_json,
         )
-    native = _native_bridge_executable(state.parent)
-    if native is None:
-        return _deny_before_the_runtime_runs(_NATIVE_RUNTIME_MISSING_CODE)
+    # Cached registrations can outlive uninstall. Authenticate before even
+    # discovering capabilities: discovery may start a short-lived runtime.
     unauthenticated = _registration_failure(
         state_path=state,
         fallback_command=fallback_command,
@@ -135,6 +134,9 @@ def main(
     )
     if unauthenticated is not None:
         return _deny_before_the_runtime_runs(unauthenticated)
+    native = _native_bridge_executable(state.parent)
+    if native is None:
+        return _deny_before_the_runtime_runs(_NATIVE_RUNTIME_MISSING_CODE)
     sys.stdout.flush()
     # The child inherits this hook call's stdio, so it reads the hook body and
     # writes the response itself. ``exec`` would save the fork, but this entry
@@ -192,9 +194,6 @@ def _desktop_main(
         sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
         return 1
     if probe_command is None:
-        native = _native_bridge_executable(state.parent)
-        if native is None:
-            return _desktop_denial(event_name, _NATIVE_RUNTIME_MISSING_CODE)
         unauthenticated = _registration_failure(
             state_path=state,
             fallback_command=fallback_command,
@@ -205,6 +204,9 @@ def _desktop_main(
         )
         if unauthenticated is not None:
             return _desktop_denial(event_name, unauthenticated)
+        native = _native_bridge_executable(state.parent)
+        if native is None:
+            return _desktop_denial(event_name, _NATIVE_RUNTIME_MISSING_CODE)
         sys.stdout.flush()
         # Desktop dispatch spends part of this hook's budget before the runtime
         # starts, so the runtime reviews inside what is left of it rather than
