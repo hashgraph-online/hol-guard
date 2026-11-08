@@ -1,11 +1,10 @@
 //! What changed in the project since a session's first prompt, for a prompt
 //! that asks about changes: each changed file with the definitions or
 //! sections the changes fall in, at their current lines, then each commit
-//! made since that prompt, newest first. An agent reviewing a teammate's push
-//! opens those lines instead of running `git` and reading each file. A small
-//! commit's diff is shown too when the prompt is about someone else's push or
-//! a failure, since then the diff itself is what the agent needs; otherwise
-//! the agent made the changes and already has them in its session.
+//! made since that prompt, newest first, and the whole diff when it is small.
+//! An agent reviewing changes reads them here instead of running `git` and
+//! reading each file. When the whole diff is too big, a small commit's diff is
+//! shown when the prompt is about someone else's push or a failure.
 //!
 //! This is the one part of prompt context that runs a program. Only a Git
 //! Guard trusts runs (never one from the project, the home folder or a temp
@@ -348,8 +347,8 @@ fn header_counts(header: &str) -> Option<((usize, usize), usize)> {
 }
 
 /// The changed definitions of each file changed since `base`, uncommitted
-/// edits included, then each commit since `base`, newest first, with its
-/// diff when `show_diffs` and it is small. `screen` returns the text of each
+/// edits included, then each commit since `base`, newest first, then the
+/// whole diff when it is small, or else each commit's when `show_diffs`. `screen` returns the text of each
 /// changed file Guard's read accepts; any other file is left out.
 pub(super) fn changes(
     git: &Git,
@@ -395,11 +394,12 @@ pub(super) fn changes(
     } else {
         screen(&paths)
     };
+    let whole = labels::whole(git, &against, &texts, until);
     let mut listed: Vec<Commit> = Vec::new();
     let mut used = 0;
     for (commit, subject) in commits {
         let mut diff = None;
-        if show_diffs && used < BUDGET {
+        if show_diffs && whole.is_none() && used < BUDGET {
             let show: Vec<&str> = ["show", "--format=", "--no-show-signature", "-U1"]
                 .into_iter()
                 .chain(DIFF)
@@ -418,7 +418,7 @@ pub(super) fn changes(
             diff,
         });
     }
-    render(since, &changed, &texts, &listed)
+    render(since, &changed, &texts, &listed, whole.as_ref())
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file

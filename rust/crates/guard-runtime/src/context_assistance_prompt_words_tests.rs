@@ -32,6 +32,27 @@ fn task_words_name_nothing_unless_written_as_code() {
         assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
     }
     assert!(found.contains(&"test".to_owned()), "{found:?}");
+    let found = terms(
+        "Add a short usage example to the docstring of `Choice.convert` in src/core.py, \
+         written as a doctest (`>>>` lines with their expected output). Make sure the \
+         example actually passes.",
+    );
+    for word in [
+        "short",
+        "usage",
+        "docstring",
+        "written",
+        "doctest",
+        "lines",
+        "expected",
+        "output",
+        "sure",
+        "actually",
+        "passes",
+    ] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"convert".to_owned()), "{found:?}");
     let found = terms("Fix `last` and `edit` so `toolz.first` keeps working");
     for word in ["last", "edit", "first"] {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");

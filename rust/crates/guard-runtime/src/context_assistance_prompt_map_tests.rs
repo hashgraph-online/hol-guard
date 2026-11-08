@@ -171,7 +171,8 @@ def test_other():\n    return 1\n";
 }
 
 /// The few tests that use the request's rare word come before the many that
-/// only use the class it names.
+/// only use the class it names, and are shown whole, once a session. A rename
+/// or a review asks where code is, so it gets their lines only.
 #[test]
 fn tests_using_a_rare_word_come_first() {
     let mut many = String::new();
@@ -181,22 +182,45 @@ fn tests_using_a_rare_word_come_first() {
     let rare = "def test_plain():\n    Choice(['a'])\n\n\
 def test_sensitive_a():\n    Choice(['a'], case_sensitive=False)\n\n\
 def test_sensitive_b():\n    Choice(['b'], case_sensitive=False)\n";
-    let text = mapped_text(
-        &[
-            ("src/core.py", CORE),
-            ("tests/test_many.py", &many),
-            ("tests/test_rare.py", rare),
-        ],
-        &[("choice", true, 3), ("casesensitive", true, 2)],
-    )
-    .unwrap();
+    let list = files(&[
+        ("src/core.py", CORE),
+        ("tests/test_many.py", &many),
+        ("tests/test_rare.py", rare),
+    ]);
+    let terms = looking_for(&[("choice", true, 3), ("casesensitive", true, 2)]);
+    let first = map(&list, &terms, &Asked::default(), later()).unwrap();
     assert!(
-        text.contains(
+        first.text.contains(
             "Tests:\ntests/test_rare.py: 2 related tests, last test_sensitive_b 7-8\n\
+tests/test_rare.py:4-5\n```\ndef test_sensitive_a():\n    Choice(['a'], case_sensitive=False)\n```\n\
+tests/test_rare.py:7-8\n```\ndef test_sensitive_b():\n    Choice(['b'], case_sensitive=False)\n```\n\
 tests/test_many.py: 6 related tests"
         ),
-        "{text}"
+        "{}",
+        first.text
     );
+    assert!(first.text.starts_with(&format!("{HEADER} {SHOWN_NOTE}")));
+    assert_eq!(first.shown.len(), 2);
+    assert!(!first.text.contains("test_choice_0():"), "{}", first.text);
+    let again = Asked {
+        earlier: first.shown.clone(),
+        ..Asked::default()
+    };
+    let rename = Asked {
+        everywhere: true,
+        ..Asked::default()
+    };
+    let review = Asked {
+        changes: true,
+        ..Asked::default()
+    };
+    for asked in [again, rename, review] {
+        let text = map(&list, &terms, &asked, later()).unwrap().text;
+        assert!(
+            text.contains("tests/test_rare.py: 2 related tests") && !text.contains("```"),
+            "{text}"
+        );
+    }
 }
 
 /// The doc section that quotes the request's rare name wins over sections

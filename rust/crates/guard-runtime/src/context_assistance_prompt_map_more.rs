@@ -1,9 +1,9 @@
 //! The rest of the prompt map: the test files that already test what the
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
-use super::super::sections::{headed_sections, marked_test, written_name, Section};
+use super::super::sections::{headed_sections, marked_test, members, written_name, Section};
 use super::super::seen::Span;
-use super::{entry, Asked, File, Kind, Pick};
+use super::{Asked, Entry, File, Kind, Pick, LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
 use std::collections::BTreeSet;
@@ -19,9 +19,11 @@ const MAX_TITLE_CHARS: usize = 60;
 const MAX_OUTLINE: usize = 8;
 /// The most lines of a definition shown whole.
 const MAX_SHOWN_LINES: usize = 40;
-/// The most characters of code one map shows whole; the named definitions
-/// come first, so this always fits the map.
+/// The most characters of code one map shows whole, for the named
+/// definitions and again for their tests.
 const MAX_SHOWN_CHARS: usize = 1_600;
+/// The most close tests looked at for showing whole.
+const MAX_SHOWN_TESTS: usize = 4;
 /// How much a long doc section is marked down, as BM25's `k1`.
 const LENGTH_K: f64 = 1.2;
 
@@ -108,8 +110,16 @@ pub(super) fn changelog_file(path: &str) -> bool {
 /// The test files whose tests best match `mentioned`, each with its count of
 /// close matches and the last of its best ones, where a new test fits. A test
 /// scores the rarity of the words it uses, so the few tests that use a rare
-/// word outrank the many that say "option".
-pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
+/// word outrank the many that say "option". The best file's short close
+/// tests are shown whole, as a named function is, since an agent fixing or
+/// writing the code reads them next; not for a rename or a review, nor when
+/// `earlier` holds them, shown by an earlier prompt or above.
+pub(super) fn tests(
+    files: &[File],
+    mentioned: &[String],
+    asked: &Asked,
+    earlier: &[Span],
+) -> Vec<Entry> {
     if mentioned.is_empty() {
         return Vec::new();
     }
@@ -166,7 +176,7 @@ pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
         .map(|(file, at, used)| (*file, *at, used.iter().map(|word| weight(word)).sum()))
         .filter(|(_, _, score)| *score > 0.0)
         .collect();
-    let mut found: Vec<(f64, usize, String)> = Vec::new();
+    let mut found: Vec<(f64, usize, String, Vec<(&File, usize, f64)>)> = Vec::new();
     for file in files.iter().filter(|file| file.kind == Kind::Test) {
         let own: Vec<&(&File, usize, f64)> = (scored.iter())
             .filter(|(of, _, _)| std::ptr::eq(*of, file))
@@ -178,10 +188,12 @@ pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
         else {
             continue;
         };
-        let close = own
-            .iter()
+        let mut near: Vec<(&File, usize, f64)> = (own.iter().map(|test| **test))
             .filter(|(_, _, score)| *score * 2.0 >= best)
-            .count();
+            .collect();
+        // The closest are shown first.
+        near.sort_by(|a, b| b.2.total_cmp(&a.2));
+        let close = near.len();
         let Some((_, at, _)) = own.iter().rev().find(|(_, _, score)| *score >= best) else {
             continue;
         };
@@ -194,14 +206,41 @@ pub(super) fn tests(files: &[File], mentioned: &[String]) -> Vec<String> {
                 "{}: {close} related tests, last {name} {}-{}",
                 file.path, section.start, section.end
             ),
+            near,
         ));
     }
     found.sort_by(|a, b| b.0.total_cmp(&a.0).then(b.1.cmp(&a.1)));
-    found
-        .into_iter()
-        .take(MAX_TEST_FILES)
-        .map(|(_, _, line)| line)
-        .collect()
+    let mut room = if asked.everywhere || asked.changes {
+        0
+    } else {
+        MAX_SHOWN_CHARS
+    };
+    let mut listed = Vec::new();
+    for (_, _, line, near) in found.into_iter().take(MAX_TEST_FILES) {
+        let mut entry = Entry::plain(line);
+        for (file, at, _) in near.into_iter().take(MAX_SHOWN_TESTS) {
+            let Some((span, code)) = whole(file, at) else {
+                continue;
+            };
+            if code.len() <= room && !earlier.contains(&span) {
+                room -= code.len();
+                let shown = format!(
+                    "\n{}:{}-{}{}",
+                    file.path,
+                    span.start,
+                    span.end,
+                    fenced(&code)
+                );
+                entry.code += shown.len();
+                entry.text.push_str(&shown);
+                entry.shown.push(span);
+            }
+        }
+        // Only the best file's tests are shown.
+        room = 0;
+        listed.push(entry);
+    }
+    listed
 }
 
 /// The doc sections about `words`. A section is about the code names it
@@ -367,31 +406,65 @@ fn around(outer: &Section, inner: &Section) -> bool {
         && (outer.start, outer.end) != (inner.start, inner.end)
 }
 
+/// One named definition: `path:start-end` and its first line, then its
+/// members' lines when it is a class or impl. A long one gives only its first
+/// line number, so the member list is what an agent opens.
+pub(super) fn entry(files: &[File], pick: &Pick) -> String {
+    let file = &files[pick.file];
+    let section = &file.sections[pick.at];
+    let first: String = file.opening(pick.at).chars().take(MAX_LINE_CHARS).collect();
+    let inside = members(&file.sections, &file.parent, &file.lines, pick.at);
+    let length = section.end - section.start + 1;
+    let mut entry = if length > LONG_SECTION && !inside.is_empty() {
+        format!("{}:{} ({length} lines) {first}", file.path, section.start)
+    } else {
+        format!("{}:{}-{} {first}", file.path, section.start, section.end)
+    };
+    let mut list = String::new();
+    for (name, start, end) in inside {
+        let piece = format!("{name} {start}-{end}");
+        if list.len() + 2 + piece.len() > MAX_MEMBERS_CHARS {
+            list.push_str(", ...");
+            break;
+        }
+        if !list.is_empty() {
+            list.push_str(", ");
+        }
+        list.push_str(&piece);
+    }
+    if !list.is_empty() {
+        entry.push_str("\n  members: ");
+        entry.push_str(&list);
+    }
+    entry
+}
+
 /// Each named definition's entry and the spans shown whole. A short function
 /// or method the prompt names is shown whole, but not for a rename or a
 /// review of changes, which ask where code is, nor when an earlier prompt of
 /// the session was shown it.
-pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> (Vec<String>, Vec<Span>) {
+pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entry> {
     let mut listed = Vec::new();
-    let mut shown = Vec::new();
     let mut room = if asked.everywhere || asked.changes {
         0
     } else {
         MAX_SHOWN_CHARS
     };
     for pick in chosen {
-        let mut text = entry(files, pick);
+        let mut item = Entry::plain(entry(files, pick));
         let code = pick.whole.then(|| whole(&files[pick.file], pick.at));
         if let Some((span, code)) = code.flatten() {
             if code.len() <= room && !asked.earlier.contains(&span) {
                 room -= code.len();
-                text.push_str(&fenced(&code));
-                shown.push(span);
+                let shown = fenced(&code);
+                item.code += shown.len();
+                item.text.push_str(&shown);
+                item.shown.push(span);
             }
         }
-        listed.push(text);
+        listed.push(item);
     }
-    (listed, shown)
+    listed
 }
 
 /// A short function or method's own lines, to show whole, with the span they

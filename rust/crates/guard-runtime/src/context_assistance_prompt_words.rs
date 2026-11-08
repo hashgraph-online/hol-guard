@@ -27,6 +27,7 @@ const STOP_WORDS: &[&str] = &[
 /// which code it is about: "find the root cause after the last commit" names
 /// no function `find`, `root` or `last`. Written like code they still count.
 const TASK_WORDS: &[&str] = &[
+    "actually",
     "alone",
     "answer",
     "behavior",
@@ -40,9 +41,12 @@ const TASK_WORDS: &[&str] = &[
     "commit",
     "committed",
     "describe",
+    "docstring",
+    "doctest",
     "edit",
     "everywhere",
     "example",
+    "expected",
     "explain",
     "fail",
     "failing",
@@ -53,8 +57,12 @@ const TASK_WORDS: &[&str] = &[
     "last",
     "leave",
     "library",
+    "line",
+    "lines",
     "look",
+    "output",
     "pass",
+    "passes",
     "passing",
     "push",
     "pushed",
@@ -67,11 +75,15 @@ const TASK_WORDS: &[&str] = &[
     "review",
     "root",
     "run",
+    "short",
     "something",
     "started",
+    "sure",
     "teammate",
     "track",
+    "usage",
     "write",
+    "written",
 ];
 
 /// Lowercase words from the prompt worth looking for in paths and code.

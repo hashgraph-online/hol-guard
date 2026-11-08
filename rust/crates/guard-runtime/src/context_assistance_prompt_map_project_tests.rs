@@ -80,9 +80,11 @@ fn a_prompt_maps_to_allowed_project_code_only() {
     let (home, _project, root) = project(ON, &list);
     let text = prompt_map(home.path(), &root, prompt).unwrap();
     assert!(text.contains("\nsrc/core.py:"), "{text}");
-    assert!(!text.contains("```"), "{text}");
     assert!(
-        text.contains("tests/test_core.py: 1 related tests, last test_choice 1-2"),
+        text.contains(
+            "tests/test_core.py: 1 related tests, last test_choice 1-2\n\
+             tests/test_core.py:1-2\n```\ndef test_choice():\n    Choice(['a'], case_sensitive=False)\n```"
+        ),
         "{text}"
     );
     assert!(!text.contains("signing.py"), "{text}");
