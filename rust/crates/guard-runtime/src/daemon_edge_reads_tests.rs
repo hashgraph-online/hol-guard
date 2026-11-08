@@ -115,7 +115,7 @@ fn takes_only_a_complete_valid_handshake() {
 
 #[test]
 fn responses_are_html_safe_json_with_the_daemon_headers() {
-    let response = json_response(200, &json!({"a": "<&>"}), Some("abc123"), None);
+    let response = json_response(200, &json!({"a": "<&>"}), Some("abc123"), None, false);
     let text = String::from_utf8(response).unwrap();
     let (head, body) = text.split_once("\r\n\r\n").unwrap();
     assert!(head.starts_with("HTTP/1.0 200 OK\r\n"));

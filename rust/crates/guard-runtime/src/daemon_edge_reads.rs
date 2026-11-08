@@ -29,12 +29,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
+use guard_contracts::DaemonRoutePayloadV1;
 use guard_contracts::{GuardStoreRequestV1, GUARD_STORE_REQUEST_SCHEMA};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::auth::authorize;
 use super::http::{head_end, parse_get, query_int, query_value, GetRequest};
+use crate::daemon_route_session::origin_decision;
 
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";
 pub(super) const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
@@ -216,7 +218,7 @@ pub(super) fn answer(
     let Some(head) = take_head(client) else {
         return Outcome::Relay(Vec::new());
     };
-    let Some((status, body, cors_origin)) =
+    let Some((status, body, cors_origin, no_store)) =
         parse_get(&head).and_then(|request| respond(&request, config, reads))
     else {
         return Outcome::Relay(head);
@@ -226,6 +228,7 @@ pub(super) fn answer(
         &body,
         config.dashboard_build.as_deref(),
         cors_origin.as_deref(),
+        no_store,
     );
     let mut writer = client;
     let _ = client.set_write_timeout(Some(stalled_write));
@@ -281,7 +284,7 @@ fn respond(
     request: &GetRequest<'_>,
     config: &ReadConfig,
     reads: &NativeReads,
-) -> Option<(u16, Value, Option<String>)> {
+) -> Option<(u16, Value, Option<String>, bool)> {
     if request.has_header("Content-Length") || request.has_header("Transfer-Encoding") {
         return None;
     }
@@ -289,8 +292,21 @@ fn respond(
     // Reported at the start as well as the end, so a slow store read never
     // looks idle to the daemon.
     reads.report_activity();
+    if request.path == "/v1/requests" {
+        let hosted = caller.cors_origin.as_deref().is_some_and(|origin| {
+            matches!(
+                origin_decision(origin, "/"),
+                DaemonRoutePayloadV1::Origin {
+                    hosted_origin: true,
+                    ..
+                }
+            )
+        });
+        return requests::list(request.query, hosted, config, reads)
+            .map(|(status, body, no_store)| (status, body, caller.cors_origin, no_store));
+    }
     route(request.path, request.query, config, reads)
-        .map(|(status, body)| (status, body, caller.cors_origin))
+        .map(|(status, body)| (status, body, caller.cors_origin, false))
 }
 
 /// The answer the daemon's Python route gives for the same path and query, or
@@ -417,6 +433,7 @@ pub(super) fn json_response(
     body: &Value,
     dashboard_build: Option<&str>,
     cors_origin: Option<&str>,
+    no_store: bool,
 ) -> Vec<u8> {
     let encoded = serde_json::to_vec(body).unwrap_or_else(|_| b"null".to_vec());
     let mut escaped = Vec::with_capacity(encoded.len());
@@ -431,6 +448,7 @@ pub(super) fn json_response(
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
+        410 => "Gone",
         _ => "Not Found",
     };
     let mut response = format!(
@@ -444,6 +462,9 @@ pub(super) fn json_response(
     }
     if let Some(build) = dashboard_build {
         response.push_str(&format!("X-Guard-Dashboard-Build: {build}\r\n"));
+    }
+    if no_store {
+        response.push_str("Cache-Control: no-store\r\n");
     }
     response.push_str("Connection: close\r\n\r\n");
     let mut bytes = response.into_bytes();
@@ -459,6 +480,9 @@ mod records;
 
 #[path = "daemon_edge_activity.rs"]
 mod activity;
+
+#[path = "daemon_edge_requests.rs"]
+mod requests;
 
 #[cfg(test)]
 #[path = "daemon_edge_reads_tests.rs"]
