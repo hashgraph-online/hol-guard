@@ -22,7 +22,6 @@ everything, as before.
 
 from __future__ import annotations
 
-import json
 import os
 import socket
 import subprocess
@@ -44,8 +43,6 @@ _QUICK_EXIT_SECONDS = 5.0
 _QUICK_EXITS_BEFORE_FALLBACK = 3
 _STOP_TIMEOUT_SECONDS = 2.0
 _FALLBACK_ACCEPT_POLL_SECONDS = 0.5
-HANDSHAKE_SCHEMA = "guard-daemon-edge-handshake.v1"
-_MAX_BUSY_TIMEOUT_MS = 60_000
 
 
 class _EdgeServer(Protocol):
@@ -104,30 +101,6 @@ def _close_liveness(liveness: socket.socket) -> None:
         liveness.shutdown(socket.SHUT_RDWR)
     with suppress(OSError):
         liveness.close()
-
-
-def edge_handshake(
-    *,
-    auth_token: str,
-    guard_home: Path,
-    store_path: Path,
-    source: str,
-    busy_timeout_seconds: float,
-    dashboard_build: str | None,
-) -> bytes:
-    """The line that lets the edge answer token-authenticated store reads."""
-
-    payload: dict[str, object] = {
-        "schema": HANDSHAKE_SCHEMA,
-        "auth_token": auth_token,
-        "guard_home": os.path.abspath(guard_home),
-        "store_path": os.path.abspath(store_path),
-        "source": source,
-        "busy_timeout_ms": max(1, min(_MAX_BUSY_TIMEOUT_MS, int(busy_timeout_seconds * 1000))),
-    }
-    if dashboard_build is not None:
-        payload["dashboard_build"] = dashboard_build
-    return json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
 def _read_activity(liveness: socket.socket, on_activity: Callable[[], None]) -> None:
@@ -395,8 +368,6 @@ def start_native_daemon_edge(
 __all__ = [
     "EDGE_ENV",
     "EDGE_FEATURE",
-    "HANDSHAKE_SCHEMA",
     "NativeDaemonEdge",
-    "edge_handshake",
     "start_native_daemon_edge",
 ]

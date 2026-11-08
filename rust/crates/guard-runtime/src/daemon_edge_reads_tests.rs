@@ -237,6 +237,7 @@ fn replays_everything_else_to_the_daemon_byte_for_byte() {
             "GET /v1/read-state HTTP/1.1\r\nOrigin: http://x\r\nX-Guard-Token: {TOKEN}\r\n\r\n"
         ),
         format!("GET /v1/requests HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
+        format!("GET /v1/receipts/analytics HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
         format!("POST /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
         // The store has no receipts table, so the read fails and the daemon
         // answers it instead.

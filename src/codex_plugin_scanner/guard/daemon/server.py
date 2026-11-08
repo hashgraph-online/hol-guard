@@ -111,7 +111,6 @@ from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime_artifact_reconciliation import (
     reconcile_runtime_artifacts,
 )
-from ..sqlite_tuning import sqlite_connect_timeout_seconds
 from ..storage_retention import quarantined_store_summary
 from ..store import GuardStore
 from ..store_evidence import (
@@ -178,7 +177,8 @@ from .manager import (
     release_guard_daemon_owner_lock,
     write_guard_daemon_state,
 )
-from .native_edge import NativeDaemonEdge, edge_handshake, start_native_daemon_edge
+from .native_edge import NativeDaemonEdge, start_native_daemon_edge
+from .native_edge_handshake import daemon_edge_callbacks
 from .release_feed_read import (
     MAX_RELEASE_FEED_PAGE_SIZE,
     RELEASE_FEED_REQUEST_INVALID,
@@ -601,32 +601,17 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         super().__init__(server_address, handler_class)
         self._socket_bound = True
         try:
+            handshake, on_activity = daemon_edge_callbacks(self, _STATIC_DIR)
             self.native_edge = start_native_daemon_edge(
                 self,
                 guard_home=store.guard_home,
                 host=str(self.server_address[0]),
-                handshake=self._native_edge_handshake,
-                on_activity=self._note_native_edge_activity,
+                handshake=handshake,
+                on_activity=on_activity,
             )
         except BaseException:
             self.server_close()
             raise
-
-    def _native_edge_handshake(self) -> bytes:
-        return edge_handshake(
-            auth_token=self.auth_token,
-            guard_home=self.store.guard_home,
-            store_path=self.store.path,
-            source=self.store.guard_source,
-            busy_timeout_seconds=sqlite_connect_timeout_seconds(),
-            dashboard_build=dashboard_build_id(_STATIC_DIR),
-        )
-
-    def _note_native_edge_activity(self) -> None:
-        # The edge answered a request itself; count it as the request handler
-        # would have.
-        self.last_activity_monotonic = time.monotonic()
-        self.runtime_heartbeat.touch(_now())
 
     def _initialize_request_services(self) -> None:
         from .hook_direct_counters import bind_hook_counter_sink

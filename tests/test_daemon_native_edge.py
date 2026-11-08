@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import native_edge
+from codex_plugin_scanner.guard.daemon import native_edge, native_edge_handshake
 
 
 class _RecordingServer:
@@ -173,7 +173,7 @@ def test_edge_that_cannot_start_its_supervisor_leaves_the_public_socket(
 
 
 def test_handshake_names_the_store_and_clamps_the_busy_timeout(tmp_path: Path) -> None:
-    line = native_edge.edge_handshake(
+    line = native_edge_handshake.edge_handshake(
         auth_token="token",
         guard_home=tmp_path,
         store_path=tmp_path / "guard.db",
@@ -183,7 +183,7 @@ def test_handshake_names_the_store_and_clamps_the_busy_timeout(tmp_path: Path) -
     )
     assert line.endswith(b"\n") and line.count(b"\n") == 1
     assert json.loads(line) == {
-        "schema": native_edge.HANDSHAKE_SCHEMA,
+        "schema": native_edge_handshake.HANDSHAKE_SCHEMA,
         "auth_token": "token",
         "guard_home": str(tmp_path),
         "store_path": str(tmp_path / "guard.db"),
@@ -192,7 +192,7 @@ def test_handshake_names_the_store_and_clamps_the_busy_timeout(tmp_path: Path) -
     }
     assert (
         json.loads(
-            native_edge.edge_handshake(
+            native_edge_handshake.edge_handshake(
                 auth_token="token",
                 guard_home=tmp_path,
                 store_path=tmp_path / "guard.db",
@@ -272,3 +272,32 @@ def test_a_restarted_edge_gets_the_handshake_again(monkeypatch: pytest.MonkeyPat
     finally:
         edge.close()
         server.socket.close()
+
+
+def test_edge_callbacks_read_the_server_store_and_touch_its_heartbeat(tmp_path: Path) -> None:
+    touched: list[str] = []
+
+    class _Store:
+        guard_home = tmp_path
+        path = tmp_path / "guard.db"
+        guard_source = "default"
+
+    class _Heartbeat:
+        def touch(self, now: str) -> None:
+            touched.append(now)
+
+    class _Server:
+        store = _Store()
+        auth_token = "token"
+        runtime_heartbeat = _Heartbeat()
+        last_activity_monotonic = 0.0
+
+    server = _Server()
+    handshake, on_activity = native_edge_handshake.daemon_edge_callbacks(server, tmp_path / "static")
+    payload = json.loads(handshake())
+    assert payload["store_path"] == str(tmp_path / "guard.db")
+    assert payload["source"] == "default"
+    assert "dashboard_build" not in payload
+    on_activity()
+    assert server.last_activity_monotonic > 0
+    assert len(touched) == 1

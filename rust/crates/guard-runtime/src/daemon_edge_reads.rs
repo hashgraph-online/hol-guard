@@ -17,8 +17,9 @@
 //! fails is replayed too, so the daemon answers it as it always has. Only
 //! reads that never write the store are answered here.
 //!
-//! Each answered request writes one byte back on the liveness socket, at most
-//! twice a second, so the daemon still counts the activity it no longer sees.
+//! Each authenticated request writes one byte back on the liveness socket when
+//! it starts and when it is answered, at most twice a second, so the daemon
+//! still counts the activity it no longer sees.
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
@@ -278,6 +279,9 @@ fn respond(
     if !constant_time_eq(token.as_bytes(), &config.token) {
         return None;
     }
+    // Reported at the start as well as the end, so a slow store read never
+    // looks idle to the daemon.
+    reads.report_activity();
     route(request.path, request.query, config, reads)
 }
 
@@ -321,7 +325,11 @@ fn route(
         }
         "/v1/read-state" => read_state(config, reads).map(|ids| (200, json!({"ids": ids}))),
         _ => {
-            if let Some(receipt_id) = single_segment(path, "/v1/receipts/", "") {
+            // The daemon serves `/v1/receipts/analytics` itself, ahead of its
+            // receipt lookup.
+            if let Some(receipt_id) =
+                single_segment(path, "/v1/receipts/", "").filter(|segment| *segment != "analytics")
+            {
                 let receipt =
                     reads.store_call(config, "get_receipt", json!({"receipt_id": receipt_id}))?;
                 return Some(if receipt.is_null() {
