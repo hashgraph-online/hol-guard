@@ -42,7 +42,8 @@ fn a_prompt_about_a_push_gets_the_newest_commit() {
             "{title} (the end of this note has what `git diff -U1 {}` prints now)",
             &first[..7]
         )) && text.contains("\nsrc/core.py: other 8-9")
-            && text.contains(" teammate: other returns 2\n")
+            && text.contains(" teammate: other returns 2 (src/core.py)\n")
+            && !text.contains("Not committed yet")
             && text.contains("\n+    return 2\n"),
         "{text}"
     );
@@ -50,7 +51,9 @@ fn a_prompt_about_a_push_gets_the_newest_commit() {
     let text = ask(&session, pushed).unwrap();
     assert!(
         text.starts_with(title)
-            && text.contains(" teammate: other returns 2\n")
+            && text.contains(
+                " teammate: other returns 2 (src/core.py)\n\nNot committed yet: src/core.py\n"
+            )
             && text.contains("\n+    return 3\n"),
         "{text}"
     );

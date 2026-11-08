@@ -25,6 +25,10 @@ const CUT: &str = "\n(more changes left out; `git diff` shows every change)";
 /// names in its command, and the most files it names as left out.
 const MAX_LIMITED_PATHS: usize = 8;
 const MAX_LEFT_OUT: usize = 3;
+const MAX_COMMITS: &str = "8";
+const MAX_SUBJECT_CHARS: usize = 80;
+/// The most files named for one commit, or as not committed yet.
+const MAX_NAMED_FILES: usize = 4;
 
 /// The whole diff, the command that prints it, and how to see the files it
 /// leaves out.
@@ -116,11 +120,106 @@ fn plain(path: &str) -> bool {
         && (path.chars()).all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-'))
 }
 
-/// One commit since the session started, and its diff when shown.
+/// One commit since the session started, the files it changes, and its
+/// diff when shown.
 pub(super) struct Commit {
     pub(super) id: String,
     pub(super) subject: String,
+    pub(super) files: Named,
     pub(super) diff: Option<String>,
+}
+
+/// Changed files by name: those Guard's read accepted, then a count of the
+/// others, whose names are never shown.
+#[derive(Default)]
+pub(super) struct Named {
+    files: Vec<String>,
+    others: usize,
+}
+
+impl Named {
+    pub(super) fn new(names: &[String], texts: &[(String, String)]) -> Self {
+        let (read, others): (Vec<&String>, Vec<&String>) =
+            (names.iter()).partition(|name| texts.iter().any(|(path, _)| path == *name));
+        let shown = read.len().min(MAX_NAMED_FILES);
+        Named {
+            files: read[..shown].iter().map(|name| (*name).clone()).collect(),
+            others: others.len() + read.len() - shown,
+        }
+    }
+
+    fn text(&self) -> String {
+        let files = if self.others == 1 { "file" } else { "files" };
+        match (self.files.is_empty(), self.others) {
+            (_, 0) => self.files.join(", "),
+            (true, others) => format!("{others} {files}"),
+            (false, others) => format!("{} and {others} more {files}", self.files.join(", ")),
+        }
+    }
+}
+
+/// The commits since `base`, newest first, leaving out merges, each with
+/// the files it changes.
+pub(super) fn commits(
+    git: &Git,
+    base: Option<&str>,
+    until: Instant,
+) -> Vec<(String, String, Vec<String>)> {
+    let Some(base) = base.filter(|base| commit_id(base)) else {
+        return Vec::new();
+    };
+    let range = format!("{base}..HEAD");
+    let log: Vec<&str> = [
+        "log",
+        "--no-show-signature",
+        "--no-merges",
+        "--name-only",
+        "--format=%x01%H %s",
+        "-n",
+        MAX_COMMITS,
+    ]
+    .into_iter()
+    .chain(DIFF)
+    .chain([range.as_str()])
+    .collect();
+    let Some(listed) = git.run(&log, until) else {
+        return Vec::new();
+    };
+    (listed.split('\u{1}'))
+        .filter_map(|entry| {
+            let mut lines = entry.lines();
+            let line = lines.next()?;
+            let (commit, subject) = line.split_once(' ').unwrap_or((line, ""));
+            commit_id(commit).then(|| {
+                let subject: String = subject
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .take(MAX_SUBJECT_CHARS)
+                    .collect();
+                let subject = if clean(&subject) {
+                    subject
+                } else {
+                    String::new()
+                };
+                let names = lines.filter(|name| !name.is_empty()).map(str::to_owned);
+                (commit.to_owned(), subject, names.collect())
+            })
+        })
+        .collect()
+}
+
+/// The changed files not committed yet.
+pub(super) fn uncommitted(git: &Git, texts: &[(String, String)], until: Instant) -> Option<Named> {
+    let arguments: Vec<&str> = ["diff", "--name-only"]
+        .into_iter()
+        .chain(DIFF)
+        .chain(["HEAD"])
+        .collect();
+    let names: Vec<String> = (git.run(&arguments, until)?.lines())
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect();
+    (!names.is_empty()).then(|| Named::new(&names, texts))
 }
 
 /// The commit a changes note starts from.
@@ -159,6 +258,7 @@ pub(super) fn render(
     changed: &[Hunk],
     texts: &[(String, String)],
     commits: &[Commit],
+    pending: Option<&Named>,
     whole: Option<&Whole>,
 ) -> Option<String> {
     let mut files = Vec::new();
@@ -219,8 +319,14 @@ pub(super) fn render(
     // files; a part that does not fit is skipped and the note says so once.
     let subjects: Vec<String> = (commits.iter())
         .map(|commit| {
+            let files = commit.files.text();
+            let files = if files.is_empty() {
+                files
+            } else {
+                format!(" ({files})")
+            };
             let line = format!("\n\nCommit {} {}", &commit.id[..8], commit.subject);
-            line.trim_end().to_owned()
+            format!("{}{files}", line.trim_end())
         })
         .collect();
     let room = MAX_NOTE.saturating_sub(out.len() + CUT.len());
@@ -270,6 +376,12 @@ pub(super) fn render(
             }
         };
         out.push_str(&part);
+    }
+    if let Some(pending) = pending {
+        let part = format!("\n\nNot committed yet: {}", pending.text());
+        if out.len() + part.len() + CUT.len() <= MAX_NOTE {
+            out.push_str(&part);
+        }
     }
     if cut {
         out.push_str(CUT);

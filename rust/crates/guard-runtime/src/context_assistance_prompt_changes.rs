@@ -24,7 +24,7 @@ use crate::context_assistance_engine::screened_texts;
 use crate::git_execution_safety_binary::resolve_trusted_git;
 use crate::git_execution_safety_config::Environment;
 use crate::git_execution_safety_probe::Prober;
-use labels::{render, Commit, Since};
+use labels::{commits, render, uncommitted, Commit, Named, Since};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -34,8 +34,6 @@ use std::time::{Duration, Instant};
 const BUDGET: usize = 2_000;
 /// The longest commit diff shown.
 const MAX_SHOWN_DIFF: usize = 1_500;
-const MAX_COMMITS: &str = "8";
-const MAX_SUBJECT_CHARS: usize = 80;
 const MAX_SESSIONS: usize = 64;
 /// A Git call starts only with at least this much of the wait left.
 const MIN_LEFT: Duration = Duration::from_millis(150);
@@ -393,7 +391,7 @@ pub(super) fn changes(
     let whole = labels::whole(git, &against, &texts, until);
     let mut listed: Vec<Commit> = Vec::new();
     let mut used = 0;
-    for (commit, subject) in commits {
+    for (commit, subject, names) in commits {
         let mut diff = None;
         if show_diffs && whole.is_none() && used < BUDGET {
             let show: Vec<&str> = ["show", "--format=", "--no-show-signature", "-U1"]
@@ -411,10 +409,22 @@ pub(super) fn changes(
         listed.push(Commit {
             id: commit,
             subject,
+            files: Named::new(&names, &texts),
             diff,
         });
     }
-    render(since, &changed, &texts, &listed, whole.as_ref())
+    // Which changes are committed is what an agent runs `git status` for.
+    let pending = (allowed == Allowed::Everything && !listed.is_empty())
+        .then(|| uncommitted(git, &texts, until))
+        .flatten();
+    render(
+        since,
+        &changed,
+        &texts,
+        &listed,
+        pending.as_ref(),
+        whole.as_ref(),
+    )
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file
@@ -429,46 +439,6 @@ fn shown_files(diff: &str, texts: &[(String, String)]) -> bool {
     !paths.is_empty()
         && headers == paths.len()
         && (paths.iter()).all(|changed| texts.iter().any(|(path, _)| path == changed))
-}
-
-/// The commits since `base`, newest first, leaving out merges.
-fn commits(git: &Git, base: Option<&str>, until: Instant) -> Vec<(String, String)> {
-    let Some(base) = base.filter(|base| commit_id(base)) else {
-        return Vec::new();
-    };
-    let range = format!("{base}..HEAD");
-    let log = [
-        "log",
-        "--no-show-signature",
-        "--no-color",
-        "--no-merges",
-        "--format=%H %s",
-        "-n",
-        MAX_COMMITS,
-        range.as_str(),
-    ];
-    let Some(listed) = git.run(&log, until) else {
-        return Vec::new();
-    };
-    listed
-        .lines()
-        .filter_map(|line| {
-            let (commit, subject) = line.split_once(' ').unwrap_or((line, ""));
-            commit_id(commit).then(|| {
-                let subject: String = subject
-                    .chars()
-                    .filter(|c| !c.is_control())
-                    .take(MAX_SUBJECT_CHARS)
-                    .collect();
-                let subject = if clean(&subject) {
-                    subject
-                } else {
-                    String::new()
-                };
-                (commit.to_owned(), subject)
-            })
-        })
-        .collect()
 }
 
 /// Whether Guard's secret scan finds nothing in `text`, having read it all.

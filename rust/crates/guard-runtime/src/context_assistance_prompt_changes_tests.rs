@@ -214,15 +214,26 @@ fn changes_are_named_by_the_definition_they_fall_in() {
         Commit {
             id: "fedcba9876543210fedcba9876543210fedcba98".into(),
             subject: "teammate fix".into(),
+            files: Named::default(),
             diff: Some("@@ -1 +1 @@\n-a\n+b\n".into()),
         },
         Commit {
             id: "1111111122222222333333334444444455555555".into(),
             subject: "older".into(),
+            files: Named::new(&["src/core.py".into(), "private/notes.txt".into()], &texts),
             diff: None,
         },
     ];
-    let text = render(Since::Start(base), &changed, &texts, &commits, None).unwrap();
+    let pending = Named::new(&["src/store.py".into()], &texts);
+    let text = render(
+        Since::Start(base),
+        &changed,
+        &texts,
+        &commits,
+        Some(&pending),
+        None,
+    )
+    .unwrap();
     assert!(
         text.starts_with(
             "HOL Guard CIGAR: changes in this project since this session started at commit \
@@ -239,7 +250,8 @@ src/big.py: big lines 50-51\nsrc/core.py: convert 4-5, other 8-9\nsrc/store.py: 
     );
     assert!(
         text.ends_with(
-            "\n\nCommit fedcba98 teammate fix:\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\nCommit 11111111 older"
+            "\n\nCommit fedcba98 teammate fix:\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\nCommit 11111111 older (src/core.py and 1 more file)\n\n\
+Not committed yet: src/store.py"
         ),
         "{text}"
     );
@@ -247,8 +259,11 @@ src/big.py: big lines 50-51\nsrc/core.py: convert 4-5, other 8-9\nsrc/store.py: 
         !text.contains("hidden") && !text.contains("value.strip()"),
         "no file the screen refused and no uncommitted diff: {text}"
     );
-    assert_eq!(render(Since::Start(base), &changed, &[], &[], None), None);
-    let uncommitted = render(Since::Nothing, &changed[..1], &texts, &[], None).unwrap();
+    assert_eq!(
+        render(Since::Start(base), &changed, &[], &[], None, None),
+        None
+    );
+    let uncommitted = render(Since::Nothing, &changed[..1], &texts, &[], None, None).unwrap();
     assert!(
         uncommitted
             .starts_with("HOL Guard CIGAR: uncommitted changes in this project (`git diff HEAD`"),
@@ -289,7 +304,9 @@ fn a_session_gets_its_uncommitted_edits_and_commits_since_its_first_prompt() {
         );
         assert!(
             text.contains("\nCommit ")
-                && text.contains(" teammate: other returns 2\n")
+                && text.contains(
+                    " teammate: other returns 2 (src/core.py)\n\nNot committed yet: src/core.py\n"
+                )
                 && text.contains(&format!("\n\n`{command}` prints:\n```diff\n"))
                 && text.contains("\n+    return value.strip()\n")
                 && text.contains("\n+    return 2\n```")
