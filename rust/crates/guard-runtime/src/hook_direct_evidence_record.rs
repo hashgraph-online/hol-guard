@@ -15,6 +15,14 @@
 //!
 //! A connector-setup review's desktop notice needs no writer, so it is raised
 //! for every paged record that names one and marked `connector_notice_raised`.
+//!
+//! A hook record left with nothing for the daemon to record then leaves the
+//! page: `record_direct_hook_evidence` would submit no receipt, fence window,
+//! capture, activity or notice for it, so its only work there was the
+//! unmanaged-harness check, whose answer changes nothing for such a record.
+//! The page's cursor still covers it, so it leaves the queue with the
+//! daemon's acknowledgement like any paged record, and a page sent again
+//! leaves it out again.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -27,6 +35,7 @@ use serde_json::{json, Value};
 
 use super::{DirectEvidenceQueue, Paged, RECEIPT_VALID};
 use crate::edge_receipt::{DIRECT_ACTIVITY_RECORDED, DIRECT_RECEIPT_RECORDED};
+use crate::hook_direct::CONNECTOR_NOTICE_FIELD;
 
 /// The writer took the fence window this record's wait reports.
 const FENCE_WAIT_RECORDED: &str = "fence_wait_recorded";
@@ -45,6 +54,11 @@ const CAPTURE_PAGE_BUDGET: Duration = Duration::from_millis(250);
 /// `hook_policy_fence_window.REBUILD_WAIT_SECONDS`, in milliseconds: no
 /// window reports a longer wait than a hook may poll.
 const REBUILD_WAIT_MS: u64 = 8_000;
+/// The hook events the daemon's drain records, `_PRE_TOOL_USE` the default
+/// of a record that names none.
+const PRE_TOOL_USE: &str = "PreToolUse";
+const POST_TOOL_USE: &str = "PostToolUse";
+const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
 
 fn flagged(record: &Value, field: &str) -> bool {
     record.get(field) == Some(&Value::Bool(true))
@@ -223,6 +237,48 @@ pub(super) fn leftovers(
     let (marks, fatal) = recorded?;
     mark(queue, paged, &marks);
     Some(fatal)
+}
+
+/// Leave out of the page the records the daemon has nothing left to record
+/// for.
+pub(super) fn drop_settled(paged: &mut Vec<Paged>, guard_home: &str) {
+    let capturing = capture_marker_present(Path::new(guard_home));
+    paged.retain(|paged| !settled(paged, capturing));
+}
+
+/// Whether `record_direct_hook_evidence` would record nothing for this
+/// record: no receipt the store accepts and the resident has not recorded, no
+/// fence wait, no capture the marker turns on, and for a tool answer its
+/// activity recorded and no connector-setup notice left to raise. A relayed
+/// MCP record, and an event the drain does not know, stay on the page.
+pub(super) fn settled(paged: &Paged, capturing: bool) -> bool {
+    let record = &paged.record;
+    let event = match record.get("event") {
+        None => PRE_TOOL_USE,
+        Some(event) => match event.as_str() {
+            Some(event) => event,
+            None => return false,
+        },
+    };
+    if record.get("kind").is_some()
+        || ![PRE_TOOL_USE, POST_TOOL_USE, USER_PROMPT_SUBMIT].contains(&event)
+    {
+        return false;
+    }
+    let receipt_left = flagged(record, RECEIPT_VALID)
+        && record.get("receipt").is_some_and(Value::is_object)
+        && !flagged(record, DIRECT_RECEIPT_RECORDED);
+    if receipt_left || fence_wait_ms(record).is_some() || capture_pending(paged, capturing) {
+        return false;
+    }
+    if event == USER_PROMPT_SUBMIT {
+        // The daemon records no activity for a prompt it answers.
+        return true;
+    }
+    flagged(record, DIRECT_ACTIVITY_RECORDED)
+        && (event == POST_TOOL_USE
+            || flagged(record, super::notice::NOTICE_RAISED)
+            || record.get(CONNECTOR_NOTICE_FIELD).is_none())
 }
 
 /// Mark what was recorded on the page and in the queue.

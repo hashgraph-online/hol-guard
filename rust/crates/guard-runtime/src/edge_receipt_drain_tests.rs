@@ -32,21 +32,25 @@ fn allowed(edge: &GuardHookEdgeResultV2) -> Value {
     })
 }
 
+/// The page leaves out a record it left the daemon nothing to record for,
+/// while its cursor still covers it.
+fn assert_settled(page: &Value) {
+    assert_eq!(page["records"], json!([]), "{page}");
+    assert!(page["through"].as_u64().is_some(), "{page}");
+    assert_eq!(page["remaining"], json!(0), "{page}");
+}
+
 #[test]
-fn the_drain_records_what_a_direct_answer_left_and_marks_it_once() {
+fn the_drain_records_what_a_direct_answer_left_once_and_leaves_it_off_the_page() {
     let home = store_home("drain-records-leftovers");
     let (_, edge) = answered(&home, true);
     let queue = DirectEvidenceQueue::default();
     assert!(offer_direct(&queue, &home, allowed(&edge), true));
     let page = drained(&queue, &home, Some("guard"));
-    let records = page["records"].as_array().unwrap();
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0][DIRECT_RECEIPT_RECORDED], json!(true));
-    assert_eq!(records[0][DIRECT_ACTIVITY_RECORDED], json!(true));
+    assert_settled(&page);
     assert!(page.get("store_fatal").is_none());
-    // A page sent again carries the marks and records nothing twice.
-    let again = drained(&queue, &home, Some("guard"));
-    assert_eq!(again["records"], page["records"]);
+    // A page sent again records nothing twice and still leaves it out.
+    assert_settled(&drained(&queue, &home, Some("guard")));
     assert_eq!(receipts_accepted(&home), json!(1));
     assert_eq!(activities_accepted(&home), json!(1));
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
@@ -102,9 +106,7 @@ fn the_drain_finishes_an_activity_the_answer_left_behind_its_receipt() {
             },
         )
         .is_ok());
-    let records = drained(&queue, &home, Some("guard"))["records"].clone();
-    assert_eq!(records[0][DIRECT_RECEIPT_RECORDED], json!(true));
-    assert_eq!(records[0][DIRECT_ACTIVITY_RECORDED], json!(true));
+    assert_settled(&drained(&queue, &home, Some("guard")));
     assert_eq!(receipts_accepted(&home), json!(1));
     // The writer was started with one activity; the drain queued this one.
     assert_eq!(activities_accepted(&home), json!(2));
@@ -126,11 +128,9 @@ fn the_drain_records_a_fence_wait_once_as_the_daemon_window_would() {
     let mut record = allowed(&edge);
     record["fence_wait_ms"] = json!(300);
     assert!(offer_direct(&queue, &home, record, true));
-    let page = drained(&queue, &home, Some("guard"));
-    assert_eq!(page["records"][0]["fence_wait_recorded"], json!(true));
-    // A page sent again carries the mark and records no second window.
-    let again = drained(&queue, &home, Some("guard"));
-    assert_eq!(again["records"], page["records"]);
+    assert_settled(&drained(&queue, &home, Some("guard")));
+    // A page sent again records no second window.
+    assert_settled(&drained(&queue, &home, Some("guard")));
     assert_eq!(receipts_accepted(&home), json!(1));
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
     let rows: Vec<(String, String, String)> = store
@@ -183,11 +183,9 @@ fn the_drain_seals_a_codex_receipt_once_while_the_capture_is_on() {
     record["payload"] = payload;
     let queue = DirectEvidenceQueue::default();
     assert!(offer_direct(&queue, &home, record, true));
-    let page = drained(&queue, &home, Some("guard"));
-    assert_eq!(page["records"][0]["capture_recorded"], json!(true));
-    // A page sent again carries the mark and seals nothing twice.
-    let again = drained(&queue, &home, Some("guard"));
-    assert_eq!(again["records"], page["records"]);
+    assert_settled(&drained(&queue, &home, Some("guard")));
+    // A page sent again seals nothing twice.
+    assert_settled(&drained(&queue, &home, Some("guard")));
     let rows = std::fs::read_to_string(home.join("diagnostics/codex-binding-capture.run-1.jsonl"))
         .unwrap();
     assert_eq!(rows.lines().count(), 1, "{rows}");
@@ -203,8 +201,9 @@ fn the_drain_leaves_a_codex_receipt_uncaptured_while_the_capture_is_off() {
     record["harness"] = json!("codex");
     let queue = DirectEvidenceQueue::default();
     assert!(offer_direct(&queue, &home, record, true));
-    let records = drained(&queue, &home, Some("guard"))["records"].clone();
-    assert!(records[0].get("capture_recorded").is_none());
+    // The daemon's capture would seal nothing without the marker either.
+    assert_settled(&drained(&queue, &home, Some("guard")));
+    assert!(!home.join("diagnostics").exists());
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
 }
 
@@ -217,7 +216,8 @@ fn the_drain_raises_a_connector_setup_notice_once() {
     record["connector_setup_notice"] =
         json!({"request_id": "req-missing", "connector_name": "Example CLI"});
     let queue = DirectEvidenceQueue::default();
-    assert!(offer_direct(&queue, &home, record, true));
+    // The binding keeps the activity, so the record stays on the page.
+    assert!(offer_direct(&queue, &home, record, false));
     let records = drained(&queue, &home, Some("guard"))["records"].clone();
     assert_eq!(records[0]["connector_notice_raised"], json!(true));
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
@@ -228,7 +228,7 @@ fn the_drain_marks_no_notice_a_record_does_not_name() {
     let home = store_home("drain-no-connector-notice");
     let (_, edge) = answered(&home, true);
     let queue = DirectEvidenceQueue::default();
-    assert!(offer_direct(&queue, &home, allowed(&edge), true));
+    assert!(offer_direct(&queue, &home, allowed(&edge), false));
     let records = drained(&queue, &home, Some("guard"))["records"].clone();
     assert!(records[0].get("connector_notice_raised").is_none());
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));

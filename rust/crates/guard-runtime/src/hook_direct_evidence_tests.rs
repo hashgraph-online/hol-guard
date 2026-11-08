@@ -299,3 +299,106 @@ fn a_partly_recorded_record_is_charged_for_the_markers_it_keeps() {
 fn values(records: &[Paged]) -> Vec<Value> {
     records.iter().map(|paged| paged.record.clone()).collect()
 }
+
+#[test]
+fn only_a_hook_record_that_leaves_the_daemon_nothing_is_settled() {
+    let settled = |record: &Value, capturing: bool| {
+        let paged = Paged {
+            seq: 1,
+            record: record.clone(),
+            activity: true,
+        };
+        super::record::settled(&paged, capturing)
+    };
+    let done = json!({
+        "harness": "claude-code",
+        "event": "PreToolUse",
+        "receipt": {"event_name": "PreToolUse"},
+        "receipt_valid": true,
+        "receipt_recorded": true,
+        "activity_recorded": true,
+    });
+    let edited = |edit: &dyn Fn(&mut serde_json::Map<String, Value>)| {
+        let mut record = done.clone();
+        edit(record.as_object_mut().unwrap());
+        record
+    };
+    let notice = json!({"request_id": "req-1", "connector_name": "Example CLI"});
+    let finished = [
+        done.clone(),
+        // A record from before the post-tool lane is a `PreToolUse`.
+        edited(&|record| {
+            record.remove("event");
+        }),
+        // A receipt the store refuses is never submitted.
+        edited(&|record| {
+            record.insert("receipt_valid".into(), json!(false));
+            record.remove("receipt_recorded");
+        }),
+        edited(&|record| {
+            record.insert("fence_wait_ms".into(), json!(300));
+            record.insert("fence_wait_recorded".into(), json!(true));
+        }),
+        edited(&|record| {
+            record.insert("fence_wait_ms".into(), json!(0));
+        }),
+        edited(&|record| {
+            record.insert("connector_setup_notice".into(), notice.clone());
+            record.insert("connector_notice_raised".into(), json!(true));
+        }),
+        // Only a `PreToolUse` raises a notice.
+        edited(&|record| {
+            record.insert("event".into(), json!("PostToolUse"));
+            record.insert("connector_setup_notice".into(), notice.clone());
+        }),
+        // The daemon records no activity for a prompt.
+        edited(&|record| {
+            record.insert("event".into(), json!("UserPromptSubmit"));
+            record.remove("activity_recorded");
+        }),
+    ];
+    for record in &finished {
+        assert!(settled(record, false), "{record}");
+    }
+    let codex = edited(&|record| {
+        record.insert("harness".into(), json!("codex"));
+    });
+    // Without the marker the daemon's capture records nothing either.
+    assert!(settled(&codex, false));
+    assert!(!settled(&codex, true));
+    let captured = edited(&|record| {
+        record.insert("harness".into(), json!("codex"));
+        record.insert("capture_recorded".into(), json!(true));
+    });
+    assert!(settled(&captured, true));
+    let left = [
+        edited(&|record| {
+            record.remove("receipt_recorded");
+        }),
+        edited(&|record| {
+            record.remove("activity_recorded");
+        }),
+        edited(&|record| {
+            record.insert("event".into(), json!("PostToolUse"));
+            record.remove("activity_recorded");
+        }),
+        edited(&|record| {
+            record.insert("fence_wait_ms".into(), json!(300));
+        }),
+        edited(&|record| {
+            record.insert("connector_setup_notice".into(), notice.clone());
+        }),
+        edited(&|record| {
+            record.insert("kind".into(), json!("mcp_tool_call"));
+        }),
+        edited(&|record| {
+            record.insert("event".into(), Value::Null);
+        }),
+        edited(&|record| {
+            record.insert("event".into(), json!("Stop"));
+        }),
+    ];
+    for record in &left {
+        assert!(!settled(record, false), "{record}");
+    }
+}
