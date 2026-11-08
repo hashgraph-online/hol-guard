@@ -89,12 +89,13 @@ fn item(row: &Map<String, Value>, home: &str) -> Option<Value> {
 }
 
 /// `_redact_export_value` for a stored scalar. Rows hold no lists or maps, so
-/// one is left to the daemon. So is any text that is not ASCII: the native
-/// patterns read word and space classes in Unicode, so a mark Python reads as
-/// a boundary could hide a secret from them.
+/// one is left to the daemon. So is any text that is not plain ASCII: the
+/// native patterns read word and space classes in Unicode, and Python also
+/// reads `\x1c`-`\x1f` as space, so a character the two read differently
+/// could hide a secret from the native patterns.
 fn redacted(value: &Value, home: &str) -> Option<Value> {
     match value {
-        Value::String(text) if !text.is_ascii() => None,
+        Value::String(text) if !plain_ascii(text) => None,
         Value::String(text) => {
             let text = redact_local_path(&redact_text(text).text, Some(home));
             Some(Value::String(redact_sensitive_text(&text)))
@@ -102,6 +103,12 @@ fn redacted(value: &Value, home: &str) -> Option<Value> {
         Value::Array(_) | Value::Object(_) => None,
         scalar => Some(scalar.clone()),
     }
+}
+
+/// ASCII with no control character but tab, line feed and carriage return.
+fn plain_ascii(text: &str) -> bool {
+    text.bytes()
+        .all(|byte| matches!(byte, b' '..=b'~' | b'\t' | b'\n' | b'\r'))
 }
 
 #[cfg(test)]

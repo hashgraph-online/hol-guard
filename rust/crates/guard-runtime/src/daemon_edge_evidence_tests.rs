@@ -110,7 +110,7 @@ fn leaves_what_it_cannot_read_the_same_way_to_the_daemon() {
 }
 
 #[test]
-fn leaves_text_that_is_not_ascii_to_the_daemon() {
+fn leaves_text_that_is_not_plain_ascii_to_the_daemon() {
     let store = store(Some(HOME));
     let token = format!("seen \u{301}gh{}_abcdefgh12345678", "p");
     rusqlite::Connection::open(&store.config.store_path)
@@ -122,4 +122,14 @@ fn leaves_text_that_is_not_ascii_to_the_daemon() {
         .unwrap();
     assert!(read(&store, "harness=cursor").is_none());
     assert!(read(&store, "harness=codex").is_some());
+    // Python reads this separator as space; the native patterns do not.
+    let separated = format!("Bear{}\x1cabcdefghijklmnop1234", "er");
+    rusqlite::Connection::open(&store.config.store_path)
+        .unwrap()
+        .execute(
+            "update guard_evidence set summary = ?1 where evidence_id = 'ev-3'",
+            [separated],
+        )
+        .unwrap();
+    assert!(read(&store, "harness=cursor").is_none());
 }
