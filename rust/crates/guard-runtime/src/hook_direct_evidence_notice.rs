@@ -81,11 +81,7 @@ pub(crate) fn raise_approval(guard_home: &str, source: &str, notice: &Value) -> 
 /// Raise the notices of the requests one call was just queued on, in order.
 /// Unless every notice reads, none is raised and all are left to the daemon.
 pub(crate) fn raise_approvals(guard_home: &str, source: &str, notices: &[Value]) -> bool {
-    let Some(shown) = notices
-        .iter()
-        .map(approval_notice)
-        .collect::<Option<Vec<_>>>()
-    else {
+    let Some(shown) = approval_notices(notices) else {
         return false;
     };
     raise(
@@ -94,6 +90,11 @@ pub(crate) fn raise_approvals(guard_home: &str, source: &str, notices: &[Value])
         shown.into_iter().map(Notice::Approval).collect(),
     );
     true
+}
+
+/// Every notice of one call, in order, or none when any is unreadable.
+fn approval_notices(notices: &[Value]) -> Option<Vec<Shown>> {
+    notices.iter().map(approval_notice).collect()
 }
 
 fn approval_notice(notice: &Value) -> Option<Shown> {
