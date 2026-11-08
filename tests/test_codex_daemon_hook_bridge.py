@@ -136,17 +136,41 @@ def _native_bridge_response(
     shape has to run the bridge rather than read the daemon directly.
     """
 
-    config = _bridge_config(guard_home, 0)
+    from urllib.parse import parse_qs
+
+    from codex_plugin_scanner.guard.adapters import codex
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
+
+    context_query = parse_qs(query, strict_parsing=True)
+    assert context_query["guard-home"] == [str(guard_home)]
+    workspace = context_query.get("workspace")
+    context = HarnessContext(
+        home_dir=Path(context_query["home"][0]),
+        workspace_dir=Path(workspace[0]) if workspace else None,
+        guard_home=guard_home,
+        home_override_explicit=True,
+        workspace_override_explicit=bool(workspace),
+    )
+    # Exercise the real installer and its authenticated registration, rather
+    # than constructing launch commands the production bridge must reject.
+    codex.CodexHarnessAdapter().install(context)
+    installed_argv = codex._hook_command_parts(context)
+    config = json.loads(decode_bridge_config_argument(installed_argv[-1]))
+    assert config["query"] == query
     event_name = str(payload.get("hook_event_name", "PreToolUse"))
+    # Match the supported Desktop remaining-deadline projection: retain every
+    # signed launch field and reduce only this event's budget, never extend it.
+    config["hook_timeouts"][event_name] = min(config["hook_timeouts"][event_name], timeout_seconds)
     argv = bridge._native_argv(
         runtime,
         state_path=config["state_path"],
         fallback_command=config["fallback_command"],
         start_command=config["start_command"],
         query=query,
-        hook_timeouts={event_name: timeout_seconds},
-        manifest_path=guard_home / "managed" / "codex" / "hooks.manifest.json",
-        config_json=None,
+        hook_timeouts=config["hook_timeouts"],
+        manifest_path=config["manifest_path"],
+        config_json=json.dumps(config, separators=(",", ":")),
     )
     completed = subprocess.run(
         argv,
