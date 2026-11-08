@@ -12,9 +12,10 @@ const MAX_CLASS_MEMBERS_CHARS: usize = 240;
 
 /// For the first chosen definition whose body is left to be written, the
 /// definitions beside it: the other members of its class, or the file's
-/// other top-level definitions, nearest first, each as its lines and first
-/// line, a class with its members. Not shown again when an earlier prompt of
-/// the session was shown the same list.
+/// other top-level definitions. The nearest ones that fit are kept and listed
+/// in file order, each as its lines and first line, a class with its members.
+/// Not shown again when an earlier prompt of the session was shown the same
+/// list.
 pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(String, Entry)> {
     let (file, at) = chosen.iter().find_map(|pick| {
         let file = &files[pick.file];
@@ -27,7 +28,7 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
         .filter(|&other| file.sections[other].name.is_some())
         .collect();
     near.sort_by_key(|&other| file.sections[other].start.abs_diff(start));
-    let mut kept: Vec<(usize, String)> = Vec::new();
+    let mut kept: Vec<(usize, usize, String)> = Vec::new();
     let mut length = 0;
     for other in near {
         let line = line(file, other);
@@ -35,16 +36,17 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
             break;
         }
         length += line.len() + 1;
-        kept.push((file.sections[other].start, line));
+        kept.push((file.sections[other].start, shown_line(file, other), line));
     }
-    kept.sort_by_key(|(start, _)| *start);
-    let text = (kept.iter().map(|(_, line)| line.as_str()))
+    kept.sort_by_key(|(start, _, _)| *start);
+    let text = (kept.iter().map(|(_, _, line)| line.as_str()))
         .collect::<Vec<_>>()
         .join("\n");
     // One span, with the whole list's digest so the same list is not sent
-    // again, covering only the first listed line: the bodies are not shown,
-    // so a later prompt still gets a body line naming its stub.
-    let first = kept.first()?.0 as u64;
+    // again, covering only the first line shown: the bodies and any
+    // decorators above it are not shown, so a later prompt still gets a line
+    // there naming its stub.
+    let first = kept.first()?.1 as u64;
     let span = Span::new(file.path, first, first, &text);
     if asked.earlier.contains(&span) {
         return None;
@@ -63,6 +65,16 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
         shown: vec![span],
     };
     Some((title, entry))
+}
+
+/// The line `line` shows of a definition: its first line under any
+/// decorators.
+fn shown_line(file: &File, at: usize) -> usize {
+    let section = &file.sections[at];
+    let opening = file.opening(at);
+    (section.start..=section.end.min(file.lines.len()))
+        .find(|&number| file.lines[number - 1].trim() == opening)
+        .unwrap_or(section.start)
 }
 
 /// `start-end` and the first line, then a class's members by name and lines.

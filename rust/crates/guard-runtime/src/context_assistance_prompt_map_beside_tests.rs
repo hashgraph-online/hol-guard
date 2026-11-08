@@ -138,3 +138,47 @@ fn listing_a_definition_beside_a_stub_does_not_hide_its_body() {
     .text;
     assert!(next.contains("return second_stub(x)"), "{next}");
 }
+
+const DECORATED: &str = "@second_stub
+def helper(x):
+    return x
+
+
+def first_stub(x):
+    \"\"\"Return x.\"\"\"
+    raise NotImplementedError
+
+
+def second_stub(f):
+    \"\"\"Return f.\"\"\"
+    raise NotImplementedError
+";
+
+/// A listed definition shows its `def` line, not the decorator above it, so
+/// a decorator naming the next stub is still listed for that stub later.
+#[test]
+fn listing_a_decorated_definition_does_not_hide_its_decorator() {
+    let list = files(&[("src/pkg/deco.py", DECORATED)]);
+    let first = map(
+        &list,
+        &looking_for(&[("firststub", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap();
+    assert!(first.text.contains("1-3 def helper(x):"), "{}", first.text);
+    assert!(!first.text.contains("@second_stub"), "{}", first.text);
+    let again = Asked {
+        earlier: first.shown.clone(),
+        ..Asked::default()
+    };
+    let next = map(
+        &list,
+        &looking_for(&[("secondstub", true, 1)]),
+        &again,
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(next.contains("@second_stub"), "{next}");
+}
