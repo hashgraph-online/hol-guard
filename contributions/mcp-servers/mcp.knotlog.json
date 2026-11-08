@@ -3,7 +3,7 @@
   "id": "mcp.knotlog",
   "version": "1.0.0",
   "name": "Knotlog",
-  "description": "Persistent session memory for coding agents, kept as plain Markdown notes in a local folder (the vault). Search the vault, read its byte-budgeted session context, and append one line to today's session note. The server makes no network calls; what it returns goes to the MCP client, which may send it to its model provider. Off until you turn it on.",
+  "description": "Persistent session memory for coding agents, kept as plain Markdown notes in a local folder (the vault). Search the vault, read its byte-budgeted session context, and add one line to today's session note (the file is rewritten through a temporary copy). The server makes no network calls; what it returns goes to the MCP client, which may send it to its model provider. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -32,8 +32,8 @@
     "https://github.com/MSelmanSonmez/Knotlog/blob/main/lib/mcp.awk"
   ],
   "saferAlternatives": [
-    "knotlog_search and knotlog_context never change notes but may write index and state files under the vault's .knotlog/ folder. Output is capped at the vault's ctx_max byte budget (4096 by default).",
-    "knotlog_note is the only tool that writes: one line appended to today's session note, never a rewrite. It stays on review because notes can be found again in later sessions.",
+    "knotlog_search and knotlog_context never change notes but may write state files under .knotlog/. ctx_max (default 4096) sizes output but is not a hard cap: pinned context is never cut, and an inherited KNOTLOG_CTX_MAX overrides it.",
+    "knotlog_note is the only tool that changes notes: it adds one line by writing a temporary copy and renaming it over today's session note, so file permissions follow the umask. It stays on review.",
     "Notes matching a secret pattern (AWS, GitHub, Slack, Google keys, private keys) are refused before anything is written.",
     "Set write_approval=on in .knotlog/config to queue notes for review with knotlog pending instead of writing them.",
     "Set KNOTLOG_VAULT in the server's env config to pin the vault. Without it the vault comes from an inherited KNOTLOG_VAULT or QUIPU_VAULT, then the working directory."
