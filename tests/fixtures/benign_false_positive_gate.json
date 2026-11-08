@@ -54115,7 +54115,8 @@
         "command": "ls -d .*"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     }
   ],
   "mcp_cases": [
