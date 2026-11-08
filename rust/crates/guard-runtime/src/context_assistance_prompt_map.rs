@@ -24,6 +24,8 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::Instant;
 
+#[path = "context_assistance_prompt_map_beside.rs"]
+mod beside;
 #[path = "context_assistance_prompt_map_imports.rs"]
 mod imports;
 #[path = "context_assistance_prompt_map_more.rs"]
@@ -307,6 +309,9 @@ pub(super) fn map(
             .flatten()
             .map(|(title, entry)| (title, vec![entry])),
     );
+    // And what is defined beside it, for the helpers it can call.
+    let near = (!asked.everywhere).then(|| beside::beside(&files, &chosen, asked));
+    blocks.extend(near.flatten().map(|(title, entry)| (title, vec![entry])));
     let mut docs = Vec::new();
     if asked.docs {
         // Every word of the prompt: a doc section is about "choices" and
@@ -423,3 +428,7 @@ mod rename_tests;
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_imports_tests.rs"]
 mod imports_tests;
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_beside_tests.rs"]
+mod beside_tests;

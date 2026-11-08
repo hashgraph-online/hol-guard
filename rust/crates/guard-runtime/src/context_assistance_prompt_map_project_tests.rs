@@ -136,7 +136,8 @@ fn a_change_prompt_naming_a_function_shows_it() {
 
 /// A prompt naming a file and a function too common a word to look for, as
 /// in "last is not implemented", is shown that file's function left to be
-/// written, whole, and the tests that call it, not the file's outline.
+/// written, whole, and the tests that call it; the functions beside it are
+/// listed by their first lines, not shown.
 #[test]
 fn a_stub_named_by_its_file_is_shown_whole() {
     let more = "def first(iterable):\n    return next(iter(iterable))\n\n\n\
@@ -154,8 +155,9 @@ implementation; the docstring and tests describe the expected behavior.";
         text.contains("```\ndef last(iterable):") && text.contains("mi.last([1, 2]) == 2"),
         "{text}"
     );
+    assert!(text.contains("\n1-2 def first(iterable):\n"), "{text}");
     assert!(
-        !text.contains("def first(") && !text.contains("mi.first("),
+        !text.contains("return next(iter(") && !text.contains("mi.first("),
         "{text}"
     );
 }
