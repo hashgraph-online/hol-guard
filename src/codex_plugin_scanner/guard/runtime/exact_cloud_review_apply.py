@@ -113,7 +113,9 @@ def apply_exact_cloud_review(
     if envelope.get("scope") != "artifact":
         raise _reject(store, "remote_exact_scope_not_exact", now=current)
     try:
-        claim_request = _frozen_claim_request(store, request_id, envelope, request, raw_request, oauth)
+        claim_request, claim_request_claims = _frozen_claim_request(
+            store, request_id, envelope, request, raw_request, oauth
+        )
         contract = request_scope_contract(claim_request)
         scope = resolve_request_scope_selection(
             claim_request,
@@ -130,6 +132,7 @@ def apply_exact_cloud_review(
             envelope=envelope,
             request_row=request,
             claim_request_row=claim_request,
+            claim_request_claims=claim_request_claims,
             oauth=oauth,
             store=store,
         )
@@ -177,8 +180,11 @@ def _frozen_claim_request(
     live_request: dict[str, object],
     raw_live_request: dict[str, object],
     oauth,
-) -> dict[str, object]:
-    """Match the signed claim against the authenticated immutable outbox snapshot."""
+) -> tuple[dict[str, object], list[dict[str, object]] | None]:
+    """Match the signed claim against the authenticated immutable outbox snapshot.
+
+    Returns the row to bind and, when already built, that row's claims.
+    """
 
     get_snapshots = getattr(store, "list_review_event_snapshots", None)
     allow_legacy = envelope.get("nativeBindingVersion") is None
@@ -186,24 +192,26 @@ def _frozen_claim_request(
     if not callable(get_snapshots):
         if allow_legacy:
             raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
-        return live_claim_request
+        return live_claim_request, None
     try:
         snapshots = get_snapshots(request_id)
     except (OSError, RuntimeError, TypeError, ValueError) as error:
         if allow_legacy:
             raise GuardReviewContractError("remote_approval_claim_hash_mismatch") from error
-        return live_claim_request
+        return live_claim_request, None
     if not isinstance(snapshots, list) or not snapshots:
         if allow_legacy:
             raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
-        return live_claim_request
+        return live_claim_request, None
     source_claim_hash = envelope.get("sourceClaimHash")
-    matching_snapshots: list[tuple[dict[str, object], dict[str, object]]] = []
+    matching_snapshots: list[tuple[dict[str, object], dict[str, object], list[dict[str, object]]]] = []
     for snapshot in snapshots:
         if not isinstance(snapshot, dict):
             continue
         try:
-            claims = local_review_request_claims(request_row=snapshot, oauth=oauth, store=store)
+            claims = local_review_request_claims(
+                request_row=snapshot, oauth=oauth, store=store, advertise_capability=False
+            )
         except GuardReviewContractError:
             continue
         claim = next(
@@ -215,18 +223,20 @@ def _frozen_claim_request(
             None,
         )
         if claim is not None:
-            matching_snapshots.append((snapshot, claim))
+            matching_snapshots.append((snapshot, claim, claims))
     if not matching_snapshots:
         if allow_legacy:
             raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
-        return live_claim_request
+        return live_claim_request, None
     if allow_legacy and any(
         not native_binding_values_match(matching_snapshots[0][1], candidate[1]) for candidate in matching_snapshots[1:]
     ):
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
-    snapshot, claim = matching_snapshots[0]
+    snapshot, claim, snapshot_claims = matching_snapshots[0]
     try:
-        live_claims = local_review_request_claims(request_row=live_claim_request, oauth=oauth, store=store)
+        live_claims = local_review_request_claims(
+            request_row=live_claim_request, oauth=oauth, store=store, advertise_capability=False
+        )
     except GuardReviewContractError as error:
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch") from error
     live_claim = next(
@@ -251,7 +261,7 @@ def _frozen_claim_request(
         not live_hash_matches and (not allow_legacy or not legacy_projection_matches)
     ) or not native_binding_values_match(claim, live_claim):
         raise GuardReviewContractError("remote_approval_claim_hash_mismatch")
-    return snapshot
+    return snapshot, snapshot_claims
 
 
 def _resolution_from_result(

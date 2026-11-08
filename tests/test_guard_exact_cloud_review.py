@@ -191,6 +191,42 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     assert audit_payload["receipt_id"] == "exact-receipt-1"
 
 
+def test_exact_cloud_review_builds_each_claim_once_without_reading_the_capability_advertisement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import review_contracts, review_exact_capability_advertisement
+
+    store = _connected_store(tmp_path)
+    target = _request("exact-claim-count")
+    _add_request(store, target)
+    enable_exact_cloud_review(store)
+    remote_approval = _remote_approval(store, target.request_id, receipt_id="exact-claim-count-receipt")
+    built: list[bool] = []
+    advertised: list[str] = []
+    build_claim = review_contracts.build_local_review_request_claim
+    advertise = review_exact_capability_advertisement.exact_review_capability_advertisement
+
+    def counting_build(**kwargs: object) -> dict[str, object]:
+        built.append(bool(kwargs.get("advertise_capability", True)))
+        return build_claim(**kwargs)
+
+    def counting_advertise(**kwargs: object) -> dict[str, object] | None:
+        advertised.append("advertisement")
+        return advertise(**kwargs)
+
+    monkeypatch.setattr(review_contracts, "build_local_review_request_claim", counting_build)
+    monkeypatch.setattr(
+        review_exact_capability_advertisement, "exact_review_capability_advertisement", counting_advertise
+    )
+
+    resolution = apply_exact_cloud_review(store, remote_approval=remote_approval, expected_harness="codex")
+
+    assert resolution.request_id == target.request_id
+    # One claim for the matching outbox snapshot and one for the live row; binding reuses the snapshot's.
+    assert built == [False, False]
+    assert advertised == []
+
+
 def test_exact_cloud_review_replay_is_durable_and_rejected_before_resolution(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     request = _request("exact-replay")

@@ -227,6 +227,7 @@ def build_local_review_request_claim(
     oauth: GuardReviewOAuthMetadata,
     store,
     substring_risk_rule: bool = False,
+    advertise_capability: bool = True,
 ) -> dict[str, object]:
     local_request_id = _non_empty_string(request_row.get("request_id"))
     approval_id = _non_empty_string(request_row.get("request_id"))
@@ -277,6 +278,9 @@ def build_local_review_request_claim(
         **review_policy_attribution(store, request_row),
     }
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
+    if not advertise_capability:
+        # The advertisement is outside the claim hash; verifiers skip the capability read.
+        return claim
     return attach_exact_review_capability(claim, oauth, store)
 
 
@@ -285,6 +289,7 @@ def local_review_request_claims(
     request_row: dict[str, object],
     oauth: GuardReviewOAuthMetadata,
     store,
+    advertise_capability: bool = True,
 ) -> list[dict[str, object]]:
     """Every claim a reply for this row may answer: the current one first.
 
@@ -293,11 +298,19 @@ def local_review_request_claims(
     against that claim. Every other field binds exactly as before.
     """
 
-    claims = [build_local_review_request_claim(request_row=request_row, oauth=oauth, store=store)]
+    claims = [
+        build_local_review_request_claim(
+            request_row=request_row, oauth=oauth, store=store, advertise_capability=advertise_capability
+        )
+    ]
     if _substring_risk_category(request_row) != claims[0]["riskCategory"]:
         claims.append(
             build_local_review_request_claim(
-                request_row=request_row, oauth=oauth, store=store, substring_risk_rule=True
+                request_row=request_row,
+                oauth=oauth,
+                store=store,
+                substring_risk_rule=True,
+                advertise_capability=advertise_capability,
             )
         )
     return claims
@@ -388,6 +401,7 @@ def validate_remote_approval_request_binding(
     oauth: GuardReviewOAuthMetadata,
     store,
     claim_request_row: dict[str, object] | None = None,
+    claim_request_claims: list[dict[str, object]] | None = None,
 ) -> None:
     claim_row = claim_request_row if claim_request_row is not None else request_row
     if _non_empty_string(envelope.get("localRequestId")) != _non_empty_string(request_row.get("request_id")):
@@ -420,7 +434,12 @@ def validate_remote_approval_request_binding(
     if _non_empty_string(envelope.get("policyVersion")) != _policy_version(claim_row):
         raise GuardReviewContractError("remote_approval_policy_version_mismatch")
     source_claim_hash = envelope.get("sourceClaimHash")
-    for expected_claim in local_review_request_claims(request_row=claim_row, oauth=oauth, store=store):
+    expected_claims = (
+        claim_request_claims
+        if claim_request_row is not None and claim_request_claims is not None
+        else local_review_request_claims(request_row=claim_row, oauth=oauth, store=store, advertise_capability=False)
+    )
+    for expected_claim in expected_claims:
         if _claim_answers_envelope(expected_claim, envelope, source_claim_hash):
             break
     else:
