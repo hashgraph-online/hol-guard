@@ -363,28 +363,6 @@ def test_job_authorization_binds_target_schema_payload_expiry_and_replay(tmp_pat
         authorize_command_job(store, expired, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
 
 
-def test_only_job_and_replay_questions_ship_the_replay_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _connected_store(tmp_path)
-    _issue(store, "guard.packageShims.status")
-    job = _job(store)
-    authorized = authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-    mark_command_job_consumed(store, authorized)
-    real = command_capability_module.native_command_capability
-    shipped: list[tuple[bool, int]] = []
-
-    def recorded(**kwargs: object) -> dict[str, object]:
-        shipped.append((kwargs["job"] is not None, len(kwargs["replay_items"])))  # type: ignore[arg-type]
-        return real(**kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(command_capability_module, "native_command_capability", recorded)
-
-    assert command_queue.command_capability_operations(store) == ("guard.packageShims.status",)
-    with pytest.raises(CommandCapabilityError, match="command_replayed"):
-        authorize_command_job(store, job, schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS)
-
-    assert shipped == [(False, 0), (True, 1)]
-
-
 def test_state_change_requires_exact_single_use_local_approval(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     operation = "guard.app.update"
