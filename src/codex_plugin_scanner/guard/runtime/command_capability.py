@@ -281,11 +281,21 @@ def _capability_verdict(
     Every comparison - the envelope's signature, its clock and binding checks,
     the job's identity and the replay rows - happens in the runtime. This side
     only reads the inputs out of the store.
+
+    The replay rows are sent only when the runtime is asked about a job or a
+    replay identity, the two answers they can change. The command loop asks
+    for operations alone before every lease, and shipping the full replay
+    history there meant encoding and digesting it on both sides for nothing.
     """
 
     home = _resident_home(store)
     key_b64, key_id = _signing_material_for_resident(store)
     device_id, workspace_id, oauth_error = _binding_for_resident(store)
+    replay_items = (
+        _state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY))
+        if job is not None or replay_identity is not None
+        else []
+    )
     return native_command_capability(
         capability=store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY),
         integrity_key_b64=key_b64,
@@ -296,7 +306,7 @@ def _capability_verdict(
         now=now if now is not None else datetime.now(timezone.utc).isoformat(),
         job=job,
         schema_versions=dict(schema_versions or {}),
-        replay_items=_state_items(store.get_sync_payload(COMMAND_REPLAY_STATE_KEY)),
+        replay_items=replay_items,
         replay_identity=replay_identity,
         guard_home=home,
     )
