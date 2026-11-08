@@ -120,6 +120,7 @@ fn a_forwarded_package_call_records_the_policy_workspace_it_ran_under() {
         &artifact(),
         "/work",
         &answer,
+        None,
     )
     .expect("the record is built");
     assert_eq!(record["kind"], json!(PACKAGE_CALL_EVIDENCE_KIND));
@@ -163,6 +164,7 @@ fn a_stopped_package_call_records_no_policy_workspace() {
         &artifact(),
         "/work",
         &answer,
+        None,
     )
     .expect("the record is built");
     assert_eq!(record["outcome"], json!("block"));
@@ -186,9 +188,25 @@ fn a_queued_package_request_records_the_inbox_row_it_leaves() {
         &artifact(),
         "/work",
         &queued,
+        Some("http://127.0.0.1:4781"),
     )
     .expect("the record is built");
-    assert_eq!(reviewed["review"], json!({"redaction_level": "partial"}));
+    // With the center the relay bound, so the resident writes the row itself.
+    assert_eq!(
+        reviewed["review"],
+        json!({"redaction_level": "partial", "approval_center_url": "http://127.0.0.1:4781"})
+    );
+    let unbound = record(
+        &request(),
+        &json!({}),
+        &decision(),
+        &artifact(),
+        "/work",
+        &queued,
+        None,
+    )
+    .expect("the record is built");
+    assert_eq!(unbound["review"], json!({"redaction_level": "partial"}));
     // Every other route leaves none, and the drain rejects a row on one.
     let forwarded = record(
         &request(),
@@ -197,6 +215,7 @@ fn a_queued_package_request_records_the_inbox_row_it_leaves() {
         &artifact(),
         "/work",
         &answer(None, "warn"),
+        None,
     )
     .expect("the record is built");
     assert_eq!(forwarded.get("review"), None);
@@ -216,6 +235,7 @@ fn a_call_relayed_without_a_search_path_records_none() {
             &artifact(),
             "/work",
             &answer(None, "warn"),
+            None,
         )
         .expect("the record is built");
         assert_eq!(record["package"]["path"], Value::Null, "{path:?}");
