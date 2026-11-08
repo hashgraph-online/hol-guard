@@ -69,20 +69,26 @@ pub(crate) fn is_code_expression(matched: &str, rest_of_line: &str) -> bool {
     let mut expression = String::with_capacity(body.len() + rest_of_line.len());
     expression.push_str(body.trim_start());
     expression.push_str(rest_of_line);
+    if reads_as_code(mode, &expression) {
+        return true;
+    }
     // `self.password = (unquote(ud['password'])` opens a group that a later
-    // line closes, as Python wraps a long conditional value. The value is read
-    // without the open bracket; a literal on a later line is matched there.
-    if mode == Mode::Assign
+    // line closes, as Python wraps a long conditional value. Such a value is
+    // read again without the open bracket; a literal on a later line is
+    // matched there.
+    mode == Mode::Assign
         && expression.starts_with('(')
         && expression.matches('(').count() > expression.matches(')').count()
-    {
-        expression.remove(0);
-    }
+        && reads_as_code(mode, &expression[1..])
+}
+
+/// Whether `expression`, the value after the separator, is code in `mode`.
+fn reads_as_code(mode: Mode, expression: &str) -> bool {
     // The cursor stops at its limit, so a longer expression could hide a literal.
     if expression.len() > MAX_EXPRESSION_BYTES {
         return false;
     }
-    let mut cursor = Cursor::new(&expression);
+    let mut cursor = Cursor::new(expression);
     match mode {
         Mode::Arrow => {
             cursor.skip_blanks();
