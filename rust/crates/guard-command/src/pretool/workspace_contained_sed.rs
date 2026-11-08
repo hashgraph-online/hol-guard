@@ -6,11 +6,21 @@ use super::super::contained_wrapper::output_filters::sed_script::workspace_scrip
 /// Files and unknown options retain review because their scripts are unread.
 pub(super) fn arguments_without_execution(arguments: &[String]) -> bool {
     let mut scripts = Vec::new();
-    let mut positional = Vec::new();
+    let mut positional: Vec<&str> = Vec::new();
     let mut index = 0;
     let mut options = true;
     while let Some(argument) = arguments.get(index) {
         index += 1;
+        // POSIXLY_CORRECT (including inherited environment) stops GNU option
+        // permutation at the first operand. Later -e must not hide that script.
+        // An empty BSD -i suffix is harmless under this alternate interpretation.
+        if options && argument.starts_with('-') && argument != "-" {
+            if let Some(script) = positional.first() {
+                if !workspace_script(script) {
+                    return false;
+                }
+            }
+        }
         if options && argument == "--" {
             options = false;
             continue;
@@ -96,6 +106,11 @@ mod tests {
             ("sed --expression='s/a/b/e' README.md", false),
             ("sed -ne's/a/b/e' README.md", false),
             ("sed -f commands.sed README.md", false),
+            ("sed 'e printf SAFE_PROBE' README.md -e 's/a/b/'", false),
+            (
+                "POSIXLY_CORRECT=1 sed 'e printf SAFE_PROBE' README.md -e 's/a/b/'",
+                false,
+            ),
             ("sed -i '' -e 's/a/b/g' README.md", true),
             ("sed -i.bak 's/a/b/g' README.md", true),
             ("sed -n '1,5p' README.md", true),
@@ -127,6 +142,8 @@ mod tests {
             vec!["-nes/a/b/e"],
             vec!["e rm tracked.txt"],
             vec!["-i", "s/a/b/e", "file"],
+            vec!["e printf SAFE_PROBE", "file", "-e", "s/a/b/"],
+            vec!["s/a/b/e", "--expression=s/a/b/"],
             vec!["-nf", "script"],
             vec!["--file=script"],
             vec!["--exp=s/a/b/e"],
@@ -144,6 +161,8 @@ mod tests {
             vec!["-i", "", "s/a/b/", "file"],
             vec!["-i.bak", "s/a/b/", "file"],
             vec!["-i", "-e", "s/a/b/", "file"],
+            vec!["-i", "", "-e", "s/a/b/", "file"],
+            vec!["s/a/b/", "file", "-n"],
             vec!["s/a/b/w output; e literal-filename"],
             vec!["r input; e literal-filename"],
             vec!["a e literal-text"],
