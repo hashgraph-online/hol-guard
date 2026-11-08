@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.knotlog",
+  "version": "1.0.0",
+  "name": "Knotlog",
+  "description": "Persistent session memory for coding agents, kept as plain Markdown notes in a local folder (the vault). Search the vault, read its byte-budgeted session context, and append one line to today's session note. Nothing leaves the machine. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.mselmansonmez",
+    "displayName": "Muhammet Selman Sönmez",
+    "url": "https://github.com/MSelmanSonmez"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#111827" },
+  "homepage": "https://github.com/MSelmanSonmez/Knotlog",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "knotlog"
+  },
+  "riskClasses": ["local-data-access", "local-file-write"],
+  "tools": [
+    { "name": "knotlog_search", "state": "inherit" },
+    { "name": "knotlog_context", "state": "inherit" },
+    { "name": "knotlog_note", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/MSelmanSonmez/Knotlog",
+    "https://github.com/MSelmanSonmez/Knotlog/blob/main/docs/REFERENCE.md#mcp-server",
+    "https://github.com/MSelmanSonmez/Knotlog/blob/main/docs/REFERENCE.md#admission",
+    "https://github.com/MSelmanSonmez/Knotlog/blob/main/lib/mcp.awk"
+  ],
+  "saferAlternatives": [
+    "knotlog_search and knotlog_context only read the vault. Both are capped at the vault's ctx_max byte budget (4096 by default), so one call cannot return more than the session start does.",
+    "knotlog_note is the only tool that writes: one line appended to today's session note, never a rewrite. It stays on review because notes can be found again in later sessions.",
+    "Notes matching a secret pattern (AWS, GitHub, Slack, Google keys, private keys) are refused before anything is written.",
+    "Set write_approval=on in .knotlog/config to queue notes for review with knotlog pending instead of writing them.",
+    "The server finds the vault from its working directory or KNOTLOG_VAULT. Register it from inside the vault you mean, so it reads that vault and no other."
+  ]
+}
