@@ -70,3 +70,18 @@ fn pi_sessions_record_nothing() {
         assert!(earlier(&pi).is_empty(), "{app}");
     }
 }
+
+#[test]
+fn a_session_keeps_its_hint_after_excerpt_eviction() {
+    let long = session("seen-hint-long");
+    remember(&long, &[hint()]);
+    for line in 0..(MAX_SPANS as u64 + 5) {
+        remember(&long, &[span("src/a.py", line, line)]);
+    }
+    let kept = earlier(&long);
+    assert!(
+        kept.contains(&hint()),
+        "excerpt eviction must not resend the turn hint"
+    );
+    assert_eq!(kept.len(), MAX_SPANS);
+}

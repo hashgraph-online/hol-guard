@@ -25,6 +25,9 @@ use std::time::{Duration, Instant};
 
 #[path = "context_assistance_prompt_changes.rs"]
 mod changes;
+#[path = "context_assistance_prompt_ending.rs"]
+mod ending;
+use ending::{end_note, prompt_session};
 #[path = "context_assistance_prompt_lookup.rs"]
 mod lookup;
 #[path = "context_assistance_prompt_map.rs"]
@@ -101,7 +104,8 @@ pub(crate) fn harness_response(
     if let Some(store) = store {
         let before = context_len(&response);
         attach(&mut response, envelope, harness, store, started);
-        end_note(&mut response, harness, before);
+        let session = prompt_session(envelope, harness, store);
+        end_note(&mut response, harness, before, session.as_ref());
     }
     Some(response)
 }
@@ -554,19 +558,6 @@ fn add_context(response: &mut Value, context: &str) {
         _ => context.to_owned(),
     };
     output.insert("additionalContext".into(), Value::String(combined));
-}
-
-/// Ends a note Guard added to this prompt with how to spend fewer turns on
-/// it, worded for the harness; a prompt Guard added nothing to gets nothing.
-fn end_note(response: &mut Value, harness: &str, before: usize) {
-    let ending = match harness {
-        "claude-code" => BATCHING,
-        "codex" => ACT_ON_IT,
-        _ => return,
-    };
-    if context_len(response) > before {
-        add_context(response, ending);
-    }
 }
 
 fn context_len(response: &Value) -> usize {
