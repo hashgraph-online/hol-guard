@@ -487,7 +487,7 @@ fn whole(file: &File, at: usize) -> Option<(Span, String)> {
 
 /// `code` on the lines after an entry, in a fence longer than any run of
 /// backticks it holds.
-fn fenced(code: &str) -> String {
+pub(super) fn fenced(code: &str) -> String {
     let longest = code.split(|c| c != '`').map(str::len).max().unwrap_or(0);
     let fence = "`".repeat(longest.max(2) + 1);
     format!("\n{fence}\n{code}\n{fence}")
