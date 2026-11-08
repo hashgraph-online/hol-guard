@@ -168,9 +168,11 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         "{text}"
     );
     for listed in [
-        "\nsrc/pkg/compiler.py: lines 2, 6, 10",
-        "\ntests/test_compiler.py: lines 2",
-        "\ndocs/api.md: lines 1",
+        "\nsrc/pkg/compiler.py:2: def _import_common(self, node):",
+        "\nsrc/pkg/compiler.py:6: self._import_common(node)",
+        "\nsrc/pkg/compiler.py:10: self._import_common(node)",
+        "\ntests/test_compiler.py:2: CodeGenerator()._import_common(None)",
+        "\ndocs/api.md:1: Call `_import_common` once.",
     ] {
         assert!(text.contains(listed), "{text}");
     }
@@ -283,9 +285,10 @@ fn a_short_named_function_is_shown_whole_once_a_session() {
     assert!(!text.contains("```"), "{text}");
 }
 
-/// A rename's list of lines naming the old name says it is whole only when
-/// the walk read the whole project and counted no file holding the name
-/// beyond the ones read; a longer name holding it is not listed.
+/// A rename lists each line naming the old name with its text, and says
+/// the list is whole only when the walk read the whole project and counted
+/// no file holding the name beyond the ones read; a longer name holding it
+/// is not listed.
 #[test]
 fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
     let list = files(&[
@@ -321,7 +324,8 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
     assert!(
         text.contains(
             "\n\nEvery line naming `_old_name`; no other project file holds it:\n\
-             src/core.py: lines 1, 6\ntests/test_core.py: lines 2\ndocs/api.md: lines 1"
+             src/core.py:1: def _old_name():\nsrc/core.py:6: return _old_name()\n\
+             tests/test_core.py:2: assert _old_name() == 1\ndocs/api.md:1: Call `_old_name` once."
         ),
         "{text}"
     );
@@ -333,7 +337,7 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
         assert!(
             text.contains(
                 "\n\nLines naming `_old_name` in the files read; other files may hold it too:\n\
-                 src/core.py: lines 1, 6"
+                 src/core.py:1: def _old_name():"
             ),
             "{text}"
         );

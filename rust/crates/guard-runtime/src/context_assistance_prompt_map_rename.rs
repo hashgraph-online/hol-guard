@@ -1,6 +1,6 @@
-//! For a rename, every line naming the old name in the files read, and
-//! whether those files are all the project files that hold it, so the agent
-//! need not search the project again before editing. For a stubbed-out
+//! For a rename, every line naming the old name in the files read, with its
+//! text, and whether those files are all the project files that hold it, so
+//! the agent need not search or open them again before editing. For a stubbed-out
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
 use super::seen::Span;
@@ -10,14 +10,13 @@ use std::time::Instant;
 
 /// Names listed for one prompt: the old name, and at most one more.
 const MAX_NAMES: usize = 2;
-const MAX_FILES: usize = 16;
-const MAX_FILE_LINES: usize = 12;
-/// Kept well inside the map's own size, so the list is never cut short
-/// while it says it is whole.
-const MAX_CHARS: usize = 1_200;
-/// Lines listed with their text for a stub, and how much of each.
+/// Lines listed with their text for a rename, and their length.
+const MAX_RENAME_LINES: usize = 40;
+const MAX_RENAME_CHARS: usize = 3_600;
+/// Lines listed with their text for a stub, and their length.
 const MAX_STUB_LINES: usize = 24;
 const MAX_STUB_CHARS: usize = 2_000;
+/// How much of each line is listed.
 const MAX_LINE_CHARS: usize = 160;
 /// What a body left to be written holds.
 const STUB_MARKS: [&str; 4] = [
@@ -75,37 +74,46 @@ fn naming(file: &File, term: &str, until: Instant) -> Option<(bool, Vec<usize>, 
 }
 
 /// The files read that hold `item` with `_` and `-` dropped, as the walk
-/// counted them, each with the lines naming it whole. The list says it is
-/// complete only when the walk read every project file, found no file
-/// holding it beyond these, and the list fits.
+/// counted them, and each line naming it whole, with its text, so the edit
+/// can be written without opening them. The list says it is complete only
+/// when the walk read every project file, found no file holding it beyond
+/// these, and every line fits.
 fn every_line(files: &[File], item: &Sought, until: Instant) -> Option<(String, Vec<String>)> {
     let mut written = None;
     let mut holding = 0;
     let mut entries = Vec::new();
+    let mut length = 0;
     let mut whole = true;
     for file in files {
-        let (held, mut lines, spelling) = naming(file, &item.text, until)?;
+        let (held, lines, spelling) = naming(file, &item.text, until)?;
         written = written.or(spelling);
         holding += usize::from(held);
-        if lines.is_empty() {
-            continue;
+        for number in lines {
+            let entry = line_entry(file, number);
+            if entries.len() == MAX_RENAME_LINES || length + entry.len() > MAX_RENAME_CHARS {
+                whole = false;
+                continue;
+            }
+            length += entry.len();
+            entries.push(entry);
         }
-        whole &= lines.len() <= MAX_FILE_LINES;
-        lines.truncate(MAX_FILE_LINES);
-        let lines: Vec<String> = lines.iter().map(usize::to_string).collect();
-        entries.push(format!("{}: lines {}", file.path, lines.join(", ")));
     }
     let name = written?;
-    whole &= entries.len() <= MAX_FILES
-        && entries.iter().map(String::len).sum::<usize>() <= MAX_CHARS
-        && item.spelled == Some(holding);
-    entries.truncate(MAX_FILES);
+    whole &= item.spelled == Some(holding);
     let title = if whole {
         format!("Every line naming `{name}`; no other project file holds it:")
     } else {
         format!("Lines naming `{name}` in the files read; other files may hold it too:")
     };
     Some((title, entries))
+}
+
+/// Line `number` of `file` as a search prints it: path, number and text.
+fn line_entry(file: &File, number: usize) -> String {
+    let text: String = (file.lines[number - 1].trim().chars())
+        .take(MAX_LINE_CHARS)
+        .collect();
+    format!("{}:{number}: {text}", file.path)
 }
 
 /// For the first chosen definition whose body is left to be written, the
@@ -149,12 +157,7 @@ pub(super) fn stub(
     'files: for other in files {
         let (_, lines, _) = naming(other, name, until)?;
         for number in lines.into_iter().filter(|&n| !inside(other.path, n)) {
-            let text: String = other.lines[number - 1]
-                .trim()
-                .chars()
-                .take(MAX_LINE_CHARS)
-                .collect();
-            let entry = format!("{}:{number}: {text}", other.path);
+            let entry = line_entry(other, number);
             if entries.len() == MAX_STUB_LINES || length + entry.len() > MAX_STUB_CHARS {
                 whole = false;
                 break 'files;

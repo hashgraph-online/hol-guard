@@ -239,6 +239,15 @@ pub(super) fn map(
         .join(", ");
     let plain =
         |entries: Vec<String>| -> Vec<Entry> { entries.into_iter().map(Entry::plain).collect() };
+    // Lines quoted from files are code, held to their own limits.
+    let quoted = |entries: Vec<String>| -> Vec<Entry> {
+        let code = |text: String| Entry {
+            code: text.len(),
+            text,
+            shown: Vec::new(),
+        };
+        entries.into_iter().map(code).collect()
+    };
     // A rename lists every line naming the old name instead.
     let renamed = rename::blocks(&files, sought, asked.everywhere, until);
     if renamed.is_empty() {
@@ -247,7 +256,7 @@ pub(super) fn map(
     blocks.extend(
         renamed
             .into_iter()
-            .map(|(title, lines)| (title, plain(lines))),
+            .map(|(title, lines)| (title, quoted(lines))),
     );
     let tests = more::tests(&files, &mentioned, asked, &earlier);
     let shown: Vec<Span> = (earlier.iter().cloned())
@@ -256,7 +265,7 @@ pub(super) fn map(
     blocks.push(("Tests:".to_owned(), tests));
     // A function left to be written: where else it is named, with the text.
     let stub = (!asked.everywhere).then(|| rename::stub(&files, &chosen, &shown, until));
-    blocks.extend(stub.flatten().map(|(title, lines)| (title, plain(lines))));
+    blocks.extend(stub.flatten().map(|(title, lines)| (title, quoted(lines))));
     let mut docs = Vec::new();
     if asked.docs {
         // Every word of the prompt: a doc section is about "choices" and
