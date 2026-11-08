@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import socket
 import subprocess
 import sys
@@ -89,7 +90,7 @@ def test_edge_moves_the_server_to_a_private_port_and_passes_the_public_socket(
     monkeypatch.delenv(native_edge.EDGE_ENV, raising=False)
     monkeypatch.setattr(native_edge, "_resolve_executable", lambda guard_home: Path(sys.executable))
 
-    def fake_spawn(executable: Path, listener: socket.socket, upstream_port: int) -> native_edge._EdgeProcess:
+    def fake_spawn(executable: Path, listener: socket.socket, upstream_port: int, *_: Any) -> native_edge._EdgeProcess:
         spawned.append((listener.getsockname()[1], upstream_port))
         return _edge_process("import time; time.sleep(30)")
 
@@ -121,7 +122,7 @@ def test_daemon_serves_the_public_port_itself_when_the_edge_keeps_failing(
     monkeypatch.setattr(
         native_edge,
         "_spawn",
-        lambda executable, listener, upstream_port: _edge_process("pass"),
+        lambda executable, listener, upstream_port, *_: _edge_process("pass"),
     )
     edge = native_edge.NativeDaemonEdge(
         server=server,
@@ -153,7 +154,7 @@ def test_edge_that_cannot_start_its_supervisor_leaves_the_public_socket(
     monkeypatch.delenv(native_edge.EDGE_ENV, raising=False)
     monkeypatch.setattr(native_edge, "_resolve_executable", lambda guard_home: Path(sys.executable))
 
-    def fake_spawn(executable: Path, listener: socket.socket, upstream_port: int) -> native_edge._EdgeProcess:
+    def fake_spawn(executable: Path, listener: socket.socket, upstream_port: int, *_: Any) -> native_edge._EdgeProcess:
         started.append(_edge_process("import time; time.sleep(30)"))
         return started[-1]
 
@@ -169,3 +170,105 @@ def test_edge_that_cannot_start_its_supervisor_leaves_the_public_socket(
         assert started[0].process.poll() is not None
     finally:
         public.close()
+
+
+def test_handshake_names_the_store_and_clamps_the_busy_timeout(tmp_path: Path) -> None:
+    line = native_edge.edge_handshake(
+        auth_token="token",
+        guard_home=tmp_path,
+        store_path=tmp_path / "guard.db",
+        source="default",
+        busy_timeout_seconds=600.0,
+        dashboard_build=None,
+    )
+    assert line.endswith(b"\n") and line.count(b"\n") == 1
+    assert json.loads(line) == {
+        "schema": native_edge.HANDSHAKE_SCHEMA,
+        "auth_token": "token",
+        "guard_home": str(tmp_path),
+        "store_path": str(tmp_path / "guard.db"),
+        "source": "default",
+        "busy_timeout_ms": 60_000,
+    }
+    assert (
+        json.loads(
+            native_edge.edge_handshake(
+                auth_token="token",
+                guard_home=tmp_path,
+                store_path=tmp_path / "guard.db",
+                source="default",
+                busy_timeout_seconds=0.0,
+                dashboard_build="abc123",
+            )
+        )["busy_timeout_ms"]
+        == 1
+    )
+
+
+def test_edge_activity_reaches_the_daemon_after_the_handshake() -> None:
+    daemon_end, edge_end = socket.socketpair()
+    touched = threading.Event()
+    try:
+        native_edge._offer_handshake(daemon_end, lambda: b"hello\n", touched.set)
+        edge_end.settimeout(10)
+        assert edge_end.recv(16) == b"hello\n"
+        edge_end.sendall(b"a")
+        assert touched.wait(10)
+    finally:
+        native_edge._close_liveness(daemon_end)
+        edge_end.close()
+
+
+def test_edge_gets_no_handshake_when_activity_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    daemon_end, edge_end = socket.socketpair()
+
+    def no_thread(self: threading.Thread) -> None:
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(threading.Thread, "start", no_thread)
+    try:
+        native_edge._offer_handshake(daemon_end, lambda: b"hello\n", lambda: None)
+        daemon_end.close()
+        edge_end.settimeout(10)
+        assert edge_end.recv(16) == b""
+    finally:
+        edge_end.close()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the native edge runs on POSIX only")
+def test_a_restarted_edge_gets_the_handshake_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = _RecordingServer(_listener())
+    public = _listener()
+    respawned = threading.Event()
+    received: list[tuple[Any, Any]] = []
+
+    def handshake() -> bytes:
+        return b"hello\n"
+
+    def on_activity() -> None:
+        return None
+
+    def fake_spawn(
+        executable: Path, listener: socket.socket, upstream_port: int, *callbacks: Any
+    ) -> native_edge._EdgeProcess:
+        received.append(callbacks)
+        respawned.set()
+        return _edge_process("import time; time.sleep(30)")
+
+    monkeypatch.setattr(native_edge, "_RESTART_DELAYS_SECONDS", (0.01,))
+    monkeypatch.setattr(native_edge, "_spawn", fake_spawn)
+    edge = native_edge.NativeDaemonEdge(
+        server=server,
+        public=public,
+        upstream_port=server.socket.getsockname()[1],
+        process=_edge_process("pass"),
+        resolve_executable=lambda: Path(sys.executable),
+        handshake=handshake,
+        on_activity=on_activity,
+    )
+    try:
+        assert respawned.wait(20)
+        assert received[0] == (handshake, on_activity)
+    finally:
+        edge.close()
+        server.socket.close()

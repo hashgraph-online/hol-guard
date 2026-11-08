@@ -12,10 +12,17 @@ otherwise holds, so the edge stops accepting the moment the daemon exits,
 however it exits. The daemon keeps its own copy of the public socket. Connections queue in its
 backlog while an edge restarts, and when no edge can run the daemon accepts on
 the public socket itself, exactly as it did before the edge existed.
+
+The daemon also writes one handshake line on that socket pair naming its auth
+token and store. With it the edge answers a few token-authenticated reads from
+the store itself and writes one byte back for each burst of them, so the daemon
+still counts that traffic as activity. An edge without the handshake relays
+everything, as before.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -37,6 +44,8 @@ _QUICK_EXIT_SECONDS = 5.0
 _QUICK_EXITS_BEFORE_FALLBACK = 3
 _STOP_TIMEOUT_SECONDS = 2.0
 _FALLBACK_ACCEPT_POLL_SECONDS = 0.5
+HANDSHAKE_SCHEMA = "guard-daemon-edge-handshake.v1"
+_MAX_BUSY_TIMEOUT_MS = 60_000
 
 
 class _EdgeServer(Protocol):
@@ -85,12 +94,91 @@ class _EdgeProcess:
         self.process.wait()
 
     def stop(self) -> None:
-        with suppress(OSError):
-            self.liveness.close()
+        _close_liveness(self.liveness)
         _stop_process(self.process)
 
 
-def _spawn(executable: Path, public: socket.socket, upstream_port: int) -> _EdgeProcess | None:
+def _close_liveness(liveness: socket.socket) -> None:
+    # Shutting down first wakes the activity reader blocked on this socket.
+    with suppress(OSError):
+        liveness.shutdown(socket.SHUT_RDWR)
+    with suppress(OSError):
+        liveness.close()
+
+
+def edge_handshake(
+    *,
+    auth_token: str,
+    guard_home: Path,
+    store_path: Path,
+    source: str,
+    busy_timeout_seconds: float,
+    dashboard_build: str | None,
+) -> bytes:
+    """The line that lets the edge answer token-authenticated store reads."""
+
+    payload: dict[str, object] = {
+        "schema": HANDSHAKE_SCHEMA,
+        "auth_token": auth_token,
+        "guard_home": os.path.abspath(guard_home),
+        "store_path": os.path.abspath(store_path),
+        "source": source,
+        "busy_timeout_ms": max(1, min(_MAX_BUSY_TIMEOUT_MS, int(busy_timeout_seconds * 1000))),
+    }
+    if dashboard_build is not None:
+        payload["dashboard_build"] = dashboard_build
+    return json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
+
+
+def _read_activity(liveness: socket.socket, on_activity: Callable[[], None]) -> None:
+    while True:
+        try:
+            chunk = liveness.recv(64)
+        except OSError:
+            return
+        if not chunk:
+            return
+        with suppress(Exception):
+            on_activity()
+
+
+def _offer_handshake(
+    liveness: socket.socket,
+    handshake: Callable[[], bytes | None] | None,
+    on_activity: Callable[[], None] | None,
+) -> None:
+    """Start the activity reader, then send the handshake.
+
+    Without a running reader the edge's own answers would never reach the
+    daemon's idle timer, so the edge then gets no handshake and relays.
+    """
+
+    if handshake is None or on_activity is None:
+        return
+    try:
+        line = handshake()
+    except Exception:
+        return
+    if line is None:
+        return
+    reader = threading.Thread(
+        target=_read_activity, args=(liveness, on_activity), name="guard-daemon-native-edge-activity", daemon=True
+    )
+    try:
+        reader.start()
+    except RuntimeError:
+        return
+    with suppress(OSError):
+        liveness.sendall(line)
+
+
+def _spawn(
+    executable: Path,
+    public: socket.socket,
+    upstream_port: int,
+    handshake: Callable[[], bytes | None] | None = None,
+    on_activity: Callable[[], None] | None = None,
+) -> _EdgeProcess | None:
     try:
         liveness, child_end = socket.socketpair()
     except OSError:
@@ -118,6 +206,7 @@ def _spawn(executable: Path, public: socket.socket, upstream_port: int) -> _Edge
         return None
     finally:
         child_end.close()
+    _offer_handshake(liveness, handshake, on_activity)
     return _EdgeProcess(process, liveness)
 
 
@@ -132,8 +221,12 @@ class NativeDaemonEdge:
         upstream_port: int,
         process: _EdgeProcess,
         resolve_executable: Callable[[], Path | None],
+        handshake: Callable[[], bytes | None] | None = None,
+        on_activity: Callable[[], None] | None = None,
     ) -> None:
         self._server = server
+        self._handshake = handshake
+        self._on_activity = on_activity
         self._public = public
         self._upstream_port = upstream_port
         self._process: _EdgeProcess | None = process
@@ -159,8 +252,7 @@ class NativeDaemonEdge:
                 break
             with suppress(Exception):
                 process.wait()
-            with suppress(OSError):
-                process.liveness.close()
+            _close_liveness(process.liveness)
             if self._closing.is_set():
                 return
             if time.monotonic() - self._started_at < _QUICK_EXIT_SECONDS:
@@ -177,7 +269,11 @@ class NativeDaemonEdge:
             # Resolve again: an upgrade can replace the runtime while the
             # daemon runs.
             executable = self._resolve_executable()
-            replacement = None if executable is None else _spawn(executable, self._public, self._upstream_port)
+            replacement = (
+                None
+                if executable is None
+                else _spawn(executable, self._public, self._upstream_port, self._handshake, self._on_activity)
+            )
             with self._lock:
                 if self._closing.is_set():
                     if replacement is not None:
@@ -242,7 +338,14 @@ def _stop_process(process: subprocess.Popen[bytes]) -> None:
             process.wait(timeout=_STOP_TIMEOUT_SECONDS)
 
 
-def start_native_daemon_edge(server: _EdgeServer, *, guard_home: Path, host: str) -> NativeDaemonEdge | None:
+def start_native_daemon_edge(
+    server: _EdgeServer,
+    *,
+    guard_home: Path,
+    host: str,
+    handshake: Callable[[], bytes | None] | None = None,
+    on_activity: Callable[[], None] | None = None,
+) -> NativeDaemonEdge | None:
     """Move the server onto a private port behind a native edge.
 
     Must run before the server starts serving. Returns ``None`` and leaves the
@@ -263,7 +366,7 @@ def start_native_daemon_edge(server: _EdgeServer, *, guard_home: Path, host: str
     except OSError:
         private.close()
         return None
-    process = _spawn(executable, public, upstream_port)
+    process = _spawn(executable, public, upstream_port, handshake, on_activity)
     if process is None:
         private.close()
         return None
@@ -275,6 +378,8 @@ def start_native_daemon_edge(server: _EdgeServer, *, guard_home: Path, host: str
             upstream_port=upstream_port,
             process=process,
             resolve_executable=lambda: _resolve_executable(guard_home),
+            handshake=handshake,
+            on_activity=on_activity,
         )
     except BaseException as error:
         # Without a supervisor nothing would own the child or the public
@@ -287,4 +392,11 @@ def start_native_daemon_edge(server: _EdgeServer, *, guard_home: Path, host: str
         raise
 
 
-__all__ = ["EDGE_ENV", "EDGE_FEATURE", "NativeDaemonEdge", "start_native_daemon_edge"]
+__all__ = [
+    "EDGE_ENV",
+    "EDGE_FEATURE",
+    "HANDSHAKE_SCHEMA",
+    "NativeDaemonEdge",
+    "edge_handshake",
+    "start_native_daemon_edge",
+]
