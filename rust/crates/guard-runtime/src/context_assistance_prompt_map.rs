@@ -228,8 +228,17 @@ pub(super) fn map(
         .filter(|_| !asked.everywhere)
         .filter_map(|pick| files[pick.file].sections[pick.at].name.as_deref())
         .collect();
+    // A piece of a name placed here (`signature` of `create_signature_registry`)
+    // is found with it, and its other uses are about something else.
+    let pieces: BTreeSet<String> = (chosen.iter())
+        .filter(|pick| !asked.everywhere && !pick.base)
+        .filter_map(|pick| written_name(files[pick.file].opening(pick.at)))
+        .flat_map(|name| pick::parts(&name))
+        .map(|part| term_form(&part))
+        .collect();
     let rare: Vec<&Sought> = (sought.iter())
         .filter(|item| item.phrase || (!item.common && !placed.contains(item.text.as_str())))
+        .filter(|item| item.phrase || item.name || !pieces.contains(&item.text))
         .filter(|item| !asked.changes || item.phrase || item.name)
         .collect();
     let (used, uses) = uses::uses(&files, &rare, asked.everywhere, until)?;

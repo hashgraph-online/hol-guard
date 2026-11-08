@@ -239,7 +239,7 @@ fn helpers(
 
 /// The words of a name, lowercased, of three letters or more:
 /// `combination_index` and `combinationIndex` are `combination` and `index`.
-fn parts(name: &str) -> Vec<String> {
+pub(super) fn parts(name: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut part = String::new();
     let mut lower = false;

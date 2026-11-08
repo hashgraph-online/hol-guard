@@ -148,6 +148,52 @@ fn quoted_text_a_docstring_wraps_is_found() {
     );
 }
 
+/// A piece of a name the map places is found with it: other lines saying
+/// `signature` are about something else. A piece of a name nothing defines is
+/// still looked for.
+#[test]
+fn a_piece_of_a_placed_name_is_not_looked_for_apart() {
+    let texts = [
+        (
+            "toolz/_signatures.py".to_owned(),
+            "def create_signature_registry(module_info, signatures):\n    return signatures\n"
+                .to_owned(),
+        ),
+        (
+            "toolz/functoolz.py".to_owned(),
+            "def _check_sigspec(func):\n    return signature(func)\n".to_owned(),
+        ),
+    ];
+    let walk = Walk {
+        checked: 200,
+        holding: vec![1, 2],
+        words: vec![1, 2],
+        ..Walk::default()
+    };
+    let mapped = |name: &str| {
+        let terms = [(name.to_owned(), true), ("signature".to_owned(), false)];
+        map(
+            &texts,
+            &sought(&walk, &terms, &[]),
+            &Asked::default(),
+            Instant::now() + Duration::from_secs(10),
+        )
+        .unwrap()
+        .text
+    };
+    let text = mapped("createsignatureregistry");
+    assert!(
+        text.contains("toolz/_signatures.py:1-2 def create_signature_registry"),
+        "{text}"
+    );
+    assert!(!text.contains("_check_sigspec"), "{text}");
+    let text = mapped("makesignaturecache");
+    assert!(
+        text.contains("toolz/functoolz.py:1-2 _check_sigspec"),
+        "{text}"
+    );
+}
+
 /// With no map, a request about tests still reads the tests the walk kept
 /// apart; other requests read the matched files alone.
 #[test]
