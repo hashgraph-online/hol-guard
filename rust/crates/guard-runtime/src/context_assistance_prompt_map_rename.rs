@@ -49,6 +49,7 @@ pub(super) fn blocks(
                 .or_else(|| every_line(files, item, None, until))
         })
         .take(MAX_NAMES)
+        .flatten()
         .collect()
 }
 
@@ -68,18 +69,24 @@ fn owner_only(spellings: &[String], term: &str) -> bool {
             <= dotted
 }
 
-/// In `file`, whether any line holds `term` with `_` and `-` dropped, and
-/// the lines naming it whole, or `exact` where given, with the first
-/// spelling written; `None` once `until` passes.
-fn naming(
-    file: &File,
-    term: &str,
-    exact: Option<&str>,
-    until: Instant,
-) -> Option<(bool, Vec<usize>, Option<String>)> {
-    let mut held = false;
-    let mut lines = Vec::new();
-    let mut written = None;
+/// Where one file holds a name.
+#[derive(Default)]
+struct Naming {
+    /// Some line holds the name with `_` and `-` dropped.
+    held: bool,
+    /// The lines naming it whole.
+    lines: Vec<usize>,
+    /// The other lines naming a longer name holding it, such as
+    /// `_get_default_module_async` for `_get_default_module`.
+    longer: Vec<usize>,
+    /// Its first spelling written.
+    written: Option<String>,
+}
+
+/// Where `file` holds `term`, or `exact` where given; `None` once `until`
+/// passes.
+fn naming(file: &File, term: &str, exact: Option<&str>, until: Instant) -> Option<Naming> {
+    let mut found = Naming::default();
     for (number, line) in file.lines.iter().enumerate() {
         if number % CHECK_EVERY == 0 && Instant::now() >= until {
             return None;
@@ -87,49 +94,79 @@ fn naming(
         if !line.to_lowercase().replace(['_', '-'], "").contains(term) {
             continue;
         }
-        held = true;
-        let named = line
+        found.held = true;
+        let mut words = line
             .split(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-')))
-            .find(|word| exact.map_or_else(|| term_form(word) == term, |exact| *word == exact));
-        if let Some(word) = named {
-            if written.is_none() {
-                written = Some(word.to_owned());
+            .filter(|word| !word.is_empty());
+        let named =
+            |word: &&str| exact.map_or_else(|| term_form(word) == term, |exact| *word == exact);
+        let longer = |word: &str| exact.is_some_and(|exact| joined(word, exact));
+        if let Some(word) = words.clone().find(named) {
+            if found.written.is_none() {
+                found.written = Some(word.to_owned());
             }
-            lines.push(number + 1);
+            found.lines.push(number + 1);
+        } else if words.any(longer) {
+            found.longer.push(number + 1);
         }
     }
-    Some((held, lines, written))
+    Some(found)
+}
+
+/// Whether `word` is a longer name joining `name` with other words:
+/// `_get_default_module_async` or `test_get_default_module`, not `chunked`.
+fn joined(word: &str, name: &str) -> bool {
+    let edge = |c: Option<char>, end: Option<char>| {
+        c.is_none_or(|c| matches!(c, '_' | '-')) || end.is_some_and(|c| matches!(c, '_' | '-'))
+    };
+    word != name
+        && (word.match_indices(name)).any(|(at, _)| {
+            let after = word[at + name.len()..].chars().next();
+            edge(word[..at].chars().next_back(), name.chars().next())
+                && (edge(after, name.chars().next_back()) || after.is_some_and(char::is_uppercase))
+        })
 }
 
 /// The files read that hold `item` with `_` and `-` dropped, as the walk
 /// counted them, and each line naming it whole, with its text, so the edit
-/// can be written without opening them. The list says it is complete only
-/// when the walk read every project file, found no file holding it beyond
-/// these, and every line fits.
+/// can be written without opening them; then the lines naming a longer name
+/// holding it, which a search for it finds too. The list says it is
+/// complete only when the walk read every project file, found no file
+/// holding it beyond these, and every line fits.
 fn every_line(
     files: &[File],
     item: &Sought,
     exact: Option<&str>,
     until: Instant,
-) -> Option<(String, Vec<String>)> {
+) -> Option<Vec<(String, Vec<String>)>> {
     let mut written = None;
     let mut holding = 0;
     let mut entries = Vec::new();
+    let mut longer = Vec::new();
     let mut length = 0;
     let mut whole = true;
-    for file in files {
-        let (held, lines, spelling) = naming(file, &item.text, exact, until)?;
-        written = written.or(spelling);
-        holding += usize::from(held);
-        for number in lines {
-            let entry = line_entry(file, number);
-            if entries.len() == MAX_RENAME_LINES || length + entry.len() > MAX_RENAME_CHARS {
-                whole = false;
-                continue;
-            }
+    let mut fits = |entry: String, entries: &mut Vec<String>, count: usize| {
+        let fit = count < MAX_RENAME_LINES && length + entry.len() <= MAX_RENAME_CHARS;
+        if fit {
             length += entry.len();
             entries.push(entry);
         }
+        fit
+    };
+    let mut others = Vec::new();
+    for file in files {
+        let found = naming(file, &item.text, exact, until)?;
+        written = written.or(found.written);
+        holding += usize::from(found.held);
+        for number in found.lines {
+            let count = entries.len();
+            whole &= fits(line_entry(file, number), &mut entries, count);
+        }
+        others.extend(found.longer.into_iter().map(|number| (file, number)));
+    }
+    for (file, number) in others {
+        let count = entries.len() + longer.len();
+        whole &= fits(line_entry(file, number), &mut longer, count);
     }
     let name = written?;
     whole &= item.spelled == Some(holding);
@@ -138,7 +175,14 @@ fn every_line(
     } else {
         format!("Lines naming `{name}` in the files read; other files may hold it too:")
     };
-    Some((title, entries))
+    let mut blocks = vec![(title, entries)];
+    if !longer.is_empty() {
+        blocks.push((
+            format!("Lines naming a longer name holding `{name}`:"),
+            longer,
+        ));
+    }
+    Some(blocks)
 }
 
 /// For a rename of a definition no test names, the source definitions
@@ -152,16 +196,16 @@ pub(super) fn callers(files: &[File], chosen: &[Pick], until: Instant) -> Vec<St
         return Vec::new();
     };
     let tested = (files.iter().filter(|file| file.kind == Kind::Test))
-        .any(|file| naming(file, name, None, until).is_none_or(|(_, lines, _)| !lines.is_empty()));
+        .any(|file| naming(file, name, None, until).is_none_or(|found| !found.lines.is_empty()));
     let mut found: Vec<String> = Vec::new();
     for file in files
         .iter()
         .filter(|file| file.kind == Kind::Source && !tested)
     {
-        let Some((_, lines, _)) = naming(file, name, None, until) else {
+        let Some(found) = naming(file, name, None, until) else {
             return Vec::new();
         };
-        for number in lines {
+        for number in found.lines {
             let holder = (0..file.sections.len())
                 .filter(|&at| !file.container(at))
                 .filter(|&at| (file.sections[at].start..=file.sections[at].end).contains(&number))
@@ -228,8 +272,8 @@ pub(super) fn stub(
     let mut length = 0;
     let mut whole = true;
     'files: for other in files {
-        let (_, lines, _) = naming(other, name, None, until)?;
-        for number in lines.into_iter().filter(|&n| !inside(other.path, n)) {
+        let found = naming(other, name, None, until)?;
+        for number in found.lines.into_iter().filter(|&n| !inside(other.path, n)) {
             let entry = line_entry(other, number);
             if entries.len() == MAX_STUB_LINES || length + entry.len() > MAX_STUB_CHARS {
                 whole = false;

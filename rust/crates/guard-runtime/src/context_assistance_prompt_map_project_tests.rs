@@ -432,8 +432,8 @@ fn a_short_named_function_is_shown_whole_once_a_session() {
 
 /// A rename lists each line naming the old name with its text, and says
 /// the list is whole only when the walk read the whole project and counted
-/// no file holding the name beyond the ones read; a longer name holding it
-/// is not listed.
+/// no file holding the name beyond the ones read. A longer name holding it
+/// is listed apart, so a rename that has to cover it too can.
 #[test]
 fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
     let list = files(&[
@@ -453,6 +453,7 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
     let terms = [("oldname".to_owned(), true)];
     let asked = Asked {
         everywhere: true,
+        spellings: vec!["_old_name".to_owned()],
         ..Asked::default()
     };
     let walk = |holding: usize, complete: bool| Walk {
@@ -470,7 +471,8 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
         text.contains(
             "\n\nEvery line naming `_old_name`; no other project file holds it:\n\
              src/core.py:1: def _old_name():\nsrc/core.py:6: return _old_name()\n\
-             tests/test_core.py:2: assert _old_name() == 1\ndocs/api.md:1: Call `_old_name` once."
+             tests/test_core.py:2: assert _old_name() == 1\ndocs/api.md:1: Call `_old_name` once.\n\n\
+             Lines naming a longer name holding `_old_name`:\ndocs/api.md:3: `_old_name_cache`"
         ),
         "{text}"
     );
