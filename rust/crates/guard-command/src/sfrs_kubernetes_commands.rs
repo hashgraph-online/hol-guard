@@ -3,10 +3,6 @@
 
 #![allow(dead_code)]
 
-use std::sync::LazyLock;
-
-use regex::Regex;
-
 use crate::data_flow::{extract_command_segments, extract_input_redirects};
 use crate::env_wrapper::parse_env_wrapper;
 use crate::hook_adapter_pytext::{py_lower, py_strip};
@@ -19,11 +15,12 @@ use crate::sfrs_kubernetes_heredoc::kubernetes_heredoc_secret_source;
 use crate::sfrs_kubernetes_heredoc_scan::wrapper_option_tokens_consumed;
 use crate::sfrs_kubernetes_support::{
     interpreter_reads_sensitive_env, is_assignment, is_proc_environ_path, is_secret_volume_path,
-    is_sensitive_env_name, kubernetes_option_tokens_consumed, matching_source_arguments,
-    path_name_lower, py_split_whitespace, raw_secret_api_path, resource_token_includes_secret,
-    script_reads_sensitive_env, shell_command_script, skip_kubectl_options, OptionSets,
-    EXEC_BOOLEAN_SHORT_CLUSTER, KUBECTL_BOOLEAN_OPTIONS, KUBECTL_OPTIONS_WITH_VALUES,
-    SHELL_EXECUTABLES, WRAPPER_COMMANDS, WRITE_ONLY_COMMANDS,
+    is_sensitive_env_name, jsonpath_renders_only_names, kubernetes_option_tokens_consumed,
+    matching_source_arguments, path_name_lower, py_split_whitespace, raw_secret_api_path,
+    resource_token_includes_secret, safe_jsonpath_field, script_reads_sensitive_env,
+    shell_command_script, skip_kubectl_options, OptionSets, EXEC_BOOLEAN_SHORT_CLUSTER,
+    KUBECTL_BOOLEAN_OPTIONS, KUBECTL_OPTIONS_WITH_VALUES, SHELL_EXECUTABLES, WRAPPER_COMMANDS,
+    WRITE_ONLY_COMMANDS,
 };
 use crate::shell_command_wrappers::normalize_transparent_shell_command;
 use crate::shell_structure::extract_command_substitutions;
@@ -90,13 +87,6 @@ const ENV_CONTROL_TOKENS: &[&str] = &["&&", "||", ";", "|", "|&", "&"];
 pub(crate) const SECRET_VOLUME: &str = "Kubernetes secret volume";
 pub(crate) const POD_ENVIRONMENT: &str = "Kubernetes pod environment";
 
-static SAFE_JSONPATH_FIELD: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)\A\{?\.?(?:items(?:\[-?\d+\]|\[\*\])?\.)?(?:metadata\.(?:name|namespace|uid)|status\.phase)\}?\z",
-    )
-    .expect("safe jsonpath field pattern")
-});
-
 /// `kubernetes_secret_read_source`.
 pub(crate) fn kubernetes_secret_read_source(command: &str) -> Option<&'static str> {
     if py_strip(command).is_empty() {
@@ -136,7 +126,9 @@ pub(crate) fn kubernetes_read_only_inventory_args(command_name: &str, args: &[St
     if kind != "jsonpath" && kind != "jsonpath-as-json" {
         return false;
     }
-    SAFE_JSONPATH_FIELD.is_match(py_strip(template).trim_matches(['\'', '"']))
+    let template = py_strip(template);
+    let template = template.trim_matches(['\'', '"']);
+    safe_jsonpath_field(template) || jsonpath_renders_only_names(template)
 }
 
 /// `_read_only_get_resource_and_output`.

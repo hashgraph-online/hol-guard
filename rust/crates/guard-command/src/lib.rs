@@ -315,11 +315,15 @@ mod sfrs_interpreter_vectors;
 mod sfrs_jq;
 mod sfrs_json;
 mod sfrs_kubernetes_commands;
+#[cfg(test)]
+mod sfrs_kubernetes_commands_tests;
 mod sfrs_kubernetes_cp;
 mod sfrs_kubernetes_heredoc;
 mod sfrs_kubernetes_heredoc_scan;
 mod sfrs_kubernetes_options;
 mod sfrs_kubernetes_support;
+#[cfg(test)]
+mod sfrs_kubernetes_support_tests;
 #[cfg(test)]
 mod sfrs_kubernetes_vectors;
 #[cfg(all(test, unix))]
