@@ -1897,7 +1897,8 @@ def test_guard_protect_pnpm_install_alias_renders_wrapped_review_link_for_cloud_
 
     assert rc == 2
     normalized_output = " ".join(output.lower().split())
-    assert "blocked" in normalized_output
+    assert "paused" in normalized_output
+    assert "guard blocked the install" not in normalized_output
     assert "approve or keep this blocked" not in normalized_output
     assert "http://127.0.0.1:5474/requests/" not in output
 
@@ -2256,9 +2257,12 @@ def test_guard_protect_cached_validation_error_still_requires_current_package_ga
         assert rc == 2
 
         store = GuardStore(home_dir)
-        assert payload["verdict"]["action"] == "block"
+        # A 400 is no verdict: it pauses for review, never runs the install.
+        assert payload["verdict"]["action"] == "require-reapproval"
         assert "primary_approval_request_id" not in payload
-        assert store.list_approval_requests(limit=None) == []
+        pending = store.list_approval_requests(status="pending", limit=None)
+        assert len(pending) == 1
+        assert marker_path.exists() is False
 
         _stop_cloud_eval_server(server, thread)
         server = None
@@ -2275,13 +2279,14 @@ def test_guard_protect_cached_validation_error_still_requires_current_package_ga
         if server is not None and thread is not None:
             _stop_cloud_eval_server(server, thread)
 
+    # The unanswered review is not permission to bypass a fresh Cloud failure.
     assert retry_exit_code == 2
     assert retry_payload["executed"] is False
     assert retry_payload["verdict"]["action"] == "block"
     assert "primary_approval_request_id" not in retry_payload
-    assert store.list_approval_requests(limit=None) == []
+    assert store.list_approval_requests(limit=None) == pending
     assert marker_path.exists() is False
-    assert store.list_approval_requests(status="pending", limit=None) == []
+    assert store.list_approval_requests(status="pending", limit=None) == pending
 
 
 def test_guard_protect_denied_retry_surfaces_saved_block_clear_command_without_requeue(
