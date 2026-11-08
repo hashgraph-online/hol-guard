@@ -34,7 +34,9 @@ everywhere in the project, including tests. Behavior must not change.";
     assert!(
         text.contains(
             "\n\nThese lines build a longer name from `_get_default_module`, such as \
-`_get_default_module_async`; every name they build must still be defined after the rename:\n\
+`_get_default_module_async`; with `_get_default_module_impl` written in place of \
+`_get_default_module`, they would build `_get_default_module_impl_async` instead. Every name they \
+build must still be defined after the rename:\n\
 src/pkg/compiler.py:3: self.write(f\"_get_default_module{self.choose_async('_async')}(context)\")\n"
         ),
         "{text}"

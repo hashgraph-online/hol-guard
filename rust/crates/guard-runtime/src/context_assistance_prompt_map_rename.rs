@@ -45,12 +45,23 @@ pub(super) fn blocks(
             // `_batched` is renamed, not `batched` beside it: the lines
             // naming it as the prompt spells it, when any file does.
             let spelled = (asked.spellings.iter()).find(|word| term_form(word) == item.text);
-            (spelled.and_then(|word| every_line(files, item, Some(word.as_str()), until)))
-                .or_else(|| every_line(files, item, None, until))
+            let found = spelled.and_then(|word| {
+                let new = renamed_to(&asked.spellings, word);
+                every_line(files, item, Some(word.as_str()), new, until)
+            });
+            found.or_else(|| every_line(files, item, None, None, until))
         })
         .take(MAX_NAMES)
         .flatten()
         .collect()
+}
+
+/// The name the prompt writes as code right after `old`, which a rename
+/// makes it: "rename `a` to `b`".
+fn renamed_to<'a>(spellings: &'a [String], old: &str) -> Option<&'a str> {
+    let at = spellings.iter().position(|word| word == old)?;
+    (spellings.get(at + 1).map(String::as_str))
+        .filter(|word| (word.chars()).all(|c| c.is_alphanumeric() || c == '_'))
 }
 
 /// Whether the prompt writes `term` only before a dot, as `peekable` in
@@ -167,6 +178,7 @@ fn every_line(
     files: &[File],
     item: &Sought,
     exact: Option<&str>,
+    new: Option<&str>,
     until: Instant,
 ) -> Option<Vec<(String, Vec<String>)>> {
     let mut written = None;
@@ -231,9 +243,18 @@ fn every_line(
         } else {
             format!(", such as {such}")
         };
+        // Spelled out, since an agent told only to keep the names defined
+        // still wrote `_get_default_module_impl{...}`.
+        let suffix = (extended.first()).and_then(|longer| longer.strip_prefix(name.as_str()));
+        let instead = match (new, suffix) {
+            (Some(new), Some(suffix)) => format!(
+                "; with `{new}` written in place of `{name}`, they would build `{new}{suffix}` instead"
+            ),
+            _ => String::new(),
+        };
         blocks.push((
             format!(
-                "These lines build a longer name from `{name}`{such}; every name they build must still be defined after the rename:"
+                "These lines build a longer name from `{name}`{such}{instead}. Every name they build must still be defined after the rename:"
             ),
             building,
         ));
