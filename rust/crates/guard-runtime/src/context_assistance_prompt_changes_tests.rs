@@ -22,6 +22,10 @@ def other():
 mod session;
 
 #[cfg(unix)]
+#[path = "context_assistance_prompt_changes_refused_tests.rs"]
+mod refused;
+
+#[cfg(unix)]
 fn later() -> Instant {
     Instant::now() + Duration::from_secs(10)
 }
@@ -449,30 +453,6 @@ fn a_secret_in_the_diff_is_left_out_though_the_file_no_longer_has_it() {
         "a diff with a secret is left out: {text}"
     );
     assert!(!text.contains(&"-".repeat(5)), "{text}");
-}
-
-/// A commit that also deletes a file shows no diff: the deleted file was
-/// never read, so the screen never saw what it held.
-#[cfg(unix)]
-#[test]
-fn a_commit_deleting_an_unread_file_shows_no_diff() {
-    let repo = Repo::new();
-    repo.write("private/notes.txt", "meeting notes\nnot for the agent\n");
-    repo.commit("add notes");
-    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
-    repo.write(
-        "src/core.py",
-        &CORE.replace("return value", "return value.strip()"),
-    );
-    repo.git(&["rm", "-q", "private/notes.txt"]);
-    repo.commit("strip values");
-    let text = repo.changes(Some(&base)).unwrap();
-    assert!(text.contains("src/core.py: convert 4-5"), "{text}");
-    assert!(
-        text.contains("strip values") && !text.contains("```diff"),
-        "{text}"
-    );
-    assert!(!text.contains("not for the agent"), "{text}");
 }
 
 /// Changes across many files stop at the note's size and say so, and the
