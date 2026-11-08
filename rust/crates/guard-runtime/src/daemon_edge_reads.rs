@@ -333,7 +333,19 @@ fn route(
         }
         "/v1/read-state" => read_state(config, reads).map(|ids| (200, json!({"ids": ids}))),
         "/v1/evidence" => evidence::list(query, config, reads),
+        "/v1/sessions" => records::sessions(config, reads),
+        "/v1/connect/state" => Some((
+            410,
+            json!({
+                "error": "legacy_pairing_disabled",
+                "message": "Use hol-guard connect for browser OAuth.",
+            }),
+        )),
+        "/v1/receipts/analytics" => records::receipt_analytics(query, config, reads),
         _ => {
+            if let Some(operation_id) = single_segment(path, "/v1/operations/", "") {
+                return records::operation(operation_id, config, reads);
+            }
             // The daemon serves `/v1/receipts/analytics` itself, ahead of its
             // receipt lookup.
             if let Some(receipt_id) =
@@ -439,6 +451,9 @@ pub(super) fn json_response(
 
 #[path = "daemon_edge_evidence.rs"]
 mod evidence;
+
+#[path = "daemon_edge_records.rs"]
+mod records;
 
 #[cfg(test)]
 #[path = "daemon_edge_reads_tests.rs"]
