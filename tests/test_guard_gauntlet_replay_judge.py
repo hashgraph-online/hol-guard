@@ -240,6 +240,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # names nothing the home keeps there.
         "neg-ls-home-dot-glob",
         "neg-ls-home-missing-hidden-store",
+        # A bare dot glob in the worktree: `.*` stands for the parent entry as
+        # well, so the listing reaches above the workspace. A contained run has
+        # nothing above the workspace to reach, so the pattern names only what
+        # the sandbox already holds.
+        "neg-hidden-glob-stands-for-dot-directories",
         # A pattern that is a credential word and an unconstrained tail expands onto the
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
