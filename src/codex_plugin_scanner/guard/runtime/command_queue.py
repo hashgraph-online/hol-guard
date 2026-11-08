@@ -57,6 +57,7 @@ from .command_queue_protocol import lease_id as _lease_id
 from .command_queue_protocol import result_payload as _result_payload
 from .command_queue_protocol import retry_wait_seconds as _retry_wait_seconds  # noqa: F401
 from .command_queue_results import drop_refused_result, post_result_unless_refused
+from .command_queue_settle_slots import settle_slots
 from .command_queue_state import (
     COMMAND_QUEUE_ENABLED_ENV,
     COMMAND_QUEUE_LEASE_WAIT_MS_ENV,  # noqa: F401 - public compatibility export
@@ -525,7 +526,7 @@ def poll_command_queue_once(
         # closes, after the job ran and its grant was spent. It still reached
         # recovery there; here it becomes the posted result so the lease closes.
         try:
-            with _review_connection_scope(store, item):
+            with settle_slots.hold(), _review_connection_scope(store, item):
                 execution = _settle_authorized_job(store, context, item, authorized)
         except sqlite3.DatabaseError as error:
             _LOGGER.warning("Guard command settle storage failure: error=%s", _redacted_error(error))
