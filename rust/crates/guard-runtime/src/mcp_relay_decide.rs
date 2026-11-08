@@ -917,6 +917,7 @@ fn settle_package(
                         _ => queue::safe_alternative(
                             mode,
                             resolved.redaction_level.as_deref(),
+                            admitted.binding.review.approval_center_origin.as_deref(),
                             policy_action.clone(),
                         )?,
                     }
