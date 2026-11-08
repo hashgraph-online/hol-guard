@@ -27,6 +27,7 @@ function loadGuardDaemonConnection() { return {stateId: 'fixture'}; }
 function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
 function invalidateToolApprovalResumes() {}
 function handlerAbortSignal(ctx) { return ctx.signal; }
+function contextSessionId(ctx) { return ctx.sessionId ?? null; }
 function captureInputApprovalResumeBinding(ctx) {
   return {generation: inputApprovalResumeGeneration, cwd: ctx.cwd};
 }
@@ -48,7 +49,7 @@ async function runGuard(payload) {
   return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit',
     additionalContext: FOUND + ' ' + payload.prompt}};
 }
-const ctx = {cwd: '/fixture', ui: {notify() {}}, isIdle: () => idle};
+const ctx = {cwd: '/fixture', sessionId: 'session-a', ui: {notify() {}}, isIdle: () => idle};
 const start = (prompt) => callbacks.before_agent_start({type: 'before_agent_start', prompt}, ctx);
 const turn = async (text, source = 'interactive', expanded = text) => ({
   input: await callbacks.input({text, source}, ctx),
@@ -129,6 +130,7 @@ console.log(JSON.stringify({matched, again, empty, blocked, skill, template, oth
     assert result["later"] == {"input": {"action": "continue"}}
     reviewed = [payload for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
     assert reviewed and all(payload["guard_prompt_context"] is True for payload in reviewed)
+    assert all(payload["session_id"] == "session-a" for payload in reviewed)
 
 
 RESUME_STEPS = """

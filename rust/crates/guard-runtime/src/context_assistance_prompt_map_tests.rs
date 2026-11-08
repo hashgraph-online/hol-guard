@@ -1,9 +1,7 @@
 use super::*;
-use crate::context_assistance_prompt_files::{plain, walk};
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-const CORE: &str = "import os
+pub(super) const CORE: &str = "import os
 
 
 class Choice(ParamType):
@@ -24,11 +22,13 @@ def other():
 ";
 
 /// What the map looks for when `checked` files were walked and each term,
-/// marked when the prompt wrote it as a name, is in that many files.
+/// marked when the prompt wrote it as a name, is in that many code files.
 fn looking_for(terms: &[(&str, bool, usize)]) -> Vec<Sought> {
+    let holding: Vec<usize> = terms.iter().map(|(_, _, holding)| *holding).collect();
     let walk = Walk {
         checked: 200,
-        holding: terms.iter().map(|(_, _, holding)| *holding).collect(),
+        holding: holding.clone(),
+        words: holding,
         ..Walk::default()
     };
     let terms: Vec<(String, bool)> = terms
@@ -53,39 +53,48 @@ fn mapped_text(list: &[(&str, &str)], terms: &[(&str, bool, usize)]) -> Option<S
         &files(list),
         &looking_for(terms),
         &Asked::default(),
-        &[],
         later(),
     )
     .map(|rendered| rendered.text)
 }
 
-/// The definition that holds the prompt's names comes back whole as the best
-/// match, and the class around it is listed by its lines, so the agent
-/// opens it directly instead of searching for it.
+/// The class the prompt names is listed with its members' lines, and the
+/// function that uses the prompt's other name with the lines it is on, so the
+/// agent opens just what it needs. No code is pasted.
 #[test]
-fn the_definition_holding_the_prompts_names_is_shown_and_its_class_listed() {
-    let text = mapped_text(
-        &[("src/core.py", CORE)],
-        &[("casesensitive", true, 2), ("choice", false, 30)],
+fn the_named_class_and_the_function_using_the_other_name_are_listed() {
+    let terms = looking_for(&[("choice", true, 3), ("casesensitive", true, 2)]);
+    let mapped = map(
+        &files(&[("src/core.py", CORE)]),
+        &terms,
+        &Asked::default(),
+        later(),
     )
     .unwrap();
+    let text = mapped.text;
     assert!(text.starts_with(HEADER), "{text}");
-    let best = text.split("Best match:\n").nth(1).unwrap();
     assert!(
-        best.starts_with("src/core.py (lines 7-9)\n```python\n    def __init__"),
+        text.contains(
+            "Definitions this request names:\nsrc/core.py:4-14 class Choice(ParamType):\n  \
+             members: __init__ 7-9, convert 11-14"
+        ),
         "{text}"
     );
     assert!(
-        text.contains("src/core.py:4-14 class Choice(ParamType):"),
+        text.contains(
+            "Where 'casesensitive' appear in source:\nsrc/core.py:7-9 Choice.__init__ (lines 7, 9)"
+        ),
         "{text}"
     );
     assert!(!text.contains("def other"), "{text}");
+    assert!(!text.contains("```"), "{text}");
+    assert!(mapped.shown.is_empty());
 }
 
-/// A long function that mentions everything gives way to the short one the
-/// prompt names.
+/// A function that mentions a word once is not where the change goes, however
+/// long it is.
 #[test]
-fn a_long_function_that_mentions_the_words_does_not_outrank_the_named_one() {
+fn a_function_mentioning_a_word_once_is_not_listed() {
     let mut long = String::from("def handle(choice, case_sensitive):\n");
     for _ in 0..300 {
         long.push_str("    step()\n");
@@ -96,13 +105,13 @@ fn a_long_function_that_mentions_the_words_does_not_outrank_the_named_one() {
         &[("casesensitive", true, 2), ("choice", true, 3)],
     )
     .unwrap();
-    let best = text.split("Best match:\n").nth(1).unwrap();
-    assert!(best.starts_with("src/short.py (lines 1-2)"), "{text}");
-    assert!(text.contains("src/long.py:1-301 def handle"), "{text}");
+    assert!(text.contains("src/short.py:1-2 def choice():"), "{text}");
+    assert!(!text.contains("src/long.py"), "{text}");
 }
 
-/// Source comes first, then a few tests, then docs, and a changelog gives
-/// its newest section, where an entry for the change belongs.
+/// After the source come the test files that test it, with the last related
+/// test, then the doc sections asked for and the newest changelog section,
+/// where an entry for the change belongs.
 #[test]
 fn tests_docs_and_the_newest_changelog_section_follow_the_source() {
     let mut tests = String::new();
@@ -114,68 +123,178 @@ fn tests_docs_and_the_newest_changelog_section_follow_the_source() {
     let docs = "Options\n=======\n\nUse ``case_sensitive`` to match exactly.\n";
     let changes = "Changes\n=======\n\nUnreleased\n----------\n\n- Fix thing.\n\n\
 Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
-    let text = mapped_text(
-        &[
+    let asked = Asked {
+        docs: true,
+        changelog: false,
+        named: vec!["CHANGES.rst".into()],
+        changes: false,
+    };
+    let text = map(
+        &files(&[
             ("CHANGES.rst", changes),
             ("docs/options.rst", docs),
             ("tests/test_core.py", &tests),
             ("src/core.py", CORE),
-        ],
-        &[("casesensitive", true, 4)],
+        ]),
+        &looking_for(&[("casesensitive", true, 4)]),
+        &asked,
+        later(),
+    )
+    .unwrap()
+    .text;
+    let at = |part: &str| text.find(part).unwrap_or_else(|| panic!("{part}: {text}"));
+    let source = at("src/core.py:7-9 Choice.__init__ (lines 7, 9)");
+    let tests = at("Tests:\ntests/test_core.py: 5 related tests, last test_case_sensitive_4 13-14");
+    let docs = at("Docs:\ndocs/options.rst:1-4 Options");
+    let changelog = at("CHANGES.rst:4-8 newest section: Unreleased");
+    assert!(source < tests && tests < docs && docs < changelog, "{text}");
+}
+
+/// A class the prompt names finds the tests that use it, however its name is
+/// cased there.
+#[test]
+fn tests_that_use_a_named_class_are_listed() {
+    let tests = "def test_a():\n    click.Choice(['a'])\n\n\
+def test_b():\n    click.Choice(['b'])\n\n\
+def test_other():\n    return 1\n";
+    let text = mapped_text(
+        &[("src/core.py", CORE), ("tests/test_types.py", tests)],
+        &[("choice", true, 3)],
     )
     .unwrap();
-    let map = text.split(MAP_TITLE).nth(1).unwrap();
-    let listed: Vec<&str> = map
-        .lines()
-        .skip(1)
-        .take_while(|line| !line.is_empty())
-        .collect();
-    let test_lines = listed
-        .iter()
-        .filter(|line| line.starts_with("tests/"))
-        .count();
-    assert_eq!(test_lines, 3, "{text}");
-    let at = |prefix: &str| {
-        listed
-            .iter()
-            .position(|line| line.starts_with(prefix))
-            .unwrap()
-    };
-    assert!(at("src/core.py") < at("tests/"), "{text}");
-    assert!(at("tests/") < at("docs/options.rst:1-4"), "{text}");
-    assert_eq!(
-        listed.last().unwrap(),
-        &"CHANGES.rst:4-8 Unreleased",
+    assert!(
+        text.contains("Tests:\ntests/test_types.py: 2 related tests, last test_b 4-5"),
         "{text}"
     );
 }
 
-/// Code this session already has is listed by its lines, not sent again.
+/// The few tests that use the request's rare word come before the many that
+/// only use the class it names.
 #[test]
-fn a_body_the_session_already_has_is_listed_not_sent_again() {
-    let terms = looking_for(&[("casesensitive", true, 2), ("choice", false, 30)]);
-    let list = files(&[("src/core.py", CORE)]);
-    let first = map(&list, &terms, &Asked::default(), &[], later()).unwrap();
-    assert_eq!(first.shown.len(), 1);
-    let again = map(&list, &terms, &Asked::default(), &first.shown, later()).unwrap();
-    assert!(again.shown.is_empty(), "{}", again.text);
-    assert!(!again.text.contains("Best match"), "{}", again.text);
+fn tests_using_a_rare_word_come_first() {
+    let mut many = String::new();
+    for n in 0..6 {
+        many.push_str(&format!("def test_choice_{n}():\n    Choice(['a'])\n\n"));
+    }
+    let rare = "def test_plain():\n    Choice(['a'])\n\n\
+def test_sensitive_a():\n    Choice(['a'], case_sensitive=False)\n\n\
+def test_sensitive_b():\n    Choice(['b'], case_sensitive=False)\n";
+    let text = mapped_text(
+        &[
+            ("src/core.py", CORE),
+            ("tests/test_many.py", &many),
+            ("tests/test_rare.py", rare),
+        ],
+        &[("choice", true, 3), ("casesensitive", true, 2)],
+    )
+    .unwrap();
     assert!(
-        again.text.contains("src/core.py:7-9 def __init__"),
-        "{}",
-        again.text
+        text.contains(
+            "Tests:\ntests/test_rare.py: 2 related tests, last test_sensitive_b 7-8\n\
+tests/test_many.py: 6 related tests"
+        ),
+        "{text}"
     );
 }
 
-/// A plain word in many files places nothing, unless a file read defines it.
+/// The doc section that quotes the request's rare name wins over sections
+/// that only say it in prose or quote everyday words, and a docs folder keeps
+/// the top-level README out.
 #[test]
-fn a_common_plain_word_places_nothing_unless_a_file_defines_it() {
+fn docs_rank_by_quoted_names_from_the_docs_folder() {
+    let mut list = vec![
+        ("src/core.py".to_owned(), CORE.to_owned()),
+        (
+            "README.md".to_owned(),
+            "# Choice\n\n``choice``\n".to_owned(),
+        ),
+        (
+            "docs/options.rst".to_owned(),
+            "Choice Options\n==============\n\nPick one with :class:`Choice`.\n".to_owned(),
+        ),
+        (
+            "docs/prose.rst".to_owned(),
+            "Choice and more\n===============\n\nA choice, a choice, an example to run.\n"
+                .to_owned(),
+        ),
+    ];
+    for n in 0..5 {
+        list.push((
+            format!("docs/page{n}.rst"),
+            format!("Page {n}\n======\n\nAn example to ``run`` and check.\n"),
+        ));
+    }
+    let asked = Asked {
+        docs: true,
+        ..Asked::default()
+    };
+    let terms = looking_for(&[
+        ("choice", true, 3),
+        ("example", false, 20),
+        ("run", false, 20),
+        ("check", false, 20),
+    ]);
+    let text = map(&list, &terms, &asked, later()).unwrap().text;
+    assert!(
+        text.contains("Docs:\ndocs/options.rst:1-4 Choice Options"),
+        "{text}"
+    );
+    assert!(!text.contains("README.md"), "{text}");
+    assert!(!text.contains("docs/prose.rst"), "{text}");
+}
+
+/// A class too long to read whole gives its first line and its members'
+/// lines, the member list cut short past its limit.
+#[test]
+fn a_long_class_is_listed_by_its_members() {
+    let mut big = String::from("class Registry:\n");
+    for n in 0..100 {
+        big.push_str(&format!("    def m{n}(self):\n        return {n}\n"));
+    }
+    let text = mapped_text(&[("src/big.py", &big)], &[("registry", true, 2)]).unwrap();
+    assert!(
+        text.contains(
+            "src/big.py:1 (201 lines) class Registry:\n  members: m0 2-3, m1 4-5, m2 6-7"
+        ),
+        "{text}"
+    );
+    assert!(text.ends_with(", ..."), "{text}");
+    assert!(text.len() <= MAX_MAP_CHARS, "{}", text.len());
+}
+
+/// A plain word in many of the project's code files places nothing, even
+/// where a file defines it; a rarer one that a file defines is listed like a
+/// name.
+#[test]
+fn a_common_plain_word_places_nothing() {
     let uses = "def read():\n    token = 1\n    return token\n";
-    let terms = [("token", false, 50)];
-    assert_eq!(mapped_text(&[("src/read.py", uses)], &terms), None);
-    let defines = "class Token:\n    pass\n";
-    let text = mapped_text(&[("src/read.py", uses), ("src/token.py", defines)], &terms).unwrap();
-    assert!(text.contains("src/token.py (lines 1-2)"), "{text}");
+    let list = files(&[
+        ("src/read.py", uses),
+        ("src/token.py", "class Token:\n    pass\n"),
+    ]);
+    let rare = looking_for(&[("token", false, MAX_PLAIN_FILES)]);
+    let text = map(&list, &rare, &Asked::default(), later()).unwrap().text;
+    assert!(text.contains("src/token.py:1-2 class Token:"), "{text}");
+    let common = looking_for(&[("token", false, MAX_PLAIN_FILES + 1)]);
+    assert!(map(&list, &common, &Asked::default(), later()).is_none());
+    let named = looking_for(&[("token", true, 50)]);
+    assert!(map(&list, &named, &Asked::default(), later()).is_some());
+    // A name as common as a package's own is still listed where it is
+    // defined, but its uses place nothing.
+    let used_only = files(&[("src/read.py", uses)]);
+    assert!(map(&used_only, &named, &Asked::default(), later()).is_none());
+}
+
+/// A plain word only in comments and docstrings is prose about the code and
+/// places nothing; on a code line it does.
+#[test]
+fn words_in_comments_and_docstrings_place_nothing() {
+    let prose = "def run(value):\n    \"\"\"\n    Reticulate it.\n    Reticulate it again.\n    \"\"\"\n    # reticulate\n    return value\n";
+    let words = [("reticulate", false, 1)];
+    assert_eq!(mapped_text(&[("src/run.py", prose)], &words), None);
+    let code = "def run(value):\n    reticulate = value\n    return reticulate\n";
+    let text = mapped_text(&[("src/run.py", code)], &words).unwrap();
+    assert!(text.contains("src/run.py:1-3 run (lines 2, 3)"), "{text}");
 }
 
 /// Definitions run from their decorators over a long signature to the end
@@ -239,13 +358,16 @@ fn only_prose_files_are_changelogs() {
     assert_eq!(kind("src/history.py"), Kind::Source);
     assert_eq!(kind("changes.rs"), Kind::Source);
     assert_eq!(kind("HISTORY.md"), Kind::Changelog);
-    let history = "def history_entry():\n    return case_sensitive\n";
+    let history = "def history_entry(case_sensitive):\n    return case_sensitive\n";
     let text = mapped_text(
         &[("src/history.py", history)],
         &[("casesensitive", true, 1)],
     )
     .unwrap();
-    assert!(text.contains("src/history.py (lines 1-2)"), "{text}");
+    assert!(
+        text.contains("src/history.py:1-2 history_entry (lines 1, 2)"),
+        "{text}"
+    );
 }
 
 /// A changelog the prompt names is on the map with its newest section, even
@@ -255,114 +377,73 @@ fn a_named_changelog_stays_on_the_map() {
     let changes = "Changes\n=======\n\nUnreleased\n----------\n\n- Fix thing.\n";
     let list = files(&[("CHANGES.rst", changes), ("src/core.py", CORE)]);
     let terms = looking_for(&[("casesensitive", true, 2)]);
-    let unnamed = map(&list, &terms, &Asked::default(), &[], later()).unwrap();
+    let unnamed = map(&list, &terms, &Asked::default(), later()).unwrap();
     assert!(!unnamed.text.contains("CHANGES.rst"), "{}", unnamed.text);
     let asked = Asked {
         docs: false,
+        changelog: false,
         named: vec!["CHANGES.rst".into()],
+        changes: false,
     };
-    let named = map(&list, &terms, &asked, &[], later()).unwrap();
+    let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(
-        named.text.contains("CHANGES.rst:4-7 Unreleased"),
+        named
+            .text
+            .contains("CHANGES.rst:4-7 newest section: Unreleased"),
         "{}",
         named.text
     );
+}
+
+/// A prompt about this session's changes, such as "review every change
+/// against the original code", gets no uses of its plain words: the changes
+/// are listed already, and "original" names no code. The changelog it names
+/// stays.
+#[test]
+fn a_review_of_changes_skips_its_plain_words() {
+    let changes = "Changes\n=======\n\nUnreleased\n----------\n\n- Fix thing.\n";
+    let list = files(&[("CHANGES.rst", changes), ("src/core.py", CORE)]);
+    let terms = looking_for(&[("value", false, 2)]);
+    let mut asked = Asked {
+        named: vec!["CHANGES.rst".into()],
+        ..Asked::default()
+    };
+    let plain = map(&list, &terms, &asked, later()).unwrap();
+    assert!(
+        plain.text.contains("Where 'value' appear"),
+        "{}",
+        plain.text
+    );
+    asked.changes = true;
+    let review = map(&list, &terms, &asked, later()).unwrap();
+    assert!(!review.text.contains("'value'"), "{}", review.text);
+    assert!(review.text.contains("CHANGES.rst:4-7"), "{}", review.text);
 }
 
 /// The map gives up once its time is up, however big the files.
 #[test]
 fn the_map_stops_at_its_deadline() {
     let many: String = (0..5_000)
-        .map(|n| format!("def case_sensitive_{n}():\n    case_sensitive()\n"))
+        .map(|n| format!("def check_{n}():\n    case_sensitive()\n    case_sensitive()\n"))
         .collect();
     let list = files(&[("src/many.py", &many)]);
     let terms = looking_for(&[("casesensitive", true, 1)]);
-    assert!(map(&list, &terms, &Asked::default(), &[], later()).is_some());
-    assert!(map(&list, &terms, &Asked::default(), &[], Instant::now()).is_none());
+    assert!(map(&list, &terms, &Asked::default(), later()).is_some());
+    assert!(map(&list, &terms, &Asked::default(), Instant::now()).is_none());
 }
 
-/// The map stays within the context limit however much matches.
+/// The map stays within its limit however much matches.
 #[test]
 fn the_map_stays_within_the_context_limit() {
     let mut many = Vec::new();
-    for n in 0..60 {
+    for n in 0..MAX_PLAIN_FILES {
         let path = format!("src/{}/module_{n}.py", "deep/".repeat(300));
         many.push((
             path,
-            format!("def case_sensitive_{n}():\n    case_sensitive()\n"),
+            format!("def check_{n}():\n    case_sensitive()\n    case_sensitive()\n"),
         ));
     }
     let list: Vec<(&str, &str)> = many.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect();
-    let text = mapped_text(&list, &[("casesensitive", true, 60)]).unwrap();
-    assert!(text.len() <= MAX_CONTEXT_CHARS, "{}", text.len());
-}
-
-const ON: &str = "[context_assistance]\nenabled=true\nruntime_id='selected'\n\
-[context_assistance.features]\nagent_context=true\n\
-[context_assistance.sources]\nworkspace_documents=true\nsource_set_id='selected-workspaces'\n";
-
-/// A Guard home with `config`, and a project holding `list`.
-fn project(config: &str, list: &[(&str, &str)]) -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
-    let home = tempfile::tempdir().unwrap();
-    std::fs::write(home.path().join("config.toml"), config).unwrap();
-    let project = tempfile::tempdir().unwrap();
-    let root = plain(std::fs::canonicalize(project.path()).unwrap());
-    for (path, text) in list {
-        let path = root.join(path);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, text).unwrap();
-    }
-    (home, project, root)
-}
-
-fn prompt_map(home: &Path, root: &Path, prompt: &str) -> Option<String> {
-    let terms = crate::context_assistance_prompt_words::marked_terms(prompt);
-    let words: Vec<String> = terms.iter().map(|(term, _)| term.clone()).collect();
-    let quoted = crate::context_assistance_prompt_files::phrases(prompt);
-    let found = walk(root, &words, &quoted, &[], Duration::from_secs(5));
-    let until = Instant::now() + Duration::from_secs(5);
-    mapped(
-        home,
-        root,
-        "codex",
-        &found,
-        &terms,
-        &quoted,
-        prompt,
-        &[],
-        until,
-    )
-    .map(|r| r.text)
-}
-
-/// From a typed prompt to the map, through the walk and Guard's own read: a
-/// file holding a private key is never read or named, and a workspace that
-/// has not allowed project context gets nothing.
-#[test]
-fn a_prompt_maps_to_allowed_project_code_only() {
-    let armour = |edge: &str| format!("-----{edge} RSA {}-----", "PRIVATE KEY");
-    let key = format!(
-        "def case_sensitive_key():\n    return '''{}\nMIIEowIBAAKCAQEA1c7b0q2xQ0keykeykeykeykey\n{}'''\n",
-        armour("BEGIN"),
-        armour("END")
-    );
-    let list = [
-        ("src/core.py", CORE),
-        ("src/signing.py", key.as_str()),
-        (
-            "tests/test_core.py",
-            "def test_choice():\n    Choice(['a'], case_sensitive=False)\n",
-        ),
-    ];
-    let prompt = "Make `Choice` honour `case_sensitive` when converting values";
-    let (home, _project, root) = project(ON, &list);
-    let text = prompt_map(home.path(), &root, prompt).unwrap();
-    assert!(text.contains("Best match:\nsrc/core.py (lines "), "{text}");
-    assert!(
-        text.contains("tests/test_core.py:1-2 def test_choice"),
-        "{text}"
-    );
-    assert!(!text.contains("signing.py"), "{text}");
-    let (home, _project, root) = project("", &list);
-    assert_eq!(prompt_map(home.path(), &root, prompt), None);
+    let text = mapped_text(&list, &[("casesensitive", true, 5)]).unwrap();
+    assert!(text.len() <= MAX_MAP_CHARS, "{}", text.len());
 }

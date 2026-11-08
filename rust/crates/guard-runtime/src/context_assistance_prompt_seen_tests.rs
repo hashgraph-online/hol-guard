@@ -57,3 +57,16 @@ fn a_session_keeps_only_its_latest_spans() {
     assert_eq!(kept.len(), MAX_SPANS);
     assert_eq!(kept[0], span("src/a.py", 5, 5));
 }
+
+/// Pi and Oh My Pi may drop the context, so what it held is sent again.
+#[test]
+fn pi_sessions_record_nothing() {
+    for app in ["pi", "omp"] {
+        let pi = Session {
+            app: app.into(),
+            ..session("seen-pi")
+        };
+        remember(&pi, &[span("src/a.py", 1, 9)]);
+        assert!(earlier(&pi).is_empty(), "{app}");
+    }
+}

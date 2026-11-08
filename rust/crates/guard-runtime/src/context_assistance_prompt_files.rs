@@ -5,6 +5,7 @@
 //! (a repository's own config can run code, so no `git` either). It only
 //! proposes paths: each one is read again through the CIGAR source screen,
 //! which refuses secrets, keys and credential files on its own.
+use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_ignore::{extend, ignored, root_chain};
 #[cfg(test)]
 pub(crate) use crate::context_assistance_prompt_words::terms;
@@ -25,9 +26,8 @@ const MAX_FILE_BYTES: u64 = 262_144;
 const MAX_DEPTH: usize = 10;
 /// Files kept per name the prompt gives.
 const MAX_NAMED_MATCHES: usize = 2;
-/// Test files kept aside when the prompt does not ask about tests, for the
-/// map of where a request's code is.
-const MAX_LEFT_OUT_TESTS: usize = 6;
+/// Test files kept aside for the map's list of where a new test goes.
+const MAX_KEPT_TESTS: usize = 6;
 const WALK_BUDGET: Duration = Duration::from_millis(350);
 
 const SKIPPED_DIRS: &[&str] = &[
@@ -102,6 +102,8 @@ struct Seen {
     modified: SystemTime,
     in_path: Vec<bool>,
     hits: Vec<u8>,
+    /// For each term, whether this is a code file holding it as a whole word.
+    whole: Vec<bool>,
     quoted: Vec<bool>,
     named: Option<usize>,
 }
@@ -113,10 +115,10 @@ struct Scored {
     named: Option<usize>,
 }
 
-/// What the walk found: the matched files, best first; the test files it
-/// left out of them because the prompt does not ask about tests, best first;
-/// how many files it checked; and how many of those hold each term and each
-/// quoted phrase.
+/// What the walk found: the matched files, best first; the best test files,
+/// kept apart from them;
+/// how many files it checked; how many of those hold each term and each
+/// quoted phrase; and how many code files hold each term as a whole word.
 #[derive(Debug, Default)]
 pub(crate) struct Walk {
     pub(crate) files: Vec<String>,
@@ -124,6 +126,19 @@ pub(crate) struct Walk {
     pub(crate) checked: usize,
     pub(crate) holding: Vec<usize>,
     pub(crate) quoting: Vec<usize>,
+    pub(crate) words: Vec<usize>,
+}
+
+impl Walk {
+    /// The files to read when no map is sent: the matched files, and the
+    /// tests kept apart from them when the request is about tests.
+    pub(crate) fn found(&self, terms: &[String]) -> Vec<String> {
+        let mut found = self.files.clone();
+        if asks_for_tests(terms) {
+            found.extend(self.tests.iter().cloned());
+        }
+        found
+    }
 }
 
 /// Project files the prompt names, then the ones that mention its words or
@@ -166,6 +181,9 @@ pub(crate) fn walk(
         let Ok(entries) = fs::read_dir(&dir) else {
             continue;
         };
+        // Test folders go deepest in the stack, so source is read first when
+        // the walk runs out of time.
+        let mut inside = Vec::new();
         for entry in entries.flatten() {
             visited += 1;
             if visited > MAX_VISITED || started.elapsed() >= budget {
@@ -195,7 +213,8 @@ pub(crate) fn walk(
                     // A folder whose own ignore file cannot be read stays out.
                     let path = entry.path();
                     if let Ok(inner) = extend(rules.clone(), &path.join(".gitignore"), &relative) {
-                        stack.push((path, relative, depth + 1, inner));
+                        let tests = TEST_DIRS.contains(&name.as_str());
+                        inside.push((tests, (path, relative, depth + 1, inner)));
                     }
                 }
                 continue;
@@ -225,6 +244,10 @@ pub(crate) fn walk(
                 .iter()
                 .map(|term| text.matches(term.as_str()).take(8).count() as u8)
                 .collect();
+            let code = !prose(Path::new(&name));
+            let whole: Vec<bool> = (terms.iter().zip(&hits))
+                .map(|(term, &n)| code && n > 0 && whole_word(&text, term))
+                .collect();
             let quoted: Vec<bool> = phrases.iter().map(|p| text.contains(p.as_str())).collect();
             let named = named_as(&relative, named);
             if in_path.contains(&true)
@@ -237,11 +260,14 @@ pub(crate) fn walk(
                     modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
                     in_path,
                     hits,
+                    whole,
                     quoted,
                     named,
                 });
             }
         }
+        inside.sort_by_key(|(tests, _)| !tests);
+        stack.extend(inside.into_iter().map(|(_, dir)| dir));
     }
     finish(seen, files, terms, phrases.len())
 }
@@ -254,17 +280,31 @@ fn finish(seen: Vec<Seen>, checked: usize, terms: &[String], phrases: usize) -> 
                 .count()
         })
         .collect();
+    let words = (0..terms.len())
+        .map(|i| seen.iter().filter(|s| s.whole[i]).count())
+        .collect();
     let quoting = (0..phrases)
         .map(|i| seen.iter().filter(|s| s.quoted[i]).count())
         .collect();
-    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases), terms);
+    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases));
     Walk {
         files,
         tests,
         checked,
         holding,
         quoting,
+        words,
     }
+}
+
+/// Whether `text` holds `term` with no letter, digit or `_` on either side,
+/// so `enum` is not found in `enumerate` nor `completion` in
+/// `shell_completion`.
+fn whole_word(text: &str, term: &str) -> bool {
+    let part = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+    text.match_indices(term).any(|(at, _)| {
+        !part(text[..at].chars().next_back()) && !part(text[at + term.len()..].chars().next())
+    })
 }
 
 /// A word counts for more the fewer files contain it, so a name like
@@ -348,7 +388,7 @@ fn named_as(relative: &str, named: &[String]) -> Option<usize> {
 /// out when a source file matched and the prompt did not ask about tests,
 /// since a test that quotes the same words would otherwise crowd out the
 /// file the request is about.
-fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
+fn ranked(scored: Vec<Scored>) -> (Vec<String>, Vec<String>) {
     let (mut pinned, mut scored): (Vec<Scored>, Vec<Scored>) =
         scored.into_iter().partition(|item| item.named.is_some());
     pinned.sort_by(|a, b| {
@@ -368,8 +408,10 @@ fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
         *count += 1;
         *count <= MAX_NAMED_MATCHES
     });
+    // Tests are kept aside even when the prompt asks for them, so source
+    // files fill the candidates and the map still finds where new tests go.
     let mut tests = Vec::new();
-    if !asks_for_tests(terms) && scored.iter().any(|item| !test_file(&item.relative)) {
+    if scored.iter().any(|item| !test_file(&item.relative)) {
         (tests, scored) = scored
             .into_iter()
             .partition(|item| test_file(&item.relative));
@@ -390,7 +432,7 @@ fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
         .collect();
     let tests = tests
         .into_iter()
-        .take(MAX_LEFT_OUT_TESTS)
+        .take(MAX_KEPT_TESTS)
         .map(|item| item.relative)
         .collect();
     (files, tests)

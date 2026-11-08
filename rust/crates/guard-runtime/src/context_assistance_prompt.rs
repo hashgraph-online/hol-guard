@@ -52,6 +52,12 @@ const MATCHED_HEADER: &str = "HOL Guard CIGAR matched these project files to thi
 best first. Open them for context:";
 const REPEATED_HEADER: &str = "HOL Guard CIGAR matched code it already added earlier in this \
 session. Open the files if those excerpts are no longer in view.";
+/// Claude Code models tend to send one tool call per turn, and every turn
+/// re-sends the whole conversation, so the reads and edits a note makes
+/// possible cost least when they go out together.
+const BATCHING: &str = "Each tool call re-sends this whole conversation. When you already know \
+several ranges to read or several edits to make, make those tool calls together in one response, \
+not one per turn.";
 
 /// A prompt's context and the excerpts it shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -88,7 +94,11 @@ pub(crate) fn harness_response(
         let _ = crate::hook_direct::claude_prompt_text::brand(&mut response, result);
     }
     if let Some(store) = store {
+        let before = context_len(&response);
         attach(&mut response, envelope, harness, store, started);
+        if harness == "claude-code" {
+            ask_for_batching(&mut response, before);
+        }
     }
     Some(response)
 }
@@ -174,6 +184,7 @@ fn attach(
         })
         .flatten()
         .filter(|_| context_on());
+    let about_changes = changed.is_some();
     if let Some(changed) = changed {
         add_context(response, &changed);
     }
@@ -183,8 +194,18 @@ fn attach(
     let marked = marked_terms(prompt);
     let mut words: Vec<String> = marked.iter().map(|(term, _)| term.clone()).collect();
     let quoted = phrases(prompt);
+    // A prompt about changes that names no code, file or phrase is answered
+    // by the changes: the lines they list are where to look, and a search on
+    // the prompt's plain words would only add code the agent may not need.
+    if about_changes
+        && quoted.is_empty()
+        && named(prompt).is_empty()
+        && !marked.iter().any(|(_, name)| *name)
+    {
+        return;
+    }
     let searched = walk(&root, &words, &quoted, &named(prompt), budget);
-    let found = searched.files.clone();
+    let found = searched.found(&words);
     if found.is_empty() {
         return;
     }
@@ -201,7 +222,15 @@ fn attach(
         .prompt_context_chosen()
         .then(|| {
             map::mapped(
-                home, &root, harness, &searched, &marked, &quoted, prompt, &earlier, deadline,
+                home,
+                &root,
+                harness,
+                &searched,
+                &marked,
+                &quoted,
+                prompt,
+                about_changes,
+                deadline,
             )
         })
         .flatten()
@@ -521,6 +550,21 @@ fn add_context(response: &mut Value, context: &str) {
         _ => context.to_owned(),
     };
     output.insert("additionalContext".into(), Value::String(combined));
+}
+
+/// Ends a note Guard added to this prompt with the request to batch tool
+/// calls; a prompt Guard added nothing to gets nothing.
+fn ask_for_batching(response: &mut Value, before: usize) {
+    if context_len(response) > before {
+        add_context(response, BATCHING);
+    }
+}
+
+fn context_len(response: &Value) -> usize {
+    response
+        .pointer("/hookSpecificOutput/additionalContext")
+        .and_then(Value::as_str)
+        .map_or(0, str::len)
 }
 
 #[cfg(test)]

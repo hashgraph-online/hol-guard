@@ -166,3 +166,64 @@ Both eight-run rounds use the per-run paid costs listed above.
 ### What this shows
 
 On Claude Code, telling the agent where the code is and what changed cut the bill by about a quarter, because sessions made fewer requests and each request re-read less. On Codex the same note cut the bill by 14% over eight runs a side, again through fewer requests. The first five-run Codex round did not show it. That round also ran the after-tool hook, and Codex cache misses swing the cost of these short sessions by about as much as the saved requests do; these runs do not say which of the two hid the saving. On Oh My Pi the note cut requests a little and did not cut the bill: the agent read more, not less.
+
+## Line-range map
+
+Runs made on 2026-11-07 with native wheels built from this change. Same fixture, task, checks and prices as above. The note now lists `path:start-end` ranges with each definition's first line and its members' lines, and pastes no code. The changes note names the definitions each changed hunk falls in. Each arm ran at the same time as its own control, because the control's cost moved by up to 25% between runs started a few hours apart.
+
+### Codex (gpt-6-luna, medium reasoning)
+
+Arms run the prompt hook only, as in the second round above.
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | raw input | full-price in | cache read | output | requests | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| base5 | 8 | 0 | yes | 0.0457 | +0.0% | 3,032,449 | 93,601 | 2,938,848 | 13,913 | 65.4 | 101,804 |
+| map (early build) | 8 | 0 | yes | 0.0393 | -14.0% | 2,432,534 | 89,110 | 2,343,424 | 13,963 | 58.8 | 76,970 |
+| base6 | 8 | 0 | yes | 0.0562 | +0.0% | 3,532,735 | 131,839 | 3,400,896 | 18,030 | 74.2 | 115,389 |
+| map | 7 | 1 | NO | 0.0347 | -38.3% | 1,996,650 | 89,030 | 1,907,621 | 13,534 | 50.3 | 73,362 |
+| base7 | 8 | 0 | yes | 0.0618 | +0.0% | 3,994,179 | 136,995 | 3,857,184 | 18,987 | 78.8 | 127,396 |
+| map | 8 | 0 | yes | 0.0377 | -39.0% | 2,140,254 | 104,686 | 2,035,568 | 13,670 | 53.5 | 74,857 |
+
+The early build is the map before it pointed at related docs and tests. The errored row is one Luna `max_output_tokens` error in step one, not counted; the other seven passed every check. The last pair has a bootstrap 90% interval of -49% to -27% and a one-sided permutation p of 0.001. Pooling the last two pairs with the batching-sentence arm described below (23 runs, each divided by its own control's mean) gives -38%, with a 90% interval of -43% to -33%.
+
+Per step (m$, base6 / map): s1 6.2 / 5.2, s2 17.2 / 9.0, s3 6.4 / 5.0, s4 6.5 / 2.7, s5 8.3 / 4.1, s6 11.6 / 8.8. Every step makes fewer requests. Steps four (find a teammate's breaking change) and five (docs) halve.
+
+A sentence asking the agent to batch reads and edits changed nothing on Codex: with the map, -37.9% against -38.3% without it. Without the map, the sentence alone gave -17.6%. Codex already sends several `sed -n` ranges in one shell call, so this change adds the sentence on Claude Code only.
+
+### Claude Code (claude-haiku-4-5)
+
+The `map` arm runs Guard's prompt hook through the native runtime built from this change, against a scratch Guard home with CIGAR set up. The control has no hook. Runs of the two arms alternated through the day, and the note reached every prompt (checked in the session transcripts). This arm includes the batching sentence.
+
+| Arm | n | all pass | paid $/run | raw input | full-price in | cache read | cache write | output | requests | compactions | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| base | 9 | 6/9 | 3.0116 | 23,096,361 | 1,685 | 22,894,635 | 200,041 | 64,080 | 208.9 | 0.8 | 173,546 |
+| map | 8 | 4/8 | 2.0240 | 14,688,551 | 1,218 | 14,537,651 | 149,682 | 53,930 | 150.8 | 0.0 | 100,241 |
+
+Paid cost fell 32.8%. Per-run paid, sorted, was $2.45, $2.70, $2.94, $2.96, $2.97, $3.08, $3.11, $3.30 and $3.61 for the control, and $1.62, $1.87, $1.94, $2.01, $2.05, $2.14, $2.26 and $2.30 with the map: every run with the map cost less than the cheapest control. The bootstrap 90% interval runs from -38% to -27%, and the one-sided permutation p is below 0.001. Against all 22 control runs made on this rig that day, including those paired with the earlier arms, the change is -29.9%.
+
+Requests fell 28%, from 209 to 151, and file-read output fell 42%. The calls that went away are searches (25 to 9 per run), `git` commands (15 to 2, since the changes note already names what a teammate touched) and `python -c` probes (25 to 16). Test runs and edits stayed the same. The control compacted its chat in most runs; the map arm never did.
+
+Every failed run in both arms fails the same way: two of the four `t2` cases. The prompt asks for `(DEPRECATED)` in `--help`, and Haiku instead adds `deprecated` to Click's bracketed extras (`[deprecated: use --new]`), the style the surrounding option-help code uses. The suite and the other checks pass in every run. Over the whole day, 12 of 22 control runs and 12 of 23 runs with any form of the note passed every check, so the note does not change how often Haiku finishes the task correctly.
+
+### Oh My Pi (gpt-6-luna, medium reasoning)
+
+Same driver as the Oh My Pi rows above: RPC mode with only the Guard extension loaded, and a control copy of the extension with prompt context turned off. The first map runs cut the bill by about 19% (nine runs) and the step that asks about a teammate's push barely moved. The cause was in the extension: it sent no session id with its prompt-context request, so Guard could not tell when the session began and the changes note never saw the teammate's commit. The prompt fell back to pasted excerpts. This change sends the session id; the `fix` arm is the extension built from it.
+
+| Arm | n | errored | all pass | paid $/run | paid vs base | raw input | full-price in | cache read | output | requests | read chars |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| base | 8 | 0 | yes | 0.1441 | +0.0% | 11,623,325 | 179,245 | 11,444,080 | 23,507 | 155.4 | 189,468 |
+| fix | 8 | 0 | yes | 0.0924 | -35.9% | 6,821,939 | 162,147 | 6,659,792 | 19,092 | 121.1 | 134,814 |
+
+Per-run paid, sorted, was $0.086, $0.094, $0.132, $0.132, $0.143, $0.162, $0.192 and $0.211 for the control, and $0.074, $0.086, $0.087, $0.089, $0.089, $0.096, $0.102 and $0.116 with the fix. The bootstrap 90% interval runs from -46% to -22%, and the one-sided permutation p is 0.002. All 16 runs passed every check.
+
+Per step (m$, base / fix): s1 10.4 / 7.1, s2 33.9 / 19.9, s3 14.6 / 11.0, s4 17.7 / 9.5, s5 23.5 / 16.2, s6 44.0 / 28.7. Step four, the teammate's push, now halves as it does on Codex. Searches fell from 13 to 5 per run and edits from 53 to 39. The batching sentence made no difference here either (-19% with it over four runs, against -19% without it).
+
+Runs that hit a login error partway through were dropped from both arms, as was one control run that failed a check. Both arms still lose about 13,000 characters per run to Guard's sandbox refusing `/bin/sh` when the agent first runs the tests; that is the same on both sides and is a separate Guard issue.
+
+### Why the harnesses differ
+
+The bill is the number of requests times the context each request re-sends. The map cuts the first and keeps the second from growing.
+
+- Codex sends several `sed -n` ranges in one shell call, so a list of line ranges turns into few, large reads: requests fell from 79 to 54.
+- Haiku sends one tool call per request. A session makes about 150 to 210 requests, each re-reading 24,000 tokens of fixed prompt plus the growing chat, so cost is almost all cache reads. Here the map helps by removing whole search and `git` loops rather than by merging reads. The batching sentence asks Claude Code to send calls it already knows together in one response; Haiku did so on about one turn in twenty.
+- Oh My Pi also makes one call per request and edits one hunk at a time, so it pays for many small edits (about 18 in the final review step). Its saving comes the same way as Haiku's, from fewer searches and a smaller step four, once the extension sends its session id. Before that fix the changes note was empty on Oh My Pi and Pi, which is why their numbers trailed the other two.

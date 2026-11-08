@@ -236,6 +236,20 @@ fn context_is_appended_after_any_existing_context() {
 }
 
 #[test]
+fn only_a_note_guard_added_asks_for_batched_calls() {
+    let mut notice = json!({"hookSpecificOutput": {"additionalContext": "notice"}});
+    let before = context_len(&notice);
+    ask_for_batching(&mut notice, before);
+    assert_eq!(notice["hookSpecificOutput"]["additionalContext"], "notice");
+    add_context(&mut notice, "map");
+    ask_for_batching(&mut notice, before);
+    assert_eq!(
+        notice["hookSpecificOutput"]["additionalContext"],
+        format!("notice\n\nmap\n\n{BATCHING}")
+    );
+}
+
+#[test]
 fn the_wait_leaves_the_hook_time_to_answer() {
     assert_eq!(waiting_time(None), DEFAULT_WAIT);
     assert_eq!(waiting_time(Some(9_000)), MAX_WAIT);

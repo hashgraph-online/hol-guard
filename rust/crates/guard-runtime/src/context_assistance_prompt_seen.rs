@@ -66,8 +66,11 @@ pub(super) fn earlier(session: &Session) -> Vec<Span> {
 
 /// Records what this prompt's context showed. The session moves to the back
 /// of the list, and the oldest session or span goes once a bound is met.
+/// Pi and Oh My Pi drop the context when the agent is busy or the prompt
+/// changed before it starts, so Guard cannot tell whether they showed it and
+/// records nothing for them.
 pub(super) fn remember(session: &Session, shown: &[Span]) {
-    if shown.is_empty() {
+    if shown.is_empty() || matches!(session.app.as_str(), "pi" | "omp") {
         return;
     }
     let Ok(mut sessions) = sessions().lock() else {
