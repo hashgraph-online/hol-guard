@@ -78,7 +78,8 @@ pub(super) fn parse_get(head: &[u8]) -> Option<GetRequest<'_>> {
         if name.is_empty() || !name.bytes().all(is_token_byte) {
             return None;
         }
-        headers.push((name, value.trim_matches([' ', '\t'])));
+        // As Python's header parser does: leading blanks go, trailing ones stay.
+        headers.push((name, value.trim_start_matches([' ', '\t'])));
     }
     Some(GetRequest {
         path,

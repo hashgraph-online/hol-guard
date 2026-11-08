@@ -5,6 +5,11 @@ use std::net::{SocketAddr, TcpListener};
 use std::sync::mpsc;
 use std::thread;
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
 const TOKEN: &str = "edge-test-token";
 
 fn handshake(guard_home: &Path) -> Vec<u8> {
@@ -26,7 +31,8 @@ fn reads_a_plain_get_head() {
     let request = parse_get(head).unwrap();
     assert_eq!(request.path, "/v1/receipts");
     assert_eq!(request.query, "limit=5");
-    assert_eq!(request.single_header("x-guard-token"), Some("t"));
+    // Python's header parser drops leading blanks and keeps trailing ones.
+    assert_eq!(request.single_header("x-guard-token"), Some("t "));
     assert!(request.has_header("HOST"));
 }
 
@@ -109,7 +115,7 @@ fn takes_only_a_complete_valid_handshake() {
 
 #[test]
 fn responses_are_html_safe_json_with_the_daemon_headers() {
-    let response = json_response(200, &json!({"a": "<&>"}), Some("abc123"));
+    let response = json_response(200, &json!({"a": "<&>"}), Some("abc123"), None);
     let text = String::from_utf8(response).unwrap();
     let (head, body) = text.split_once("\r\n\r\n").unwrap();
     assert!(head.starts_with("HTTP/1.0 200 OK\r\n"));
@@ -228,6 +234,37 @@ fn answers_a_token_read_itself_and_reports_the_activity() {
 }
 
 #[test]
+fn answers_a_dashboard_session_with_the_daemon_cors_headers() {
+    let edge = spawn_configured_edge();
+    let claims = json!({
+        "aud": "guard-local-daemon",
+        "surface": "dashboard",
+        "expires_at": "2999-01-01T00:00:00+00:00",
+    });
+    let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap());
+    let mut mac = Hmac::<Sha256>::new_from_slice(TOKEN.as_bytes()).unwrap();
+    mac.update(payload.as_bytes());
+    let session = format!(
+        "gld1.{payload}.{}",
+        URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+    );
+    let response = exchange(
+        edge.address,
+        &format!(
+            "GET /v1/read-state HTTP/1.1\r\nOrigin: http://127.0.0.1:5474\r\nX-Guard-Dashboard-Session: {session}\r\n\r\n"
+        ),
+    );
+    let (head, body) = response.split_once("\r\n\r\n").unwrap();
+    assert!(head.starts_with("HTTP/1.0 200 OK\r\n"), "{response}");
+    assert!(head.contains("\r\nAccess-Control-Allow-Origin: http://127.0.0.1:5474\r\n"));
+    assert!(head.contains("\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\n"));
+    assert!(head.contains("\r\nAccess-Control-Allow-Private-Network: true\r\n"));
+    assert!(head.contains("\r\nVary: Origin\r\n"));
+    assert_eq!(body, r#"{"ids":["newer","older"]}"#);
+    assert!(edge.requests.try_recv().is_err());
+}
+
+#[test]
 fn replays_everything_else_to_the_daemon_byte_for_byte() {
     let edge = spawn_configured_edge();
     for request in [
@@ -236,6 +273,7 @@ fn replays_everything_else_to_the_daemon_byte_for_byte() {
         format!(
             "GET /v1/read-state HTTP/1.1\r\nOrigin: http://x\r\nX-Guard-Token: {TOKEN}\r\n\r\n"
         ),
+        "GET /v1/read-state HTTP/1.1\r\nX-Guard-Dashboard-Session: gld1.e30.x\r\n\r\n".to_owned(),
         format!("GET /v1/requests HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
         format!("GET /v1/receipts/analytics HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
         format!("POST /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
