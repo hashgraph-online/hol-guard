@@ -77,3 +77,20 @@ fn a_called_or_dotted_name_is_written_as_code() {
     let found = spellings("Rename `peekable.prepend` to `push_front`");
     assert!(found.contains(&"peekable.prepend".to_owned()), "{found:?}");
 }
+
+/// A sentence a docstring or comment wraps is still the one the prompt
+/// quotes on one line.
+#[test]
+fn quoted_text_is_found_where_a_comment_wraps_it() {
+    let phrase = phrases("which function does this? \"Execute a call and return the result(s).\"");
+    let text =
+        "def _multicall():\n    \"\"\"execute a call and return the\n    result(s).\n    \"\"\"\n\
+                # execute a call and\n# return the result(s).\n";
+    assert_eq!(quoted(text, &phrase), [true]);
+    assert_eq!(
+        quoted("return the\n\nresult", &["the result".to_owned()]),
+        [true]
+    );
+    // A `*` that starts code, not a comment, stays.
+    assert_eq!(quoted("x\n*args", &["x args".to_owned()]), [false]);
+}

@@ -7,6 +7,7 @@
 //! which refuses secrets, keys and credential files on its own.
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_ignore::{extend, ignored, root_chain};
+use crate::context_assistance_prompt_words::quoted;
 #[cfg(test)]
 pub(crate) use crate::context_assistance_prompt_words::terms;
 pub(crate) use crate::context_assistance_prompt_words::{asks_for_tests, named, phrases};
@@ -259,7 +260,7 @@ pub(crate) fn walk(
             for (count, held) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
                 *count += usize::from(held);
             }
-            let quoted: Vec<bool> = phrases.iter().map(|p| text.contains(p.as_str())).collect();
+            let quoted = quoted(&text, phrases);
             let named = named_as(&relative, named);
             if in_path.contains(&true)
                 || hits.iter().any(|&n| n > 0)

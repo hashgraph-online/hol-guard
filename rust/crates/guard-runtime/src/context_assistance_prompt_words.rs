@@ -320,6 +320,38 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
     found
 }
 
+/// `text` with each line break, and the indent and comment mark after it,
+/// read as one space: a docstring or comment wraps the sentence a prompt
+/// quotes on one line ("...return the\n    result(s).").
+pub(crate) fn unwrapped(text: &str) -> String {
+    let mut joined = String::with_capacity(text.len());
+    for line in text.lines().map(str::trim) {
+        let after = line.trim_start_matches(['#', '/', '*', '!']);
+        let line = if after.is_empty() || after.starts_with(char::is_whitespace) {
+            after.trim_start()
+        } else {
+            line
+        };
+        if !line.is_empty() {
+            joined.push_str(line);
+            joined.push(' ');
+        }
+    }
+    joined
+}
+
+/// For each of `phrases`, whether `text` holds it, on one line or wrapped.
+pub(crate) fn quoted(text: &str, phrases: &[String]) -> Vec<bool> {
+    let mut joined: Option<String> = None;
+    (phrases.iter())
+        .map(|phrase| {
+            text.contains(phrase.as_str())
+                || (text.contains('\n')
+                    && (joined.get_or_insert_with(|| unwrapped(text))).contains(phrase.as_str()))
+        })
+        .collect()
+}
+
 /// How `terms` spells `word`: lowercase, without `-` or `_`, singular.
 pub(crate) fn term_form(word: &str) -> String {
     singular(&word.replace(['-', '_'], "").to_lowercase())

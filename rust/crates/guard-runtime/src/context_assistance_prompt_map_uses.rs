@@ -4,6 +4,7 @@ use super::super::sections::Section;
 use super::{File, Kind, Sought, CHECK_EVERY, MAX_PLAIN_FILES};
 use crate::context_assistance_engine::opened;
 use crate::context_assistance_prompt_files::Walk;
+use crate::context_assistance_prompt_words::unwrapped;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
@@ -89,6 +90,8 @@ fn one_letter_apart(a: &str, b: &str) -> bool {
 const MAX_USES: usize = 8;
 /// Line numbers shown for one function that holds the prompt's words.
 const MAX_USE_LINES: usize = 3;
+/// The most lines quoted text wraps over and is still found.
+const WRAPPED_LINES: usize = 3;
 
 /// The functions in source that hold the prompt's rarer words in code, or
 /// quoted text anywhere, each with the lines that hold them: those holding
@@ -127,7 +130,8 @@ pub(super) fn uses<'a>(
                 Some(mark) => (!line.contains(mark)).then_some(mark),
                 None => opened(line),
             };
-            let held: Vec<usize> = (holds(line, rare).into_iter())
+            let after = &file.lines[number + 1..(number + WRAPPED_LINES).min(file.lines.len())];
+            let held: Vec<usize> = (holds(line, after, rare).into_iter())
                 .filter(|&word| !comment || rare[word].phrase)
                 .collect();
             let Some(at) = innermost[number] else {
@@ -202,14 +206,24 @@ fn commented(line: &str) -> bool {
 }
 
 /// Which of `sought` the line holds: a term as a whole word, spelled the way
-/// `terms` spells it, or quoted text anywhere in it.
-fn holds(line: &str, sought: &[&Sought]) -> Vec<usize> {
+/// `terms` spells it, or quoted text anywhere in it, or starting in it and
+/// wrapped onto the lines `after` it.
+fn holds(line: &str, after: &[&str], sought: &[&Sought]) -> Vec<usize> {
     let words = super::more::line_words(line);
     let lower = line.to_lowercase();
+    let mut window: Option<(String, usize)> = None;
+    let mut wrapped = |text: &str| {
+        let (joined, first) = window.get_or_insert_with(|| {
+            let first = unwrapped(&lower).len();
+            let rest = after.join("\n").to_lowercase();
+            (unwrapped(&format!("{lower}\n{rest}")), first)
+        });
+        joined.find(text).is_some_and(|at| at < *first)
+    };
     (sought.iter().enumerate())
         .filter(|(_, item)| {
             if item.phrase {
-                lower.contains(&item.text)
+                lower.contains(&item.text) || (!after.is_empty() && wrapped(&item.text))
             } else {
                 words.contains(&item.text)
             }

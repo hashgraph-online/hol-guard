@@ -117,6 +117,37 @@ fn a_helper_inside_a_test_is_part_of_it() {
     );
 }
 
+/// Quoted text a docstring wraps over two lines is found at the line it
+/// starts on.
+#[test]
+fn quoted_text_a_docstring_wraps_is_found() {
+    let source = "def _multicall(hook_impls):
+    \"\"\"Execute a call into multiple python functions and return the
+    result(s).
+    \"\"\"
+    return [impl() for impl in hook_impls]
+";
+    let walk = Walk {
+        checked: 200,
+        quoting: vec![1],
+        ..Walk::default()
+    };
+    let quoted =
+        ["execute a call into multiple python functions and return the result(s).".to_owned()];
+    let text = map(
+        &[("src/callers.py".to_owned(), source.to_owned())],
+        &sought(&walk, &[], &quoted),
+        &Asked::default(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        text.contains("src/callers.py:1-5 _multicall (lines 2)"),
+        "{text}"
+    );
+}
+
 /// With no map, a request about tests still reads the tests the walk kept
 /// apart; other requests read the matched files alone.
 #[test]
