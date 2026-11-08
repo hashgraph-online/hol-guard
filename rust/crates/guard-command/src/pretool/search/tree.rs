@@ -253,7 +253,7 @@ pub(in crate::pretool) fn safe_glob_operand(
     context: ReadContext<'_>,
     recursive: bool,
 ) -> bool {
-    let Some(matches) = expand_glob(value, context) else {
+    let Some(matches) = expand_listing_glob(value, context) else {
         return false;
     };
     // With globstar a final `**` also expands to every nested entry, so the
@@ -627,6 +627,11 @@ pub(super) fn walk_uncached(
 /// [`glob_expand::expand_glob_matches`] with at least one match.
 fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
     expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
+}
+
+/// [`glob_expand::expand_glob_matches_listing`] with at least one match.
+fn expand_listing_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
+    glob_expand::expand_glob_matches_listing(value, context).filter(|matches| !matches.is_empty())
 }
 
 pub(super) fn parent_component(value: &str) -> bool {

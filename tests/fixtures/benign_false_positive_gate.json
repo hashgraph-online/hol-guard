@@ -24335,6 +24335,38 @@
       "expect": "allow"
     },
     {
+      "id": "ls-docs-glob-names-credential-named-page",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls docs/*.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "echo-docs-glob-names-credential-named-page",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo docs/*.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "gauntlet-sed-field-copy-source",
       "fix_area": "shell",
       "harnesses": [
