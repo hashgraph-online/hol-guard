@@ -6,12 +6,15 @@ use crate::context_assistance_prompt_files::{plain, walk};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-const ON: &str = "[context_assistance]\nenabled=true\nruntime_id='selected'\n\
+pub(super) const ON: &str = "[context_assistance]\nenabled=true\nruntime_id='selected'\n\
 [context_assistance.features]\nagent_context=true\n\
 [context_assistance.sources]\nworkspace_documents=true\nsource_set_id='selected-workspaces'\n";
 
 /// A Guard home with `config`, and a project holding `list`.
-fn project(config: &str, list: &[(&str, &str)]) -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
+pub(super) fn project(
+    config: &str,
+    list: &[(&str, &str)],
+) -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(home.path().join("config.toml"), config).unwrap();
     let project = tempfile::tempdir().unwrap();
@@ -24,7 +27,7 @@ fn project(config: &str, list: &[(&str, &str)]) -> (tempfile::TempDir, tempfile:
     (home, project, root)
 }
 
-fn prompt_map(home: &Path, root: &Path, prompt: &str) -> Option<String> {
+pub(super) fn prompt_map(home: &Path, root: &Path, prompt: &str) -> Option<String> {
     changes_map(home, root, prompt, false)
 }
 

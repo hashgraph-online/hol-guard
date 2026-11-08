@@ -79,6 +79,10 @@ struct Naming {
     /// The other lines naming a longer name holding it, such as
     /// `_get_default_module_async` for `_get_default_module`.
     longer: Vec<usize>,
+    /// The lines building a longer name from it, and the longer names
+    /// starting with it, which such a line may build.
+    building: Vec<usize>,
+    extended: Vec<String>,
     /// Its first spelling written.
     written: Option<String>,
 }
@@ -95,7 +99,7 @@ fn naming(file: &File, term: &str, exact: Option<&str>, until: Instant) -> Optio
             continue;
         }
         found.held = true;
-        let mut words = line
+        let words = line
             .split(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-')))
             .filter(|word| !word.is_empty());
         let named =
@@ -106,8 +110,17 @@ fn naming(file: &File, term: &str, exact: Option<&str>, until: Instant) -> Optio
                 found.written = Some(word.to_owned());
             }
             found.lines.push(number + 1);
-        } else if words.any(longer) {
+            if builds_on(line, word) {
+                found.building.push(number + 1);
+            }
+        } else if words.clone().any(longer) {
             found.longer.push(number + 1);
+            let extended = |word: &&str| exact.is_some_and(|exact| word.starts_with(exact));
+            for word in words.filter(extended) {
+                if !found.extended.iter().any(|known| known == word) {
+                    found.extended.push(word.to_owned());
+                }
+            }
         }
     }
     Some(found)
@@ -125,6 +138,23 @@ fn joined(word: &str, name: &str) -> bool {
             edge(word[..at].chars().next_back(), name.chars().next())
                 && (edge(after, name.chars().next_back()) || after.is_some_and(char::is_uppercase))
         })
+}
+
+/// Whether `line` writes `name` in a string as the start of a name it
+/// builds: `f"_get_default_module{suffix}"`, `` `${name}${suffix}` ``,
+/// `"name%s" % suffix` or `"name" + suffix`.
+fn builds_on(line: &str, name: &str) -> bool {
+    let quote = |c: char| matches!(c, '"' | '\'' | '`');
+    (line.match_indices(name)).any(|(at, _)| {
+        let rest = &line[at + name.len()..];
+        let before = line[..at].chars().next_back();
+        line[..at].contains(quote)
+            && !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+            && (rest.starts_with(['{', '%'])
+                || rest.starts_with("${")
+                || (rest.strip_prefix(quote))
+                    .is_some_and(|rest| rest.trim_start().starts_with('+')))
+    })
 }
 
 /// The files read that hold `item` with `_` and `-` dropped, as the walk
@@ -154,6 +184,8 @@ fn every_line(
         fit
     };
     let mut others = Vec::new();
+    let mut building = Vec::new();
+    let mut extended: Vec<String> = Vec::new();
     for file in files {
         let found = naming(file, &item.text, exact, until)?;
         written = written.or(found.written);
@@ -163,6 +195,17 @@ fn every_line(
             whole &= fits(line_entry(file, number), &mut entries, count);
         }
         others.extend(found.longer.into_iter().map(|number| (file, number)));
+        building.extend(
+            found
+                .building
+                .into_iter()
+                .map(|number| line_entry(file, number)),
+        );
+        for word in found.extended {
+            if !extended.contains(&word) {
+                extended.push(word);
+            }
+        }
     }
     for (file, number) in others {
         let count = entries.len() + longer.len();
@@ -176,6 +219,25 @@ fn every_line(
         format!("Lines naming `{name}` in the files read; other files may hold it too:")
     };
     let mut blocks = vec![(title, entries)];
+    // `f"_get_default_module{choose_async('_async')}"` also calls
+    // `_get_default_module_async`, which renaming only the first breaks.
+    if !building.is_empty() {
+        let such = (extended.iter().take(MAX_NAMES))
+            .map(|word| format!("`{word}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let such = if such.is_empty() {
+            String::new()
+        } else {
+            format!(", such as {such}")
+        };
+        blocks.push((
+            format!(
+                "These lines build a longer name from `{name}`{such}; every name they build must still be defined after the rename:"
+            ),
+            building,
+        ));
+    }
     if !longer.is_empty() {
         blocks.push((
             format!("Lines naming a longer name holding `{name}`:"),

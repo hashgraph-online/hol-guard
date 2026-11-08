@@ -404,3 +404,7 @@ mod nested_tests;
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_project_tests.rs"]
 mod project_tests;
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_rename_tests.rs"]
+mod rename_tests;
