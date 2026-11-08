@@ -47,6 +47,7 @@ pub mod cloud_action_activation;
 pub mod cloud_action_binding;
 pub mod cloud_action_canonical;
 pub mod cloud_action_policy;
+pub mod cloud_action_serve;
 #[cfg(test)]
 mod cloud_action_tests;
 pub mod cloud_catalog;
