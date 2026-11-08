@@ -46,7 +46,7 @@ pub(super) fn blocks(
             // naming it as the prompt spells it, when any file does.
             let spelled = (asked.spellings.iter()).find(|word| term_form(word) == item.text);
             let found = spelled.and_then(|word| {
-                let new = renamed_to(&asked.spellings, word);
+                let new = renamed_to(&asked.renames, word);
                 every_line(files, item, Some(word.as_str()), new, until)
             });
             found.or_else(|| every_line(files, item, None, None, until))
@@ -56,11 +56,10 @@ pub(super) fn blocks(
         .collect()
 }
 
-/// The name the prompt writes as code right after `old`, which a rename
-/// makes it: "rename `a` to `b`".
-fn renamed_to<'a>(spellings: &'a [String], old: &str) -> Option<&'a str> {
-    let at = spellings.iter().position(|word| word == old)?;
-    (spellings.get(at + 1).map(String::as_str))
+/// The name the prompt renames `old` to: "rename `a` to `b`".
+fn renamed_to<'a>(renames: &'a [(String, String)], old: &str) -> Option<&'a str> {
+    (renames.iter().find(|(from, _)| from == old))
+        .map(|(_, to)| to.as_str())
         .filter(|word| (word.chars()).all(|c| c.is_alphanumeric() || c == '_'))
 }
 
@@ -245,7 +244,11 @@ fn every_line(
         };
         // Spelled out, since an agent told only to keep the names defined
         // still wrote `_get_default_module_impl{...}`.
-        let suffix = (extended.first()).and_then(|longer| longer.strip_prefix(name.as_str()));
+        // The ending comes from a longer name whose ending a building line
+        // writes, not from any longer name a file holds.
+        let suffix = (extended.iter())
+            .filter_map(|longer| longer.strip_prefix(name.as_str()))
+            .find(|end| !end.is_empty() && building.iter().any(|line| line.contains(end)));
         let instead = match (new, suffix) {
             (Some(new), Some(suffix)) => format!(
                 "; with `{new}` written in place of `{name}`, they would build `{new}{suffix}` instead"

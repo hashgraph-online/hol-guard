@@ -457,6 +457,7 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
     let asked = Asked {
         everywhere: true,
         spellings: vec!["_old_name".to_owned()],
+        renames: Vec::new(),
         ..Asked::default()
     };
     let walk = |holding: usize, complete: bool| Walk {

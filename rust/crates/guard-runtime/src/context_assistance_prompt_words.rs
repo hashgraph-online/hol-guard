@@ -249,6 +249,28 @@ pub(crate) fn spellings(prompt: &str) -> Vec<String> {
         .collect()
 }
 
+/// What the prompt renames to what, both names written as code:
+/// "rename `a` to `b`", "`a` -> `b`". A name written twice, or two names
+/// side by side ("rename `a` and update `b`"), is no rename.
+pub(crate) fn renames(prompt: &str) -> Vec<(String, String)> {
+    let shaped = spellings(prompt);
+    let spaced = prompt.replace('`', " ");
+    let words: Vec<&str> = (spaced.split_whitespace())
+        .map(|word| word.trim_matches([',', ';', ':', '"', '\'', '(', ')']))
+        .map(|word| word.trim_end_matches('.'))
+        .collect();
+    (words.windows(3))
+        .filter(|three| matches!(three[1].to_lowercase().as_str(), "to" | "into" | "->"))
+        .filter(|three| {
+            [three[0], three[2]]
+                .iter()
+                .all(|word| shaped.iter().any(|known| known == word))
+        })
+        .filter(|three| term_form(three[0]) != term_form(three[2]))
+        .map(|three| (three[0].to_owned(), three[2].to_owned()))
+        .collect()
+}
+
 /// Files the prompt names, as typed (`CHANGES.rst`, `src/app/cli.py`).
 pub(crate) fn named(prompt: &str) -> Vec<String> {
     let mut found: Vec<String> = Vec::new();

@@ -131,6 +131,7 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
         everywhere: false,
         earlier: Vec::new(),
         spellings: Vec::new(),
+        renames: Vec::new(),
     };
     let text = map(
         &files(&[
@@ -430,6 +431,7 @@ fn a_named_changelog_stays_on_the_map() {
         everywhere: false,
         earlier: Vec::new(),
         spellings: Vec::new(),
+        renames: Vec::new(),
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(
