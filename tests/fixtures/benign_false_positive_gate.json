@@ -24869,8 +24869,7 @@
         "command": "cat README.md | sed -E 's/\\/tmp\\/scratch-[a-z0-9]+/TMPDIR/e'"
       },
       "cwd": "worktree",
-      "expect": "not_allow",
-      "contained_ok": true
+      "expect": "not_allow"
     },
     {
       "id": "sed-substitute-alternate-delimiter",
