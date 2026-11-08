@@ -1,7 +1,7 @@
-//! The definitions the newest commit or this session changed, as they read
-//! now. Asked to fix what a commit broke or to review a session's work, an
-//! agent reads each changed definition, since a diff gives a line or two
-//! around each change; a short one shown whole here needs no read.
+//! The definitions the newest commit changed, as they read now. Asked to fix
+//! what a commit broke, an agent reads each changed definition before its
+//! edit, since a diff gives a line or two around each change; a short one
+//! shown whole here needs no read.
 use super::super::sections::{headed, sections, Section};
 use super::{clean, Hunk};
 

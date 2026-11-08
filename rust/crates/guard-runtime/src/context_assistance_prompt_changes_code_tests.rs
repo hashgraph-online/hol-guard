@@ -11,12 +11,12 @@ const STORE: &str = "class Store:
         return len(self.items) // 2
 ";
 
-/// A note about the newest commit or a session's changes shows each short
-/// definition changed, whole, as the file reads now, so the agent can edit or
-/// review it without reading it first. A long definition and prose get no
-/// such code.
+/// A note about the newest commit shows each short definition it changed,
+/// whole, as the file reads now, so the agent can edit it without reading it
+/// first. A long definition, prose, and a note about a session's own changes
+/// get no such code.
 #[test]
-fn short_changed_definitions_are_shown_whole_for_a_commit_and_a_review() {
+fn the_newest_commits_short_changed_definitions_are_shown_whole() {
     let hunk = |path: &str, start, body: &str| Hunk {
         path: path.into(),
         start,
@@ -50,7 +50,7 @@ fn short_changed_definitions_are_shown_whole_for_a_commit_and_a_review() {
     assert_eq!(text.matches("def put(").count(), 1, "{text}");
     assert!(!text.contains("x = 1") && !text.contains("body"), "{text}");
     let session = render(Since::Start(base), &changed, &texts, &[], [None; 2], None).unwrap();
-    assert!(session.ends_with(shown), "{session}");
+    assert!(!session.contains("as they read now"), "{session}");
 }
 
 /// A change spanning two short functions shows both, and a closing brace

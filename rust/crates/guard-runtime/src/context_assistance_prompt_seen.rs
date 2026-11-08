@@ -37,6 +37,13 @@ impl Span {
     }
 }
 
+/// Stands for the hint that ends a note, recorded beside the excerpts once
+/// a note of the session carried it. No project file has an empty path, so
+/// it never matches an excerpt.
+pub(super) fn hint() -> Span {
+    Span::new("", 0, 0, "hint")
+}
+
 /// One session of one app in one project.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Session {
