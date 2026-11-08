@@ -31,8 +31,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use guard_command::mcp_runtime_evidence::ArgumentEntry;
 use guard_contracts::{
-    canonical_utc_timestamp, write_json_string, GuardStoreRequestV1, McpCallProjectionQueryV1,
-    McpRuntimeEvidenceRequestV1, McpToolCallArtifactV1, GUARD_STORE_REQUEST_SCHEMA,
+    canonical_utc_timestamp, GuardStoreRequestV1, McpCallProjectionQueryV1,
+    McpRuntimeEvidenceRequestV1, GUARD_STORE_REQUEST_SCHEMA,
     MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS, MCP_RUNTIME_EVIDENCE_PATH_ARGUMENT_KEYS,
     MCP_RUNTIME_EVIDENCE_REQUEST_SCHEMA,
 };
@@ -44,9 +44,14 @@ use crate::hook_evidence_store_gate::hold_storage_gate;
 use crate::hook_evidence_store_timeout::sqlite_timeout_ms;
 use crate::local_store_read::STORE_FILE_NAME;
 
+#[path = "mcp_relay_receipt_event.rs"]
+mod event;
 #[path = "mcp_relay_receipt_record.rs"]
 mod record;
+#[path = "mcp_relay_receipt_row.rs"]
+mod row;
 
+use event::{diff_summary, event_payload_json};
 use record::{block_taxonomy, plain, Plain};
 
 const INLINE_SOURCES: [&str; 4] = [
@@ -77,6 +82,8 @@ const QUEUE_METHOD: &str = "queue_blocked_approvals";
 /// `GuardStore`'s default `guard_event_queue_limit`.
 const EVENT_QUEUE_LIMIT: u64 = 1_000;
 
+/// A receipt's store arguments and its silent inbox row's.
+type Args = (Map<String, Value>, Option<Map<String, Value>>);
 /// A record, its receipt's store arguments and its silent inbox row's.
 type Composed = (Value, Map<String, Value>, Option<Map<String, Value>>);
 
@@ -340,11 +347,7 @@ fn receipt_evidence(
 /// The `record_tool_call_evidence` arguments `allow_tool_call` or
 /// `block_tool_call` writes for this record, and the silent inbox row a
 /// safe-alternative block adds after it.
-fn compose(
-    guard_home: &str,
-    record: &Value,
-    stamp: &Stamp,
-) -> Option<(Map<String, Value>, Option<Map<String, Value>>)> {
+fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     let plain = plain(record)?;
     let artifact = plain.artifact;
     let name = artifact["name"].as_str()?;
@@ -361,7 +364,7 @@ fn compose(
     call_evidence.extend(plain.append.iter().cloned());
     let row = projected
         .as_ref()
-        .and_then(|projected| silent_review(guard_home, &plain, projected, &call_evidence, stamp));
+        .and_then(|projected| row::silent_review(&plain, projected, &call_evidence, stamp));
     let mut scanner_evidence = vec![firewall_evidence];
     scanner_evidence.extend(call_evidence);
     let (event_name, provenance_summary, user_override) = if plain.forward {
@@ -440,107 +443,6 @@ fn compose(
     );
     args.insert("event_occurred_at".to_owned(), json!(stamp.now));
     Some((args, row))
-}
-
-/// `_record_unprompted_review`: the `queue_blocked_approvals` arguments of a
-/// safe-alternative block's inbox row, written with no prompt shown and the
-/// daemon's own loopback origin as `silent_review_center_url` gives it. A
-/// row that cannot be composed is left out, and the receipt still written.
-fn silent_review(
-    guard_home: &str,
-    plain: &Plain<'_>,
-    projected: &Value,
-    evidence: &[Value],
-    stamp: &Stamp,
-) -> Option<Map<String, Value>> {
-    let redaction_level = plain.silent_review()?;
-    let projection = crate::mcp_relay_decide::ask_row::projection(projected)?;
-    let artifact: McpToolCallArtifactV1 =
-        serde_json::from_value(Value::Object(plain.artifact.clone())).ok()?;
-    let center = crate::daemon_lifecycle_ports::daemon_url_for_home(guard_home);
-    // `str(Path.cwd())`, the writing process's, or null when it is gone.
-    let cwd = std::env::current_dir().map_or(Value::Null, |cwd| json!(cwd.to_string_lossy()));
-    let queue = crate::mcp_relay_decide::ask_row::Queue {
-        harness: plain.harness,
-        cwd,
-        prompt_shown: false,
-        center: &center,
-        now: &stamp.now,
-        redaction_level,
-    };
-    Some(crate::mcp_relay_decide::ask_row::silent_review_args(
-        &queue,
-        &artifact,
-        plain.artifact_hash,
-        &strings(&plain.decision["signals"])
-            .into_iter()
-            .map(str::to_owned)
-            .collect::<Vec<_>>(),
-        &projection,
-        plain.policy_action,
-        evidence.to_vec(),
-    ))
-}
-
-/// `_auto_diff_summary`.
-fn diff_summary(changed: &[&str]) -> String {
-    let sample = changed
-        .iter()
-        .take(3)
-        .copied()
-        .collect::<Vec<_>>()
-        .join(", ");
-    let suffix = if changed.len() > 3 { " ..." } else { "" };
-    format!("{} change(s): {sample}{suffix}", changed.len())
-}
-
-/// The runtime event's payload as `json.dumps` writes it: insertion order,
-/// `", "` and `": "` separators, ASCII only.
-fn event_payload_json(
-    plain: &Plain<'_>,
-    artifact_id: &str,
-    risk_categories: &[&str],
-    signals: &[&str],
-) -> Option<String> {
-    let mut out = vec![b'{'];
-    for (name, value) in [
-        ("artifact_id", artifact_id),
-        ("artifact_hash", plain.artifact_hash),
-        ("decision_source", plain.source),
-        ("policy_action", plain.policy_action),
-    ] {
-        key(&mut out, name);
-        write_json_string(value, &mut out);
-    }
-    if !plain.forward {
-        key(&mut out, "execution_outcome");
-        write_json_string("not-executed", &mut out);
-    }
-    key(&mut out, "risk_categories");
-    list(&mut out, risk_categories);
-    key(&mut out, "signals");
-    list(&mut out, signals);
-    out.push(b'}');
-    String::from_utf8(out).ok()
-}
-
-fn key(out: &mut Vec<u8>, name: &str) {
-    if out.len() > 1 {
-        out.extend_from_slice(b", ");
-    }
-    write_json_string(name, out);
-    out.extend_from_slice(b": ");
-}
-
-fn list(out: &mut Vec<u8>, items: &[&str]) {
-    out.push(b'[');
-    for (index, item) in items.iter().enumerate() {
-        if index > 0 {
-            out.extend_from_slice(b", ");
-        }
-        write_json_string(item, out);
-    }
-    out.push(b']');
 }
 
 #[cfg(test)]

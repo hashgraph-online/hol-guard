@@ -35,8 +35,10 @@ const APPROVAL_KEYS: [&str; 5] = [
 ];
 /// An ask block's decision source.
 const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
-/// The inbox row a safe-alternative block adds, `_redaction_level`.
+/// The inbox row a safe-alternative block adds, `_redaction_level`, and the
+/// approval center origin the resident links it to.
 const REVIEW_KEY: &str = "review";
+const REVIEW_FIELDS: [&str; 2] = ["redaction_level", "approval_center_url"];
 const REDACTION_LEVELS: [&str; 3] = ["full", "partial", "none"];
 /// A safe-alternative block's decision source.
 const SAFE_ALTERNATIVE_SOURCE: &str = "policy-safe-alternative";
@@ -136,9 +138,9 @@ pub(super) struct Plain<'a> {
     /// An ask or safe-alternative block's risk input: the proxy projects a
     /// queued call with its artifact for the receipt's risk categories.
     pub(super) projected_risk: Option<McpToolRiskInputV1>,
-    /// A safe-alternative block's redaction level, which its inbox row is
-    /// written with.
-    pub(super) redaction_level: Option<&'a str>,
+    /// A safe-alternative block's redaction level and approval center
+    /// origin, which its inbox row is written with.
+    pub(super) review: Option<(&'a str, &'a str)>,
 }
 
 impl Plain<'_> {
@@ -167,10 +169,10 @@ impl Plain<'_> {
         string_list(categories).then(|| strings(categories))
     }
 
-    /// The redaction level of the inbox row `queue_blocked_approvals` writes
-    /// for this block, if it writes one.
-    pub(super) fn silent_review(&self) -> Option<&str> {
-        self.redaction_level
+    /// The redaction level and center of the inbox row
+    /// `queue_blocked_approvals` writes for this block, if it writes one.
+    pub(super) fn silent_review(&self) -> Option<(&str, &str)> {
+        self.review
             .filter(|_| REVIEWABLE.contains(&self.policy_action))
     }
 }
@@ -194,12 +196,12 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     };
     // Only a safe-alternative block carries its inbox row, and it must; an
     // ask block's request answers the call instead.
-    let redaction_level = match record.get(REVIEW_KEY) {
+    let review = match record.get(REVIEW_KEY) {
         None => None,
         Some(_) if queued => return None,
-        Some(review) => Some(redaction_level(review)?),
+        Some(review) => Some(review_fields(review)?),
     };
-    let reviewed = redaction_level.is_some();
+    let reviewed = review.is_some();
     let append = match record.get(APPEND_KEY) {
         None => &[][..],
         Some(Value::Array(items)) if items.iter().all(Value::is_object) => items.as_slice(),
@@ -274,7 +276,7 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         decision,
         append,
         projected_risk,
-        redaction_level,
+        review,
     })
 }
 
@@ -290,12 +292,18 @@ fn block_source_fits(queued: bool, reviewed: bool, source: &str) -> bool {
     }
 }
 
-/// `_redaction_level`: exactly `{"redaction_level": level}` with a known
-/// level.
-fn redaction_level(review: &Value) -> Option<&str> {
-    exact_object(review, &["redaction_level"])?["redaction_level"]
+/// `_redaction_level` with the center the resident links the row to: a
+/// known level and a loopback origin. A record from a binding with no center
+/// leaves the row, and so the receipt, to the daemon.
+fn review_fields(review: &Value) -> Option<(&str, &str)> {
+    let review = exact_object(review, &REVIEW_FIELDS)?;
+    let level = review["redaction_level"]
         .as_str()
-        .filter(|level| REDACTION_LEVELS.contains(level))
+        .filter(|level| REDACTION_LEVELS.contains(level))?;
+    let center = review["approval_center_url"]
+        .as_str()
+        .filter(|center| !center.trim().is_empty())?;
+    Some((level, center))
 }
 
 /// `_queued_approval`, with no desktop notice left to raise.

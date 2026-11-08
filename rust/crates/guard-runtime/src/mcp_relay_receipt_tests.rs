@@ -5,6 +5,7 @@ use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
 
 const HOME: &str = "/home/guard/.hol-guard";
+const CENTER: &str = "http://127.0.0.1:4781";
 const HASH: &str = "guard-approval-context:v1:0123456789abcdef";
 
 /// A queued relay record as the native relay leaves it.
@@ -256,7 +257,10 @@ fn an_ask_block_writes_the_pending_receipt_with_projected_risk() {
 /// A safe-alternative block, which the proxy records with a silent inbox row.
 fn reviewed(record: Value) -> Value {
     edited(record, |record| {
-        record["review"] = json!({"redaction_level": "full"});
+        record["review"] = json!({
+            "redaction_level": "full",
+            "approval_center_url": CENTER,
+        });
     })
 }
 
@@ -287,11 +291,8 @@ fn a_safe_alternative_block_writes_its_receipt_then_a_silent_row() {
     assert_eq!(row["prompt_shown"], false);
     assert_eq!(row["redaction_level"], "full");
     assert_eq!(row["now"], stamp().now);
-    let center = row["approval_center_url"].as_str().unwrap();
-    let port = center
-        .strip_prefix("http://127.0.0.1:")
-        .expect("the daemon's loopback origin");
-    assert!(port.parse::<u16>().is_ok(), "{center}");
+    // The origin the daemon listens on, as the relay's binding carried it.
+    assert_eq!(row["approval_center_url"], CENTER);
     assert_eq!(row["continuation"]["harness"], "codex");
     assert_eq!(row["continuation"]["now"], stamp().now);
     let items = row["items"].as_array().unwrap();
@@ -392,6 +393,23 @@ fn records_the_daemon_owns_are_not_plain() {
             reviewed(record("block", "policy-safe-alternative", "review")),
             |record| record["review"] = json!("full"),
         ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| {
+                record["review"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("approval_center_url");
+            },
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["approval_center_url"] = json!(4781),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["approval_center_url"] = json!(" "),
+        ),
         record("block", "policy-block", "allow"),
         edited(record("forward", "policy", "allow"), |record| {
             record["harness"] = json!("claude-code");
@@ -465,6 +483,40 @@ fn plain_records_land_in_the_store() {
     assert!(unwritten.is_empty(), "{unwritten:?}");
     assert_eq!(count(&home, "runtime_receipts"), before + 2);
     assert_eq!(count(&home, "guard_events"), 2);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_safe_alternative_block_lands_its_receipt_and_its_silent_row() {
+    let (receipts, inventory) = vectors();
+    let home = temp_home("relay-receipt-silent-row");
+    build_database(&home.join("guard.db"), &receipts, &inventory);
+    // The approval tables the receipt vectors leave out, from the queue
+    // write's own schema.
+    let store: Value = serde_json::from_str(include_str!(
+        "../testdata/guard_store/approval_request_write_vectors.json"
+    ))
+    .unwrap();
+    let connection = rusqlite::Connection::open(home.join("guard.db")).unwrap();
+    for statement in store["schema_sql"].as_array().unwrap() {
+        let sql = statement.as_str().unwrap();
+        if !sql.contains("TRIGGER guard_review_outbox_after_") {
+            let _ = connection.execute_batch(sql);
+        }
+    }
+    drop(connection);
+    let before = count(&home, "runtime_receipts");
+    let unwritten = write(
+        home.to_str().unwrap(),
+        vec![reviewed(record(
+            "block",
+            "policy-safe-alternative",
+            "review",
+        ))],
+    );
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    assert_eq!(count(&home, "approval_requests"), 1);
     let _ = std::fs::remove_dir_all(&home);
 }
 
