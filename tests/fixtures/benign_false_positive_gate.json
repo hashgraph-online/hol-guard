@@ -53043,7 +53043,7 @@
       "harnesses": ["codex", "zcode", "claude-code", "omp"],
       "tool": "shell",
       "tool_input": {
-        "command": "while kill -0 999999 2>/dev/null; do sleep 15; done; echo \"build finished\"; date -u +%H:%M:%SZ"
+        "command": "while kill -0 4194305 2>/dev/null; do sleep 15; done; echo \"build finished\"; date -u +%H:%M:%SZ"
       },
       "cwd": "worktree",
       "expect": "allow"
