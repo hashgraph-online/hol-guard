@@ -149,21 +149,21 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert requirements_copy_index < source_copy_index
     assert build_deps_index < pip_install_index
     assert pip_install_index < purge_index
-    assert "cryptography==50.0.0" in docker_requirements
-    assert "aiohttp==3.14.4" in docker_requirements
+    assert "cryptography==50.0.2" in docker_requirements
+    assert "aiohttp==3.14.5" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==8.9.0" in docker_requirements
-    assert "litellm==1.93.2" in docker_requirements
-    assert "python-dotenv==1.2.2" in docker_requirements
+    assert "litellm==1.106.6" in docker_requirements
+    assert "python-dotenv==1.2.4" in docker_requirements
     assert "python-multipart==0.0.32" in docker_requirements
     # The image installs these pins with --no-deps, so the patched versions
     # have to be carried here and not only in the project manifest.
     assert "filelock==4.2.4" in docker_requirements
     assert "mcp==1.30.0" in docker_requirements
     assert "multidict==6.9.1" in docker_requirements
-    assert "pyjwt==2.15.0" in docker_requirements
-    assert "starlette==1.3.1" in docker_requirements
-    assert "tokenizers==0.23.1" in docker_requirements
+    assert "pyjwt==2.15.1" in docker_requirements
+    assert "starlette==1.7.0" in docker_requirements
+    assert "tokenizers==0.23.3" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev" in contributing
     assert "uv sync --extra dev --extra cisco --group cisco-mcp" in contributing
