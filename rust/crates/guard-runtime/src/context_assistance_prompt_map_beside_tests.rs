@@ -122,6 +122,8 @@ fn listing_a_definition_beside_a_stub_does_not_hide_its_body() {
         "{}",
         first.text
     );
+    // The stub shown whole, and one span for the whole list.
+    assert_eq!(first.shown.len(), 2, "{:?}", first.shown);
     let again = Asked {
         earlier: first.shown.clone(),
         ..Asked::default()

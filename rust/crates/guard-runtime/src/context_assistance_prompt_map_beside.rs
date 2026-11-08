@@ -14,7 +14,7 @@ const MAX_CLASS_MEMBERS_CHARS: usize = 240;
 /// definitions beside it: the other members of its class, or the file's
 /// other top-level definitions, nearest first, each as its lines and first
 /// line, a class with its members. Not shown again when an earlier prompt of
-/// the session was shown every line of it.
+/// the session was shown the same list.
 pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(String, Entry)> {
     let (file, at) = chosen.iter().find_map(|pick| {
         let file = &files[pick.file];
@@ -38,20 +38,17 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
         kept.push((file.sections[other].start, line));
     }
     kept.sort_by_key(|(start, _)| *start);
-    // Only each definition's first line is shown, so only those lines count
-    // as shown: a later prompt still gets a body line naming its stub.
-    let shown: Vec<Span> = (kept.iter())
-        .map(|(start, _)| {
-            let text = file.lines.get(start - 1).copied().unwrap_or_default();
-            Span::new(file.path, *start as u64, *start as u64, text)
-        })
-        .collect();
-    if shown.is_empty() || shown.iter().all(|span| asked.earlier.contains(span)) {
-        return None;
-    }
-    let text = (kept.into_iter().map(|(_, line)| line))
+    let text = (kept.iter().map(|(_, line)| line.as_str()))
         .collect::<Vec<_>>()
         .join("\n");
+    // One span, with the whole list's digest so the same list is not sent
+    // again, covering only the first listed line: the bodies are not shown,
+    // so a later prompt still gets a body line naming its stub.
+    let first = kept.first()?.0 as u64;
+    let span = Span::new(file.path, first, first, &text);
+    if asked.earlier.contains(&span) {
+        return None;
+    }
     let title = match outer {
         Some(outer) => format!(
             "Other members of {} in {}:",
@@ -63,7 +60,7 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
     let entry = Entry {
         code: text.len(),
         text,
-        shown,
+        shown: vec![span],
     };
     Some((title, entry))
 }
