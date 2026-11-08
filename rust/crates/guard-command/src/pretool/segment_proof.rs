@@ -344,8 +344,15 @@ pub(super) fn exact_safe_segment_with_context(
         Vec::new()
     };
     let secret_namespace = github_metadata_text::secret_namespace(segment);
-    let sensitive_text =
-        secret_namespace.map(|index| github_metadata_text::without_namespace(segment, index));
+    // A `kubectl` output template selects fields in the object the read
+    // returns, so its words are not names on this machine.
+    let output_templates = super::kubectl_reads::output_template_positions(segment);
+    let sensitive_text = secret_namespace
+        .map(|index| github_metadata_text::without_namespace(segment, index))
+        .or_else(|| {
+            (!output_templates.is_empty())
+                .then(|| super::kubectl_reads::without_output_templates(segment, &output_templates))
+        });
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))
@@ -357,6 +364,7 @@ pub(super) fn exact_safe_segment_with_context(
                 .any(|(index, argument)| {
                     Some(index) != jq_filter
                         && Some(index) != secret_namespace
+                        && !output_templates.contains(&index)
                         && !search_text.contains(&index)
                         && sensitive_path_argument(argument)
                 }))

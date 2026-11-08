@@ -445,7 +445,8 @@ def test_full_batch_settles_its_jobs_then_drains_by_leasing(tmp_path: Path) -> N
     _join(pool)
 
     assert polls.count("job-2") == 1
-    assert polls.count("lease") == command_queue_drain.REVIEW_DRAIN_WORKERS
+    assert polls.count("watch") == 1
+    assert polls.count("lease") == command_queue_drain.REVIEW_DRAIN_WORKERS - 1
 
 
 def test_job_handed_over_while_a_worker_stops_is_still_settled(tmp_path: Path, monkeypatch) -> None:

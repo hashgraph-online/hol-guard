@@ -82,6 +82,10 @@ pub(super) fn run() -> Result<(), String> {
         [command, config] if command == cline_hook_worker::WORKER_COMMAND => {
             std::process::exit(cline_hook_worker::run(config))
         }
+        #[cfg(unix)]
+        [command, rest @ ..] if command == daemon_edge::EDGE_COMMAND => {
+            std::process::exit(daemon_edge::run(rest))
+        }
         [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
             std::process::exit(pi_hook_bridge::run(config))
         }

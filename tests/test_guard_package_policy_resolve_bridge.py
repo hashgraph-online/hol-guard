@@ -173,10 +173,11 @@ def test_a_claim_refused_for_a_moved_revision_reads_the_allow_again(monkeypatch:
 
 
 def test_every_sibling_in_a_full_bulk_approval_landing_first_still_allows(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Guard settles a full lease batch of Cloud Review jobs at once. Each
-    # sibling moves the authority revision twice before this claim: once when
-    # its allow is stored and once when its own install claims it.
-    moves = 2 * (command_queue_drain.REVIEW_LEASE_BATCH_SIZE - 1)
+    # Guard settles one Cloud Review job per drain worker plus the main
+    # worker's at once. Each sibling moves the authority revision twice before
+    # this claim: once when its allow is stored and once when its own install
+    # claims it.
+    moves = 2 * command_queue_drain.REVIEW_DRAIN_WORKERS
 
     def transport(request: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
         if request.get("claim_succeeded") is False:

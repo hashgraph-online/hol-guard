@@ -21,6 +21,7 @@ from .advisory_lock_handoff import hold_advisory_file_lock
 from .cloud_sync_busy import GuardCloudSyncBusyError
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
+from .sqlite_connection_cache import close_idle_store_connections, open_store_connection, release_store_connection
 from .sqlite_deadline_connection import DeadlineConnection
 from .sqlite_errors import sqlite_error_is_fatal, sqlite_error_is_io
 from .sqlite_profile import (
@@ -286,6 +287,8 @@ class StoreConnectionSchemaMixin:
             except OSError:
                 failed_identity = None
         with self._hold_storage_gate(exclusive=True):
+            # Kept connections still hold the failed file open.
+            close_idle_store_connections()
             # Another process may already have replaced the failed store.
             try:
                 current_stat = self.path.stat()
@@ -457,10 +460,11 @@ class StoreConnectionSchemaMixin:
         profiler = self._sqlite_profiler()
         connect_started = time.monotonic()
         try:
-            if sqlite_operation_deadline_monotonic() is None:
-                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            else:
-                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds, factory=DeadlineConnection)
+            connection, cache_key = open_store_connection(
+                self.path,
+                timeout=connect_timeout_seconds,
+                factory=sqlite3.Connection if sqlite_operation_deadline_monotonic() is None else DeadlineConnection,
+            )
         except sqlite3.OperationalError as error:
             profiler.record_connect((time.monotonic() - connect_started) * 1000)
             if sqlite_error_is_busy_locked(error):
@@ -470,6 +474,7 @@ class StoreConnectionSchemaMixin:
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
         notification: dict[str, object] | None = None
+        completed = False
         try:
             connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
             # WAL can use synchronous=NORMAL; rollback-journal and schema-init stay FULL.
@@ -487,6 +492,7 @@ class StoreConnectionSchemaMixin:
                 connection, initial_changes, profiler.record_commit
             )
             notification = self._take_policy_integrity_state_notification(connection)
+            completed = True
         except sqlite3.OperationalError as error:
             if sqlite_error_is_busy_locked(error):
                 profiler.record_busy_locked()
@@ -497,7 +503,7 @@ class StoreConnectionSchemaMixin:
                 # A failed transaction must drop the queued notice. Leaving it
                 # keyed by id(connection) lets a later connection publish it.
                 self._take_policy_integrity_state_notification(connection)
-            connection.close()
+            release_store_connection(connection, cache_key, reusable=completed)
             elapsed_ms = (time.monotonic() - start) * 1000
             self._repair_store_permissions()
             if elapsed_ms >= _slow_query_threshold_ms_compat():
