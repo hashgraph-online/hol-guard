@@ -5,8 +5,9 @@
 pub(super) enum Redirect {
     /// No `>` the shell acts on.
     None,
-    /// Only `2>&1` or `2>/dev/null`: no file is written, but whatever the
-    /// command reads still reaches the agent's output.
+    /// Only a merge or a discard, such as `2>&1`, `2>/dev/null` or
+    /// `> /dev/null`: no file is written, and whatever the command reads
+    /// reaches the agent's output unless the discard swallowed it.
     Stderr,
     /// An output redirection that can write a file.
     Output,
@@ -42,9 +43,7 @@ pub(super) fn posix_redirect(text: &str) -> Redirect {
             None if character == '>' => {
                 let inert =
                     crate::parser_segments::is_stderr_to_stdout_redirect(&chars, index, false)
-                        || index.checked_sub(1).is_some_and(|start| {
-                            crate::parser_segments::is_stderr_to_null_redirect(&chars, start, false)
-                        });
+                        || crate::parser_segments::null_sink_redirect_at(&chars, index, false);
                 if !inert {
                     return Redirect::Output;
                 }
