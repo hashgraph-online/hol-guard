@@ -161,7 +161,8 @@ fn a_piece_of_a_placed_name_is_not_looked_for_apart() {
         ),
         (
             "toolz/functoolz.py".to_owned(),
-            "def _check_sigspec(func):\n    return signature(func)\n".to_owned(),
+            "def _check_sigspec(func):\n    if signature is None:\n        return None\n    return signature(func)\n"
+                .to_owned(),
         ),
     ];
     let walk = Walk {
@@ -189,7 +190,7 @@ fn a_piece_of_a_placed_name_is_not_looked_for_apart() {
     assert!(!text.contains("_check_sigspec"), "{text}");
     let text = mapped("makesignaturecache");
     assert!(
-        text.contains("toolz/functoolz.py:1-2 _check_sigspec"),
+        text.contains("toolz/functoolz.py:1-4 _check_sigspec"),
         "{text}"
     );
 }

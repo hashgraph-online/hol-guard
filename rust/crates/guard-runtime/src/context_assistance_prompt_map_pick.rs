@@ -100,6 +100,14 @@ pub(super) fn named_definitions(
         let found = (shaped.then(|| dotted(name)).flatten())
             .or_else(|| best(name, false, shaped))
             .or_else(|| shaped.then(|| best(name, true, shaped)).flatten());
+        // `ManyToMany.update` is that method, not the whole class it names.
+        let found = found.map(|(file, at)| {
+            let item = &files[file];
+            let member = (0..item.sections.len()).find(|&inner| {
+                item.parent[inner] == Some(at) && asked.spellings.contains(&item.qualified(inner))
+            });
+            (file, member.unwrap_or(at))
+        });
         if let Some((file, at)) = found {
             if !picks.iter().any(|pick| pick.file == file && pick.at == at) {
                 picks.push(Pick {
