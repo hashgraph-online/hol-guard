@@ -298,6 +298,7 @@ def test_edge_callbacks_read_the_server_store_and_touch_its_heartbeat(tmp_path: 
     assert payload["store_path"] == str(tmp_path / "guard.db")
     assert payload["source"] == "default"
     assert "dashboard_build" not in payload
+    assert payload["user_home"] == str(Path.home())
     on_activity()
     assert server.last_activity_monotonic > 0
     assert len(touched) == 1

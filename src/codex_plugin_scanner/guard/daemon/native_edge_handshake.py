@@ -31,6 +31,7 @@ def edge_handshake(
     source: str,
     busy_timeout_seconds: float,
     dashboard_build: str | None,
+    user_home: str | None = None,
 ) -> bytes:
     """The line that lets the edge answer token-authenticated store reads."""
 
@@ -44,6 +45,9 @@ def edge_handshake(
     }
     if dashboard_build is not None:
         payload["dashboard_build"] = dashboard_build
+    if user_home is not None:
+        # Evidence reads shorten this home to ``~`` as ``redact_local_path`` does.
+        payload["user_home"] = user_home
     return json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
@@ -59,6 +63,7 @@ def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], b
             source=store.guard_source,
             busy_timeout_seconds=sqlite_connect_timeout_seconds(),
             dashboard_build=dashboard_build_id(static_dir),
+            user_home=_user_home(),
         )
 
     def on_activity() -> None:
@@ -68,6 +73,13 @@ def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], b
         server.runtime_heartbeat.touch(_now())
 
     return handshake, on_activity
+
+
+def _user_home() -> str | None:
+    try:
+        return str(Path.home())
+    except RuntimeError:
+        return None
 
 
 __all__ = ["HANDSHAKE_SCHEMA", "daemon_edge_callbacks", "edge_handshake"]
