@@ -44,13 +44,22 @@ def test_release_please_job_is_pinned_and_least_privilege() -> None:
     assert release["outputs"]["tag_name"] == "${{ steps.release.outputs.tag_name }}"
     assert release["outputs"]["sha"] == "${{ steps.release.outputs.sha }}"
     assert release["outputs"]["version"] == "${{ steps.release.outputs.version }}"
-    require_token = release["steps"][0]
-    assert "RELEASE_PLEASE_TOKEN is not configured" in require_token["run"]
+    mint_token = next(s for s in release["steps"] if s.get("id") == "release-token")
+    assert mint_token["with"]["client-id"] == "${{ vars.HOL_RELEASE_APP_CLIENT_ID }}"
+    assert mint_token["with"]["private-key"] == "${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}"
+    assert mint_token["with"]["permission-contents"] == "write"
+    assert mint_token["with"]["permission-pull-requests"] == "write"
+    assert mint_token["with"]["fallback-on-error"] == "true"
+    require_token = next(s for s in release["steps"] if s.get("name") == "Require a token that can open pull requests")
+    assert "Neither the release App nor RELEASE_PLEASE_TOKEN is configured." in require_token["run"]
+    assert require_token["env"]["APP_TOKEN_SOURCE"] == "${{ steps.release-token.outputs.source }}"
     assert require_token["env"]["RELEASE_PLEASE_TOKEN"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
-    step = release["steps"][1]
-    assert step["id"] == "release"
+    step = next(s for s in release["steps"] if s.get("id") == "release")
     assert step["uses"] == PINNED_RELEASE_PLEASE_ACTION
-    assert step["with"]["token"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
+    assert step["with"]["token"] == (
+        "${{ steps.release-token.outputs.source == 'app' "
+        "&& steps.release-token.outputs.token || secrets.RELEASE_PLEASE_TOKEN }}"
+    )
     assert step["with"]["target-branch"] == "main"
     assert step["with"]["config-file"] == "release-please-config.json"
     assert step["with"]["manifest-file"] == ".release-please-manifest.json"
