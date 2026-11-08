@@ -1,3 +1,6 @@
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+
 use super::*;
 
 const TOKEN: &[u8] = b"activity-test-key";
@@ -186,7 +189,7 @@ fn civil_days_round_trip_and_stay_canonical() {
     ] {
         assert_eq!(parse_date(date), None, "{date}");
     }
-    assert_eq!(days_from_civil((1970, 1, 1)), 0);
+    assert_eq!(days_from_civil(1970, 1, 1), 0);
 }
 
 #[test]

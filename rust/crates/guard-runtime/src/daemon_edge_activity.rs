@@ -1,14 +1,12 @@
 //! Command-activity list and analytics reads, validated and paged as the
 //! daemon's `command_activity_api` validates and pages them.
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
-use hmac::{Hmac, Mac};
 use serde_json::{json, Map, Value};
-use sha2::Sha256;
 
 use super::super::http::query_pairs;
 use super::{NativeReads, ReadConfig};
+use crate::guard_store_json::{civil_date, days_from_civil};
+use cursor::{signed_cursor, verified_cursor};
 
 const API_SCHEMA_VERSION: &str = "guard.command-activity-api.v1";
 const CURSOR_PREFIX: &str = "gca1";
@@ -126,7 +124,10 @@ pub(super) fn analytics(
         Ok(parsed) => parsed,
         Err(code) => return Some(bad_request(code)),
     };
-    let today = days_from_civil(utc_today()?);
+    let today = {
+        let (year, month, day) = utc_today()?;
+        days_from_civil(year, month, day)
+    };
     let start = today - (days - 1);
     let payload = reads.store_call(
         config,
@@ -229,7 +230,7 @@ fn list_query(query: &str, token: &[u8]) -> Parsed<(ListFilters, Option<(String,
         "invalid_occurred_through"
     ));
     // `date.max` reads as an inclusive bound the edge does not reproduce.
-    if occurred_through == Some(days_from_civil((9999, 12, 31))) {
+    if occurred_through == Some(days_from_civil(9999, 12, 31)) {
         return None;
     }
     let filters = ListFilters {
@@ -372,7 +373,7 @@ fn parse_date(value: &str) -> Option<i64> {
         2 => 28,
         _ => return None,
     };
-    (year >= 1 && (1..=month_days).contains(&day)).then(|| days_from_civil((year, month, day)))
+    (year >= 1 && (1..=month_days).contains(&day)).then(|| days_from_civil(year, month, day))
 }
 
 fn one_of(value: &Option<String>, allowed: &[&str]) -> bool {
@@ -402,88 +403,6 @@ fn optional_stable_id(value: &Option<String>) -> bool {
     !after_separator
 }
 
-/// `_signed_cursor` over the next page's marker.
-fn signed_cursor(
-    occurred_at: &str,
-    activity_id: &str,
-    binding: &Value,
-    token: &[u8],
-) -> Option<String> {
-    if !occurred_at.is_ascii() || !activity_id.is_ascii() {
-        return None;
-    }
-    // `json.dumps(sort_keys=True, separators=(",", ":"))`.
-    let raw = serde_json::to_string(&json!({
-        "activity_id": activity_id,
-        "binding": binding,
-        "occurred_at": occurred_at,
-        "version": API_SCHEMA_VERSION,
-    }))
-    .ok()?;
-    let encoded = URL_SAFE_NO_PAD.encode(raw);
-    let mut mac = Hmac::<Sha256>::new_from_slice(token).ok()?;
-    mac.update(encoded.as_bytes());
-    let signature = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
-    Some(format!("{CURSOR_PREFIX}.{encoded}.{signature}"))
-}
-
-/// `decode_activity_cursor`: a cursor this daemon signed for the same
-/// filters, or the daemon's `invalid_cursor`.
-fn verified_cursor(cursor: &str, binding: &Value, token: &[u8]) -> Parsed<(String, String)> {
-    const INVALID: &str = "invalid_cursor";
-    if cursor.len() > 2_048 {
-        return Some(Err(INVALID));
-    }
-    let parts: Vec<&str> = cursor.split('.').collect();
-    let [prefix, encoded, signature] = parts.as_slice() else {
-        return Some(Err(INVALID));
-    };
-    if *prefix != CURSOR_PREFIX || encoded.is_empty() || signature.is_empty() {
-        return Some(Err(INVALID));
-    }
-    let Ok(supplied) = URL_SAFE_NO_PAD.decode(signature) else {
-        return Some(Err(INVALID));
-    };
-    let mut mac = Hmac::<Sha256>::new_from_slice(token).ok()?;
-    mac.update(encoded.as_bytes());
-    if mac.verify_slice(&supplied).is_err() {
-        return Some(Err(INVALID));
-    }
-    let Ok(raw) = URL_SAFE_NO_PAD.decode(encoded) else {
-        return Some(Err(INVALID));
-    };
-    // Text `json.loads` reads differently (other encodings, NaN) goes to the
-    // daemon.
-    let Value::Object(payload) = serde_json::from_slice::<Value>(&raw).ok()? else {
-        return Some(Err(INVALID));
-    };
-    // Python compares `1 == True`; a number anywhere in the binding goes to
-    // the daemon.
-    let stored = payload.get("binding");
-    if stored
-        .and_then(Value::as_array)
-        .is_some_and(|items| items.iter().any(Value::is_number))
-    {
-        return None;
-    }
-    match (
-        payload.get("version"),
-        stored,
-        payload.get("occurred_at"),
-        payload.get("activity_id"),
-    ) {
-        (
-            Some(Value::String(version)),
-            Some(stored),
-            Some(Value::String(at)),
-            Some(Value::String(id)),
-        ) if version == API_SCHEMA_VERSION && stored == binding => {
-            Some(Ok((at.clone(), id.clone())))
-        }
-        _ => Some(Err(INVALID)),
-    }
-}
-
 /// Whether every number prints as Python's `json.dumps` prints it: integers
 /// and floats Python writes without an exponent.
 pub(super) fn prints_alike(value: &Value) -> bool {
@@ -506,41 +425,12 @@ fn utc_today() -> Option<(i64, i64, i64)> {
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_secs();
-    Some(civil_from_days(i64::try_from(seconds / 86_400).ok()?))
-}
-
-/// Days since 1970-01-01 for a proleptic Gregorian date.
-fn days_from_civil((year, month, day): (i64, i64, i64)) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month_index = (month + 9) % 12;
-    let day_of_year = (153 * month_index + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
-fn civil_from_days(days: i64) -> (i64, i64, i64) {
-    let days = days + 719_468;
-    let era = days.div_euclid(146_097);
-    let day_of_era = days - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
-    let month = if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-    (year, month, day)
+    Some(civil_date(i64::try_from(seconds / 86_400).ok()?))
 }
 
 /// `date.isoformat()`, for the years `date` holds.
 fn iso_date(days: i64) -> Option<String> {
-    let (year, month, day) = civil_from_days(days);
+    let (year, month, day) = civil_date(days);
     (1..=9999)
         .contains(&year)
         .then(|| format!("{year:04}-{month:02}-{day:02}"))
@@ -550,6 +440,9 @@ fn iso_date(days: i64) -> Option<String> {
 fn midnight(days: i64) -> Option<String> {
     Some(format!("{}T00:00:00+00:00", iso_date(days)?))
 }
+
+#[path = "daemon_edge_activity_cursor.rs"]
+mod cursor;
 
 #[cfg(test)]
 #[path = "daemon_edge_activity_tests.rs"]
