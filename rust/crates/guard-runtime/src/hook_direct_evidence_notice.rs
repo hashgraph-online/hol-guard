@@ -75,10 +75,24 @@ pub(super) struct Shown {
 /// persisted fields `_QueuedNotice` reads. A notice the daemon could not read
 /// is left to the daemon, and says so by returning `false`.
 pub(crate) fn raise_approval(guard_home: &str, source: &str, notice: &Value) -> bool {
-    let Some(shown) = approval_notice(notice) else {
+    raise_approvals(guard_home, source, std::slice::from_ref(notice))
+}
+
+/// Raise the notices of the requests one call was just queued on, in order.
+/// Unless every notice reads, none is raised and all are left to the daemon.
+pub(crate) fn raise_approvals(guard_home: &str, source: &str, notices: &[Value]) -> bool {
+    let Some(shown) = notices
+        .iter()
+        .map(approval_notice)
+        .collect::<Option<Vec<_>>>()
+    else {
         return false;
     };
-    raise(guard_home, source, vec![Notice::Approval(shown)]);
+    raise(
+        guard_home,
+        source,
+        shown.into_iter().map(Notice::Approval).collect(),
+    );
     true
 }
 
