@@ -54101,23 +54101,6 @@
       "expect": "allow"
     },
     {
-      "id": "neg-hidden-glob-reads-the-bytes",
-      "fix_area": "negative",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cat .gitignore*"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
       "id": "neg-hidden-glob-stands-for-dot-directories",
       "fix_area": "negative",
       "harnesses": [

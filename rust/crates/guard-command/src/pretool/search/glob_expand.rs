@@ -263,14 +263,22 @@ fn screened_match(
             });
     let canonical = std::fs::canonicalize(path).ok()?;
     // `ls` prints a regular file's name and metadata, never its bytes, so a
-    // match that is a file is admitted by the directory holding it, exactly
-    // as the same name spelled literally is admitted as a listing operand.
-    // That is what keeps `ls .deploy-production.lock*` and
-    // `ls .deploy-production.lock` answering alike. A directory match is
-    // listed itself, which prints names the parent listing does not, so it
-    // keeps the read screen.
-    let located = if screen == Screen::Names && metadata.is_file() {
-        canonical.parent().is_some_and(|parent| {
+    // match that is a file the read screen turns down is admitted by the
+    // directory holding it, exactly as the same name spelled literally is
+    // admitted as a listing operand. That is what keeps
+    // `ls .deploy-production.lock*` and `ls .deploy-production.lock`
+    // answering alike, while a match the read screen already admits keeps
+    // answering through it, so a file below a directory the parent screen
+    // turns down is unaffected. A directory match is listed itself, which
+    // prints names the parent listing does not, so it keeps the read
+    // screen.
+    let located = crate::pretool::read_paths::resolved_path_allowed(
+        &canonical,
+        context.home_dir,
+        context.cwd,
+    ) || (screen == Screen::Names
+        && metadata.is_file()
+        && canonical.parent().is_some_and(|parent| {
             crate::pretool::read_paths::resolved_path_allowed_for_operation(
                 parent,
                 context.home_dir,
@@ -278,10 +286,7 @@ fn screened_match(
                 false,
                 true,
             )
-        })
-    } else {
-        crate::pretool::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
-    };
+        }));
     Some(
         guard_secure_fs::sensitive_path_family(path).is_none()
             && (screen == Screen::Names || !guard_secure_fs::credential_named_path(relative))

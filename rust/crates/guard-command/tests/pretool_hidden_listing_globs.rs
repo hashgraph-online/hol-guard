@@ -55,6 +55,9 @@ fn hidden_listing_globs_answer_like_the_literal_spelling() {
 
     // Reading the bytes of the same match is a different question, and a
     // pattern that stands for `.` or `..` prints another directory's entries.
+    // The fixture is a plain directory, so no match here carries a
+    // repository's own proof; a tracked `.gitignore` inside a checkout is a
+    // proven source document and reads on its own terms.
     for command in [
         "cat .deploy*",
         "head -5 .deploy*",
