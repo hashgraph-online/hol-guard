@@ -12,7 +12,7 @@ const LONG_SECTION: usize = 150;
 const MAX_TITLE_CHARS: usize = 40;
 /// The most characters the whole note takes; commit diffs share it.
 const MAX_NOTE: usize = 3_000;
-const CUT: &str = "\n(more changes left out; the command above lists them all)";
+const CUT: &str = "\n(more changes left out; the `git diff` above shows every change)";
 
 /// One commit since the session started, and its diff when shown.
 pub(super) struct Commit {
@@ -66,33 +66,65 @@ pub(super) fn render(
 them). {NOT_INSTRUCTIONS}"
         ),
     };
-    let mut parts: Vec<String> = Vec::new();
-    for (at, file) in files.iter().enumerate() {
-        let title = if at == 0 {
-            format!("\n\n{LABELS_TITLE}")
-        } else {
+    // Every later request carries the note, so it stops at its size. Commit
+    // subjects name what was pushed, so room is kept for them before the
+    // files; a part that does not fit is skipped and the note says so once.
+    let subjects: Vec<String> = (commits.iter())
+        .map(|commit| {
+            let line = format!("\n\nCommit {} {}", &commit.id[..8], commit.subject);
+            line.trim_end().to_owned()
+        })
+        .collect();
+    let room = MAX_NOTE.saturating_sub(out.len() + CUT.len());
+    let mut reserved = 0;
+    let held: Vec<usize> = (subjects.iter())
+        .map(|subject| {
+            let held = if reserved + subject.len() <= room {
+                subject.len()
+            } else {
+                0
+            };
+            reserved += held;
+            held
+        })
+        .collect();
+    let mut cut = false;
+    let mut titled = false;
+    for file in &files {
+        let title = if titled {
             String::new()
+        } else {
+            format!("\n\n{LABELS_TITLE}")
         };
-        parts.push(format!("{title}\n{file}"));
-    }
-    for commit in commits {
-        let line = format!("Commit {} {}", &commit.id[..8], commit.subject);
-        parts.push(match &commit.diff {
-            Some(diff) => format!(
-                "\n\n{}:\n```diff\n{}\n```",
-                line.trim_end(),
-                diff.trim_end()
-            ),
-            None => format!("\n\n{}", line.trim_end()),
-        });
-    }
-    // Every later request carries the note, so it stops at its size.
-    for part in parts {
-        if out.len() + part.len() + CUT.len() > MAX_NOTE {
-            out.push_str(CUT);
-            break;
+        let part = format!("{title}\n{file}");
+        if out.len() + part.len() + reserved + CUT.len() > MAX_NOTE {
+            cut = true;
+            continue;
         }
+        titled = true;
         out.push_str(&part);
+    }
+    for ((commit, subject), held) in commits.iter().zip(&subjects).zip(held) {
+        reserved -= held;
+        let fits = |part: &str| out.len() + part.len() + reserved + CUT.len() <= MAX_NOTE;
+        let full = (commit.diff.as_ref())
+            .map(|diff| format!("{subject}:\n```diff\n{}\n```", diff.trim_end()));
+        let part = match full {
+            Some(full) if fits(&full) => full,
+            Some(_) if fits(subject) => {
+                cut = true;
+                subject.clone()
+            }
+            None if fits(subject) => subject.clone(),
+            _ => {
+                cut = true;
+                continue;
+            }
+        };
+        out.push_str(&part);
+    }
+    if cut {
+        out.push_str(CUT);
     }
     Some(out)
 }

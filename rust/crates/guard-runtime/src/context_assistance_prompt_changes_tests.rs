@@ -437,7 +437,8 @@ fn a_commit_deleting_an_unread_file_shows_no_diff() {
     assert!(!text.contains("not for the agent"), "{text}");
 }
 
-/// Changes across many files stop at the note's size, and say so.
+/// Changes across many files stop at the note's size and say so, and the
+/// commit that made them is still named.
 #[cfg(unix)]
 #[test]
 fn a_note_about_many_files_stays_bounded() {
@@ -456,4 +457,5 @@ fn a_note_about_many_files_stays_bounded() {
     assert!(text.len() <= 3_000, "{}", text.len());
     assert!(text.contains(&name(0)), "{text}");
     assert!(text.contains("more changes left out"), "{text}");
+    assert!(text.contains("change modules"), "{text}");
 }
