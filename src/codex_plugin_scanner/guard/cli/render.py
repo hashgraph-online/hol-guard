@@ -2808,6 +2808,13 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
     rerun_command = payload.get("rerun_command")
     diff_command = payload.get("diff_command")
     approvals_command = payload.get("approvals_command")
+    capability = payload.get("approval_capability")
+    if blocked and isinstance(capability, dict) and capability.get("available") is False:
+        return [{
+            "title": "Inspect the unsupported guarded launch",
+            "command": str(diff_command) if isinstance(diff_command, str) else f"hol-guard diff {harness}",
+            "detail": str(review_hint or "This platform cannot bind and resume this launch after approval."),
+        }]
     if blocked and dry_run:
         review_command = (
             str(rerun_command) if isinstance(rerun_command, str) and rerun_command else f"hol-guard run {harness}"

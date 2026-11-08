@@ -409,3 +409,62 @@ pub(crate) fn claim_partition(args: &Value) -> KindResult {
     }
     Ok(json!({"consumed": consumed, "retained": retained, "qualifications": qualifications}))
 }
+
+/// Non-Unix consumer launch identities deliberately retain an unproven
+/// entrypoint nonce. An approval cannot be resumed there; do not advertise
+/// choices that the subsequent exact-context check can never honor.
+pub(crate) fn consumer_launch_review_capability(args: &Value) -> KindResult {
+    let artifacts = args_object(args)?
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .ok_or(ERR_INVALID)?;
+    let evaluations = args_object(args)?
+        .get("evaluations")
+        .and_then(Value::as_array)
+        .ok_or(ERR_INVALID)?;
+    let mut actions = std::collections::HashMap::new();
+    for evaluation in evaluations {
+        let evaluation = evaluation.as_object().ok_or(ERR_INVALID)?;
+        let id = non_empty_str(evaluation.get("artifact_id")).ok_or(ERR_INVALID)?;
+        let action = evaluation
+            .get("policy_action")
+            .and_then(Value::as_str)
+            .and_then(GuardAction::from_canonical)
+            .ok_or(ERR_INVALID)?;
+        if actions.insert(id, action).is_some() {
+            return Err(ERR_INVALID);
+        }
+    }
+    let mut unavailable = Vec::new();
+    for artifact in artifacts {
+        let artifact = artifact.as_object().ok_or(ERR_INVALID)?;
+        let id = non_empty_str(artifact.get("artifact_id")).ok_or(ERR_INVALID)?;
+        let command = artifact.get("command").ok_or(ERR_INVALID)?;
+        if !command.is_null() && !command.is_string() {
+            return Err(ERR_INVALID);
+        }
+        let hook_identity = artifact.get("harness").and_then(Value::as_str) == Some("codex")
+            && artifact.get("artifact_type").and_then(Value::as_str) == Some("hook")
+            && artifact
+                .get("metadata")
+                .and_then(Value::as_object)
+                .and_then(|metadata| non_empty_str(metadata.get("codex_hook_identity")))
+                .is_some();
+        let needs_review = matches!(
+            actions.get(id),
+            Some(GuardAction::Review | GuardAction::RequireReapproval)
+        );
+        if needs_review
+            && !cfg!(unix)
+            && command.as_str().is_some_and(|value| !value.is_empty())
+            && !hook_identity
+        {
+            unavailable.push(id);
+        }
+    }
+    Ok(json!({
+        "available": unavailable.is_empty(),
+        "unavailable_artifact_ids": unavailable,
+        "reason_code": if unavailable.is_empty() { Value::Null } else { json!("consumer_launch_binding_unsupported_platform") },
+    }))
+}

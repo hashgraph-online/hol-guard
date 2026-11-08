@@ -162,6 +162,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "skill_content_risk" => detector::skill_content_risk(args),
         "current_authority_actions" => detector::current_authority_actions(args),
         "request_overrides" => detector::request_overrides(args),
+        "consumer_launch_review_capability" => detector::consumer_launch_review_capability(args),
         "claim_partition" => detector::claim_partition(args),
         "apply_detector_result" => evaluation::apply_detector_result(args),
         "preclaim_failure" => evaluation::preclaim_failure(args),

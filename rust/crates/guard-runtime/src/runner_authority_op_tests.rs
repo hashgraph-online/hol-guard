@@ -221,3 +221,63 @@ fn skill_content_risk_refuses_oversized_content() {
         Err(ERR_TOO_LARGE)
     );
 }
+
+#[test]
+fn consumer_launch_capability_matches_the_platform_binding_owner() {
+    let result = call(
+        "consumer_launch_review_capability",
+        &json!({"artifacts": [
+            {"artifact_id": "node", "command": "node", "harness": "codex", "artifact_type": "mcp_server"},
+            {"artifact_id": "absolute-node", "command": "C:\\Node\\node.exe", "harness": "codex", "artifact_type": "mcp_server"},
+            {"artifact_id": "skill", "command": null, "harness": "codex", "artifact_type": "skill"},
+            {"artifact_id": "hook", "command": "guard", "harness": "codex", "artifact_type": "hook", "metadata": {"codex_hook_identity": "bound"}}
+        ], "evaluations": [
+            {"artifact_id": "node", "policy_action": "require-reapproval"},
+            {"artifact_id": "absolute-node", "policy_action": "review"},
+            {"artifact_id": "skill", "policy_action": "review"},
+            {"artifact_id": "hook", "policy_action": "review"}
+        ]}),
+    );
+    assert_eq!(result["available"], cfg!(unix));
+    assert_eq!(
+        result["unavailable_artifact_ids"],
+        if cfg!(unix) {
+            json!([])
+        } else {
+            json!(["node", "absolute-node"])
+        }
+    );
+    let skills = call(
+        "consumer_launch_review_capability",
+        &json!({"artifacts": [
+            {"artifact_id": "skill", "command": null, "harness": "codex", "artifact_type": "skill"}
+        ], "evaluations": [{"artifact_id": "skill", "policy_action": "review"}]}),
+    );
+    assert_eq!(skills["available"], true);
+    assert!(dispatch(
+        "consumer_launch_review_capability",
+        &json!({"artifacts": [{"artifact_id": "bad", "command": 7}], "evaluations": []})
+    )
+    .is_err());
+}
+
+#[test]
+fn allowed_commands_do_not_disable_a_separate_skill_review() {
+    for action in ["allow", "warn", "block", "sandbox-required"] {
+        let result = call(
+            "consumer_launch_review_capability",
+            &json!({
+                "artifacts": [
+                    {"artifact_id": "node", "command": "node", "harness": "codex", "artifact_type": "mcp_server"},
+                    {"artifact_id": "skill", "command": null, "harness": "codex", "artifact_type": "skill"}
+                ],
+                "evaluations": [
+                    {"artifact_id": "node", "policy_action": action},
+                    {"artifact_id": "skill", "policy_action": "require-reapproval"}
+                ]
+            }),
+        );
+        assert_eq!(result["available"], true, "{action}");
+        assert_eq!(result["unavailable_artifact_ids"], json!([]), "{action}");
+    }
+}

@@ -2879,6 +2879,19 @@ def test_codex_node_repl_and_five_skills_allow_once_rechecks_exact_context(
         interactive_resolver=allow_once,
         current_config_provider=lambda: config,
     )
+    if os.name == "nt":
+        # Windows deliberately retains an unproven entrypoint nonce. Explain
+        # the unavailable route before asking for approvals that cannot run.
+        assert reviewed == []
+        assert launches == []
+        assert result["blocked"] is True
+        assert result["launched"] is False
+        assert result["approval_capability"]["available"] is False
+        assert result["approval_capability"]["unavailable_artifact_ids"] == [server.artifact_id]
+        assert result["approval_capability"]["reason_code"] == "consumer_launch_binding_unsupported_platform"
+        assert "No launch approval is available" in result["review_hint"]
+        assert len(store.list_receipts(limit=10)) == 6
+        return
     assert len(reviewed) == 6
     assert result["blocked"] is change_server_after_review, result
     assert result["launched"] is not change_server_after_review, result

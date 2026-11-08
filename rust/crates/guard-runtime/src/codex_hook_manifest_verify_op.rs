@@ -109,6 +109,10 @@ pub(crate) fn evaluate_request(request: &CodexHookManifestVerifyRequestV1) -> Va
     json!({ "state": state, "private_group_questions": questions })
 }
 
+#[path = "codex_hook_manifest_launch_files.rs"]
+mod launch_files;
+pub(crate) use launch_files::authenticated_launch_files;
+
 struct Verifier<'a> {
     request: &'a CodexHookManifestVerifyRequestV1,
     /// Which managed events hold their authenticated group, as far as the

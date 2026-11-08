@@ -340,7 +340,7 @@ pub(crate) fn route_response(text: &str, event_name: &str) -> Route {
 }
 
 /// The full native decision for one hook, given its config argument.
-pub(crate) fn route_hook(
+fn route_hook(
     config: &BridgeConfig,
     raw_data: &str,
     input_ready: Instant,
@@ -387,8 +387,30 @@ fn write_stdout(text: &str) {
         .and_then(|()| stdout.flush());
 }
 
-/// `guard-runtime codex-hook-bridge <python argv...> <config>`: the exit
-/// code Codex sees.
+/// The only production entrance to routing. Keep registration authentication
+/// ahead of ingress recording, daemon IPC, restart, and contained fallback.
+fn registered_route(
+    config: &BridgeConfig,
+    data: &str,
+    ready: Instant,
+    argv: &[String],
+) -> (Route, Option<Prepared>) {
+    let prepared = match prepare(data, &config.hook_timeouts) {
+        Ok(value) => value,
+        Err(Unprepared::Refused(event)) => return (Route::Respond(fail_closed(&event)), None),
+    };
+    if registration::authenticate(config, argv, ready + prepared.timeout, &prepared.event_name)
+        .is_none()
+    {
+        return (
+            Route::Respond(fail_closed(&prepared.event_name)),
+            Some(prepared),
+        );
+    }
+    route_hook(config, data, ready)
+}
+
+/// `guard-runtime codex-hook-bridge <python argv...> <config>`: the exit code Codex sees.
 pub(crate) fn run(python_argv: &[String]) -> i32 {
     let mut raw = Vec::new();
     let read = io::stdin()
@@ -413,7 +435,7 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
         return 0;
     };
     let input_ready = Instant::now();
-    match route_hook(&config, &raw_data, input_ready) {
+    match registered_route(&config, &raw_data, input_ready, python_argv) {
         (Route::Respond(text), _) => {
             write_stdout(&text);
             0
@@ -456,6 +478,8 @@ pub(crate) mod contain;
 mod handoff;
 #[path = "codex_hook_bridge_observation.rs"]
 mod observation;
+#[path = "codex_hook_bridge_registration.rs"]
+pub(crate) mod registration;
 #[path = "codex_hook_bridge_restart.rs"]
 mod restart;
 

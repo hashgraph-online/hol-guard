@@ -119,7 +119,7 @@ def test_frozen_windows_launcher_preserves_multiple_arguments(tmp_path: Path) ->
     captured = capture_path.read_text(encoding="utf-8").strip()
     assert "run-shim" in captured
     assert str(workspace) in captured
-    assert '-- --help "prompt with spaces"' in captured
+    assert '"--" --help "prompt with spaces"' in captured
 
 
 def _generated_shim(executable: str, tmp_path: Path) -> str:

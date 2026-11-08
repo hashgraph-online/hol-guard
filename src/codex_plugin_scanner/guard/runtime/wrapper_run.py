@@ -17,6 +17,7 @@ from .approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
 )
+from .consumer_launch_capability import _copy_approval_metadata, consumer_launch_review_capability
 from .guard_run_evaluation import (
     _detection_with_prompt_artifacts,
     _evaluation_with_action_envelope,
@@ -32,22 +33,6 @@ from .guard_run_launch import (
 )
 from .guard_run_receipts import _append_authority_evidence_to_receipts, _receipt_rowid_cursor
 from .wrapper_run_finish import finish_guard_run
-
-_APPROVAL_METADATA_KEYS = (
-    "approval_center_url",
-    "approval_delivery",
-    "approval_queue_unavailable",
-    "approval_requests",
-    "approval_wait",
-    "daemon_queue_unavailable",
-    "review_hint",
-)
-
-
-def _copy_approval_metadata(target: dict[str, Any], resolved: Mapping[str, Any]) -> None:
-    for key in _APPROVAL_METADATA_KEYS:
-        if key in resolved:
-            target[key] = resolved[key]
 
 
 def _detector_pass(
@@ -161,11 +146,15 @@ def _guard_run_bound(
     if evaluation["blocked"]:
         evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
 
+    unavailable_capability = (
+        consumer_launch_review_capability(detection, evaluation) if evaluation["blocked"] and not dry_run else {}
+    )
     resolved_evaluation: dict[str, Any] | None = None
     trusted_request_overrides: dict[str, str] = {}
     trusted_request_override_labels: dict[str, str] = {}
     if (
         not dry_run
+        and not unavailable_capability
         and authoritative_detector_block is None
         and interactive_resolver is not None
         and evaluation["blocked"]
@@ -175,7 +164,11 @@ def _guard_run_bound(
             resolved_evaluation
         )
     elif (
-        not dry_run and authoritative_detector_block is None and blocked_resolver is not None and evaluation["blocked"]
+        not dry_run
+        and not unavailable_capability
+        and authoritative_detector_block is None
+        and blocked_resolver is not None
+        and evaluation["blocked"]
     ):
         resolved_evaluation = blocked_resolver(detection, evaluation)
         trusted_request_overrides = _authority.exact_request_overrides(resolved_evaluation)
@@ -484,6 +477,7 @@ def _guard_run_bound(
                     )
                 if resolved_evaluation is not None:
                     _copy_approval_metadata(evaluation, resolved_evaluation)
+    evaluation.update(unavailable_capability)
     return finish_guard_run(
         evaluation,
         detection=detection,

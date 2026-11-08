@@ -46,6 +46,15 @@ request the workspace scope is the repository identity plus the dependency
 graph, so a workspace allow also answers the identical install in a linked
 worktree of the same repository.
 
+The Windows `guard run` consumer route cannot currently bind a command's
+entrypoint for approval reuse. Its native launch identity retains a fresh
+unproven-entrypoint nonce on every evaluation. Guard reports that capability
+as unavailable before prompting or queueing a launch approval, and keeps the
+launch blocked. The native Codex hook identity route and command-less skills
+are separate capabilities; this limitation does not disable those hooks.
+Inspect the configuration with `hol-guard diff <harness>` and use a platform
+with supported consumer launch binding rather than weakening Guard policy.
+
 Only terminal verdicts are excluded. `block`, `sandbox-required` and `allow`
 are not reviews, so there is nothing to approve.
 
