@@ -150,7 +150,8 @@ pub(super) fn mapped(
     until: Instant,
 ) -> Option<Rendered> {
     let sought = sought(walk, terms, quoted);
-    if sought.is_empty() {
+    // A file the prompt names is mapped by its outline when nothing else is.
+    if sought.is_empty() && named(prompt).is_empty() {
         return None;
     }
     let files: Vec<String> = walk.files.iter().chain(&walk.tests).cloned().collect();
@@ -279,7 +280,7 @@ pub(super) fn map(
 fn file<'a>(path: &'a str, text: &'a str) -> File<'a> {
     let lines: Vec<&str> = text.lines().collect();
     let sections = sections(path, &lines);
-    let parent = parents(&sections);
+    let parent = more::parents(&sections);
     File {
         path,
         kind: kind(path),
@@ -287,33 +288,6 @@ fn file<'a>(path: &'a str, text: &'a str) -> File<'a> {
         sections,
         parent,
     }
-}
-
-/// The smallest section holding each one, in one pass: visited by start, a
-/// section's parent is the innermost still-open section around it.
-fn parents(sections: &[Section]) -> Vec<Option<usize>> {
-    let mut order: Vec<usize> = (0..sections.len()).collect();
-    order.sort_by_key(|&at| (sections[at].start, std::cmp::Reverse(sections[at].end)));
-    let mut parent = vec![None; sections.len()];
-    let mut open: Vec<usize> = Vec::new();
-    for at in order {
-        while open
-            .last()
-            .is_some_and(|&outer| !around(&sections[outer], &sections[at]))
-        {
-            open.pop();
-        }
-        parent[at] = open.last().copied();
-        open.push(at);
-    }
-    parent
-}
-
-/// Whether `outer` holds `inner` and is larger.
-fn around(outer: &Section, inner: &Section) -> bool {
-    outer.start <= inner.start
-        && inner.end <= outer.end
-        && (outer.start, outer.end) != (inner.start, inner.end)
 }
 
 struct Pick {
@@ -343,9 +317,12 @@ fn named_definitions(files: &[File], names: &[(&str, bool)], named: &[String]) -
     // A file the prompt names holds the definition it means, even one named
     // like a test file (`src/jinja2/tests.py`).
     let in_named = |file: &File| more::named_in(file.path, named);
-    let best = |name: &str, member: bool| {
+    // Sample code holds a word the prompt only mentions in passing, but not
+    // a name it writes as code.
+    let best = |name: &str, member: bool, shaped: bool| {
         (files.iter().enumerate())
             .filter(|(_, file)| file.kind == Kind::Source || in_named(file))
+            .filter(|(_, file)| shaped || !more::sample(file.path))
             .filter_map(|(index, file)| {
                 let at = if member {
                     more::member(file, name, names)
@@ -369,7 +346,8 @@ fn named_definitions(files: &[File], names: &[(&str, bool)], named: &[String]) -
     };
     let mut picks: Vec<Pick> = Vec::new();
     for &(name, shaped) in names {
-        let found = best(name, false).or_else(|| shaped.then(|| best(name, true)).flatten());
+        let found = (best(name, false, shaped))
+            .or_else(|| shaped.then(|| best(name, true, shaped)).flatten());
         if let Some((file, at)) = found {
             if !picks.iter().any(|pick| pick.file == file && pick.at == at) {
                 picks.push(Pick {
@@ -378,6 +356,15 @@ fn named_definitions(files: &[File], names: &[(&str, bool)], named: &[String]) -
                     base: false,
                 });
             }
+        }
+    }
+    if picks.is_empty() {
+        for (file, item) in files.iter().enumerate().filter(|(_, item)| in_named(item)) {
+            picks.extend(more::outline(item).map(|at| Pick {
+                file,
+                at,
+                base: false,
+            }));
         }
     }
     let mut bases = Vec::new();

@@ -1,7 +1,7 @@
 //! The rest of the prompt map: the test files that already test what the
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
-use super::super::sections::{headed_sections, marked_test, written_name};
+use super::super::sections::{headed_sections, marked_test, written_name, Section};
 use super::{Asked, File, Kind};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
@@ -14,6 +14,8 @@ const MAX_DOCS: usize = 4;
 /// A doc section this long is a whole page, not the part about the request.
 const MAX_DOC_SECTION: usize = 200;
 const MAX_TITLE_CHARS: usize = 60;
+/// How many of a named file's definitions stand in for its outline.
+const MAX_OUTLINE: usize = 8;
 /// How much a long doc section is marked down, as BM25's `k1`.
 const LENGTH_K: f64 = 1.2;
 
@@ -47,6 +49,15 @@ pub(super) fn member(file: &File, name: &str, names: &[(&str, bool)]) -> Option<
 }
 
 /// Whether `path` is in a folder of examples or demos.
+/// The first top-level definitions of a file the prompt names, for a prompt
+/// that names nothing in it: a file name gives no search words, so its
+/// outline is what the map can point at.
+pub(super) fn outline<'a>(file: &'a File) -> impl Iterator<Item = usize> + 'a {
+    (0..file.sections.len())
+        .filter(|&at| file.parent[at].is_none() && file.sections[at].name.is_some())
+        .take(MAX_OUTLINE)
+}
+
 pub(super) fn sample(path: &str) -> bool {
     (path.split('/').rev().skip(1)).any(|folder| {
         matches!(
@@ -321,4 +332,31 @@ pub(super) fn named_in(path: &str, named: &[String]) -> bool {
         let wanted = wanted.to_lowercase();
         name == wanted || lower == wanted || lower.ends_with(&format!("/{wanted}"))
     })
+}
+
+/// The smallest section holding each one, in one pass: visited by start, a
+/// section's parent is the innermost still-open section around it.
+pub(super) fn parents(sections: &[Section]) -> Vec<Option<usize>> {
+    let mut order: Vec<usize> = (0..sections.len()).collect();
+    order.sort_by_key(|&at| (sections[at].start, std::cmp::Reverse(sections[at].end)));
+    let mut parent = vec![None; sections.len()];
+    let mut open: Vec<usize> = Vec::new();
+    for at in order {
+        while open
+            .last()
+            .is_some_and(|&outer| !around(&sections[outer], &sections[at]))
+        {
+            open.pop();
+        }
+        parent[at] = open.last().copied();
+        open.push(at);
+    }
+    parent
+}
+
+/// Whether `outer` holds `inner` and is larger.
+fn around(outer: &Section, inner: &Section) -> bool {
+    outer.start <= inner.start
+        && inner.end <= outer.end
+        && (outer.start, outer.end) != (inner.start, inner.end)
 }

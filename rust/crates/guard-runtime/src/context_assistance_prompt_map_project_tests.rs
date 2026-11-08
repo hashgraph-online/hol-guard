@@ -119,7 +119,8 @@ CHANGES.rst describes everything.";
 /// code is a named definition, and a rename lists every call to it, single
 /// lines included; a file the prompt names wins over another defining the same
 /// name, even when it is named like a test file; and the file's folders are not
-/// searched for as words.
+/// searched for as words. A file named alone maps by its outline, and a plain
+/// word is placed in source, not in an example defining it too.
 #[test]
 fn everyday_prompts_reach_the_definition_they_mean() {
     let compiler =
@@ -139,6 +140,11 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         (
             "src/pkg/tests.py",
             "def test_undefined(value):\n    return value is None\n",
+        ),
+        ("src/pkg/parse.py", "def parse(text):\n    return text\n"),
+        (
+            "examples/aliases/parse.py",
+            "def parse(text):\n    return text\n",
         ),
     ];
     let (home, _project, root) = project(ON, &list);
@@ -169,4 +175,12 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         "{text}"
     );
     assert!(!text.contains("'src'") && !text.contains("'pkg'"), "{text}");
+    let text = map("Look at src/pkg/termui.py and add examples.");
+    assert!(
+        text.contains("\nsrc/pkg/termui.py:1-2 def getchar"),
+        "{text}"
+    );
+    let text = map("Make parse strip whitespace before returning.");
+    assert!(text.contains("\nsrc/pkg/parse.py:1-2 def parse"), "{text}");
+    assert!(!text.contains("examples/aliases/parse.py:1-2"), "{text}");
 }
