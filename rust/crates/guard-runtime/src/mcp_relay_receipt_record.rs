@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 const KIND: &str = "mcp_tool_call";
 /// The harnesses whose MCP proxy the relay replaces.
 const RELAY_HARNESSES: [&str; 6] = ["cline", "codex", "copilot", "cursor", "hermes", "opencode"];
-const RECORD_KEYS: [&str; 10] = [
+pub(super) const RECORD_KEYS: [&str; 10] = [
     "kind",
     "harness",
     "outcome",
@@ -95,7 +95,7 @@ const GUARD_ACTIONS: [&str; 6] = [
     "sandbox-required",
     "block",
 ];
-const FORWARD_ACTIONS: [&str; 2] = ["allow", "warn"];
+pub(super) const FORWARD_ACTIONS: [&str; 2] = ["allow", "warn"];
 /// A policy block, and the two refusals of the client's inline prompt.
 const BLOCK_SOURCES: [&str; 3] = ["policy-block", "inline-denied", "inline-invalid"];
 /// `_NON_EXECUTED_TOOL_CALL_TAXONOMY`: the event and provenance of a block.
@@ -179,12 +179,11 @@ impl Plain<'_> {
 
 pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     let record = record.as_object()?;
-    if !RECORD_KEYS.iter().all(|key| record.contains_key(*key))
-        || record.keys().any(|key| {
-            ![APPEND_KEY, APPROVAL_KEY, REVIEW_KEY].contains(&key.as_str())
-                && !RECORD_KEYS.contains(&key.as_str())
-        })
-    {
+    if !keys_fit(
+        record,
+        &RECORD_KEYS,
+        &[APPEND_KEY, APPROVAL_KEY, REVIEW_KEY],
+    ) {
         return None;
     }
     // An ask block whose desktop notice the resident raised; one still
@@ -207,41 +206,91 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         Some(Value::Array(items)) if items.iter().all(Value::is_object) => items.as_slice(),
         Some(_) => return None,
     };
-    let text = |key: &str| record.get(key).and_then(Value::as_str);
-    let harness = text("harness").filter(|harness| RELAY_HARNESSES.contains(harness))?;
-    if queued && harness == BROWSER_APPROVAL_HARNESS {
+    let call = relayed(record, KIND)?;
+    if queued && call.harness == BROWSER_APPROVAL_HARNESS {
         return None;
     }
-    let source = text("decision_source")?;
-    let policy_action = text("policy_action")?;
-    let tool_name = text("tool_name")?;
-    let params = &record["params"];
-    if text("kind") != Some(KIND)
-        || !params.is_object()
-        || params.get("name").and_then(Value::as_str) != Some(tool_name)
-    {
-        return None;
-    }
-    let forward = match text("outcome")? {
-        "forward" if !queued && !reviewed && FORWARD_ACTIONS.contains(&policy_action) => true,
+    let forward = match call.outcome {
+        "forward" if !queued && !reviewed && FORWARD_ACTIONS.contains(&call.policy_action) => true,
         "block"
-            if block_taxonomy(policy_action).is_some()
-                && block_source_fits(queued, reviewed, source) =>
+            if block_taxonomy(call.policy_action).is_some()
+                && block_source_fits(queued, reviewed, call.source) =>
         {
             false
         }
         _ => return None,
     };
-    let identity = exact_object(&record["identity"], &IDENTITY_KEYS)?;
-    let artifact = exact_object(&identity["artifact"], &ARTIFACT_KEYS)?;
-    let artifact_hash = identity["artifact_hash"]
-        .as_str()
-        .filter(|hash| hash.starts_with(TOKEN_PREFIX))?;
+    let artifact = call.artifact;
     // Without it the proxy enriches the artifact first, which the daemon does.
     let firewall = artifact["metadata"]
         .as_object()?
         .get("mcpSkillFirewall")
         .filter(|firewall| firewall.is_object())?;
+    let projected_risk = if queued || reviewed {
+        Some(risk_input(artifact, call.params, &record["arguments"])?)
+    } else {
+        None
+    };
+    Some(Plain {
+        harness: call.harness,
+        forward,
+        source: call.source,
+        policy_action: call.policy_action,
+        tool_name: call.tool_name,
+        params: call.params,
+        artifact,
+        artifact_hash: call.artifact_hash,
+        firewall,
+        decision: call.decision,
+        append,
+        projected_risk,
+        review,
+    })
+}
+
+/// The fields every relayed call's record carries, tool or package.
+pub(super) struct Relayed<'a> {
+    pub(super) harness: &'a str,
+    pub(super) outcome: &'a str,
+    pub(super) source: &'a str,
+    pub(super) policy_action: &'a str,
+    pub(super) tool_name: &'a str,
+    pub(super) params: &'a Value,
+    /// The tool call's own artifact, from its identity.
+    pub(super) artifact: &'a Map<String, Value>,
+    pub(super) artifact_hash: &'a str,
+    pub(super) decision: &'a Map<String, Value>,
+}
+
+/// Whether `record` has every one of `keys` and nothing beyond `optional`.
+pub(super) fn keys_fit(record: &Map<String, Value>, keys: &[&str], optional: &[&str]) -> bool {
+    keys.iter().all(|key| record.contains_key(*key))
+        && record
+            .keys()
+            .all(|key| keys.contains(&key.as_str()) || optional.contains(&key.as_str()))
+}
+
+/// The shared fields of a `kind` record, as `_decode`, `_decision` and
+/// `_ordered_params` read them.
+pub(super) fn relayed<'a>(record: &'a Map<String, Value>, kind: &str) -> Option<Relayed<'a>> {
+    let text = |key: &str| record.get(key).and_then(Value::as_str);
+    let harness = text("harness").filter(|harness| RELAY_HARNESSES.contains(harness))?;
+    let outcome = text("outcome")?;
+    let source = text("decision_source")?;
+    let policy_action = text("policy_action")?;
+    let tool_name = text("tool_name")?;
+    let params = &record["params"];
+    if text("kind") != Some(kind)
+        || !params.is_object()
+        || params.get("name").and_then(Value::as_str) != Some(tool_name)
+    {
+        return None;
+    }
+    let identity = exact_object(&record["identity"], &IDENTITY_KEYS)?;
+    let artifact = exact_object(&identity["artifact"], &ARTIFACT_KEYS)?;
+    let artifact_hash = identity["artifact_hash"]
+        .as_str()
+        .filter(|hash| hash.starts_with(TOKEN_PREFIX))?;
     if !identity["runtime_private_metadata"].is_object()
         || !string_list(&identity["risk_categories"])
         || artifact["harness"].as_str() != Some(harness)
@@ -258,25 +307,16 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     if !decision_fits(decision) || !arguments_fit(params, &record["arguments"]) {
         return None;
     }
-    let projected_risk = if queued || reviewed {
-        Some(risk_input(artifact, params, &record["arguments"])?)
-    } else {
-        None
-    };
-    Some(Plain {
+    Some(Relayed {
         harness,
-        forward,
+        outcome,
         source,
         policy_action,
         tool_name,
         params,
         artifact,
         artifact_hash,
-        firewall,
         decision,
-        append,
-        projected_risk,
-        review,
     })
 }
 
@@ -414,7 +454,7 @@ fn strings(value: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn string_list(value: &Value) -> bool {
+pub(super) fn string_list(value: &Value) -> bool {
     value
         .as_array()
         .is_some_and(|items| items.iter().all(Value::is_string))
