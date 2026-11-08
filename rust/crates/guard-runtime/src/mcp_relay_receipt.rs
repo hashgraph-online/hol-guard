@@ -10,9 +10,10 @@
 //! the page that skipped it. A plain record is a forward, a policy block, a
 //! refused inline prompt, a safe-alternative block or an ask block whose
 //! identity carries its firewall evidence. The resident raises an ask block's
-//! desktop notice itself as soon as it writes the request, so for a harness
-//! whose approval flow never opens the browser its receipt is all that is left
-//! to write. A safe-alternative block's silent inbox row follows its receipt
+//! desktop notice itself as soon as it writes the request, so its receipt is
+//! all that is left to write: the daemon's `_maybe_open_approval_center` opens
+//! nothing for a relayed call, whose surface policy is `attention-aware` or
+//! `native-only`. A safe-alternative block's silent inbox row follows its receipt
 //! through the same `queue_blocked_approvals` store operation the daemon's
 //! `record_unprompted_review` calls. A relayed package call's forward,
 //! observed forward, policy block or ask block is plain too: its receipt is
@@ -20,9 +21,8 @@
 //! rebuilds from the record (`mcp_relay_receipt_package.rs`).
 //!
 //! Everything else is still drained to the daemon: a remembered allow writes
-//! the daemon's policy, an ask block whose notice the resident could not read
-//! still carries it, and an ask block from a harness whose approval flow opens
-//! the approval center in the browser still needs the daemon to open it.
+//! the daemon's policy, and an ask block whose notice the resident could not
+//! read still carries it.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an

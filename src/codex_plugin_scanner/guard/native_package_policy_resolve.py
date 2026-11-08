@@ -27,8 +27,8 @@ _SAVED_ACTIONS = frozenset({"allow", "block"})
 _VERDICT_KEYS = ("decision", "risk_summary", "user_copy", "record_monitor_evidence")
 # How many times one install reads a saved allow's authority, and the local
 # claims that read it again when the revision moved. A daemon claim carries
-# the daemon's own authority instead. Guard settles up to
-# REVIEW_LEASE_BATCH_SIZE Cloud Review jobs at once, and each sibling moves the
+# the daemon's own authority instead. Guard settles up to one Cloud Review job
+# per drain worker plus the main worker's at once, and each sibling moves the
 # revision twice (storing its allow, then its own install claiming it), so an
 # install can need two reads per job.
 _AUTHORITY_READS = 16
