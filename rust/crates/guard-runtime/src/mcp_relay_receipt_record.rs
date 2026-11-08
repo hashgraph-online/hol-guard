@@ -35,6 +35,13 @@ const APPROVAL_KEYS: [&str; 5] = [
 ];
 /// An ask block's decision source.
 const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
+/// The inbox row a safe-alternative block adds, `_redaction_level`.
+const REVIEW_KEY: &str = "review";
+const REDACTION_LEVELS: [&str; 3] = ["full", "partial", "none"];
+/// A safe-alternative block's decision source.
+const SAFE_ALTERNATIVE_SOURCE: &str = "policy-safe-alternative";
+/// `_needs_review`: the actions `queue_blocked_approvals` writes a row for.
+const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
 /// The relay harness whose approval flow opens the approval center in the
 /// browser (`approval-center` tier, `auto_open_browser`), which the daemon's
 /// `_open_approval_center` still does for an ask block.
@@ -126,26 +133,45 @@ pub(super) struct Plain<'a> {
     pub(super) firewall: &'a Value,
     pub(super) decision: &'a Map<String, Value>,
     pub(super) append: &'a [Value],
-    /// An ask block's risk input: the proxy projects a queued call with its
-    /// artifact for the receipt's risk categories.
-    pub(super) queued_risk: Option<McpToolRiskInputV1>,
+    /// An ask or safe-alternative block's risk input: the proxy projects a
+    /// queued call with its artifact for the receipt's risk categories.
+    pub(super) projected_risk: Option<McpToolRiskInputV1>,
+    /// A safe-alternative block's redaction level, which its inbox row is
+    /// written with.
+    pub(super) redaction_level: Option<&'a str>,
 }
 
 impl Plain<'_> {
-    /// The receipt's risk categories: a queued call's projected ones, else
-    /// the decision's.
-    pub(super) fn risk_categories(&self) -> Option<Vec<String>> {
-        let Some(risk) = &self.queued_risk else {
-            return Some(strings(&self.decision["risk_categories"]));
+    /// The call projected with its artifact when the proxy projects it so,
+    /// and `Some(None)` when it does not.
+    pub(super) fn projected(&self) -> Option<Option<Value>> {
+        let Some(risk) = &self.projected_risk else {
+            return Some(None);
         };
-        let projected = crate::mcp_proxy_projection::call_projection(&McpCallProjectionQueryV1 {
+        crate::mcp_proxy_projection::call_projection(&McpCallProjectionQueryV1 {
             tool_name: self.tool_name.to_owned(),
             params: self.params.clone(),
             risk: Some(risk.clone()),
         })
-        .ok()?;
+        .ok()
+        .map(Some)
+    }
+
+    /// The receipt's risk categories: the projected ones, else the
+    /// decision's.
+    pub(super) fn risk_categories(&self, projected: Option<&Value>) -> Option<Vec<String>> {
+        let Some(projected) = projected else {
+            return Some(strings(&self.decision["risk_categories"]));
+        };
         let categories = projected.get("risk")?.get("risk_categories")?;
         string_list(categories).then(|| strings(categories))
+    }
+
+    /// The redaction level of the inbox row `queue_blocked_approvals` writes
+    /// for this block, if it writes one.
+    pub(super) fn silent_review(&self) -> Option<&str> {
+        self.redaction_level
+            .filter(|_| REVIEWABLE.contains(&self.policy_action))
     }
 }
 
@@ -153,7 +179,8 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     let record = record.as_object()?;
     if !RECORD_KEYS.iter().all(|key| record.contains_key(*key))
         || record.keys().any(|key| {
-            key != APPEND_KEY && key != APPROVAL_KEY && !RECORD_KEYS.contains(&key.as_str())
+            ![APPEND_KEY, APPROVAL_KEY, REVIEW_KEY].contains(&key.as_str())
+                && !RECORD_KEYS.contains(&key.as_str())
         })
     {
         return None;
@@ -165,6 +192,14 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         Some(approval) if approval_fits(approval) => true,
         Some(_) => return None,
     };
+    // Only a safe-alternative block carries its inbox row, and it must; an
+    // ask block's request answers the call instead.
+    let redaction_level = match record.get(REVIEW_KEY) {
+        None => None,
+        Some(_) if queued => return None,
+        Some(review) => Some(redaction_level(review)?),
+    };
+    let reviewed = redaction_level.is_some();
     let append = match record.get(APPEND_KEY) {
         None => &[][..],
         Some(Value::Array(items)) if items.iter().all(Value::is_object) => items.as_slice(),
@@ -186,8 +221,11 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         return None;
     }
     let forward = match text("outcome")? {
-        "forward" if !queued && FORWARD_ACTIONS.contains(&policy_action) => true,
-        "block" if block_taxonomy(policy_action).is_some() && block_source_fits(queued, source) => {
+        "forward" if !queued && !reviewed && FORWARD_ACTIONS.contains(&policy_action) => true,
+        "block"
+            if block_taxonomy(policy_action).is_some()
+                && block_source_fits(queued, reviewed, source) =>
+        {
             false
         }
         _ => return None,
@@ -218,7 +256,7 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     if !decision_fits(decision) || !arguments_fit(params, &record["arguments"]) {
         return None;
     }
-    let queued_risk = if queued {
+    let projected_risk = if queued || reviewed {
         Some(risk_input(artifact, params, &record["arguments"])?)
     } else {
         None
@@ -235,17 +273,29 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         firewall,
         decision,
         append,
-        queued_risk,
+        projected_risk,
+        redaction_level,
     })
 }
 
-/// `_block_source_fits` for a block with no inbox row.
-fn block_source_fits(queued: bool, source: &str) -> bool {
+/// `_block_source_fits`: whether a block's decision source fits its queue
+/// route.
+fn block_source_fits(queued: bool, reviewed: bool, source: &str) -> bool {
     if queued {
         source == APPROVAL_PENDING_SOURCE
+    } else if reviewed {
+        source == SAFE_ALTERNATIVE_SOURCE
     } else {
         BLOCK_SOURCES.contains(&source)
     }
+}
+
+/// `_redaction_level`: exactly `{"redaction_level": level}` with a known
+/// level.
+fn redaction_level(review: &Value) -> Option<&str> {
+    exact_object(review, &["redaction_level"])?["redaction_level"]
+        .as_str()
+        .filter(|level| REDACTION_LEVELS.contains(level))
 }
 
 /// `_queued_approval`, with no desktop notice left to raise.

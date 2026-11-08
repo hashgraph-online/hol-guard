@@ -8,16 +8,18 @@
 //! the record, so the resident writes it itself through the same
 //! `record_tool_call_evidence` store operation, once the daemon acknowledges
 //! the page that skipped it. A plain record is a forward, a policy block, a
-//! refused inline prompt or an ask block whose identity carries its firewall
-//! evidence. The resident raises an ask block's desktop notice itself as soon
-//! as it writes the request, so for a harness whose approval flow never opens
-//! the browser its receipt is all that is left to write.
+//! refused inline prompt, a safe-alternative block or an ask block whose
+//! identity carries its firewall evidence. The resident raises an ask block's
+//! desktop notice itself as soon as it writes the request, so for a harness
+//! whose approval flow never opens the browser its receipt is all that is left
+//! to write. A safe-alternative block's silent inbox row follows its receipt
+//! through the same `queue_blocked_approvals` store operation the daemon's
+//! `record_unprompted_review` calls.
 //!
 //! Everything else is still drained to the daemon: a remembered allow writes
-//! the daemon's policy, a safe-alternative block adds an inbox row, an ask
-//! block whose notice the resident could not read still carries it, and an
-//! ask block from a harness whose approval flow opens the approval center in
-//! the browser still needs the daemon to open it.
+//! the daemon's policy, an ask block whose notice the resident could not read
+//! still carries it, and an ask block from a harness whose approval flow opens
+//! the approval center in the browser still needs the daemon to open it.
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an
@@ -30,7 +32,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use guard_command::mcp_runtime_evidence::ArgumentEntry;
 use guard_contracts::{
     canonical_utc_timestamp, write_json_string, GuardStoreRequestV1, McpCallProjectionQueryV1,
-    McpRuntimeEvidenceRequestV1, GUARD_STORE_REQUEST_SCHEMA,
+    McpRuntimeEvidenceRequestV1, McpToolCallArtifactV1, GUARD_STORE_REQUEST_SCHEMA,
     MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS, MCP_RUNTIME_EVIDENCE_PATH_ARGUMENT_KEYS,
     MCP_RUNTIME_EVIDENCE_REQUEST_SCHEMA,
 };
@@ -70,8 +72,13 @@ const POLICY_SOURCES: [&str; 15] = [
     "auto-allow",
     "auto-block",
 ];
+const RECEIPT_METHOD: &str = "record_tool_call_evidence";
+const QUEUE_METHOD: &str = "queue_blocked_approvals";
 /// `GuardStore`'s default `guard_event_queue_limit`.
 const EVENT_QUEUE_LIMIT: u64 = 1_000;
+
+/// A record, its receipt's store arguments and its silent inbox row's.
+type Composed = (Value, Map<String, Value>, Option<Map<String, Value>>);
 
 /// One writer at a time, so two drains never contend for the store.
 static WRITER: Mutex<()> = Mutex::new(());
@@ -120,11 +127,11 @@ fn take(slot: &Mutex<Option<Vec<Value>>>) -> Vec<Value> {
 /// stayed closed, or a write that failed. Records that are not plain are
 /// dropped.
 pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
-    let composed: Vec<(Value, Map<String, Value>)> = records
+    let composed: Vec<Composed> = records
         .into_iter()
         .filter_map(|record| {
-            let args = compose(guard_home, &record, &Stamp::fresh()?)?;
-            Some((record, args))
+            let (receipt, row) = compose(guard_home, &record, &Stamp::fresh()?)?;
+            Some((record, receipt, row))
         })
         .collect();
     if composed.is_empty() {
@@ -143,8 +150,17 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
         let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
         composed
             .into_iter()
-            .filter_map(|(record, args)| {
-                (!store(guard_home, busy_timeout_ms, args)).then_some(record)
+            .filter_map(|(record, receipt, row)| {
+                if !store(guard_home, busy_timeout_ms, RECEIPT_METHOD, receipt) {
+                    return Some(record);
+                }
+                // After the receipt, as the proxy writes them. A row the store
+                // cannot take leaves the block without one, as
+                // `record_unprompted_review` does.
+                if let Some(row) = row {
+                    store(guard_home, busy_timeout_ms, QUEUE_METHOD, row);
+                }
+                None
             })
             .collect()
     };
@@ -152,14 +168,14 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
     unwritten
 }
 
-fn records_of(composed: Vec<(Value, Map<String, Value>)>) -> Vec<Value> {
-    composed.into_iter().map(|(record, _)| record).collect()
+fn records_of(composed: Vec<Composed>) -> Vec<Value> {
+    composed.into_iter().map(|(record, ..)| record).collect()
 }
 
-/// Whether the receipt is in the store: a failure after the commit (the
-/// outbox generation read) leaves it written, so the daemon must not write it
-/// again under a fresh receipt id.
-fn store(guard_home: &str, busy_timeout_ms: u64, args: Map<String, Value>) -> bool {
+/// Whether the write is in the store: a failure after the commit (the
+/// outbox generation read) leaves it written, so the daemon must not write a
+/// receipt again under a fresh receipt id.
+fn store(guard_home: &str, busy_timeout_ms: u64, method: &str, args: Map<String, Value>) -> bool {
     let (outcome, committed) = crate::guard_store_op::evaluate_committing(&GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "mcp-relay-receipt".to_owned(),
@@ -168,7 +184,7 @@ fn store(guard_home: &str, busy_timeout_ms: u64, args: Map<String, Value>) -> bo
             .to_string_lossy()
             .into_owned(),
         guard_home: guard_home.to_owned(),
-        method: "record_tool_call_evidence".to_owned(),
+        method: method.to_owned(),
         source: "mcp-relay".to_owned(),
         busy_timeout_ms,
         args,
@@ -322,20 +338,32 @@ fn receipt_evidence(
 }
 
 /// The `record_tool_call_evidence` arguments `allow_tool_call` or
-/// `block_tool_call` writes for this record.
-fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Map<String, Value>> {
+/// `block_tool_call` writes for this record, and the silent inbox row a
+/// safe-alternative block adds after it.
+fn compose(
+    guard_home: &str,
+    record: &Value,
+    stamp: &Stamp,
+) -> Option<(Map<String, Value>, Option<Map<String, Value>>)> {
     let plain = plain(record)?;
     let artifact = plain.artifact;
     let name = artifact["name"].as_str()?;
     let config_path = artifact["config_path"].as_str()?;
     let artifact_id = artifact["artifact_id"].as_str()?;
     let signals = strings(&plain.decision["signals"]);
-    let risk_categories = plain.risk_categories()?;
+    let projected = plain.projected()?;
+    let risk_categories = plain.risk_categories(projected.as_ref())?;
     let (raw_command_text, firewall_evidence) =
         receipt_evidence(guard_home, &plain, stamp, &risk_categories)?;
+    // `(*tool_decision_scanner_evidence(decision), *evidence_append)`, which
+    // the inbox row records as well.
+    let mut call_evidence = decision_evidence(plain.decision);
+    call_evidence.extend(plain.append.iter().cloned());
+    let row = projected
+        .as_ref()
+        .and_then(|projected| silent_review(guard_home, &plain, projected, &call_evidence, stamp));
     let mut scanner_evidence = vec![firewall_evidence];
-    scanner_evidence.extend(decision_evidence(plain.decision));
-    scanner_evidence.extend(plain.append.iter().cloned());
+    scanner_evidence.extend(call_evidence);
     let (event_name, provenance_summary, user_override) = if plain.forward {
         (
             "runtime_tool_call_allowed",
@@ -411,7 +439,47 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Map<String
         )?),
     );
     args.insert("event_occurred_at".to_owned(), json!(stamp.now));
-    Some(args)
+    Some((args, row))
+}
+
+/// `_record_unprompted_review`: the `queue_blocked_approvals` arguments of a
+/// safe-alternative block's inbox row, written with no prompt shown and the
+/// daemon's own loopback origin as `silent_review_center_url` gives it. A
+/// row that cannot be composed is left out, and the receipt still written.
+fn silent_review(
+    guard_home: &str,
+    plain: &Plain<'_>,
+    projected: &Value,
+    evidence: &[Value],
+    stamp: &Stamp,
+) -> Option<Map<String, Value>> {
+    let redaction_level = plain.silent_review()?;
+    let projection = crate::mcp_relay_decide::ask_row::projection(projected)?;
+    let artifact: McpToolCallArtifactV1 =
+        serde_json::from_value(Value::Object(plain.artifact.clone())).ok()?;
+    let center = crate::daemon_lifecycle_ports::daemon_url_for_home(guard_home);
+    // `str(Path.cwd())`, the writing process's, or null when it is gone.
+    let cwd = std::env::current_dir().map_or(Value::Null, |cwd| json!(cwd.to_string_lossy()));
+    let queue = crate::mcp_relay_decide::ask_row::Queue {
+        harness: plain.harness,
+        cwd,
+        prompt_shown: false,
+        center: &center,
+        now: &stamp.now,
+        redaction_level,
+    };
+    Some(crate::mcp_relay_decide::ask_row::silent_review_args(
+        &queue,
+        &artifact,
+        plain.artifact_hash,
+        &strings(&plain.decision["signals"])
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>(),
+        &projection,
+        plain.policy_action,
+        evidence.to_vec(),
+    ))
 }
 
 /// `_auto_diff_summary`.

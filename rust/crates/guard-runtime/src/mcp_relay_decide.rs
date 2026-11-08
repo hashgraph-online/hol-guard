@@ -999,7 +999,7 @@ fn provider_catalog_hash(
 #[path = "mcp_relay_decide_ask.rs"]
 mod ask;
 #[path = "mcp_relay_decide_ask_row.rs"]
-mod ask_row;
+pub(crate) mod ask_row;
 #[path = "mcp_relay_decide_claim.rs"]
 mod claim;
 pub(crate) use claim::claim;

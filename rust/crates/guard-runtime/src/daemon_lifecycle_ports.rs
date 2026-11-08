@@ -1,8 +1,11 @@
 //! Daemon port selection and start-timeout arithmetic.
 
+use std::collections::BTreeMap;
+use std::path::Path;
+
 use guard_contracts::{
     DaemonAdoptablePortsQueryV1, DaemonCandidatePortsQueryV1, DaemonConfiguredPortQueryV1,
-    DaemonStartTimeoutsQueryV1,
+    DaemonPlatformV1, DaemonStartTimeoutsQueryV1,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -55,6 +58,26 @@ fn configured_port(ctx: &Ctx, env_port: Option<&String>, guard_home: &str) -> i6
         Some(port) if port > 0 => port,
         _ => stable_port(ctx, guard_home),
     }
+}
+
+/// `guard_daemon_url_for_home` on this host: the loopback origin of the port
+/// this home's daemon is configured on, with the home resolved as the
+/// lifecycle's fact resolver resolves it.
+pub(crate) fn daemon_url_for_home(guard_home: &str) -> String {
+    let platform = if cfg!(windows) {
+        DaemonPlatformV1::Nt
+    } else {
+        DaemonPlatformV1::Posix
+    };
+    let key = norm_path(guard_home);
+    let mut facts = BTreeMap::new();
+    if Path::new(&key).is_absolute() {
+        let resolved = crate::claude_hook_bridge_url::resolve_absolute(&key);
+        facts.insert(format!("resolve:{key}"), Value::String(resolved));
+    }
+    let env_port = std::env::var("GUARD_DAEMON_PORT").ok();
+    let port = configured_port(&Ctx::new(platform, &facts), env_port.as_ref(), guard_home);
+    format!("http://127.0.0.1:{port}")
 }
 
 pub(crate) fn configured_port_result(ctx: &Ctx, query: &DaemonConfiguredPortQueryV1) -> Value {

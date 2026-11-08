@@ -68,7 +68,16 @@ fn stamp() -> Stamp {
 }
 
 fn composed(record: &Value) -> Map<String, Value> {
-    compose(HOME, record, &stamp()).expect("a plain record composes")
+    compose(HOME, record, &stamp())
+        .expect("a plain record composes")
+        .0
+}
+
+/// The silent inbox row a composed record adds, if any.
+fn row(record: &Value) -> Option<Map<String, Value>> {
+    compose(HOME, record, &stamp())
+        .expect("a plain record composes")
+        .1
 }
 
 fn edited(mut record: Value, edit: impl FnOnce(&mut Value)) -> Value {
@@ -232,7 +241,7 @@ fn an_ask_block_writes_the_pending_receipt_with_projected_risk() {
         crate::mcp_proxy_projection::call_projection(&guard_contracts::McpCallProjectionQueryV1 {
             tool_name: "run_command".to_owned(),
             params: record["params"].clone(),
-            risk: super::record::plain(&record).unwrap().queued_risk,
+            risk: super::record::plain(&record).unwrap().projected_risk,
         })
         .unwrap();
     let payload: Value =
@@ -242,6 +251,81 @@ fn an_ask_block_writes_the_pending_receipt_with_projected_risk() {
         projected["risk"]["risk_categories"]
     );
     assert_ne!(payload["risk_categories"], json!(["decision-only"]));
+}
+
+/// A safe-alternative block, which the proxy records with a silent inbox row.
+fn reviewed(record: Value) -> Value {
+    edited(record, |record| {
+        record["review"] = json!({"redaction_level": "full"});
+    })
+}
+
+#[test]
+fn a_safe_alternative_block_writes_its_receipt_then_a_silent_row() {
+    let record = reviewed(record("block", "policy-safe-alternative", "review"));
+    let args = composed(&record);
+    assert_eq!(args["receipt"]["approval_source"], "policy");
+    assert_eq!(args["receipt"]["policy_decision"], "review");
+    assert_eq!(args["inventory"]["approved"], false);
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    let projected =
+        crate::mcp_proxy_projection::call_projection(&guard_contracts::McpCallProjectionQueryV1 {
+            tool_name: "run_command".to_owned(),
+            params: record["params"].clone(),
+            risk: super::record::plain(&record).unwrap().projected_risk,
+        })
+        .unwrap();
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        payload["risk_categories"],
+        projected["risk"]["risk_categories"]
+    );
+
+    let row = row(&record).expect("a safe-alternative block adds a row");
+    assert_eq!(row["harness"], "codex");
+    assert_eq!(row["prompt_shown"], false);
+    assert_eq!(row["redaction_level"], "full");
+    assert_eq!(row["now"], stamp().now);
+    let center = row["approval_center_url"].as_str().unwrap();
+    let port = center
+        .strip_prefix("http://127.0.0.1:")
+        .expect("the daemon's loopback origin");
+    assert!(port.parse::<u16>().is_ok(), "{center}");
+    assert_eq!(row["continuation"]["harness"], "codex");
+    assert_eq!(row["continuation"]["now"], stamp().now);
+    let items = row["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    let artifacts = row["artifacts"].as_object().unwrap();
+    assert!(artifacts.contains_key("codex:project:shell:run_command"));
+    // The row records the decision's evidence without the firewall verdict.
+    assert!(items[0].get("scanner_evidence").is_none(), "{}", items[0]);
+}
+
+#[test]
+fn a_silent_row_carries_the_decision_and_appended_evidence() {
+    let record = edited(
+        reviewed(record(
+            "block",
+            "policy-safe-alternative",
+            "require-reapproval",
+        )),
+        |record| record["evidence_append"] = json!([{"source": "post_claim_check"}]),
+    );
+    let row = row(&record).expect("a reapproval block adds a row");
+    assert_eq!(
+        row["items"][0]["scanner_evidence"],
+        json!([{"source": "post_claim_check"}])
+    );
+}
+
+#[test]
+fn only_a_reviewable_safe_alternative_adds_a_row() {
+    let blocked = reviewed(record("block", "policy-safe-alternative", "block"));
+    assert!(is_plain(&blocked));
+    assert!(row(&blocked).is_none());
+    assert!(row(&record("block", "policy-block", "review")).is_none());
+    assert!(row(&asked(record("block", "approval-center-pending", "review"))).is_none());
 }
 
 #[test]
@@ -290,6 +374,23 @@ fn records_the_daemon_owns_are_not_plain() {
                 record["harness"] = json!("cline");
                 record["identity"]["artifact"]["harness"] = json!("cline");
             },
+        ),
+        // A safe-alternative block without its row is the daemon's to write.
+        record("block", "policy-safe-alternative", "review"),
+        reviewed(record("block", "policy-block", "review")),
+        reviewed(record("forward", "policy", "allow")),
+        reviewed(asked(record("block", "approval-center-pending", "review"))),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["redaction_level"] = json!("secret"),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"]["extra"] = json!(true),
+        ),
+        edited(
+            reviewed(record("block", "policy-safe-alternative", "review")),
+            |record| record["review"] = json!("full"),
         ),
         record("block", "policy-block", "allow"),
         edited(record("forward", "policy", "allow"), |record| {

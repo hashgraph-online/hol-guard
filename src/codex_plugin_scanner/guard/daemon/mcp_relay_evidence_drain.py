@@ -19,7 +19,9 @@ blocked-request mode is blocked by the resident, and its record carries the
 receipt redaction level the proxy's config binds. It is recorded as
 ``_queue_approval_center_response`` records it: the ``policy-safe-alternative``
 block receipt with the risk categories of the call projected with its
-artifact, then the silent inbox row ``record_unprompted_review`` writes.
+artifact, then the silent inbox row ``record_unprompted_review`` writes. A
+current resident writes both itself, so only an older resident still hands
+those records here.
 
 Under the ``ask`` mode the resident writes the call's approval request itself
 and blocks on it, so its record carries that request instead of an inbox row:
