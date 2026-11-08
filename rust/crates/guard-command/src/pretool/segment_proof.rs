@@ -407,6 +407,21 @@ pub(super) fn exact_safe_segment_with_context(
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
         "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
+        // Signal 0 is delivered to nothing. The kernel performs the
+        // permission check and returns, so `kill -0 4821` answers whether a
+        // process is still there and leaves it running -- the same question
+        // `ps -p 4821` asks, which is proven here already. A wait on a build
+        // or a server asks it on every pass, and the containment reading
+        // already admits this exact form for the same reason. An expansion
+        // stands for a number by the time the arguments are read, so
+        // `kill -0 $((-1))` would arrive as the pid `1` while the shell
+        // signals every process the user can reach; the operands this form
+        // admits are the words the caller wrote, so a segment carrying one
+        // is not among them.
+        "kill" => {
+            !segment.text.contains('$')
+                && super::workspace_contained::kill::liveness_only(&segment.arguments)
+        }
         "pg_isready" => super::safe_scalar::safe_pg_isready_arguments(&segment.arguments),
         "ls" => super::listing_reads::safe_listing_segment(
             &segment.text,
