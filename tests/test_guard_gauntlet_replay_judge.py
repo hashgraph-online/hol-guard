@@ -274,6 +274,13 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-rg-files-no-ignore-service-lane",
         "neg-rg-path-before-files-flag-credential-store",
         "neg-rg-replace-widens-home-search",
+        # A sed expression whose write, chained command or exec flag the
+        # substitution recognizer refuses: every operand stays inside the
+        # workspace, so a contained run writes and runs nothing outside it and
+        # the case pins the refusal rather than a prompt the sandbox never raises.
+        "neg-sed-substitute-chained-write-command",
+        "neg-sed-substitute-escaped-delimiter-exec-flag",
+        "neg-sed-substitute-second-expression-writes-a-file",
         # A `cat` that names a private key after a sibling run: the review stands,
         # and a contained run in the sibling root reaches no key at all.
         "neg-sibling-cd-jest-cat-reads-private-key",
