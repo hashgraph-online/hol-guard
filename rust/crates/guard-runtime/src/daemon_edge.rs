@@ -51,6 +51,9 @@ pub(crate) const EDGE_FEATURE: &str = "daemon-edge-v1";
 const MAX_ACTIVE_CONNECTIONS: usize = 256;
 const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const RELAY_THREAD_STACK: usize = 64 * 1024;
+// A connection thread may answer from the store, whose page projections need
+// far more than a relay pump.
+const CONNECTION_THREAD_STACK: usize = 2 * 1024 * 1024;
 const STALLED_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 
 const EXIT_USAGE: i32 = 2;
@@ -241,7 +244,7 @@ fn serve(
         let connection_reads = Arc::clone(&native_reads);
         let spawned = thread::Builder::new()
             .name("daemon-edge-conn".into())
-            .stack_size(RELAY_THREAD_STACK)
+            .stack_size(CONNECTION_THREAD_STACK)
             .spawn(move || {
                 serve_connection(client, upstream, stalled_write, &connection_reads);
                 relay_slots.release();
