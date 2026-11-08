@@ -1,10 +1,50 @@
 //! Where in source the prompt's rarer words and quoted text are: the
 //! functions holding them, with the lines they are on.
 use super::super::sections::Section;
-use super::{File, Kind, Sought, CHECK_EVERY};
+use super::{File, Kind, Sought, CHECK_EVERY, MAX_PLAIN_FILES};
 use crate::context_assistance_engine::opened;
+use crate::context_assistance_prompt_files::Walk;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
+
+/// What the map looks for, with how rare the walk found each. The walk
+/// reads text as written, so it finds no file holding `casesensitive` when
+/// the code says `case_sensitive`; such a term counts as the rarest.
+pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -> Vec<Sought> {
+    let rarity = |holding: usize| (1.0 + walk.checked.max(1) as f64 / holding.max(1) as f64).ln();
+    let mut found = Vec::new();
+    for (at, (term, name)) in terms.iter().enumerate() {
+        let holding = walk.holding.get(at).copied().unwrap_or_default();
+        // Counted as a whole word in code, so `enumerate` and prose do not
+        // make `enum` common.
+        let words = walk.words.get(at).copied().unwrap_or_default();
+        found.push(Sought {
+            text: term.clone(),
+            phrase: false,
+            name: *name,
+            rarity: rarity(holding),
+            common: words > MAX_PLAIN_FILES,
+            spelled: (walk.spelled.get(at).copied()).filter(|_| walk.complete),
+        });
+    }
+    for (phrase, &holding) in quoted.iter().zip(&walk.quoting) {
+        // A quoted name is already one of the terms.
+        let name = phrase
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-'));
+        if holding > 0 && holding <= MAX_PLAIN_FILES && !name {
+            found.push(Sought {
+                text: phrase.clone(),
+                phrase: true,
+                name: false,
+                rarity: rarity(holding),
+                common: false,
+                spelled: None,
+            });
+        }
+    }
+    found
+}
 
 const MAX_USES: usize = 8;
 /// Line numbers shown for one function that holds the prompt's words.

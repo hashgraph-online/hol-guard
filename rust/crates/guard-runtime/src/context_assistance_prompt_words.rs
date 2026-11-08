@@ -315,3 +315,38 @@ fn singular(word: &str) -> String {
 #[cfg(test)]
 #[path = "context_assistance_prompt_words_tests.rs"]
 mod tests;
+
+/// Whether `text` holds `term` with no letter, digit or `_` on either side,
+/// so `enum` is not found in `enumerate` nor `completion` in
+/// `shell_completion`.
+pub(crate) fn whole_word(text: &str, term: &str) -> bool {
+    let part = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+    text.match_indices(term).any(|(at, _)| {
+        !part(text[..at].chars().next_back()) && !part(text[at + term.len()..].chars().next())
+    })
+}
+
+/// For each of `terms`, whether `text` holds it once `_` and `-` are
+/// dropped. A term found as written, per `hits`, is held either way, so the
+/// text is joined only when one is not.
+pub(crate) fn spelled(text: &str, terms: &[String], hits: &[u8]) -> Vec<bool> {
+    let mut joined: Option<String> = None;
+    (terms.iter().zip(hits))
+        .map(|(term, &hits)| {
+            hits > 0
+                || (text.contains(['_', '-'])
+                    && joined
+                        .get_or_insert_with(|| text.replace(['_', '-'], ""))
+                        .contains(term.as_str()))
+        })
+        .collect()
+}
+
+/// For each of `terms`, whether the file's path holds it.
+pub(crate) fn in_path(relative: &str, terms: &[String]) -> Vec<bool> {
+    let lower = relative.to_lowercase().replace(['-', '_'], "");
+    terms
+        .iter()
+        .map(|term| lower.contains(term.as_str()))
+        .collect()
+}

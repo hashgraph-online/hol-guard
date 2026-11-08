@@ -15,8 +15,10 @@ const MAX_TITLE_CHARS: usize = 40;
 /// The most characters the note takes besides the whole diff; commit diffs
 /// share it.
 const MAX_NOTE: usize = 3_000;
-/// The longest whole diff shown.
-const MAX_WHOLE_DIFF: usize = 2_500;
+/// The longest whole diff shown. An agent asked about changes reads the
+/// diff whatever its size, and a request re-sends the whole conversation, so
+/// a diff of a few thousand characters costs less here than as a command.
+const MAX_WHOLE_DIFF: usize = 6_000;
 const CUT: &str = "\n(more changes left out; `git diff` shows every change)";
 
 /// The whole diff, and the command that prints it.

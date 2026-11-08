@@ -119,8 +119,8 @@ CHANGES.rst describes everything.";
 }
 
 /// Prompts from varied tasks reach the definition they mean: a method named as
-/// code is a named definition, and a rename lists every call to it, single
-/// lines included; a file the prompt names wins over another defining the same
+/// code is a named definition, and a rename lists every line naming it, in
+/// source, tests and docs, as the whole list; a file the prompt names wins over another defining the same
 /// name, even when it is named like a test file; and the file's folders are not
 /// searched for as words. A file named alone maps by its outline, and a plain
 /// word is placed in source, not in an example defining it too.
@@ -132,6 +132,11 @@ def visit_Import(self, node):\n        self._import_common(node)\n        return
 def visit_FromImport(self, node):\n        self._import_common(node)\n        return node\n";
     let list = [
         ("src/pkg/compiler.py", compiler),
+        (
+            "tests/test_compiler.py",
+            "def test_import():\n    CodeGenerator()._import_common(None)\n",
+        ),
+        ("docs/api.md", "Call `_import_common` once.\n"),
         (
             "src/pkg/termui.py",
             "def getchar(echo=False):\n    return _getchar(echo)\n",
@@ -159,13 +164,16 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         "{text}"
     );
     assert!(
-        text.contains("CodeGenerator.visit_Import (lines 6)"),
+        text.contains("\n\nEvery line naming `_import_common`; no other project file holds it:\n"),
         "{text}"
     );
-    assert!(
-        text.contains("CodeGenerator.visit_FromImport (lines 10)"),
-        "{text}"
-    );
+    for listed in [
+        "\nsrc/pkg/compiler.py: lines 2, 6, 10",
+        "\ntests/test_compiler.py: lines 2",
+        "\ndocs/api.md: lines 1",
+    ] {
+        assert!(text.contains(listed), "{text}");
+    }
     assert!(!text.contains("```"), "{text}");
     let text = map("Tests fail: `getchar` in src/pkg/termui.py raises NotImplementedError.");
     assert!(
@@ -247,4 +255,61 @@ fn a_short_named_function_is_shown_whole_once_a_session() {
     .unwrap()
     .text;
     assert!(!text.contains("```"), "{text}");
+}
+
+/// A rename's list of lines naming the old name says it is whole only when
+/// the walk read the whole project and counted no file holding the name
+/// beyond the ones read; a longer name holding it is not listed.
+#[test]
+fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
+    let list = files(&[
+        (
+            "src/core.py",
+            "def _old_name():\n    return 1\n\n\ndef caller():\n    return _old_name()\n",
+        ),
+        (
+            "tests/test_core.py",
+            "def test_old():\n    assert _old_name() == 1\n",
+        ),
+        (
+            "docs/api.md",
+            "Call `_old_name` once.\n\n`_old_name_cache` is separate.\n",
+        ),
+    ]);
+    let terms = [("oldname".to_owned(), true)];
+    let asked = Asked {
+        everywhere: true,
+        ..Asked::default()
+    };
+    let walk = |holding: usize, complete: bool| Walk {
+        checked: 200,
+        holding: vec![holding],
+        words: vec![holding],
+        spelled: vec![holding],
+        complete,
+        ..Walk::default()
+    };
+    let text = map(&list, &sought(&walk(3, true), &terms, &[]), &asked, later())
+        .unwrap()
+        .text;
+    assert!(
+        text.contains(
+            "\n\nEvery line naming `_old_name`; no other project file holds it:\n\
+             src/core.py: lines 1, 6\ntests/test_core.py: lines 2\ndocs/api.md: lines 1"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("Where "), "{text}");
+    for walk in [walk(4, true), walk(3, false)] {
+        let text = map(&list, &sought(&walk, &terms, &[]), &asked, later())
+            .unwrap()
+            .text;
+        assert!(
+            text.contains(
+                "\n\nLines naming `_old_name` in the files read; other files may hold it too:\n\
+                 src/core.py: lines 1, 6"
+            ),
+            "{text}"
+        );
+    }
 }

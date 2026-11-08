@@ -292,12 +292,15 @@ fn a_session_gets_its_uncommitted_edits_and_commits_since_its_first_prompt() {
             "{text}"
         );
     }
-    // Too big a whole diff leaves only the teammate's commit shown.
-    repo.write(
-        "src/big.py",
-        &"value = 'a fairly long line of text'\n".repeat(80),
-    );
+    // A whole diff of a few thousand characters is still shown.
+    let line = "value = 'a fairly long line of text'\n";
+    repo.write("src/big.py", &line.repeat(80));
     repo.git(&["add", "src/big.py"]);
+    let text = repo.changes(Some(&base)).unwrap();
+    let shown = text.contains(&format!("\n\n`{command}` prints:\n```diff\n"));
+    assert!(shown && text.matches("\n+value = ").count() == 80, "{text}");
+    // Too big a whole diff leaves only the teammate's commit shown.
+    repo.write("src/big.py", &line.repeat(200));
     let text = repo.changes(Some(&base)).unwrap();
     assert!(
         text.contains(&format!("(`git diff {}` shows all of them)", &base[..7]))
