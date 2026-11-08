@@ -67,3 +67,45 @@ fn a_prompt_about_a_push_gets_the_newest_commit() {
     let lone = Repo::new();
     assert_eq!(newest(&lone.found(), pushed, later()), None);
 }
+
+/// A file a commit changes and the working tree changes back has no net
+/// change since the session started, yet the commit line and the line on
+/// what is not committed still name it: the agent reviewing the commit
+/// needs to know which file to open.
+#[test]
+fn a_file_changed_back_is_still_named() {
+    let repo = Repo::new();
+    repo.write("src/more.py", "def more():\n    return 1\n");
+    repo.commit("add more");
+    let guard_home = tempfile::tempdir().unwrap();
+    fs::write(guard_home.path().join("config.toml"), ON).unwrap();
+    let root = fs::canonicalize(repo.path()).unwrap();
+    let session = repo.session("changed-back");
+    let ask = |prompt: &str| {
+        let home = repo.home.path();
+        let session = Some(&session);
+        since_start(
+            guard_home.path(),
+            home,
+            &root,
+            "codex",
+            session,
+            prompt,
+            later(),
+        )
+    };
+    assert_eq!(ask("review the diff"), None);
+    repo.write("src/more.py", "def more():\n    return 2\n");
+    repo.commit("more returns 2");
+    repo.write("src/core.py", &CORE.replace("return 1", "return 3"));
+    repo.commit("other returns 3");
+    repo.write("src/core.py", CORE);
+    let text = ask("review the diff").unwrap();
+    assert!(
+        text.contains("\nsrc/more.py: more 1-2")
+            && text.contains(" other returns 3 (src/core.py)\n")
+            && text.contains(" more returns 2 (src/more.py)\n")
+            && text.contains("\n\nNot committed yet: src/core.py"),
+        "{text}"
+    );
+}

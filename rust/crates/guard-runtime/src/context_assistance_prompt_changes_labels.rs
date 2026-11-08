@@ -138,9 +138,9 @@ pub(super) struct Named {
 }
 
 impl Named {
-    pub(super) fn new(names: &[String], texts: &[(String, String)]) -> Self {
+    pub(super) fn new(names: &[String], readable: &[&str]) -> Self {
         let (read, others): (Vec<&String>, Vec<&String>) =
-            (names.iter()).partition(|name| texts.iter().any(|(path, _)| path == *name));
+            (names.iter()).partition(|name| readable.contains(&name.as_str()));
         let shown = read.len().min(MAX_NAMED_FILES);
         Named {
             files: read[..shown].iter().map(|name| (*name).clone()).collect(),
@@ -209,7 +209,7 @@ pub(super) fn commits(
 }
 
 /// The changed files not committed yet.
-pub(super) fn uncommitted(git: &Git, texts: &[(String, String)], until: Instant) -> Option<Named> {
+pub(super) fn uncommitted(git: &Git, until: Instant) -> Option<Vec<String>> {
     let arguments: Vec<&str> = ["diff", "--name-only"]
         .into_iter()
         .chain(DIFF)
@@ -219,7 +219,7 @@ pub(super) fn uncommitted(git: &Git, texts: &[(String, String)], until: Instant)
         .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .collect();
-    (!names.is_empty()).then(|| Named::new(&names, texts))
+    (!names.is_empty()).then_some(names)
 }
 
 /// The commit a changes note starts from.

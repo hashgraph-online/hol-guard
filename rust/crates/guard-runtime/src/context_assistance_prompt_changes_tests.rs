@@ -209,6 +209,7 @@ fn changes_are_named_by_the_definition_they_fall_in() {
         ("src/core.py".to_owned(), CORE.to_owned()),
         ("src/store.py".to_owned(), store.to_owned()),
     ];
+    let readable: Vec<&str> = texts.iter().map(|(path, _)| path.as_str()).collect();
     let base = "0123456789abcdef0123456789abcdef01234567";
     let commits = vec![
         Commit {
@@ -220,11 +221,14 @@ fn changes_are_named_by_the_definition_they_fall_in() {
         Commit {
             id: "1111111122222222333333334444444455555555".into(),
             subject: "older".into(),
-            files: Named::new(&["src/core.py".into(), "private/notes.txt".into()], &texts),
+            files: Named::new(
+                &["src/core.py".into(), "private/notes.txt".into()],
+                &readable,
+            ),
             diff: None,
         },
     ];
-    let pending = Named::new(&["src/store.py".into()], &texts);
+    let pending = Named::new(&["src/store.py".into()], &readable);
     let text = render(
         Since::Start(base),
         &changed,

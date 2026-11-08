@@ -342,8 +342,9 @@ fn header_counts(header: &str) -> Option<((usize, usize), usize)> {
 
 /// The changed definitions of each file changed since `base`, uncommitted
 /// edits included, then each commit since `base`, newest first, then the
-/// whole diff when it is small, or else each commit's when `show_diffs`. `screen` returns the text of each
-/// changed file Guard's read accepts; any other file is left out.
+/// whole diff when it is small, or else each commit's when `show_diffs`.
+/// `screen` returns the text of each file Guard's read accepts; any other
+/// file is left out, and counted rather than named.
 pub(super) fn changes(
     git: &Git,
     since: Since,
@@ -377,17 +378,34 @@ pub(super) fn changes(
         }
     }
     let commits = commits(git, base, until);
-    let paths: Vec<String> = changed
-        .iter()
-        .map(|hunk| hunk.path.clone())
+    // Which changes are committed is what an agent runs `git status` for.
+    let pending = (allowed == Allowed::Everything && !commits.is_empty())
+        .then(|| uncommitted(git, until))
+        .flatten();
+    let paths: BTreeSet<&str> = changed.iter().map(|hunk| hunk.path.as_str()).collect();
+    // A file a commit or the working tree changes back is named too, when
+    // Guard's read accepts it.
+    let named: Vec<String> = (paths.iter().copied())
+        .chain(
+            commits
+                .iter()
+                .flat_map(|(_, _, names)| names.iter().map(String::as_str)),
+        )
+        .chain(pending.iter().flatten().map(String::as_str))
         .collect::<BTreeSet<_>>()
         .into_iter()
+        .map(str::to_owned)
         .collect();
-    let texts = if paths.is_empty() {
+    let read = if named.is_empty() {
         Vec::new()
     } else {
-        screen(&paths)
+        screen(&named)
     };
+    let readable: Vec<&str> = read.iter().map(|(path, _)| path.as_str()).collect();
+    let texts: Vec<(String, String)> = (read.iter())
+        .filter(|(path, _)| paths.contains(path.as_str()))
+        .cloned()
+        .collect();
     let whole = labels::whole(git, &against, &texts, until);
     let mut listed: Vec<Commit> = Vec::new();
     let mut used = 0;
@@ -409,14 +427,11 @@ pub(super) fn changes(
         listed.push(Commit {
             id: commit,
             subject,
-            files: Named::new(&names, &texts),
+            files: Named::new(&names, &readable),
             diff,
         });
     }
-    // Which changes are committed is what an agent runs `git status` for.
-    let pending = (allowed == Allowed::Everything && !listed.is_empty())
-        .then(|| uncommitted(git, &texts, until))
-        .flatten();
+    let pending = pending.map(|names| Named::new(&names, &readable));
     render(
         since,
         &changed,
