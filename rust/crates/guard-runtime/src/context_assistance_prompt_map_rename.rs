@@ -202,10 +202,10 @@ pub(super) fn callers(files: &[File], chosen: &[Pick], until: Instant) -> Vec<St
         .iter()
         .filter(|file| file.kind == Kind::Source && !tested)
     {
-        let Some(found) = naming(file, name, None, until) else {
+        let Some(hits) = naming(file, name, None, until) else {
             return Vec::new();
         };
-        for number in found.lines {
+        for number in hits.lines {
             let holder = (0..file.sections.len())
                 .filter(|&at| !file.container(at))
                 .filter(|&at| (file.sections[at].start..=file.sections[at].end).contains(&number))
