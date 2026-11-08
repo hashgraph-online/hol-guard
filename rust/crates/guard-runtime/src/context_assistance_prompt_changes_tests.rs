@@ -253,9 +253,9 @@ src/big.py: big lines 50-51\nsrc/core.py: convert 4-5, other 8-9\nsrc/store.py: 
         "{text}"
     );
     assert!(
-        text.ends_with(
+        text.contains(
             "\n\nCommit fedcba98 teammate fix:\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\nCommit 11111111 older (src/core.py and 1 more file)\n\n\
-Not committed yet: src/store.py"
+Not committed yet: src/store.py\n\nChanged definitions as they read now:"
         ),
         "{text}"
     );

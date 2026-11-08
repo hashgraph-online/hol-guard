@@ -400,10 +400,9 @@ pub(super) fn render(
             whole.command, whole.diff
         ));
     }
-    // A commit that broke something is fixed in the definitions it changed.
-    if matches!(since, Since::Newest(_)) {
-        out.push_str(&code(changed, texts).unwrap_or_default());
-    }
+    // A commit that broke something is fixed, and a session's work reviewed,
+    // in the definitions they changed.
+    out.push_str(&code(changed, texts).unwrap_or_default());
     Some(out)
 }
 
