@@ -69,9 +69,10 @@ fn a_prompt_about_a_push_gets_the_newest_commit() {
 }
 
 /// A file a commit changes and the working tree changes back has no net
-/// change since the session started, yet the commit line and the line on
-/// what is not committed still name it: the agent reviewing the commit
-/// needs to know which file to open.
+/// change since the session started. The commit line and the line on what
+/// is not committed still name it, and the note says it is back as it was:
+/// shown only the commit, an agent reviewing the session took the undoing
+/// edit for a leftover and put the commit's change back.
 #[test]
 fn a_file_changed_back_is_still_named() {
     let repo = Repo::new();
@@ -95,6 +96,7 @@ fn a_file_changed_back_is_still_named() {
         )
     };
     assert_eq!(ask("review the diff"), None);
+    let start = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
     repo.write("src/more.py", "def more():\n    return 2\n");
     repo.commit("more returns 2");
     repo.write("src/core.py", &CORE.replace("return 1", "return 3"));
@@ -105,7 +107,11 @@ fn a_file_changed_back_is_still_named() {
         text.contains("\nsrc/more.py: more 1-2")
             && text.contains(" other returns 3 (src/core.py)\n")
             && text.contains(" more returns 2 (src/more.py)\n")
-            && text.contains("\n\nNot committed yet: src/core.py"),
+            && text.contains(&format!(
+                "\n\nNot committed yet: src/core.py\n\nChanged and then changed back, so as at \
+commit {}: src/core.py",
+                &start[..7]
+            )),
         "{text}"
     );
 }

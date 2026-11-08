@@ -234,7 +234,7 @@ fn changes_are_named_by_the_definition_they_fall_in() {
         &changed,
         &texts,
         &commits,
-        Some(&pending),
+        [Some(&pending), None],
         None,
     )
     .unwrap();
@@ -264,10 +264,10 @@ Not committed yet: src/store.py"
         "no file the screen refused and no uncommitted diff: {text}"
     );
     assert_eq!(
-        render(Since::Start(base), &changed, &[], &[], None, None),
+        render(Since::Start(base), &changed, &[], &[], [None, None], None),
         None
     );
-    let uncommitted = render(Since::Nothing, &changed[..1], &texts, &[], None, None).unwrap();
+    let uncommitted = render(Since::Nothing, &changed[..1], &texts, &[], [None; 2], None).unwrap();
     assert!(
         uncommitted
             .starts_with("HOL Guard CIGAR: uncommitted changes in this project (`git diff HEAD`"),

@@ -251,14 +251,14 @@ impl<'a> Since<'a> {
 }
 
 /// The note: what changed, file by file, at current line numbers, then the
-/// commits, then the whole diff. Nothing when no accepted file changed and no
-/// commit was made.
+/// commits, the files not committed yet and those changed back, then the
+/// whole diff. Nothing when no accepted file changed and no commit was made.
 pub(super) fn render(
     since: Since,
     changed: &[Hunk],
     texts: &[(String, String)],
     commits: &[Commit],
-    pending: Option<&Named>,
+    [pending, back]: [Option<&Named>; 2],
     whole: Option<&Whole>,
 ) -> Option<String> {
     let mut files = Vec::new();
@@ -377,8 +377,15 @@ pub(super) fn render(
         };
         out.push_str(&part);
     }
-    if let Some(pending) = pending {
-        let part = format!("\n\nNot committed yet: {}", pending.text());
+    let back = back.zip(since.base()).map(|(back, base)| {
+        format!(
+            "\n\nChanged and then changed back, so as at commit {}: {}",
+            &base[..7],
+            back.text()
+        )
+    });
+    let pending = pending.map(|pending| format!("\n\nNot committed yet: {}", pending.text()));
+    for part in [pending, back].into_iter().flatten() {
         if out.len() + part.len() + CUT.len() <= MAX_NOTE {
             out.push_str(&part);
         }

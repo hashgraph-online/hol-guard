@@ -385,6 +385,8 @@ pub(super) fn changes(
     let paths: BTreeSet<&str> = changed.iter().map(|hunk| hunk.path.as_str()).collect();
     // A file a commit or the working tree changes back is named too, when
     // Guard's read accepts it.
+    let listed_names: BTreeSet<&String> =
+        (commits.iter()).flat_map(|(_, _, names)| names).collect();
     let named: Vec<String> = (paths.iter().copied())
         .chain(
             commits
@@ -402,6 +404,11 @@ pub(super) fn changes(
         screen(&named)
     };
     let readable: Vec<&str> = read.iter().map(|(path, _)| path.as_str()).collect();
+    // Seen only in commits, a change that was undone reads as a leftover.
+    let back: Vec<String> = (named.iter())
+        .filter(|name| !paths.contains(name.as_str()) && listed_names.contains(*name))
+        .cloned()
+        .collect();
     let texts: Vec<(String, String)> = (read.iter())
         .filter(|(path, _)| paths.contains(path.as_str()))
         .cloned()
@@ -432,12 +439,13 @@ pub(super) fn changes(
         });
     }
     let pending = pending.map(|names| Named::new(&names, &readable));
+    let back = (!against.is_empty() && !back.is_empty()).then(|| Named::new(&back, &readable));
     render(
         since,
         &changed,
         &texts,
         &listed,
-        pending.as_ref(),
+        [pending.as_ref(), back.as_ref()],
         whole.as_ref(),
     )
 }
