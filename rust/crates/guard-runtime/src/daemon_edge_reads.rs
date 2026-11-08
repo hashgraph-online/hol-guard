@@ -9,13 +9,13 @@
 //! With a handshake the edge peeks at the head of each new connection, without
 //! consuming it, for a few milliseconds. A head that has not fully arrived by
 //! then, or that is followed by more bytes, leaves the connection untouched for
-//! the daemon. The edge answers a request itself only when it is a `GET` for one of the store reads
-//! below, carries no `Origin` and presents the daemon's token in a single
-//! `X-Guard-Token` header. Every other request, including one whose token does
-//! not match, is replayed byte for byte to the daemon, which keeps every
-//! rejection, audit record and session check it has today. A store read that
-//! fails is replayed too, so the daemon answers it as it always has. Only
-//! reads that never write the store are answered here.
+//! the daemon. The edge answers a request itself only when it is a `GET` for
+//! one of the store reads below, with no body, from a caller `auth` finds the
+//! daemon would let through: its token, or a dashboard session, from an
+//! allowed origin. Anything else is replayed byte for byte to the daemon,
+//! which keeps every rejection, audit record and nonce check it has today. A
+//! store read that fails is replayed too, so the daemon answers it as it
+//! always has. Only reads that never write the store are answered here.
 //!
 //! Each authenticated request writes one byte back on the liveness socket when
 //! it starts and when it is answered, at most twice a second, so the daemon
@@ -33,8 +33,8 @@ use guard_contracts::{GuardStoreRequestV1, GUARD_STORE_REQUEST_SCHEMA};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use super::auth::authorize;
 use super::http::{head_end, parse_get, query_int, query_value, GetRequest};
-use crate::resident_transport::constant_time_eq;
 
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";
 pub(super) const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
@@ -44,6 +44,9 @@ const MAX_HEAD_BYTES: usize = 16 * 1024;
 // admission and deadlines see it as before.
 const HEAD_PEEK_WINDOW: Duration = Duration::from_millis(25);
 const HEAD_PEEK_PAUSE: Duration = Duration::from_millis(1);
+/// The request headers the daemon names in its CORS answer.
+const CORS_ALLOW_HEADERS: &str =
+    "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token";
 const ACTIVITY_INTERVAL: Duration = Duration::from_millis(500);
 const ACTIVITY_WRITE_TIMEOUT: Duration = Duration::from_millis(10);
 const MAX_BUSY_TIMEOUT_MS: u64 = 60_000;
@@ -208,12 +211,17 @@ pub(super) fn answer(
     let Some(head) = take_head(client) else {
         return Outcome::Relay(Vec::new());
     };
-    let Some((status, body)) =
+    let Some((status, body, cors_origin)) =
         parse_get(&head).and_then(|request| respond(&request, config, reads))
     else {
         return Outcome::Relay(head);
     };
-    let response = json_response(status, &body, config.dashboard_build.as_deref());
+    let response = json_response(
+        status,
+        &body,
+        config.dashboard_build.as_deref(),
+        cors_origin.as_deref(),
+    );
     let mut writer = client;
     let _ = client.set_write_timeout(Some(stalled_write));
     let _ = writer.write_all(&response);
@@ -268,21 +276,16 @@ fn respond(
     request: &GetRequest<'_>,
     config: &ReadConfig,
     reads: &NativeReads,
-) -> Option<(u16, Value)> {
-    if request.has_header("Origin")
-        || request.has_header("Content-Length")
-        || request.has_header("Transfer-Encoding")
-    {
+) -> Option<(u16, Value, Option<String>)> {
+    if request.has_header("Content-Length") || request.has_header("Transfer-Encoding") {
         return None;
     }
-    let token = request.single_header("X-Guard-Token")?;
-    if !constant_time_eq(token.as_bytes(), &config.token) {
-        return None;
-    }
+    let caller = authorize(request, &config.token)?;
     // Reported at the start as well as the end, so a slow store read never
     // looks idle to the daemon.
     reads.report_activity();
     route(request.path, request.query, config, reads)
+        .map(|(status, body)| (status, body, caller.cors_origin))
 }
 
 /// The answer the daemon's Python route gives for the same path and query, or
@@ -387,9 +390,14 @@ fn read_state(config: &ReadConfig, reads: &NativeReads) -> Option<Vec<Value>> {
     None
 }
 
-/// The response the daemon's `_write_json` writes for a request without an
-/// `Origin`: HTML-safe JSON, `nosniff` and the dashboard build stamp.
-pub(super) fn json_response(status: u16, body: &Value, dashboard_build: Option<&str>) -> Vec<u8> {
+/// The response the daemon's `_write_json` writes: HTML-safe JSON, `nosniff`,
+/// the dashboard build stamp and, for an allowed `Origin`, its CORS headers.
+pub(super) fn json_response(
+    status: u16,
+    body: &Value,
+    dashboard_build: Option<&str>,
+    cors_origin: Option<&str>,
+) -> Vec<u8> {
     let encoded = serde_json::to_vec(body).unwrap_or_else(|_| b"null".to_vec());
     let mut escaped = Vec::with_capacity(encoded.len());
     for byte in encoded {
@@ -409,6 +417,11 @@ pub(super) fn json_response(status: u16, body: &Value, dashboard_build: Option<&
         "HTTP/1.0 {status} {reason}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\n",
         escaped.len()
     );
+    if let Some(origin) = cors_origin {
+        response.push_str(&format!(
+            "Access-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: {CORS_ALLOW_HEADERS}\r\nAccess-Control-Allow-Private-Network: true\r\nVary: Origin\r\n"
+        ));
+    }
     if let Some(build) = dashboard_build {
         response.push_str(&format!("X-Guard-Dashboard-Build: {build}\r\n"));
     }
