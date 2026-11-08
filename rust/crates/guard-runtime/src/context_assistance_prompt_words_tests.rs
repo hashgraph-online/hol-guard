@@ -1,20 +1,21 @@
 use super::*;
 
-/// A file path names its file, which `named` finds; its folders are not
-/// words to look for, so `src/app/utils.py` does not map every `src` or
-/// `app` definition in the project.
+/// A file path names its file, which `named` finds; its folders and name
+/// are not words to look for, so `src/app/utils.py` does not map every
+/// definition that mentions `src`, `app` or `utils`.
 #[test]
-fn a_file_path_gives_only_its_file_name() {
+fn a_file_path_gives_no_search_words() {
     let prompt = "Tests fail because parse is not implemented (src/app/utils.py).";
     let found = terms(prompt);
-    assert!(found.contains(&"util".to_owned()), "{found:?}");
-    assert!(
-        !found.iter().any(|term| term == "src" || term == "app"),
-        "{found:?}"
-    );
+    assert_eq!(found, ["parse", "implemented", "test"], "{found:?}");
     assert_eq!(named(prompt), ["src/app/utils.py"]);
-    let test_path = terms("make tests/test_basic.py pass");
-    assert!(asks_for_tests(&test_path), "{test_path:?}");
+    assert!(asks_for_tests(&terms("make tests/test_basic.py pass")));
+}
+
+/// Quoted punctuation, such as the `>>>` of a doctest, is not a phrase.
+#[test]
+fn quoted_punctuation_is_no_phrase() {
+    assert_eq!(phrases("add `>>>` lines and a \"Usage\" note"), ["usage"]);
 }
 
 /// Plain words that say what to do name no code; the same words written as

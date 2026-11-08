@@ -22,6 +22,40 @@ pub(super) fn asks_for_docs(prompt: &str) -> bool {
     prompt_words(prompt).any(|word| word == "doc" || word == "docs" || word.starts_with("document"))
 }
 
+/// True when the prompt renames something or changes it everywhere it is
+/// used, so every use matters, not only the definition.
+pub(super) fn asks_everywhere(prompt: &str) -> bool {
+    prompt_words(prompt).any(|word| word == "rename" || word == "everywhere")
+}
+
+/// The member, such as a method, named `name` in `file`: the one inside a
+/// class the prompt also names (`CondExpr.as_const`) when there is one.
+pub(super) fn member(file: &File, name: &str, names: &[(&str, bool)]) -> Option<usize> {
+    let holds = |at: usize| file.sections[at].name.as_deref() == Some(name) && !file.container(at);
+    let inside_named = |at: usize| {
+        (file.parent[at].and_then(|outer| file.sections[outer].name.as_deref()))
+            .is_some_and(|outer| names.iter().any(|(name, _)| *name == outer))
+    };
+    let mut found = (0..file.sections.len()).filter(|&at| file.parent[at].is_some() && holds(at));
+    let first = found.next()?;
+    Some(
+        std::iter::once(first)
+            .chain(found)
+            .find(|&at| inside_named(at))
+            .unwrap_or(first),
+    )
+}
+
+/// Whether `path` is in a folder of examples or demos.
+pub(super) fn sample(path: &str) -> bool {
+    (path.split('/').rev().skip(1)).any(|folder| {
+        matches!(
+            folder,
+            "example" | "examples" | "demo" | "demos" | "samples"
+        )
+    })
+}
+
 /// True when the prompt asks for a changelog entry without naming the file.
 pub(super) fn asks_for_changelog(prompt: &str) -> bool {
     prompt_words(prompt).any(|word| word == "changelog")
@@ -280,7 +314,7 @@ fn heading(file: &File, start: usize) -> String {
 }
 
 /// Whether the prompt named the file at `path`, by its name or a path ending.
-fn named_in(path: &str, named: &[String]) -> bool {
+pub(super) fn named_in(path: &str, named: &[String]) -> bool {
     let lower = path.to_lowercase();
     let name = lower.rsplit('/').next().unwrap_or(&lower);
     named.iter().any(|wanted| {

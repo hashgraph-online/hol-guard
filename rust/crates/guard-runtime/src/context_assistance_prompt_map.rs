@@ -79,6 +79,9 @@ pub(super) struct Asked {
     pub(super) docs: bool,
     pub(super) changelog: bool,
     pub(super) named: Vec<String>,
+    /// A rename: every use of a named definition is listed, not only the
+    /// definition.
+    pub(super) everywhere: bool,
     /// The changes are already listed, so the prompt's plain words, such as
     /// "original" or "naming", say how to review them, not where.
     pub(super) changes: bool,
@@ -157,6 +160,7 @@ pub(super) fn mapped(
         changelog: more::asks_for_changelog(prompt),
         named: named(prompt),
         changes: about_changes,
+        everywhere: more::asks_everywhere(prompt),
     };
     map(&texts, &sought, &asked, until)
 }
@@ -218,17 +222,19 @@ pub(super) fn map(
     // review and name no code. Sample code does not count: an example script
     // defining `commit` does not make the word a name.
     let defined: BTreeSet<String> = (files.iter())
-        .filter(|file| file.kind == Kind::Source && !sample(&file.path))
+        .filter(|file| file.kind == Kind::Source && !more::sample(file.path))
         .flat_map(|file| file.sections.iter().filter_map(|s| s.name.clone()))
         .collect();
     let plain_name = |item: &Sought| !asked.changes && !item.common && defined.contains(&item.text);
-    let names: Vec<&str> = (sought.iter())
+    let names: Vec<(&str, bool)> = (sought.iter())
         .filter(|item| !item.phrase && (item.name || plain_name(item)))
-        .map(|item| item.text.as_str())
+        .map(|item| (item.text.as_str(), item.name))
         .collect();
-    let chosen = named_definitions(&files, &names);
-    // A name no definition here holds is looked for where it is used instead.
+    let chosen = named_definitions(&files, &names, &asked.named);
+    // A name no definition here holds is looked for where it is used
+    // instead, and a renamed one where it is used as well.
     let placed: BTreeSet<&str> = (chosen.iter())
+        .filter(|_| !asked.everywhere)
         .filter_map(|pick| files[pick.file].sections[pick.at].name.as_deref())
         .collect();
     let rare: Vec<&Sought> = (sought.iter())
@@ -318,9 +324,11 @@ struct Pick {
 
 /// The top-level definition of each name the prompt gives, in the prompt's
 /// order: in source, not tests, and in the file defining the most of the
-/// prompt's names when several do. Then the types they build on that the same
-/// file defines, which the change usually has to follow.
-fn named_definitions(files: &[File], names: &[&str]) -> Vec<Pick> {
+/// prompt's names when several do. A name written as code that no top-level
+/// definition holds is a member, such as a method, found the same way. Then
+/// the types they build on that the same file defines, which the change
+/// usually has to follow.
+fn named_definitions(files: &[File], names: &[(&str, bool)], named: &[String]) -> Vec<Pick> {
     let top = |file: &File, name: &str| {
         (0..file.sections.len()).find(|&at| {
             file.parent[at].is_none() && file.sections[at].name.as_deref() == Some(name)
@@ -329,17 +337,27 @@ fn named_definitions(files: &[File], names: &[&str]) -> Vec<Pick> {
     let defining = |file: &File| {
         names
             .iter()
-            .filter(|name| top(file, name).is_some())
+            .filter(|(name, _)| top(file, name).is_some())
             .count()
     };
-    let mut picks: Vec<Pick> = Vec::new();
-    for name in names {
-        let best = (files.iter().enumerate())
-            .filter(|(_, file)| file.kind == Kind::Source)
-            .filter_map(|(index, file)| top(file, name).map(|at| (index, at)))
+    // A file the prompt names holds the definition it means, even one named
+    // like a test file (`src/jinja2/tests.py`).
+    let in_named = |file: &File| more::named_in(file.path, named);
+    let best = |name: &str, member: bool| {
+        (files.iter().enumerate())
+            .filter(|(_, file)| file.kind == Kind::Source || in_named(file))
+            .filter_map(|(index, file)| {
+                let at = if member {
+                    more::member(file, name, names)
+                } else {
+                    top(file, name)
+                };
+                at.map(|at| (index, at))
+            })
             .max_by(|(a, _), (b, _)| {
                 let (a, b) = (&files[*a], &files[*b]);
-                (defining(a).cmp(&defining(b)))
+                (in_named(a).cmp(&in_named(b)))
+                    .then(defining(a).cmp(&defining(b)))
                     .then(
                         b.path
                             .matches('/')
@@ -347,8 +365,12 @@ fn named_definitions(files: &[File], names: &[&str]) -> Vec<Pick> {
                             .cmp(&a.path.matches('/').count()),
                     )
                     .then(b.path.cmp(a.path))
-            });
-        if let Some((file, at)) = best {
+            })
+    };
+    let mut picks: Vec<Pick> = Vec::new();
+    for &(name, shaped) in names {
+        let found = best(name, false).or_else(|| shaped.then(|| best(name, true)).flatten());
+        if let Some((file, at)) = found {
             if !picks.iter().any(|pick| pick.file == file && pick.at == at) {
                 picks.push(Pick {
                     file,
@@ -383,16 +405,6 @@ fn named_definitions(files: &[File], names: &[&str]) -> Vec<Pick> {
     picks.extend(bases);
     picks.truncate(MAX_NAMED_DEFINITIONS);
     picks
-}
-
-/// Whether `path` is in a folder of examples or demos.
-fn sample(path: &str) -> bool {
-    (path.split('/').rev().skip(1)).any(|folder| {
-        matches!(
-            folder,
-            "example" | "examples" | "demo" | "demos" | "samples"
-        )
-    })
 }
 
 fn kind(path: &str) -> Kind {

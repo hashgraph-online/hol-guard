@@ -128,6 +128,7 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
+        everywhere: false,
     };
     let text = map(
         &files(&[
@@ -400,6 +401,7 @@ fn a_named_changelog_stays_on_the_map() {
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
+        everywhere: false,
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(

@@ -26,6 +26,7 @@ pub(super) fn uses<'a>(
         lines: BTreeSet<usize>,
         words: BTreeSet<usize>,
         phrase: bool,
+        named: bool,
     }
     let mut found: BTreeMap<(usize, usize), Use> = BTreeMap::new();
     for (index, file) in files.iter().enumerate() {
@@ -60,14 +61,18 @@ pub(super) fn uses<'a>(
                 lines: BTreeSet::new(),
                 words: BTreeSet::new(),
                 phrase: false,
+                named: false,
             });
             entry.lines.insert(number + 1);
             entry.phrase |= held.iter().any(|&word| rare[word].phrase);
+            entry.named |= held.iter().any(|&word| rare[word].name);
             entry.words.extend(held);
         }
     }
     let mut kept: Vec<Use> = (found.into_values())
-        .filter(|item| item.phrase || item.lines.len() >= 2)
+        // A name written as code is a lead on a single line too: a call to
+        // `_import_common` is where a rename has to change it.
+        .filter(|item| item.phrase || item.named || item.lines.len() >= 2)
         .collect();
     kept.sort_by(|a, b| {
         (b.phrase.cmp(&a.phrase))

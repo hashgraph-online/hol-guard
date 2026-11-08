@@ -114,3 +114,59 @@ CHANGES.rst describes everything.";
     assert!(text.contains("\nCHANGES.rst:4-7"), "{text}");
     assert!(!text.contains("'original'"), "{text}");
 }
+
+/// Prompts from varied tasks reach the definition they mean: a method named as
+/// code is a named definition, and a rename lists every call to it, single
+/// lines included; a file the prompt names wins over another defining the same
+/// name, even when it is named like a test file; and the file's folders are not
+/// searched for as words.
+#[test]
+fn everyday_prompts_reach_the_definition_they_mean() {
+    let compiler =
+        "class CodeGenerator:\n    def _import_common(self, node):\n        return node\n\n    \
+def visit_Import(self, node):\n        self._import_common(node)\n        return node\n\n    \
+def visit_FromImport(self, node):\n        self._import_common(node)\n        return node\n";
+    let list = [
+        ("src/pkg/compiler.py", compiler),
+        (
+            "src/pkg/termui.py",
+            "def getchar(echo=False):\n    return _getchar(echo)\n",
+        ),
+        (
+            "src/pkg/_termui_impl.py",
+            "def getchar(echo):\n    return echo\n",
+        ),
+        (
+            "src/pkg/tests.py",
+            "def test_undefined(value):\n    return value is None\n",
+        ),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let map = |prompt: &str| prompt_map(home.path(), &root, prompt).unwrap();
+    let text =
+        map("Rename the private helper `_import_common` to `_import_common_impl` everywhere.");
+    assert!(
+        text.contains("\nsrc/pkg/compiler.py:2-3 def _import_common(self, node):"),
+        "{text}"
+    );
+    assert!(
+        text.contains("CodeGenerator.visit_Import (lines 6)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("CodeGenerator.visit_FromImport (lines 10)"),
+        "{text}"
+    );
+    let text = map("Tests fail: `getchar` in src/pkg/termui.py raises NotImplementedError.");
+    assert!(
+        text.contains("\nsrc/pkg/termui.py:1-2 def getchar"),
+        "{text}"
+    );
+    assert!(!text.contains("_termui_impl.py:1-2"), "{text}");
+    let text = map("Add a usage example to the docstring of `test_undefined` in src/pkg/tests.py.");
+    assert!(
+        text.contains("\nsrc/pkg/tests.py:1-2 def test_undefined(value):"),
+        "{text}"
+    );
+    assert!(!text.contains("'src'") && !text.contains("'pkg'"), "{text}");
+}

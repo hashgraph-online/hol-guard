@@ -135,15 +135,16 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 
 /// The prompt's words, each marked when it is written like code: inside
 /// backticks, dotted (`click.Choice`), snake_case or camelCase. A file name
-/// gives its name without the extension or folders: `src/app/utils.py` is
-/// about `utils`, not about every definition holding `src` or `app`.
+/// gives no words: `named` finds the file, and its folders and name
+/// (`src/app/utils.py`) would map every definition that mentions them.
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
         for token in tokens(span) {
             let token = token.trim_matches(['.', '-', '/']);
-            let token =
-                file_name(token).map_or(token, |(stem, _)| stem.rsplit('/').next().unwrap_or(stem));
+            if file_name(token).is_some() {
+                continue;
+            }
             let shaped = ticked || token.contains(['.', '_']) || camel(token);
             for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
                 found.push((piece.to_owned(), shaped));
@@ -272,7 +273,10 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
         };
         let phrase: String = chars[at + 1..at + 1 + end].iter().collect();
         let phrase = phrase.trim().to_lowercase();
-        if (3..=80).contains(&phrase.chars().count()) && !found.contains(&phrase) {
+        if (3..=80).contains(&phrase.chars().count())
+            && phrase.chars().any(char::is_alphanumeric)
+            && !found.contains(&phrase)
+        {
             found.push(phrase);
         }
         at += end + 2;

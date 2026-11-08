@@ -18,6 +18,10 @@ def other():
 ";
 
 #[cfg(unix)]
+#[path = "context_assistance_prompt_changes_session_tests.rs"]
+mod session;
+
+#[cfg(unix)]
 fn later() -> Instant {
     Instant::now() + Duration::from_secs(10)
 }
@@ -293,37 +297,6 @@ fn a_session_gets_its_uncommitted_edits_and_commits_since_its_first_prompt() {
             .map(|text| text.contains("Commit ")),
         Some(false)
     );
-}
-
-#[cfg(unix)]
-#[test]
-fn a_first_prompt_about_a_push_gets_the_newest_commit() {
-    let repo = Repo::new();
-    let first = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
-    repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
-    repo.commit("teammate: other returns 2");
-    // The session starts after the push, so nothing changed since its start.
-    let session = repo.session("first-prompt-after-push");
-    let base = started(&session, &repo.found(), later()).unwrap();
-    assert_eq!(repo.changes(Some(&base)), None);
-    let pushed = "A teammate pushed a fix and tests fail";
-    assert_eq!(newest(&repo.found(), false, pushed, later()), None);
-    assert_eq!(
-        newest(&repo.found(), true, "review the diff", later()),
-        None
-    );
-    let parent = newest(&repo.found(), true, pushed, later()).unwrap();
-    assert_eq!(parent, first);
-    let text = repo.since(Since::Newest(&parent), true).unwrap();
-    let title = "HOL Guard CIGAR: the newest commit in this project and any uncommitted changes";
-    assert!(
-        text.starts_with(&format!("{title} (`git diff {}` shows", &first[..7]))
-            && text.contains("\nsrc/core.py: other 8-9\n")
-            && text.contains("teammate: other returns 2:\n```diff\n+    return 2"),
-        "{text}"
-    );
-    let lone = Repo::new();
-    assert_eq!(newest(&lone.found(), true, pushed, later()), None);
 }
 
 #[cfg(unix)]
