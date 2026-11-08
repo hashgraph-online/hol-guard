@@ -16,14 +16,15 @@
 //! to. A rebuilt artifact that is not the one decided drops the record, as the
 //! Python drain drops it.
 //!
-//! A plain package record is a forward under its own action, a policy block,
-//! or an ask block whose desktop notice the resident already raised, from a
-//! harness whose approval flow never opens the browser. The `ask` branch of
+//! A plain package record is a forward under its own action, an observed
+//! forward whose notices the resident already raised, a policy block, or an
+//! ask block whose desktop notice the resident already raised, from a harness
+//! whose approval flow never opens the browser. The `ask` branch of
 //! `_queue_package_approval_response` projects the call without the artifact,
 //! so that block's receipt records no risk categories and is all it leaves.
 //! A safe-alternative block's inbox row, an ask block still carrying its
-//! notice or opening the approval center, and an observed forward's notices
-//! are still the daemon's to write.
+//! notice or opening the approval center, and an observed forward still
+//! carrying notices are still the daemon's to write.
 
 use std::path::Path;
 
@@ -55,6 +56,10 @@ const PACKAGE_KEYS: [&str; 7] = [
 /// Bound only by the allow receipt, so only a forward's record carries it.
 const POLICY_WORKSPACE_KEY: &str = "policy_workspace";
 const BLOCK_SOURCE: &str = "policy-block";
+/// The observed approval requests' notices, present only on an observed
+/// forward's record, which `_record_package_forward` records under the mode.
+const OBSERVED_KEY: &str = "observed";
+const OBSERVE_SOURCE: &str = "policy-observe";
 
 /// A package record the resident can write the receipt of.
 pub(super) struct PlainPackage<'a> {
@@ -65,11 +70,21 @@ pub(super) struct PlainPackage<'a> {
 
 pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
     let record = record.as_object()?;
-    if !keys_fit(record, &RECORD_KEYS, &[PACKAGE_KEY, APPROVAL_KEY])
-        || !record.contains_key(PACKAGE_KEY)
+    if !keys_fit(
+        record,
+        &RECORD_KEYS,
+        &[PACKAGE_KEY, APPROVAL_KEY, OBSERVED_KEY],
+    ) || !record.contains_key(PACKAGE_KEY)
     {
         return None;
     }
+    // An observed forward whose notices the resident raised; one still
+    // carrying a notice is the daemon's to raise.
+    let observed = match record.get(OBSERVED_KEY) {
+        None => false,
+        Some(observed) if *observed == json!({"notices": []}) => true,
+        Some(_) => return None,
+    };
     // An ask block whose desktop notice the resident raised; one still
     // carrying a notice is the daemon's to raise.
     let queued = match record.get(APPROVAL_KEY) {
@@ -82,8 +97,9 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
         return None;
     }
     // `_record_package_forward` records the action it forwarded with as the
-    // source, a block the package policy settled is a `policy-block`, and an
-    // ask block is recorded as pending in the approval center.
+    // source, or the mode for an observed forward. A block the package policy
+    // settled is a `policy-block`, and an ask block is recorded as pending in
+    // the approval center.
     let block_source = if queued {
         APPROVAL_PENDING_SOURCE
     } else {
@@ -93,11 +109,19 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
         "forward"
             if !queued
                 && FORWARD_ACTIONS.contains(&call.policy_action)
-                && call.source.strip_prefix("policy-") == Some(call.policy_action) =>
+                && if observed {
+                    call.source == OBSERVE_SOURCE
+                } else {
+                    call.source.strip_prefix("policy-") == Some(call.policy_action)
+                } =>
         {
             true
         }
-        "block" if block_taxonomy(call.policy_action).is_some() && call.source == block_source => {
+        "block"
+            if !observed
+                && block_taxonomy(call.policy_action).is_some()
+                && call.source == block_source =>
+        {
             false
         }
         _ => return None,

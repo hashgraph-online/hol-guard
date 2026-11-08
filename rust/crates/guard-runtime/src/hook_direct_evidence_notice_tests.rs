@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::{approval_notice, message, pending, Shown};
+use super::{approval_notice, approval_notices, message, pending, raise_approvals, Shown};
 
 #[test]
 fn a_connector_notice_reads_as_the_daemon_writes_it() {
@@ -89,4 +89,21 @@ fn a_notice_the_daemon_could_not_read_is_left() {
     ] {
         assert_eq!(approval_notice(&unreadable), None);
     }
+}
+
+#[test]
+fn a_call_raises_all_its_notices_in_order_or_none() {
+    let second = notice(json!({"request_id": "req-2", "artifact_name": "other-server"}));
+    let shown = approval_notices(&[notice(json!({})), second]).expect("both notices read");
+    let ids: Vec<_> = shown
+        .iter()
+        .map(|shown| shown.request_id.as_str())
+        .collect();
+    assert_eq!(ids, ["req-1", "req-2"]);
+    // One unreadable notice leaves the whole call's notices to the daemon, so
+    // none is raised here and none is dropped from its record.
+    let mixed = [notice(json!({})), notice(json!({"approval_url": null}))];
+    assert_eq!(approval_notices(&mixed), None);
+    assert!(!raise_approvals("/nonexistent-guard-home", "test", &mixed));
+    assert_eq!(approval_notices(&[]), Some(Vec::new()));
 }

@@ -228,6 +228,74 @@ fn ask_blocks_the_daemon_still_surfaces_are_not_plain() {
     let _ = std::fs::remove_dir_all(&workspace);
 }
 
+/// An observed forward whose notices the resident raised.
+fn observed(workspace: &Path) -> Value {
+    edited(
+        record(workspace, "forward", "policy-observe", "allow"),
+        |record| record["observed"] = json!({"notices": []}),
+    )
+}
+
+#[test]
+fn an_observed_forward_writes_the_allowed_receipt_under_the_mode() {
+    let workspace = temp_home("relay-package-observed");
+    let expected = artifact(&workspace);
+    let args = composed(&observed(&workspace));
+    assert_eq!(args["event_name"], "runtime_tool_call_allowed");
+    let receipt = &args["receipt"];
+    assert_eq!(receipt["artifact_id"], expected.artifact_id);
+    assert_eq!(receipt["approval_source"], "policy");
+    assert_eq!(
+        receipt["changed_capabilities"],
+        json!(["runtime_tool_call", "policy-observe", "package-install"])
+    );
+    assert_eq!(args["inventory"]["approved"], true);
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["decision_source"], "policy-observe");
+    assert_eq!(payload["risk_categories"], json!([]));
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
+#[test]
+fn observed_forwards_the_daemon_still_surfaces_are_not_plain() {
+    let workspace = temp_home("relay-package-observed-owned");
+    let forward = observed(&workspace);
+    assert!(is_plain(&forward));
+    let cases = [
+        edited(forward.clone(), |r| r["observed"] = json!({})),
+        edited(forward.clone(), |r| {
+            r["observed"] = json!({"notices": [], "extra": true})
+        }),
+        // An observed forward is recorded under the mode, and is a forward.
+        edited(forward.clone(), |r| {
+            r["decision_source"] = json!("policy-allow")
+        }),
+        edited(forward.clone(), |r| {
+            r["outcome"] = json!("block");
+            r["decision_source"] = json!("policy-block");
+            r["policy_action"] = json!("block");
+            r["package"]
+                .as_object_mut()
+                .unwrap()
+                .remove("policy_workspace");
+        }),
+        edited(forward, |r| {
+            r["approval"] = json!({
+                "approval_center_url": "http://127.0.0.1:4781/approvals",
+                "review_url": "http://127.0.0.1:4781/approvals/req-1",
+                "request_id": "req-1",
+                "workspace": "/work",
+                "notices": [],
+            })
+        }),
+    ];
+    for case in cases {
+        assert!(!is_plain(&case), "{case}");
+    }
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
 #[test]
 fn package_records_the_daemon_owns_are_not_plain() {
     let workspace = temp_home("relay-package-owned");
@@ -236,10 +304,10 @@ fn package_records_the_daemon_owns_are_not_plain() {
     assert!(is_plain(&forward));
     assert!(is_plain(&block));
     let cases = [
-        // An observed forward still raises its notices.
+        // An observed forward still carrying notices raises them.
         edited(forward.clone(), |r| {
             r["decision_source"] = json!("policy-observe");
-            r["observed"] = json!({"notices": []});
+            r["observed"] = json!({"notices": [{"request_id": "req-1"}]});
         }),
         edited(forward.clone(), |r| {
             r["decision_source"] = json!("policy-warn")

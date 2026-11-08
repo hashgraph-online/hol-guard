@@ -75,11 +75,25 @@ pub(super) struct Shown {
 /// persisted fields `_QueuedNotice` reads. A notice the daemon could not read
 /// is left to the daemon, and says so by returning `false`.
 pub(crate) fn raise_approval(guard_home: &str, source: &str, notice: &Value) -> bool {
-    let Some(shown) = approval_notice(notice) else {
+    raise_approvals(guard_home, source, std::slice::from_ref(notice))
+}
+
+/// Raise the notices of the requests one call was just queued on, in order.
+/// Unless every notice reads, none is raised and all are left to the daemon.
+pub(crate) fn raise_approvals(guard_home: &str, source: &str, notices: &[Value]) -> bool {
+    let Some(shown) = approval_notices(notices) else {
         return false;
     };
-    raise(guard_home, source, vec![Notice::Approval(shown)]);
-    true
+    raise(
+        guard_home,
+        source,
+        shown.into_iter().map(Notice::Approval).collect(),
+    )
+}
+
+/// Every notice of one call, in order, or none when any is unreadable.
+fn approval_notices(notices: &[Value]) -> Option<Vec<Shown>> {
+    notices.iter().map(approval_notice).collect()
 }
 
 fn approval_notice(notice: &Value) -> Option<Shown> {
@@ -104,19 +118,21 @@ fn approval_notice(notice: &Value) -> Option<Shown> {
 }
 
 /// Raise notices one after another on a thread of their own, so neither the
-/// drain nor a blocked call waits on the notifier.
-pub(super) fn raise(guard_home: &str, source: &str, notices: Vec<Notice>) {
+/// drain nor a blocked call waits on the notifier. Returns whether that thread
+/// started, so a caller can leave notices it could not hand off to the daemon.
+pub(super) fn raise(guard_home: &str, source: &str, notices: Vec<Notice>) -> bool {
     if notices.is_empty() {
-        return;
+        return true;
     }
     let (guard_home, source) = (guard_home.to_owned(), source.to_owned());
-    let _ = std::thread::Builder::new()
+    std::thread::Builder::new()
         .name("hol-guard-approval-notice".to_owned())
         .spawn(move || {
             for notice in notices {
                 notify(&guard_home, &source, notice);
             }
-        });
+        })
+        .is_ok()
 }
 
 fn notify(guard_home: &str, source: &str, notice: Notice) {
