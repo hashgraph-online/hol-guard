@@ -330,7 +330,7 @@ fn a_session_gets_its_uncommitted_edits_and_commits_since_its_first_prompt() {
     let text = repo.changes(Some(&base)).unwrap();
     assert!(
         text.contains(&format!("(`git diff {}` shows all of them)", &base[..7]))
-            && text.contains("teammate: other returns 2:\n```diff\n")
+            && text.contains("teammate: other returns 2 (src/core.py):\n```diff\n")
             && text.contains("+    return 2"),
         "{text}"
     );
