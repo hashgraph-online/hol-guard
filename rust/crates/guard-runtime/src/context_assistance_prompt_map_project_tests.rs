@@ -210,13 +210,18 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
     assert!(!text.contains("examples/aliases/parse.py:1-2"), "{text}");
 }
 
-/// A short function the prompt names is shown whole, so the agent need not
-/// read it, and only once a session. A rename asks where it is used, and a
-/// long function or a class is given by its lines.
+/// A function the prompt names is shown whole, so the agent need not read
+/// it, even at 60 lines, and only once a session. A rename asks where it is
+/// used, and a very long function or a class is given by its lines.
 #[test]
 fn a_short_named_function_is_shown_whole_once_a_session() {
-    let long = format!("def long_one():\n{}", "    x = 1\n".repeat(45));
-    let list = files(&[("src/core.py", CORE), ("src/long.py", &long)]);
+    let long = format!("def long_one():\n{}", "    x = 1\n".repeat(85));
+    let medium = format!("def medium_one():\n{}", "    x = 1\n".repeat(60));
+    let list = files(&[
+        ("src/core.py", CORE),
+        ("src/long.py", &long),
+        ("src/medium.py", &medium),
+    ]);
     let other = looking_for(&[("other", true, 1)]);
     let first = map(&list, &other, &Asked::default(), later()).unwrap();
     assert!(
@@ -255,6 +260,18 @@ fn a_short_named_function_is_shown_whole_once_a_session() {
     .text;
     assert!(text.contains("\nsrc/long.py:1-"), "{text}");
     assert!(!text.contains("```"), "{text}");
+    let text = map(
+        &list,
+        &looking_for(&[("mediumone", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        text.contains("\nsrc/medium.py:1-61 def medium_one():\n```"),
+        "{text}"
+    );
     let text = map(
         &list,
         &looking_for(&[("choice", true, 1)]),

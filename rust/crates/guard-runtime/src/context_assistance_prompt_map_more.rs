@@ -18,10 +18,13 @@ const MAX_TITLE_CHARS: usize = 60;
 /// How many of a named file's definitions stand in for its outline.
 const MAX_OUTLINE: usize = 8;
 /// The most lines of a definition shown whole.
-const MAX_SHOWN_LINES: usize = 40;
-/// The most characters of code one map shows whole, for the named
-/// definitions and again for their tests.
+const MAX_SHOWN_LINES: usize = 80;
+/// The most characters of code one map shows whole for their tests.
 const MAX_SHOWN_CHARS: usize = 1_600;
+/// The most characters of named definitions one map shows whole. The agent
+/// opens a named definition before editing it, and that read costs a whole
+/// request, so even a long one is cheaper to show.
+const MAX_SHOWN_DEFINITION_CHARS: usize = 4_000;
 /// The most close tests looked at for showing whole.
 const MAX_SHOWN_TESTS: usize = 4;
 /// How much a long doc section is marked down, as BM25's `k1`.
@@ -448,7 +451,7 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
     let mut room = if asked.everywhere || asked.changes {
         0
     } else {
-        MAX_SHOWN_CHARS
+        MAX_SHOWN_DEFINITION_CHARS
     };
     for pick in chosen {
         let mut item = Entry::plain(entry(files, pick));
