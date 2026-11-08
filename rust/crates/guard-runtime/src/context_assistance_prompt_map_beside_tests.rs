@@ -1,5 +1,7 @@
 //! The definitions beside a function left to be written.
 use super::project_tests::{project, prompt_map, ON};
+use super::tests::{files, later, looking_for};
+use super::{map, Asked};
 
 const TRACE: &str = "\"\"\"Tracebacks.\"\"\"
 import sys
@@ -86,4 +88,51 @@ implementation; the docstring and tests describe the expected behavior.";
         "{text}"
     );
     assert!(!text.contains("def helper"), "{text}");
+}
+
+const TWO: &str = "def first_stub(x):
+    \"\"\"Return x.\"\"\"
+    raise NotImplementedError
+
+
+def helper(x):
+    return second_stub(x)
+
+
+def second_stub(x):
+    \"\"\"Return x twice.\"\"\"
+    raise NotImplementedError
+";
+
+/// Only the first line of each definition beside a stub is shown, so only
+/// those lines count as shown later in the session: writing the next stub,
+/// the agent still gets the line in a listed function's body that calls it.
+#[test]
+fn listing_a_definition_beside_a_stub_does_not_hide_its_body() {
+    let list = files(&[("src/pkg/two.py", TWO)]);
+    let first = map(
+        &list,
+        &looking_for(&[("firststub", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap();
+    assert!(
+        first.text.contains("\n6-7 def helper(x):"),
+        "{}",
+        first.text
+    );
+    let again = Asked {
+        earlier: first.shown.clone(),
+        ..Asked::default()
+    };
+    let next = map(
+        &list,
+        &looking_for(&[("secondstub", true, 1)]),
+        &again,
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(next.contains("return second_stub(x)"), "{next}");
 }

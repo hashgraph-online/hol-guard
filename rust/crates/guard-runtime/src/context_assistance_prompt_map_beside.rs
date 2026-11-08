@@ -14,7 +14,7 @@ const MAX_CLASS_MEMBERS_CHARS: usize = 240;
 /// definitions beside it: the other members of its class, or the file's
 /// other top-level definitions, nearest first, each as its lines and first
 /// line, a class with its members. Not shown again when an earlier prompt of
-/// the session was shown the same list.
+/// the session was shown every line of it.
 pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(String, Entry)> {
     let (file, at) = chosen.iter().find_map(|pick| {
         let file = &files[pick.file];
@@ -27,7 +27,7 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
         .filter(|&other| file.sections[other].name.is_some())
         .collect();
     near.sort_by_key(|&other| file.sections[other].start.abs_diff(start));
-    let mut kept: Vec<(usize, usize, String)> = Vec::new();
+    let mut kept: Vec<(usize, String)> = Vec::new();
     let mut length = 0;
     for other in near {
         let line = line(file, other);
@@ -35,19 +35,23 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
             break;
         }
         length += line.len() + 1;
-        let section = &file.sections[other];
-        kept.push((section.start, section.end, line));
+        kept.push((file.sections[other].start, line));
     }
-    kept.sort_by_key(|(start, _, _)| *start);
-    let first = kept.first()?.0;
-    let last = kept.iter().map(|(_, end, _)| *end).max()?;
-    let text = (kept.into_iter().map(|(_, _, line)| line))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let span = Span::new(file.path, first as u64, last as u64, &text);
-    if asked.earlier.contains(&span) {
+    kept.sort_by_key(|(start, _)| *start);
+    // Only each definition's first line is shown, so only those lines count
+    // as shown: a later prompt still gets a body line naming its stub.
+    let shown: Vec<Span> = (kept.iter())
+        .map(|(start, _)| {
+            let text = file.lines.get(start - 1).copied().unwrap_or_default();
+            Span::new(file.path, *start as u64, *start as u64, text)
+        })
+        .collect();
+    if shown.is_empty() || shown.iter().all(|span| asked.earlier.contains(span)) {
         return None;
     }
+    let text = (kept.into_iter().map(|(_, line)| line))
+        .collect::<Vec<_>>()
+        .join("\n");
     let title = match outer {
         Some(outer) => format!(
             "Other members of {} in {}:",
@@ -59,7 +63,7 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
     let entry = Entry {
         code: text.len(),
         text,
-        shown: vec![span],
+        shown,
     };
     Some((title, entry))
 }
