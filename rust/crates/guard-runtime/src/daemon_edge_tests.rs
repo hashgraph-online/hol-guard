@@ -61,7 +61,15 @@ fn spawn_edge(upstream: SocketAddr) -> SocketAddr {
 fn spawn_edge_with(upstream: SocketAddr, limit: usize, stalled_write: Duration) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
-    thread::spawn(move || serve(&listener, upstream, limit, stalled_write));
+    thread::spawn(move || {
+        serve(
+            &listener,
+            upstream,
+            limit,
+            stalled_write,
+            Arc::new(NativeReads::new(None)),
+        )
+    });
     address
 }
 

@@ -178,6 +178,7 @@ from .manager import (
     write_guard_daemon_state,
 )
 from .native_edge import NativeDaemonEdge, start_native_daemon_edge
+from .native_edge_handshake import daemon_edge_callbacks
 from .release_feed_read import (
     MAX_RELEASE_FEED_PAGE_SIZE,
     RELEASE_FEED_REQUEST_INVALID,
@@ -600,8 +601,13 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         super().__init__(server_address, handler_class)
         self._socket_bound = True
         try:
+            handshake, on_activity = daemon_edge_callbacks(self, _STATIC_DIR)
             self.native_edge = start_native_daemon_edge(
-                self, guard_home=store.guard_home, host=str(self.server_address[0])
+                self,
+                guard_home=store.guard_home,
+                host=str(self.server_address[0]),
+                handshake=handshake,
+                on_activity=on_activity,
             )
         except BaseException:
             self.server_close()

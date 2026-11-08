@@ -19,17 +19,27 @@
 //! listening socket open, so connections queued while an edge restarts are not
 //! lost.
 //!
+//! Once the daemon sends its handshake on that socket, the edge also answers
+//! a few token-authenticated store reads itself; see [`reads`].
+//!
 //! A write that makes no progress for [`STALLED_WRITE_TIMEOUT`] ends its
 //! connection, so a peer that stops reading cannot hold a slot. Idle
 //! connections are not affected: the timeout only runs while a write waits.
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
+
+#[path = "daemon_edge_http.rs"]
+mod http;
+#[path = "daemon_edge_reads.rs"]
+mod reads;
+
+use reads::{NativeReads, Outcome};
 
 pub(crate) const EDGE_COMMAND: &str = "daemon-edge";
 pub(crate) const EDGE_FEATURE: &str = "daemon-edge-v1";
@@ -74,12 +84,15 @@ pub(crate) fn run(args: &[String]) -> i32 {
     let Ok(liveness) = io::stdout().as_fd().try_clone_to_owned() else {
         return EXIT_LISTENER;
     };
-    watch_parent(UnixStream::from(liveness));
+    let liveness = UnixStream::from(liveness);
+    let reads = Arc::new(NativeReads::new(liveness.try_clone().ok()));
+    watch_parent(liveness, Arc::clone(&reads));
     match serve(
         &listener,
         upstream,
         MAX_ACTIVE_CONNECTIONS,
         STALLED_WRITE_TIMEOUT,
+        reads,
     ) {
         Ok(()) => 0,
         Err(error) => {
@@ -124,17 +137,36 @@ fn upstream_address(listener: &TcpListener, upstream_port: u16) -> Option<Socket
 /// Exits the process as soon as the daemon's end of the liveness socket on
 /// standard output closes. The kernel closes it when the daemon exits for any
 /// reason, so a daemon killed outright leaves no edge accepting on its port.
-fn watch_parent(liveness: UnixStream) {
+///
+/// Each line the daemon writes on the socket is a handshake for [`reads`]; a
+/// line too long to be one is dropped.
+fn watch_parent(liveness: UnixStream, native_reads: Arc<NativeReads>) {
     let _ = thread::Builder::new()
         .name("daemon-edge-parent".into())
         .stack_size(RELAY_THREAD_STACK)
         .spawn(move || {
-            let mut sink = [0u8; 64];
+            let mut chunk = [0u8; 4096];
+            let mut line = Vec::new();
+            let mut oversized = false;
             let mut reader = &liveness;
             loop {
-                match reader.read(&mut sink) {
+                match reader.read(&mut chunk) {
                     Ok(0) => std::process::exit(0),
-                    Ok(_) => continue,
+                    Ok(read) => {
+                        for &byte in &chunk[..read] {
+                            if byte == b'\n' {
+                                if !oversized {
+                                    native_reads.accept_handshake(&line);
+                                }
+                                line.clear();
+                                oversized = false;
+                            } else if line.len() < reads::MAX_HANDSHAKE_BYTES {
+                                line.push(byte);
+                            } else {
+                                oversized = true;
+                            }
+                        }
+                    }
                     Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                     Err(_) => std::process::exit(0),
                 }
@@ -178,6 +210,7 @@ fn serve(
     upstream: SocketAddr,
     limit: usize,
     stalled_write: Duration,
+    native_reads: Arc<NativeReads>,
 ) -> io::Result<()> {
     let slots = Arc::new(Slots {
         active: Mutex::new(0),
@@ -203,11 +236,12 @@ fn serve(
             }
         };
         let relay_slots = Arc::clone(&slots);
+        let connection_reads = Arc::clone(&native_reads);
         let spawned = thread::Builder::new()
             .name("daemon-edge-conn".into())
             .stack_size(RELAY_THREAD_STACK)
             .spawn(move || {
-                relay_connection(client, upstream, stalled_write);
+                serve_connection(client, upstream, stalled_write, &connection_reads);
                 relay_slots.release();
             });
         if spawned.is_err() {
@@ -229,8 +263,32 @@ fn accept_error_is_transient(error: &io::Error) -> bool {
     )
 }
 
-/// Relays one connection both ways until each side has finished.
-fn relay_connection(client: TcpStream, upstream: SocketAddr, stalled_write: Duration) {
+/// Answers one connection's request natively when it can, and relays the
+/// connection to the daemon otherwise.
+fn serve_connection(
+    client: TcpStream,
+    upstream: SocketAddr,
+    stalled_write: Duration,
+    native_reads: &NativeReads,
+) {
+    let read_ahead = match native_reads.config() {
+        Some(config) => match reads::answer(&client, &config, native_reads, stalled_write) {
+            Outcome::Answered => return,
+            Outcome::Relay(bytes) => bytes,
+        },
+        None => Vec::new(),
+    };
+    relay_connection(client, upstream, stalled_write, &read_ahead);
+}
+
+/// Relays one connection both ways until each side has finished, sending
+/// `read_ahead`, the bytes already read from the client, first.
+fn relay_connection(
+    client: TcpStream,
+    upstream: SocketAddr,
+    stalled_write: Duration,
+    read_ahead: &[u8],
+) {
     let Ok(server) = TcpStream::connect_timeout(&upstream, UPSTREAM_CONNECT_TIMEOUT) else {
         let _ = client.shutdown(Shutdown::Both);
         return;
@@ -240,6 +298,11 @@ fn relay_connection(client: TcpStream, upstream: SocketAddr, stalled_write: Dura
     if client.set_write_timeout(Some(stalled_write)).is_err()
         || server.set_write_timeout(Some(stalled_write)).is_err()
     {
+        let _ = client.shutdown(Shutdown::Both);
+        let _ = server.shutdown(Shutdown::Both);
+        return;
+    }
+    if !read_ahead.is_empty() && (&server).write_all(read_ahead).is_err() {
         let _ = client.shutdown(Shutdown::Both);
         let _ = server.shutdown(Shutdown::Both);
         return;
