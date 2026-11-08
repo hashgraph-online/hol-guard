@@ -18,6 +18,14 @@ def other():
 ";
 
 #[cfg(unix)]
+#[path = "context_assistance_prompt_changes_session_tests.rs"]
+mod session;
+
+#[cfg(unix)]
+#[path = "context_assistance_prompt_changes_refused_tests.rs"]
+mod refused;
+
+#[cfg(unix)]
 fn later() -> Instant {
     Instant::now() + Duration::from_secs(10)
 }
@@ -93,7 +101,12 @@ impl Repo {
     }
 
     fn changes_shown(&self, base: Option<&str>, show_diffs: bool) -> Option<String> {
-        changes(&self.found(), base, show_diffs, later(), |paths| {
+        let since = base.map_or(Since::Nothing, Since::Start);
+        self.since(since, show_diffs)
+    }
+
+    fn since(&self, since: Since, show_diffs: bool) -> Option<String> {
+        changes(&self.found(), since, show_diffs, later(), |paths| {
             paths
                 .iter()
                 .filter_map(|path| {
@@ -112,14 +125,18 @@ fn prompts_about_changes_are_recognised() {
         "review the diff before I merge",
         "What changed in convert?",
         "this regression is new",
+        "test_parse started failing after the last commit",
+        "convert started returning None recently",
         "what did we do in this session",
     ] {
         assert!(about_changes(prompt), "{prompt}");
     }
     for prompt in [
         "add a --verbose flag",
+        "Implement parse again so its tests pass",
         "rename convert to parse",
         "session cookies leak",
+        "Question, no code changes: which function does this?",
     ] {
         assert!(!about_changes(prompt), "{prompt}");
     }
@@ -192,20 +209,35 @@ fn changes_are_named_by_the_definition_they_fall_in() {
         ("src/core.py".to_owned(), CORE.to_owned()),
         ("src/store.py".to_owned(), store.to_owned()),
     ];
+    let readable: Vec<&str> = texts.iter().map(|(path, _)| path.as_str()).collect();
     let base = "0123456789abcdef0123456789abcdef01234567";
     let commits = vec![
         Commit {
             id: "fedcba9876543210fedcba9876543210fedcba98".into(),
             subject: "teammate fix".into(),
+            files: Named::default(),
             diff: Some("@@ -1 +1 @@\n-a\n+b\n".into()),
         },
         Commit {
             id: "1111111122222222333333334444444455555555".into(),
             subject: "older".into(),
+            files: Named::new(
+                &["src/core.py".into(), "private/notes.txt".into()],
+                &readable,
+            ),
             diff: None,
         },
     ];
-    let text = render(Some(base), &changed, &texts, &commits).unwrap();
+    let pending = Named::new(&["src/store.py".into()], &readable);
+    let text = render(
+        Since::Start(base),
+        &changed,
+        &texts,
+        &commits,
+        [Some(&pending), None],
+        None,
+    )
+    .unwrap();
     assert!(
         text.starts_with(
             "HOL Guard CIGAR: changes in this project since this session started at commit \
@@ -222,7 +254,8 @@ src/big.py: big lines 50-51\nsrc/core.py: convert 4-5, other 8-9\nsrc/store.py: 
     );
     assert!(
         text.ends_with(
-            "\n\nCommit fedcba98 teammate fix:\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\nCommit 11111111 older"
+            "\n\nCommit fedcba98 teammate fix:\n```diff\n@@ -1 +1 @@\n-a\n+b\n```\n\nCommit 11111111 older (src/core.py and 1 more file)\n\n\
+Not committed yet: src/store.py"
         ),
         "{text}"
     );
@@ -230,8 +263,11 @@ src/big.py: big lines 50-51\nsrc/core.py: convert 4-5, other 8-9\nsrc/store.py: 
         !text.contains("hidden") && !text.contains("value.strip()"),
         "no file the screen refused and no uncommitted diff: {text}"
     );
-    assert_eq!(render(Some(base), &changed, &[], &[]), None);
-    let uncommitted = render(None, &changed[..1], &texts, &[]).unwrap();
+    assert_eq!(
+        render(Since::Start(base), &changed, &[], &[], [None, None], None),
+        None
+    );
+    let uncommitted = render(Since::Nothing, &changed[..1], &texts, &[], [None; 2], None).unwrap();
     assert!(
         uncommitted
             .starts_with("HOL Guard CIGAR: uncommitted changes in this project (`git diff HEAD`"),
@@ -259,20 +295,47 @@ fn a_session_gets_its_uncommitted_edits_and_commits_since_its_first_prompt() {
             .replace("return 1", "return 2")
             .replace("return value", "return value.strip()"),
     );
+    // The whole diff is small, so the note ends with it, the agent's own
+    // edits included, and points at no command to run.
+    let command = format!("git diff -U1 {}", &base[..7]);
+    for show_diffs in [true, false] {
+        let text = repo.changes_shown(Some(&base), show_diffs).unwrap();
+        assert!(
+            text.contains(&format!(
+                "(the end of this note has what `{command}` prints now)"
+            )) && text.contains("\nsrc/core.py: convert 4-5, other 8-9\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("\nCommit ")
+                && text.contains(
+                    " teammate: other returns 2 (src/core.py)\n\nNot committed yet: src/core.py\n"
+                )
+                && text.contains(&format!("\n\n`{command}` prints:\n```diff\n"))
+                && text.contains("\n+    return value.strip()\n")
+                && text.contains("\n+    return 2\n```")
+                && text.matches("```diff").count() == 1,
+            "{text}"
+        );
+    }
+    // A whole diff of a few thousand characters is still shown.
+    let line = "value = 'a fairly long line of text'\n";
+    repo.write("src/big.py", &line.repeat(80));
+    repo.git(&["add", "src/big.py"]);
+    let text = repo.changes(Some(&base)).unwrap();
+    let shown = text.contains(&format!("\n\n`{command}` prints:\n```diff\n"));
+    assert!(shown && text.matches("\n+value = ").count() == 80, "{text}");
+    // Too big a whole diff leaves only the teammate's commit shown.
+    repo.write("src/big.py", &line.repeat(200));
     let text = repo.changes(Some(&base)).unwrap();
     assert!(
-        text.contains(&format!("`git diff {}`", &base[..7]))
-            && text.contains("\nsrc/core.py: convert 4-5, other 8-9\n"),
-        "{text}"
-    );
-    assert!(
-        text.contains("Commit ")
-            && text.contains("teammate: other returns 2:\n```diff\n")
+        text.contains(&format!("(`git diff {}` shows all of them)", &base[..7]))
+            && text.contains("teammate: other returns 2 (src/core.py):\n```diff\n")
             && text.contains("+    return 2"),
         "{text}"
     );
     assert!(
-        !text.contains("value.strip()"),
+        !text.contains("value.strip()") && !text.contains("prints"),
         "the agent's own edits are named, not shown: {text}"
     );
     let quiet = repo.changes_shown(Some(&base), false).unwrap();
@@ -322,7 +385,7 @@ fn repository_configuration_cannot_start_programs() {
     let text = repo.changes(Some(&base)).unwrap();
     assert!(!marker.exists(), "a configured program ran");
     assert!(
-        text.contains("src/core.py: other 8-9") && text.contains("+    return 3"),
+        text.contains("src/core.py: other 8-9") && text.contains("\n+    return 4\n"),
         "{text}"
     );
     assert!(!text.contains('\u{1b}'), "no color codes");
@@ -376,13 +439,13 @@ fn a_partial_clone_shows_what_is_on_disk_and_never_fetches() {
     let text = clone.changes(Some(&base)).unwrap();
     assert!(text.contains("src/core.py: other 8-9"), "{text}");
     assert!(
-        text.contains("seven") && text.contains("+    return 7"),
+        text.contains("seven") && text.contains("+    return 8"),
         "{text}"
     );
     assert!(!text.contains("OLD = 1"), "{text}");
     assert!(
         text.contains("add kept") && text.contains("+KEPT = 1"),
-        "an older commit on disk still shows: {text}"
+        "an older commit's file on disk still shows: {text}"
     );
     assert!(!marker.exists(), "a missing object was fetched");
 }
@@ -391,14 +454,14 @@ fn a_partial_clone_shows_what_is_on_disk_and_never_fetches() {
 #[test]
 fn a_secret_in_the_diff_is_left_out_though_the_file_no_longer_has_it() {
     let repo = Repo::new();
-    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
     let key = format!(
         "{d}BEGIN PRIVATE KEY{d}\nprivate test material\n{d}END PRIVATE KEY{d}",
         d = "-".repeat(5)
     );
     repo.write("src/core.py", &format!("{CORE}\n{key}\n"));
     repo.commit("add key");
-    // The edit is a part of its own; the removed key's part is left out.
+    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    // Both the whole diff and the commit's remove the key, so neither shows.
     repo.write(
         "src/core.py",
         &CORE.replace("return value", "return value.strip()"),
@@ -411,30 +474,6 @@ fn a_secret_in_the_diff_is_left_out_though_the_file_no_longer_has_it() {
         "a diff with a secret is left out: {text}"
     );
     assert!(!text.contains(&"-".repeat(5)), "{text}");
-}
-
-/// A commit that also deletes a file shows no diff: the deleted file was
-/// never read, so the screen never saw what it held.
-#[cfg(unix)]
-#[test]
-fn a_commit_deleting_an_unread_file_shows_no_diff() {
-    let repo = Repo::new();
-    repo.write("private/notes.txt", "meeting notes\nnot for the agent\n");
-    repo.commit("add notes");
-    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
-    repo.write(
-        "src/core.py",
-        &CORE.replace("return value", "return value.strip()"),
-    );
-    repo.git(&["rm", "-q", "private/notes.txt"]);
-    repo.commit("strip values");
-    let text = repo.changes(Some(&base)).unwrap();
-    assert!(text.contains("src/core.py: convert 4-5"), "{text}");
-    assert!(
-        text.contains("strip values") && !text.contains("```diff"),
-        "{text}"
-    );
-    assert!(!text.contains("not for the agent"), "{text}");
 }
 
 /// Changes across many files stop at the note's size and say so, and the

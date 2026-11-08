@@ -1,23 +1,107 @@
 //! Where in source the prompt's rarer words and quoted text are: the
 //! functions holding them, with the lines they are on.
 use super::super::sections::Section;
-use super::{File, Kind, Sought, CHECK_EVERY};
+use super::{File, Kind, Sought, CHECK_EVERY, MAX_PLAIN_FILES};
 use crate::context_assistance_engine::opened;
+use crate::context_assistance_prompt_files::Walk;
+use crate::context_assistance_prompt_words::unwrapped;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
+
+/// What the map looks for, with how rare the walk found each. The walk
+/// reads text as written, so it finds no file holding `casesensitive` when
+/// the code says `case_sensitive`; such a term counts as the rarest.
+pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -> Vec<Sought> {
+    let rarity = |holding: usize| (1.0 + walk.checked.max(1) as f64 / holding.max(1) as f64).ln();
+    let mut found = Vec::new();
+    for (at, (term, name)) in terms.iter().enumerate() {
+        let holding = walk.holding.get(at).copied().unwrap_or_default();
+        // Counted as a whole word in code, so `enumerate` and prose do not
+        // make `enum` common.
+        let words = walk.words.get(at).copied().unwrap_or_default();
+        found.push(Sought {
+            text: term.clone(),
+            phrase: false,
+            name: *name,
+            rarity: rarity(holding),
+            common: words > MAX_PLAIN_FILES,
+            spelled: (walk.spelled.get(at).copied()).filter(|_| walk.complete),
+        });
+    }
+    for (phrase, &holding) in quoted.iter().zip(&walk.quoting) {
+        // A quoted name is already one of the terms.
+        let name = phrase
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-'));
+        if holding > 0 && holding <= MAX_PLAIN_FILES && !name {
+            found.push(Sought {
+                text: phrase.clone(),
+                phrase: true,
+                name: false,
+                rarity: rarity(holding),
+                common: false,
+                spelled: None,
+            });
+        }
+    }
+    found
+}
+
+/// The shortest prompt word read as a misspelled name.
+const MIN_MISSPELLED: usize = 5;
+
+/// The one definition a misspelled name means, a letter away from it:
+/// "chunkd" is `chunked`. Only for a word of five letters or more that no
+/// project file holds, and only when one name is that near.
+pub(super) fn misspelled<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a str> {
+    if item.phrase || item.spelled != Some(0) || item.text.chars().count() < MIN_MISSPELLED {
+        return None;
+    }
+    let mut near = (defined.iter()).filter(|name| one_letter_apart(&item.text, name));
+    let first = near.next()?;
+    near.next().is_none().then_some(first.as_str())
+}
+
+/// Whether `a` and `b` differ by one letter added, dropped or changed, or
+/// two neighbors swapped.
+fn one_letter_apart(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let (short, long) = if a.len() <= b.len() {
+        (&a, &b)
+    } else {
+        (&b, &a)
+    };
+    let same = (short.iter().zip(long.iter()))
+        .take_while(|(x, y)| x == y)
+        .count();
+    match long.len() - short.len() {
+        0 if same < short.len() => {
+            let swapped = same + 1 < short.len()
+                && short[same] == long[same + 1]
+                && short[same + 1] == long[same]
+                && short[same + 2..] == long[same + 2..];
+            short[same + 1..] == long[same + 1..] || swapped
+        }
+        1 => short[same..] == long[same + 1..],
+        _ => false,
+    }
+}
 
 const MAX_USES: usize = 8;
 /// Line numbers shown for one function that holds the prompt's words.
 const MAX_USE_LINES: usize = 3;
+/// The most lines quoted text wraps over and is still found.
+const WRAPPED_LINES: usize = 3;
 
 /// The functions in source that hold the prompt's rarer words in code, or
 /// quoted text anywhere, each with the lines that hold them: those holding
 /// quoted text first, then the most lines. A function needs two such lines
-/// or quoted text. Also the words found, rarest first. `None` once `until`
-/// passes.
+/// or quoted text, or, for a rename, one line naming it as code. Also the
+/// words found, rarest first. `None` once `until` passes.
 pub(super) fn uses<'a>(
     files: &[File],
     rare: &[&'a Sought],
+    everywhere: bool,
     until: Instant,
 ) -> Option<(Vec<&'a str>, Vec<String>)> {
     struct Use {
@@ -26,6 +110,7 @@ pub(super) fn uses<'a>(
         lines: BTreeSet<usize>,
         words: BTreeSet<usize>,
         phrase: bool,
+        named: bool,
     }
     let mut found: BTreeMap<(usize, usize), Use> = BTreeMap::new();
     for (index, file) in files.iter().enumerate() {
@@ -45,7 +130,8 @@ pub(super) fn uses<'a>(
                 Some(mark) => (!line.contains(mark)).then_some(mark),
                 None => opened(line),
             };
-            let held: Vec<usize> = (holds(line, rare).into_iter())
+            let after = &file.lines[number + 1..(number + WRAPPED_LINES).min(file.lines.len())];
+            let held: Vec<usize> = (holds(line, after, rare).into_iter())
                 .filter(|&word| !comment || rare[word].phrase)
                 .collect();
             let Some(at) = innermost[number] else {
@@ -60,14 +146,18 @@ pub(super) fn uses<'a>(
                 lines: BTreeSet::new(),
                 words: BTreeSet::new(),
                 phrase: false,
+                named: false,
             });
             entry.lines.insert(number + 1);
             entry.phrase |= held.iter().any(|&word| rare[word].phrase);
+            entry.named |= held.iter().any(|&word| rare[word].name);
             entry.words.extend(held);
         }
     }
     let mut kept: Vec<Use> = (found.into_values())
-        .filter(|item| item.phrase || item.lines.len() >= 2)
+        // For a rename, a name written as code is a lead on a single line
+        // too: a call to `_import_common` is where it has to change.
+        .filter(|item| item.phrase || (everywhere && item.named) || item.lines.len() >= 2)
         .collect();
     kept.sort_by(|a, b| {
         (b.phrase.cmp(&a.phrase))
@@ -116,14 +206,24 @@ fn commented(line: &str) -> bool {
 }
 
 /// Which of `sought` the line holds: a term as a whole word, spelled the way
-/// `terms` spells it, or quoted text anywhere in it.
-fn holds(line: &str, sought: &[&Sought]) -> Vec<usize> {
+/// `terms` spells it, or quoted text anywhere in it, or starting in it and
+/// wrapped onto the lines `after` it.
+fn holds(line: &str, after: &[&str], sought: &[&Sought]) -> Vec<usize> {
     let words = super::more::line_words(line);
     let lower = line.to_lowercase();
+    let mut window: Option<(String, usize)> = None;
+    let mut wrapped = |text: &str| {
+        let (joined, first) = window.get_or_insert_with(|| {
+            let first = unwrapped(&lower).len();
+            let rest = after.join("\n").to_lowercase();
+            (unwrapped(&format!("{lower}\n{rest}")), first)
+        });
+        joined.find(text).is_some_and(|at| at < *first)
+    };
     (sought.iter().enumerate())
         .filter(|(_, item)| {
             if item.phrase {
-                lower.contains(&item.text)
+                lower.contains(&item.text) || (!after.is_empty() && wrapped(&item.text))
             } else {
                 words.contains(&item.text)
             }
