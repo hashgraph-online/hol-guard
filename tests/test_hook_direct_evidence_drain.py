@@ -254,6 +254,33 @@ def test_drain_pulls_pages_until_the_queue_is_empty(tmp_path: Path) -> None:
     assert json.loads(requests[1]["payload"])["request"]["ack_epoch"] == "e1"  # pyright: ignore[reportArgumentType]
 
 
+def test_drain_pages_past_a_page_the_resident_fully_recorded(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    pages = [_page([], 1, through=256), _page([_record()], 0, through=257)]
+    requests: list[dict[str, object]] = []
+
+    def client(**values: object) -> bytes:
+        requests.append(values)
+        return pages.pop(0)
+
+    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, client))
+    assert drain.drain_once() is False
+    assert (drain.recorded, drain.failures) == (1, 0)
+    assert json.loads(requests[1]["payload"])["request"]["ack_through"] == 256  # pyright: ignore[reportArgumentType]
+
+
+def test_an_empty_page_without_a_cursor_ends_the_wake(tmp_path: Path) -> None:
+    requests: list[dict[str, object]] = []
+
+    def client(**values: object) -> bytes:
+        requests.append(values)
+        return _page([], 3)
+
+    drain = DirectHookEvidenceDrain(_host(tmp_path), transport=lambda: (tmp_path, client))
+    assert drain.drain_once() is False
+    assert len(requests) == 1
+
+
 @pytest.mark.parametrize("epoch", [None, "", 7])
 def test_a_cursor_without_its_resident_epoch_is_a_bad_page(tmp_path: Path, epoch: object) -> None:
     output = _page([_record()], 0, through=1, epoch=epoch)

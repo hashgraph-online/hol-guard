@@ -27,7 +27,8 @@
 //! daemon records it as it did before.
 //!
 //! A paged record whose receipt the resident has not written yet is recorded
-//! before the page leaves, as the `record` module describes.
+//! before the page leaves, as the `record` module describes, and a record
+//! that leaves the daemon nothing to record is then left off the page.
 
 use crate::hook_direct_counters::DirectHookCounters;
 use serde::Deserialize;
@@ -446,9 +447,14 @@ pub(crate) fn drain(
             ..paged
         })
         .collect();
-    let store_fatal = writer_source
-        .filter(|_| !request.guard_home.is_empty())
-        .and_then(|source| record::leftovers(queue, &request.guard_home, source, &mut paged));
+    let store_fatal = match writer_source.filter(|_| !request.guard_home.is_empty()) {
+        Some(source) => {
+            let fatal = record::leftovers(queue, &request.guard_home, source, &mut paged);
+            record::drop_settled(&mut paged, &request.guard_home);
+            fatal
+        }
+        None => None,
+    };
     drop(recording);
     let records: Vec<Value> = paged.into_iter().map(|paged| paged.record).collect();
     let mut page = json!({
