@@ -139,7 +139,7 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         ("docs/api.md", "Call `_import_common` once.\n"),
         (
             "src/pkg/termui.py",
-            "def getchar(echo=False):\n    return _getchar(echo)\n",
+            "_getchar = None\n\n\ndef getchar(echo=False):\n    raise NotImplementedError\n",
         ),
         (
             "src/pkg/_termui_impl.py",
@@ -177,14 +177,23 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
     assert!(!text.contains("```"), "{text}");
     let text = map("Tests fail: `getchar` in src/pkg/termui.py raises NotImplementedError.");
     assert!(
-        text.contains("\nsrc/pkg/termui.py:1-2 def getchar"),
+        text.contains("\nsrc/pkg/termui.py:4-5 def getchar"),
         "{text}"
     );
     assert!(!text.contains("_termui_impl.py:1-2"), "{text}");
     assert!(
-        text.contains("def getchar(echo=False):\n```\ndef getchar(echo=False):\n    return _getchar(echo)\n```"),
+        text.contains("def getchar(echo=False):\n```\ndef getchar(echo=False):\n    raise NotImplementedError\n```"),
         "{text}"
     );
+    // The stub's other names, with their text, and not its own lines.
+    for listed in [
+        "\n\nOther lines naming `getchar` in the files read:\n",
+        "\nsrc/pkg/termui.py:1: _getchar = None",
+        "\nsrc/pkg/_termui_impl.py:1: def getchar(echo):",
+    ] {
+        assert!(text.contains(listed), "{text}");
+    }
+    assert!(!text.contains("termui.py:4: "), "{text}");
     let text = map("Add a usage example to the docstring of `test_undefined` in src/pkg/tests.py.");
     assert!(
         text.contains("\nsrc/pkg/tests.py:1-2 def test_undefined(value):"),
@@ -193,7 +202,7 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
     assert!(!text.contains("'src'") && !text.contains("'pkg'"), "{text}");
     let text = map("Look at src/pkg/termui.py and add examples.");
     assert!(
-        text.contains("\nsrc/pkg/termui.py:1-2 def getchar"),
+        text.contains("\nsrc/pkg/termui.py:4-5 def getchar"),
         "{text}"
     );
     let text = map("Make parse strip whitespace before returning.");

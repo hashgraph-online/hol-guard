@@ -249,10 +249,14 @@ pub(super) fn map(
             .into_iter()
             .map(|(title, lines)| (title, plain(lines))),
     );
-    blocks.push((
-        "Tests:".to_owned(),
-        more::tests(&files, &mentioned, asked, &earlier),
-    ));
+    let tests = more::tests(&files, &mentioned, asked, &earlier);
+    let shown: Vec<Span> = (earlier.iter().cloned())
+        .chain(tests.iter().flat_map(|entry| entry.shown.iter().cloned()))
+        .collect();
+    blocks.push(("Tests:".to_owned(), tests));
+    // A function left to be written: where else it is named, with the text.
+    let stub = (!asked.everywhere).then(|| rename::stub(&files, &chosen, &shown, until));
+    blocks.extend(stub.flatten().map(|(title, lines)| (title, plain(lines))));
     let mut docs = Vec::new();
     if asked.docs {
         // Every word of the prompt: a doc section is about "choices" and
