@@ -182,3 +182,32 @@ fn a_renamed_helper_lists_the_tests_of_its_callers() {
         "{text}"
     );
 }
+
+/// A name the prompt misspells, held by no project file, is the definition
+/// one letter away from it; a word held somewhere is left alone.
+#[test]
+fn a_misspelled_name_finds_the_definition_a_letter_away() {
+    let source = "def chunked(iterable, n):\n    return [iterable[:n]]\n\n\n\
+def chunk_size(n):\n    return n\n";
+    let walk = |spelled| Walk {
+        checked: 200,
+        holding: vec![0],
+        words: vec![0],
+        spelled: vec![spelled],
+        complete: true,
+        ..Walk::default()
+    };
+    let mapped = |spelled| {
+        map(
+            &[("pkg/more.py".to_owned(), source.to_owned())],
+            &sought(&walk(spelled), &[("chunkd".to_owned(), false)], &[]),
+            &Asked::default(),
+            Instant::now() + Duration::from_secs(10),
+        )
+        .map(|rendered| rendered.text)
+    };
+    let text = mapped(0).unwrap();
+    assert!(text.contains("pkg/more.py:1-2 def chunked"), "{text}");
+    assert!(!text.contains("chunk_size"), "{text}");
+    assert!(mapped(1).is_none_or(|text| !text.contains("def chunked")));
+}

@@ -46,6 +46,46 @@ pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -
     found
 }
 
+/// The shortest prompt word read as a misspelled name.
+const MIN_MISSPELLED: usize = 5;
+
+/// The one definition a misspelled name means, a letter away from it:
+/// "chunkd" is `chunked`. Only for a word of five letters or more that no
+/// project file holds, and only when one name is that near.
+pub(super) fn misspelled<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a str> {
+    if item.phrase || item.spelled != Some(0) || item.text.chars().count() < MIN_MISSPELLED {
+        return None;
+    }
+    let mut near = (defined.iter()).filter(|name| one_letter_apart(&item.text, name));
+    let first = near.next()?;
+    near.next().is_none().then_some(first.as_str())
+}
+
+/// Whether `a` and `b` differ by one letter added, dropped or changed, or
+/// two neighbors swapped.
+fn one_letter_apart(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let (short, long) = if a.len() <= b.len() {
+        (&a, &b)
+    } else {
+        (&b, &a)
+    };
+    let same = (short.iter().zip(long.iter()))
+        .take_while(|(x, y)| x == y)
+        .count();
+    match long.len() - short.len() {
+        0 if same < short.len() => {
+            let swapped = same + 1 < short.len()
+                && short[same] == long[same + 1]
+                && short[same + 1] == long[same]
+                && short[same + 2..] == long[same + 2..];
+            short[same + 1..] == long[same + 1..] || swapped
+        }
+        1 => short[same..] == long[same + 1..],
+        _ => false,
+    }
+}
+
 const MAX_USES: usize = 8;
 /// Line numbers shown for one function that holds the prompt's words.
 const MAX_USE_LINES: usize = 3;

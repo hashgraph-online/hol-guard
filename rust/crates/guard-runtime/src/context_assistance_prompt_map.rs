@@ -210,9 +210,16 @@ pub(super) fn map(
         .flat_map(|file| file.sections.iter().filter_map(|s| s.name.clone()))
         .collect();
     let plain_name = |item: &Sought| !asked.changes && !item.common && defined.contains(&item.text);
+    // A misspelled name means the one definition a letter away.
     let names: Vec<(&str, bool)> = (sought.iter())
-        .filter(|item| !item.phrase && (item.name || plain_name(item)))
-        .map(|item| (item.text.as_str(), item.name))
+        .filter(|item| !item.phrase)
+        .filter_map(|item| {
+            let near = uses::misspelled(item, &defined).filter(|_| !asked.changes);
+            match near {
+                Some(name) => Some((name, item.name)),
+                None => (item.name || plain_name(item)).then_some((item.text.as_str(), item.name)),
+            }
+        })
         .collect();
     let chosen = named_definitions(&files, &names, asked);
     // A name no definition here holds is looked for where it is used
