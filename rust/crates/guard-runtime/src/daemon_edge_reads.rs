@@ -334,6 +334,8 @@ fn route(
         "/v1/read-state" => read_state(config, reads).map(|ids| (200, json!({"ids": ids}))),
         "/v1/evidence" => evidence::list(query, config, reads),
         "/v1/sessions" => records::sessions(config, reads),
+        "/v1/command-activity" => activity::list(query, config, reads),
+        "/v1/command-activity/analytics" => activity::analytics(query, config, reads),
         "/v1/connect/state" => Some((
             410,
             json!({
@@ -454,6 +456,9 @@ mod evidence;
 
 #[path = "daemon_edge_records.rs"]
 mod records;
+
+#[path = "daemon_edge_activity.rs"]
+mod activity;
 
 #[cfg(test)]
 #[path = "daemon_edge_reads_tests.rs"]
