@@ -25,7 +25,7 @@ pub(super) const RECORD_KEYS: [&str; 10] = [
 /// The post-claim check's evidence.
 const APPEND_KEY: &str = "evidence_append";
 /// The approval request an ask block was queued on, `_queued_approval`.
-const APPROVAL_KEY: &str = "approval";
+pub(super) const APPROVAL_KEY: &str = "approval";
 const APPROVAL_KEYS: [&str; 5] = [
     "approval_center_url",
     "review_url",
@@ -34,7 +34,7 @@ const APPROVAL_KEYS: [&str; 5] = [
     "notices",
 ];
 /// An ask block's decision source.
-const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
+pub(super) const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
 /// The inbox row a safe-alternative block adds, `_redaction_level`, and the
 /// approval center origin the resident links it to.
 const REVIEW_KEY: &str = "review";
@@ -47,7 +47,7 @@ const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
 /// The relay harness whose approval flow opens the approval center in the
 /// browser (`approval-center` tier, `auto_open_browser`), which the daemon's
 /// `_open_approval_center` still does for an ask block.
-const BROWSER_APPROVAL_HARNESS: &str = "cline";
+pub(super) const BROWSER_APPROVAL_HARNESS: &str = "cline";
 const IDENTITY_KEYS: [&str; 4] = [
     "artifact",
     "runtime_private_metadata",
@@ -347,7 +347,7 @@ fn review_fields(review: &Value) -> Option<(&str, &str)> {
 }
 
 /// `_queued_approval`, with no desktop notice left to raise.
-fn approval_fits(approval: &Value) -> bool {
+pub(super) fn approval_fits(approval: &Value) -> bool {
     let Some(approval) = exact_object(approval, &APPROVAL_KEYS) else {
         return false;
     };

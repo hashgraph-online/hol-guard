@@ -16,9 +16,14 @@
 //! to. A rebuilt artifact that is not the one decided drops the record, as the
 //! Python drain drops it.
 //!
-//! A plain package record is a forward under its own action or a policy
-//! block. A queued request's inbox row or approval surface and an observed
-//! forward's notices are still the daemon's to write.
+//! A plain package record is a forward under its own action, a policy block,
+//! or an ask block whose desktop notice the resident already raised, from a
+//! harness whose approval flow never opens the browser. The `ask` branch of
+//! `_queue_package_approval_response` projects the call without the artifact,
+//! so that block's receipt records no risk categories and is all it leaves.
+//! A safe-alternative block's inbox row, an ask block still carrying its
+//! notice or opening the approval center, and an observed forward's notices
+//! are still the daemon's to write.
 
 use std::path::Path;
 
@@ -29,7 +34,8 @@ use serde_json::{json, Map, Value};
 
 use super::event::{store_args, Artifact, Receipt};
 use super::record::{
-    block_taxonomy, keys_fit, relayed, string_list, Relayed, FORWARD_ACTIONS, RECORD_KEYS,
+    approval_fits, block_taxonomy, keys_fit, relayed, string_list, Relayed, APPROVAL_KEY,
+    APPROVAL_PENDING_SOURCE, BROWSER_APPROVAL_HARNESS, FORWARD_ACTIONS, RECORD_KEYS,
 };
 use super::{decision_evidence, receipt_evidence, strings, Call, Stamp};
 
@@ -59,20 +65,39 @@ pub(super) struct PlainPackage<'a> {
 
 pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
     let record = record.as_object()?;
-    if !keys_fit(record, &RECORD_KEYS, &[PACKAGE_KEY]) || !record.contains_key(PACKAGE_KEY) {
+    if !keys_fit(record, &RECORD_KEYS, &[PACKAGE_KEY, APPROVAL_KEY])
+        || !record.contains_key(PACKAGE_KEY)
+    {
         return None;
     }
+    // An ask block whose desktop notice the resident raised; one still
+    // carrying a notice is the daemon's to raise.
+    let queued = match record.get(APPROVAL_KEY) {
+        None => false,
+        Some(approval) if approval_fits(approval) => true,
+        Some(_) => return None,
+    };
     let call = relayed(record, KIND)?;
+    if queued && call.harness == BROWSER_APPROVAL_HARNESS {
+        return None;
+    }
     // `_record_package_forward` records the action it forwarded with as the
-    // source, and a block the package policy settled is a `policy-block`.
+    // source, a block the package policy settled is a `policy-block`, and an
+    // ask block is recorded as pending in the approval center.
+    let block_source = if queued {
+        APPROVAL_PENDING_SOURCE
+    } else {
+        BLOCK_SOURCE
+    };
     let forward = match call.outcome {
         "forward"
-            if FORWARD_ACTIONS.contains(&call.policy_action)
+            if !queued
+                && FORWARD_ACTIONS.contains(&call.policy_action)
                 && call.source.strip_prefix("policy-") == Some(call.policy_action) =>
         {
             true
         }
-        "block" if block_taxonomy(call.policy_action).is_some() && call.source == BLOCK_SOURCE => {
+        "block" if block_taxonomy(call.policy_action).is_some() && call.source == block_source => {
             false
         }
         _ => return None,

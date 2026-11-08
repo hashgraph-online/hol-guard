@@ -146,6 +146,88 @@ fn a_rebuilt_artifact_that_differs_drops_the_record() {
     let _ = std::fs::remove_dir_all(&workspace);
 }
 
+/// An ask block whose desktop notice the resident raised.
+fn asked(workspace: &Path) -> Value {
+    edited(
+        record(workspace, "block", "approval-center-pending", "review"),
+        |record| {
+            record["approval"] = json!({
+                "approval_center_url": "http://127.0.0.1:4781/approvals",
+                "review_url": "http://127.0.0.1:4781/approvals/req-1",
+                "request_id": "req-1",
+                "workspace": "/work",
+                "notices": [],
+            });
+        },
+    )
+}
+
+#[test]
+fn an_ask_block_writes_the_pending_receipt_without_risk_categories() {
+    let workspace = temp_home("relay-package-ask");
+    let expected = artifact(&workspace);
+    let args = composed(&asked(&workspace));
+    assert_eq!(args["event_name"], "runtime_tool_call_review_required");
+    assert_eq!(
+        args["receipt"]["provenance_summary"],
+        "runtime tool call awaiting review from /work/.codex/config.toml"
+    );
+    let receipt = &args["receipt"];
+    assert_eq!(receipt["artifact_id"], expected.artifact_id);
+    assert_eq!(receipt["artifact_hash"], PACKAGE_HASH);
+    assert_eq!(receipt["approval_source"], "approval_center");
+    assert_eq!(receipt["user_override"], Value::Null);
+    assert_eq!(
+        receipt["changed_capabilities"],
+        json!([
+            "runtime_tool_call",
+            "approval-center-pending",
+            "package-install"
+        ])
+    );
+    assert_eq!(args["inventory"]["approved"], false);
+    let payload: Value =
+        serde_json::from_str(args["event_payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["execution_outcome"], "not-executed");
+    assert_eq!(payload["risk_categories"], json!([]));
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
+#[test]
+fn ask_blocks_the_daemon_still_surfaces_are_not_plain() {
+    let workspace = temp_home("relay-package-ask-owned");
+    let ask = asked(&workspace);
+    assert!(is_plain(&ask));
+    let cases = [
+        // The browser approval flow still opens the approval center.
+        edited(ask.clone(), |r| {
+            r["harness"] = json!("cline");
+            r["identity"]["artifact"]["harness"] = json!("cline");
+        }),
+        // A notice the resident could not raise is the daemon's to raise.
+        edited(ask.clone(), |r| {
+            r["approval"]["notices"] = json!([{"request_id": "req-1"}])
+        }),
+        edited(ask.clone(), |r| r["approval"]["request_id"] = json!(" ")),
+        edited(ask.clone(), |r| r["approval"]["extra"] = json!(true)),
+        // An ask block is recorded as pending, and only a block is queued.
+        edited(ask.clone(), |r| {
+            r["decision_source"] = json!("policy-block")
+        }),
+        edited(ask.clone(), |r| {
+            r["outcome"] = json!("forward");
+            r["decision_source"] = json!("policy-allow");
+            r["policy_action"] = json!("allow");
+            r["package"]["policy_workspace"] = json!("/work");
+        }),
+        edited(ask, |r| r["review"] = json!({"redaction_level": "full"})),
+    ];
+    for case in cases {
+        assert!(!is_plain(&case), "{case}");
+    }
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
 #[test]
 fn package_records_the_daemon_owns_are_not_plain() {
     let workspace = temp_home("relay-package-owned");
