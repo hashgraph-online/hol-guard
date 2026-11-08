@@ -15,6 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..native_approval_gate import session_signals
 from ..sqlite_tuning import sqlite_connect_timeout_seconds
 from .dashboard_bundle import dashboard_build_id
 from .server_common import _now
@@ -32,6 +33,7 @@ def edge_handshake(
     busy_timeout_seconds: float,
     dashboard_build: str | None,
     user_home: str | None = None,
+    session_signals: list[str] | None = None,
 ) -> bytes:
     """The line that lets the edge answer token-authenticated store reads."""
 
@@ -48,6 +50,10 @@ def edge_handshake(
     if user_home is not None:
         # Evidence reads shorten this home to ``~`` as ``redact_local_path`` does.
         payload["user_home"] = user_home
+    if session_signals:
+        # The edge runs in a session of its own; approval-gate checks it sends
+        # must carry the daemon's session, as the daemon's own checks do.
+        payload["session_signals"] = session_signals
     return json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
@@ -64,6 +70,7 @@ def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], b
             busy_timeout_seconds=sqlite_connect_timeout_seconds(),
             dashboard_build=dashboard_build_id(static_dir),
             user_home=_user_home(),
+            session_signals=session_signals(),
         )
 
     def on_activity() -> None:

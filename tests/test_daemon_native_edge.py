@@ -205,6 +205,25 @@ def test_handshake_names_the_store_and_clamps_the_busy_timeout(tmp_path: Path) -
     )
 
 
+def test_handshake_carries_the_daemon_session_for_approval_gate_checks(tmp_path: Path) -> None:
+    def line(signals: list[str] | None) -> dict[str, object]:
+        return json.loads(
+            native_edge_handshake.edge_handshake(
+                auth_token="t",
+                guard_home=tmp_path,
+                store_path=tmp_path / "guard.db",
+                source="default",
+                busy_timeout_seconds=1.0,
+                dashboard_build=None,
+                session_signals=signals,
+            )
+        )
+
+    assert line(["sid=7", "TMUX_PANE=%1"])["session_signals"] == ["sid=7", "TMUX_PANE=%1"]
+    assert "session_signals" not in line([])
+    assert "session_signals" not in line(None)
+
+
 def test_edge_activity_reaches_the_daemon_after_the_handshake() -> None:
     daemon_end, edge_end = socket.socketpair()
     touched = threading.Event()

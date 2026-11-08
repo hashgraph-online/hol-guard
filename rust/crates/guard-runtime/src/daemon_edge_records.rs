@@ -10,17 +10,25 @@ use crate::policy_bundle_time::micros_to_utc_isoformat;
 
 /// `GET /v1/sessions`: `list_guard_sessions(limit=200)`.
 pub(super) fn sessions(config: &ReadConfig, reads: &NativeReads) -> Option<(u16, Value)> {
+    let items = session_items(200, config, reads)?;
+    Some((200, json!({ "items": items })))
+}
+
+/// `list_guard_sessions(limit=limit)`, newest first.
+pub(super) fn session_items(
+    limit: i64,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<Value>> {
     let rows = reads.store_call(
         config,
         "list_guard_sessions",
-        json!({"status": null, "limit": 200}),
+        json!({"status": null, "limit": limit}),
     )?;
-    let items = rows
-        .as_array()?
+    rows.as_array()?
         .iter()
         .map(|row| session(row.as_object()?))
-        .collect::<Option<Vec<_>>>()?;
-    Some((200, json!({ "items": items })))
+        .collect()
 }
 
 /// `GET /v1/operations/<id>`: `get_guard_operation`, or the daemon's 404.
@@ -38,6 +46,57 @@ pub(super) fn operation(
         return Some((404, json!({"error": "not_found"})));
     }
     Some((200, operation_row(row.as_object()?)?))
+}
+
+/// `GET /v1/sessions/<id>/resume`: `resume_session`, the session with its
+/// live client attachments and its operations, or the daemon's 404.
+pub(super) fn session_resume(
+    session_id: &str,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value)> {
+    let row = reads.store_call(
+        config,
+        "get_guard_session",
+        json!({"session_id": session_id}),
+    )?;
+    if row.is_null() {
+        return Some((404, json!({"error": "not_found"})));
+    }
+    let session = session(row.as_object()?)?;
+    let attachments = reads.store_call(
+        config,
+        "list_guard_client_attachments",
+        json!({
+            "surface": null,
+            "session_id": session_id,
+            "active_within_seconds": 60,
+            "now": now_isoformat()?,
+        }),
+    )?;
+    let attachments = attachments
+        .as_array()?
+        .iter()
+        .map(|row| attachment(row.as_object()?))
+        .collect::<Option<Vec<_>>>()?;
+    let operations = reads.store_call(
+        config,
+        "list_guard_operations",
+        json!({"session_id": session_id, "limit": 100}),
+    )?;
+    let operations = operations
+        .as_array()?
+        .iter()
+        .map(|row| operation_row(row.as_object()?))
+        .collect::<Option<Vec<_>>>()?;
+    Some((
+        200,
+        json!({
+            "session": session,
+            "attachments": attachments,
+            "operations": operations,
+        }),
+    ))
 }
 
 /// `GET /v1/receipts/analytics`, with the daemon's bounds on each window.
@@ -78,6 +137,25 @@ fn session(row: &Map<String, Value>) -> Option<Value> {
         decoded(row, "capabilities_json")?,
     );
     for field in ["created_at", "updated_at"] {
+        item.insert(field.to_owned(), text(row, field)?);
+    }
+    Some(Value::Object(item))
+}
+
+/// `_guard_attachment_row`.
+fn attachment(row: &Map<String, Value>) -> Option<Value> {
+    let mut item = Map::new();
+    for field in ["client_id", "surface"] {
+        item.insert(field.to_owned(), text(row, field)?);
+    }
+    item.insert("session_id".to_owned(), optional_text(row, "session_id")?);
+    item.insert("metadata".to_owned(), decoded(row, "metadata_json")?);
+    item.insert("lease_id".to_owned(), text(row, "lease_id")?);
+    item.insert(
+        "lease_expires_at".to_owned(),
+        optional_text(row, "lease_expires_at")?,
+    );
+    for field in ["attached_at", "last_seen_at"] {
         item.insert(field.to_owned(), text(row, field)?);
     }
     Some(Value::Object(item))

@@ -18,7 +18,7 @@ use hmac::{Hmac, Mac};
 use serde_json::{Map, Value};
 use sha2::Sha256;
 
-use super::http::GetRequest;
+use super::http::Request;
 use crate::daemon_route_paths::session_path;
 use crate::daemon_route_session::{origin_decision, session_authorize, SessionRequest};
 use crate::guard_store_json::{aware_epoch_micros, py_strip};
@@ -36,7 +36,35 @@ pub(super) struct Caller {
     pub(super) cors_origin: Option<String>,
 }
 
-pub(super) fn authorize(request: &GetRequest<'_>, token: &[u8]) -> Option<Caller> {
+pub(super) fn authorize(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
+    let caller = allowed_origin(request)?;
+    if token_matches(request, token)? {
+        return Some(caller);
+    }
+    session_allows(request, token, caller.cors_origin.as_deref()).then_some(caller)
+}
+
+/// A caller the daemon would let write: an allowed origin and its auth token.
+/// A dashboard session goes to the daemon, whose write verdicts can spend a
+/// nonce.
+pub(super) fn authorize_token(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
+    let caller = allowed_origin(request)?;
+    token_matches(request, token)?.then_some(caller)
+}
+
+/// Whether the request carries the auth token, or `None` when it repeats the
+/// header, which the edge does not read the way the daemon does.
+fn token_matches(request: &Request<'_>, token: &[u8]) -> Option<bool> {
+    if !request.has_header("X-Guard-Token") {
+        return Some(false);
+    }
+    let presented = request.single_header("X-Guard-Token")?;
+    Some(constant_time_eq(presented.as_bytes(), token))
+}
+
+/// `_origin_is_allowed_for_request`: no `Origin`, or one the native policy
+/// allows for the path.
+fn allowed_origin(request: &Request<'_>) -> Option<Caller> {
     let cors_origin = if request.has_header("Origin") {
         let origin = normalize_origin(request.single_header("Origin")?)?;
         let DaemonRoutePayloadV1::Origin { allowed: true, .. } =
@@ -48,14 +76,7 @@ pub(super) fn authorize(request: &GetRequest<'_>, token: &[u8]) -> Option<Caller
     } else {
         None
     };
-    let caller = Caller { cors_origin };
-    if request.has_header("X-Guard-Token") {
-        let presented = request.single_header("X-Guard-Token")?;
-        if constant_time_eq(presented.as_bytes(), token) {
-            return Some(caller);
-        }
-    }
-    session_allows(request, token, caller.cors_origin.as_deref()).then_some(caller)
+    Some(Caller { cors_origin })
 }
 
 /// `_normalize_origin`, for the origins the edge reads exactly as Python's
@@ -121,7 +142,7 @@ pub(super) fn normalize_origin(raw: &str) -> Option<String> {
 
 /// Whether a dashboard session the request presents lets it read `path`
 /// without spending a nonce.
-fn session_allows(request: &GetRequest<'_>, token: &[u8], origin: Option<&str>) -> bool {
+fn session_allows(request: &Request<'_>, token: &[u8], origin: Option<&str>) -> bool {
     if !session_path("GET", request.path) {
         return false;
     }
@@ -161,7 +182,7 @@ fn session_allows(request: &GetRequest<'_>, token: &[u8], origin: Option<&str>) 
 
 /// The session tokens the daemon would try, in its order, or `None` when a
 /// header it reads is repeated.
-fn session_candidates<'a>(request: &GetRequest<'a>) -> Option<Vec<&'a str>> {
+fn session_candidates<'a>(request: &Request<'a>) -> Option<Vec<&'a str>> {
     let mut candidates = Vec::new();
     for name in ["X-Guard-Dashboard-Session", "Authorization"] {
         if !request.has_header(name) {

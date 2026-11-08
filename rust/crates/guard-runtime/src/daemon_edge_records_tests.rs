@@ -28,6 +28,15 @@ fn store(operation_metadata: &str) -> Store {
                  approval_request_ids_json text not null, {token_column} text,
                  metadata_json text not null, created_at text not null,
                  updated_at text not null);
+             create table guard_client_attachments (
+                 client_id text primary key, surface text not null, session_id text,
+                 metadata_json text not null default '{{}}', lease_id text not null default '',
+                 lease_expires_at text, attached_at text not null, last_seen_at text not null);
+             insert into guard_client_attachments values ('c-live', 'cli', 's-1',
+                 '{{\"pid\": 7}}', 'l-1', '2999-01-01T00:00:00+00:00', 't1',
+                 '2999-01-01T00:00:00+00:00');
+             insert into guard_client_attachments values ('c-gone', 'cli', 's-1', '{{}}',
+                 'l-2', '2000-01-01T00:00:00+00:00', 't1', '2000-01-01T00:00:00+00:00');
              insert into guard_sessions values ('s-1', 'codex', 'cli', 'active', 'Codex',
                  null, '1.2', '/work', '[\"approvals\"]', 't1', 't2');",
         ))
@@ -88,6 +97,28 @@ fn reads_an_operation_or_answers_not_found() {
 }
 
 #[test]
+fn resumes_a_session_with_its_live_attachments_and_operations() {
+    let store = store("{}");
+    let (status, body) = session_resume("s-1", &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["session"]["session_id"], "s-1");
+    assert_eq!(
+        body["attachments"],
+        json!([{
+            "client_id": "c-live", "surface": "cli", "session_id": "s-1",
+            "metadata": {"pid": 7}, "lease_id": "l-1",
+            "lease_expires_at": "2999-01-01T00:00:00+00:00", "attached_at": "t1",
+            "last_seen_at": "2999-01-01T00:00:00+00:00",
+        }])
+    );
+    assert_eq!(body["operations"][0]["operation_id"], "op-1");
+    assert_eq!(
+        session_resume("s-2", &store.config, &store.reads),
+        Some((404, json!({"error": "not_found"})))
+    );
+}
+
+#[test]
 fn relays_operations_whose_json_python_reads_or_prints_differently() {
     for metadata in ["{\"ratio\": 0.5}", "{\"big\": 1e400}", "NaN", "{bad"] {
         let store = store(metadata);
@@ -127,6 +158,8 @@ fn routes_record_paths_the_way_the_daemon_dispatches_them() {
     assert_eq!(route("/v1/operations/op-1", "").unwrap().0, 200);
     assert_eq!(route("/v1/operations/op-1/items", ""), None);
     assert_eq!(route("/v1/sessions", "").unwrap().0, 200);
+    assert_eq!(route("/v1/sessions/s-1/resume", "").unwrap().0, 200);
+    assert_eq!(route("/v1/sessions/s-1/archive", ""), None);
     // Analytics never falls through to a receipt lookup.
     assert_eq!(route("/v1/receipts/analytics", "top_limit=x"), None);
     assert_eq!(
