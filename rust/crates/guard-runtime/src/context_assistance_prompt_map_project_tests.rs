@@ -188,6 +188,46 @@ pkg/recipes.py:1: def _batched(iterable, n):\npkg/recipes.py:5: batched = _batch
     );
 }
 
+/// A name the prompt writes is the definition spelled that way: the
+/// `cachedmethod` function, not the `CachedMethod` class whose name differs
+/// only in case. A method written after its class (`peekable.prepend`) is
+/// that method, not a `prepend` function in another file, and its rename
+/// lists the lines naming the method, not those naming the class.
+#[test]
+fn a_name_is_the_definition_spelled_as_the_prompt_writes_it() {
+    let cache =
+        "class CachedMethod:\n    def __init__(self, func):\n        self.func = func\n\n\n\
+def cachedmethod(func):\n    return CachedMethod(func)\n";
+    let more =
+        "class peekable:\n    def __init__(self, iterable):\n        self._it = iterable\n\n    \
+def prepend(self, *items):\n        self._cache = list(items)\n\n\n\
+def spy(iterable):\n    return peekable(iterable)\n";
+    let list = [
+        ("pkg/cache.py", cache),
+        ("pkg/more.py", more),
+        (
+            "pkg/recipes.py",
+            "def prepend(value, iterator):\n    return [value, *iterator]\n",
+        ),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let text = prompt_map(
+        home.path(),
+        &root,
+        "Fix `cachedmethod` so it returns the wrapper.",
+    )
+    .unwrap();
+    assert!(text.contains("pkg/cache.py:6-7"), "{text}");
+    assert!(!text.contains("pkg/cache.py:1-"), "{text}");
+    let prompt = "Rename the method `peekable.prepend` to `peekable.push_front` everywhere, \
+keeping tests passing.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(text.contains("pkg/more.py:5-"), "{text}");
+    assert!(!text.contains("pkg/recipes.py:1-"), "{text}");
+    assert!(text.contains("naming `prepend`"), "{text}");
+    assert!(!text.contains("naming `peekable`"), "{text}");
+}
+
 /// Prompts from varied tasks reach the definition they mean: a method named as
 /// code is a named definition, and a rename lists every line naming it, in
 /// source, tests and docs, as the whole list; a file the prompt names wins over another defining the same

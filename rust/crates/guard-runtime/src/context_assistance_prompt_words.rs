@@ -147,18 +147,25 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 }
 
 /// The prompt's words, each marked when it is written like code: inside
-/// backticks, dotted (`click.Choice`), snake_case or camelCase. A file name
-/// gives no words: `named` finds the file, and its folders and name
-/// (`src/app/utils.py`) would map every definition that mentions them.
+/// backticks, dotted (`click.Choice`), snake_case, camelCase or called
+/// (`URL(...).normalize()`). A file name gives no words: `named` finds the
+/// file, and its folders and name (`src/app/utils.py`) would map every
+/// definition that mentions them.
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
-        for token in tokens(span) {
-            let token = token.trim_matches(['.', '-', '/']);
+        for written in tokens(span) {
+            let token = written.trim_matches(['.', '-', '/']);
             if file_name(token).is_some() {
                 continue;
             }
-            let shaped = ticked || token.contains(['.', '_']) || camel(token);
+            let end = written.as_ptr() as usize - span.as_ptr() as usize + written.len();
+            let called = span[end..].starts_with('(') && !span[end..].starts_with("(s)");
+            let shaped = ticked
+                || called
+                || (written.starts_with('.') && !token.contains('/'))
+                || token.contains(['.', '_'])
+                || camel(token);
             for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
                 found.push((piece.to_owned(), shaped));
             }
@@ -224,11 +231,18 @@ fn file_name(token: &str) -> Option<(&str, &str)> {
 }
 
 /// The names the prompt writes as code, spelled as written: `_batched`,
-/// which `terms` reads as `batched`.
+/// which `terms` reads as `batched`, and each dotted name whole as well
+/// (`peekable.prepend`), which names a member.
 pub(crate) fn spellings(prompt: &str) -> Vec<String> {
+    let dotted = (spans(prompt).into_iter())
+        .flat_map(|(span, _)| tokens(span))
+        .map(|token| token.trim_matches(['.', '-', '/']))
+        .filter(|token| token.contains('.') && !token.contains('/') && file_name(token).is_none())
+        .map(str::to_owned);
     (words(prompt).into_iter())
         .filter(|(_, shaped)| *shaped)
         .map(|(word, _)| word)
+        .chain(dotted)
         .collect()
 }
 

@@ -58,3 +58,22 @@ fn task_words_name_nothing_unless_written_as_code() {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
     }
 }
+
+/// A name written as a call is code even outside backticks, as are
+/// `URL(...)` and `.normalize()`, but not the plural in `item(s)`. A dotted
+/// name is also kept whole as a spelling, since it names a member.
+#[test]
+fn a_called_or_dotted_name_is_written_as_code() {
+    let found = marked_terms(
+        "Bug: URL('http://a/b/../c').normalize() gives the wrong path; the item(s) too.",
+    );
+    for name in ["url", "normalize"] {
+        assert!(
+            found.contains(&(name.to_owned(), true)),
+            "{name}: {found:?}"
+        );
+    }
+    assert!(found.contains(&("item".to_owned(), false)), "{found:?}");
+    let found = spellings("Rename `peekable.prepend` to `push_front`");
+    assert!(found.contains(&"peekable.prepend".to_owned()), "{found:?}");
+}

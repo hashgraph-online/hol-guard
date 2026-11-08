@@ -26,6 +26,9 @@ use std::time::Instant;
 
 #[path = "context_assistance_prompt_map_more.rs"]
 mod more;
+#[path = "context_assistance_prompt_map_pick.rs"]
+mod pick;
+use pick::{named_definitions, Pick};
 #[path = "context_assistance_prompt_map_rename.rs"]
 mod rename;
 #[path = "context_assistance_prompt_map_uses.rs"]
@@ -48,9 +51,6 @@ const MAX_LINE_CHARS: usize = 90;
 /// A plain word in more of the project's code files than this is too common
 /// to place anything.
 const MAX_PLAIN_FILES: usize = 8;
-const MAX_NAMED_DEFINITIONS: usize = 6;
-/// Functions left to be written that stand in for a named file's outline.
-const MAX_STUBS: usize = 2;
 /// Words named in the title of the uses list.
 const MAX_TITLE_WORDS: usize = 4;
 /// How many lines the map handles between looks at the clock.
@@ -214,7 +214,7 @@ pub(super) fn map(
         .filter(|item| !item.phrase && (item.name || plain_name(item)))
         .map(|item| (item.text.as_str(), item.name))
         .collect();
-    let chosen = named_definitions(&files, &names, &asked.named);
+    let chosen = named_definitions(&files, &names, asked);
     // A name no definition here holds is looked for where it is used
     // instead, and a renamed one where it is used as well.
     let placed: BTreeSet<&str> = (chosen.iter())
@@ -318,125 +318,6 @@ impl Entry {
             code: 0,
         }
     }
-}
-
-struct Pick {
-    file: usize,
-    at: usize,
-    base: bool,
-    /// Named by the prompt, so it may be shown whole.
-    whole: bool,
-}
-
-/// The top-level definition of each name the prompt gives, in the prompt's
-/// order: in source, not tests, and in the file defining the most of the
-/// prompt's names when several do. A name written as code that no top-level
-/// definition holds is a member, such as a method, found the same way. Then
-/// the types they build on that the same file defines, which the change
-/// usually has to follow.
-fn named_definitions(files: &[File], names: &[(&str, bool)], named: &[String]) -> Vec<Pick> {
-    let top = |file: &File, name: &str| {
-        (0..file.sections.len()).find(|&at| {
-            file.parent[at].is_none() && file.sections[at].name.as_deref() == Some(name)
-        })
-    };
-    let defining = |file: &File| {
-        names
-            .iter()
-            .filter(|(name, _)| top(file, name).is_some())
-            .count()
-    };
-    // A file the prompt names holds the definition it means, even one named
-    // like a test file (`src/jinja2/tests.py`).
-    let in_named = |file: &File| more::named_in(file.path, named);
-    // Sample code holds a word the prompt only mentions in passing, but not
-    // a name it writes as code.
-    let best = |name: &str, member: bool, shaped: bool| {
-        (files.iter().enumerate())
-            .filter(|(_, file)| file.kind == Kind::Source || in_named(file))
-            .filter(|(_, file)| shaped || !more::sample(file.path))
-            .filter_map(|(index, file)| {
-                let at = if member {
-                    more::member(file, name, names)
-                } else {
-                    top(file, name)
-                };
-                at.map(|at| (index, at))
-            })
-            .max_by(|(a, _), (b, _)| {
-                let (a, b) = (&files[*a], &files[*b]);
-                (in_named(a).cmp(&in_named(b)))
-                    .then(defining(a).cmp(&defining(b)))
-                    .then(
-                        b.path
-                            .matches('/')
-                            .count()
-                            .cmp(&a.path.matches('/').count()),
-                    )
-                    .then(b.path.cmp(a.path))
-            })
-    };
-    let mut picks: Vec<Pick> = Vec::new();
-    for &(name, shaped) in names {
-        let found = (best(name, false, shaped))
-            .or_else(|| shaped.then(|| best(name, true, shaped)).flatten());
-        if let Some((file, at)) = found {
-            if !picks.iter().any(|pick| pick.file == file && pick.at == at) {
-                picks.push(Pick {
-                    file,
-                    at,
-                    base: false,
-                    whole: true,
-                });
-            }
-        }
-    }
-    if picks.is_empty() {
-        for (file, item) in files.iter().enumerate().filter(|(_, item)| in_named(item)) {
-            // A function left to be written is the one a prompt naming only
-            // its file means: "last is not implemented (more.py)".
-            let pick = |at, whole| Pick {
-                file,
-                at,
-                base: false,
-                whole,
-            };
-            let stubs: Vec<usize> = (0..item.sections.len())
-                .filter(|&at| !item.container(at) && rename::stubbed(item, at))
-                .take(MAX_STUBS)
-                .collect();
-            if stubs.is_empty() {
-                picks.extend(more::outline(item).map(|at| pick(at, false)));
-            }
-            picks.extend(stubs.into_iter().map(|at| pick(at, true)));
-        }
-    }
-    let mut bases = Vec::new();
-    for pick in picks
-        .iter()
-        .filter(|pick| files[pick.file].container(pick.at))
-    {
-        let file = &files[pick.file];
-        let opening = file.opening(pick.at);
-        let words = opening.split(|c: char| !(c.is_alphanumeric() || c == '_'));
-        for word in words.skip(2).filter(|word| !word.is_empty()) {
-            let Some(at) = top(file, &term_form(word)) else {
-                continue;
-            };
-            let taken = |p: &Pick| p.file == pick.file && p.at == at;
-            if at != pick.at && !picks.iter().any(taken) && !bases.iter().any(taken) {
-                bases.push(Pick {
-                    file: pick.file,
-                    at,
-                    base: true,
-                    whole: false,
-                });
-            }
-        }
-    }
-    picks.extend(bases);
-    picks.truncate(MAX_NAMED_DEFINITIONS);
-    picks
 }
 
 fn kind(path: &str) -> Kind {

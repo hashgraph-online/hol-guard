@@ -38,7 +38,7 @@ pub(super) fn blocks(
         return Vec::new();
     }
     (sought.iter())
-        .filter(|item| item.name && !item.phrase)
+        .filter(|item| item.name && !item.phrase && !owner_only(&asked.spellings, &item.text))
         .filter_map(|item| {
             // `_batched` is renamed, not `batched` beside it: the lines
             // naming it as the prompt spells it, when any file does.
@@ -48,6 +48,22 @@ pub(super) fn blocks(
         })
         .take(MAX_NAMES)
         .collect()
+}
+
+/// Whether the prompt writes `term` only before a dot, as `peekable` in
+/// `peekable.prepend`, where the member is renamed and not its class.
+fn owner_only(spellings: &[String], term: &str) -> bool {
+    let owner = |word: &&String| {
+        (word.rsplit_once('.'))
+            .is_some_and(|(owner, _)| term_form(owner.rsplit('.').next().unwrap_or(owner)) == term)
+    };
+    let dotted = spellings.iter().filter(owner).count();
+    dotted > 0
+        && spellings
+            .iter()
+            .filter(|word| term_form(word) == term)
+            .count()
+            <= dotted
 }
 
 /// In `file`, whether any line holds `term` with `_` and `-` dropped, and
