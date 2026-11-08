@@ -30,6 +30,11 @@ pub(super) fn run() -> Result<(), String> {
         [command, rest @ ..] if command == codex_sandbox_check::CHECK_COMMAND => {
             std::process::exit(codex_sandbox_check::run(rest))
         }
+        // Guard Cloud's hosted action evaluator; the same JSON-lines loop as
+        // `guard-cloud-action`, so a host with the wheel needs no other binary.
+        [command, rest @ ..] if command == "cloud-action" => std::process::exit(
+            guard_command::cloud_action_serve::serve("hol-guard-runtime cloud-action", rest),
+        ),
         [command] if command == "capabilities" => write_json(&capabilities()),
         [command, flag] if command == "capabilities" && flag == "--json" => {
             write_json(&capabilities())
