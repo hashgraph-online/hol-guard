@@ -95,6 +95,10 @@ class _Handoff:
         self.may_lease = True
         self.watch_until = 0.0
         self.watcher: int | None = None
+        # Bumped by every batch that renews the watch window; the watcher keeps
+        # the value it saw when it took the watch up.
+        self.watch_epoch = 0
+        self.watcher_epoch = 0
 
 
 def review_drain_lane(slot: int, *, wait_ms: int = 0) -> CommandQueueLane:
@@ -318,6 +322,7 @@ class ReviewDrainPool:
                 remaining = self._handoff.watch_until - time.monotonic()
                 if remaining >= _REVIEW_WATCH_MIN_SECONDS:
                     self._handoff.watcher = slot
+                    self._handoff.watcher_epoch = self._handoff.watch_epoch
                     return ReviewWatch(wait_ms=int(remaining * 1000))
             if self._handoff.may_lease:
                 return None
@@ -329,6 +334,11 @@ class ReviewDrainPool:
 
         with self._lock:
             if self._handoff.jobs:
+                return False
+            if self._handoff.watcher == slot and self._handoff.watcher_epoch != self._handoff.watch_epoch:
+                # Another batch renewed the window while this watch was open,
+                # so the burst is not over: the worker takes the watch up again.
+                self._handoff.watcher = None
                 return False
             self._free(slot)
             return True
@@ -364,6 +374,7 @@ class ReviewDrainPool:
             if batch is not None:
                 self._handoff.jobs.extend(batch.jobs)
                 self._handoff.watch_until = time.monotonic() + REVIEW_WATCH_SECONDS
+                self._handoff.watch_epoch += 1
             if batch is None or batch.more_may_be_ready:
                 self._handoff.may_lease = True
             else:

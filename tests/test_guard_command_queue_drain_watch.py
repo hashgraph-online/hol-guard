@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime import command_queue_drain
@@ -41,3 +42,38 @@ def test_a_full_batch_leaves_one_worker_free_to_watch(tmp_path: Path) -> None:
     assert polls.count("watch") >= 1
     assert sorted(str(job["id"]) for job in jobs) == sorted(poll for poll in polls if poll.startswith("job-"))
     assert not pool.has_handoff()
+
+
+def _watching_pool(tmp_path: Path) -> tuple[command_queue_drain.ReviewDrainPool, threading.Event]:
+    # Slot 0 holds an open watch lease on a live thread; nothing else runs.
+    pool = _recording_pool(tmp_path, [], threading.Lock())
+    hold = threading.Event()
+    watcher = threading.Thread(target=hold.wait, daemon=True)
+    watcher.start()
+    pool._threads[0] = watcher
+    pool._handoff.may_lease = False
+    pool._handoff.watch_until = time.monotonic() + command_queue_drain.REVIEW_WATCH_SECONDS
+    assert isinstance(pool._take_job(0, lane_clear=True), command_queue_drain.ReviewWatch)
+    return pool, hold
+
+
+def test_a_watch_renewed_by_another_batch_is_taken_up_again(tmp_path: Path) -> None:
+    pool, hold = _watching_pool(tmp_path)
+    try:
+        # Another batch lands while the watch lease is open and renews the window.
+        assert pool.start(command_queue_drain.ReviewLeaseBatch(jobs=(), more_may_be_ready=False)) == 0
+
+        # The open lease then comes back empty: the worker keeps watching.
+        assert pool._release(0) is False
+        assert isinstance(pool._take_job(0, lane_clear=True), command_queue_drain.ReviewWatch)
+    finally:
+        hold.set()
+
+
+def test_an_empty_watch_with_no_renewal_ends_the_burst(tmp_path: Path) -> None:
+    pool, hold = _watching_pool(tmp_path)
+    try:
+        assert pool._release(0) is True
+        assert pool._handoff.watch_until == 0.0
+    finally:
+        hold.set()
