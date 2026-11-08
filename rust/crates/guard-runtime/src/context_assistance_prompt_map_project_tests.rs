@@ -228,8 +228,9 @@ keeping tests passing.";
     assert!(!text.contains("naming `peekable`"), "{text}");
 }
 
-/// A method left to be written comes with what it builds on: its class's
-/// constructor, and the method and error its docstring writes as code.
+/// A function left to be written comes with what it builds on: its class's
+/// constructor, the method and error its docstring writes as code, and the
+/// nearest function named like it.
 #[test]
 fn a_stub_comes_with_what_its_docstring_names() {
     let dicts = "class ManyToMany:\n    def __init__(self):\n        self.data = {}\n\n    \
@@ -242,8 +243,17 @@ def update(self, iterable):\n        \"\"\"Add each pair as :meth:`add` does, ra
             "pkg/errors.py",
             "class PairError(ValueError):\n    \"\"\"Raised by ManyToMany.update.\"\"\"\n",
         ),
+        (
+            "pkg/ranks.py",
+            "def combination_index(element, iterable):\n    return sorted(element)\n\n\n\
+def permutation_index(element, iterable):\n    \"\"\"Its index.\"\"\"\n    raise NotImplementedError\n",
+        ),
     ];
     let (home, _project, root) = project(ON, &list);
+    let prompt = "Tests fail because permutation_index is not implemented (pkg/ranks.py). \
+Write the implementation.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(text.contains("return sorted(element)"), "{text}");
     let prompt = "`ManyToMany.update` in pkg/dictutils.py was stubbed out and now raises \
 NotImplementedError. Implement it again so it does what its docstring says.";
     let text = prompt_map(home.path(), &root, prompt).unwrap();

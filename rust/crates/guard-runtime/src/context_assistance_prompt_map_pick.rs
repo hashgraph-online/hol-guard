@@ -181,7 +181,8 @@ pub(super) fn named_definitions(
 /// class holding it, where the state it reads is set up (`ManyToMany.update`
 /// needs `__init__`), and the definitions its docstring writes as code
 /// (`zip_broadcast` raises ``UnequalIterablesError``), a method of the same
-/// class first, then any found by `find`.
+/// class first, then any found by `find`; then the nearest definition named
+/// like it.
 fn helpers(
     files: &[File],
     stub: &Pick,
@@ -217,7 +218,43 @@ fn helpers(
             found.push(at);
         }
     }
+    // A function named like it, nearest first, is often written the same
+    // way: `combination_index` beside `permutation_index`.
+    let own = parts(&written_name(file.opening(stub.at)).unwrap_or_default());
+    let alike = (0..file.sections.len())
+        .filter(|&at| at != stub.at && file.parent[at] == file.parent[stub.at])
+        .filter(|&at| !file.container(at) && !rename::stubbed(file, at))
+        .filter(|&at| {
+            written_name(file.opening(at))
+                .is_some_and(|name| parts(&name).iter().any(|part| own.contains(part)))
+        })
+        .min_by_key(|&at| file.sections[at].start.abs_diff(section.start));
+    if let Some(at) =
+        alike.filter(|at| found.len() < MAX_HELPERS && !found.contains(&(stub.file, *at)))
+    {
+        found.push((stub.file, at));
+    }
     found
+}
+
+/// The words of a name, lowercased, of three letters or more:
+/// `combination_index` and `combinationIndex` are `combination` and `index`.
+fn parts(name: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut part = String::new();
+    let mut lower = false;
+    for c in name.chars() {
+        if c == '_' || (c.is_uppercase() && lower) {
+            parts.push(std::mem::take(&mut part));
+        }
+        lower = c.is_lowercase();
+        if c != '_' {
+            part.extend(c.to_lowercase());
+        }
+    }
+    parts.push(part);
+    parts.retain(|part| part.len() >= 3);
+    parts
 }
 
 /// The names `line` writes between backticks: `name`, ``name``,
