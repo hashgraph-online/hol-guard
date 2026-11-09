@@ -399,7 +399,7 @@ assert instance.__exit__(None, None, None) is False\n\n\ndef test_other():\n    
         super::project_tests::ON,
         &[("pkg/more.py", source), ("tests/test_more.py", tests)],
     );
-    let prompt = "Something in `callback_iter.__exit__` broke recently, please fix it.";
+    let prompt = "Something in callback_iter.__exit__ broke recently, please fix it.";
     let text = super::project_tests::prompt_map(home.path(), &root, prompt).unwrap();
     assert!(text.contains("def __exit__"), "{text}");
     assert!(
