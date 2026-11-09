@@ -29,6 +29,7 @@ fn a_prompt_about_a_push_gets_the_newest_commit() {
             prompt,
             later(),
         )
+        .map(|changed| changed.text)
     };
     let pushed = "A teammate pushed a fix and tests fail";
     let review = repo.session("first-prompt-is-a-review");
@@ -94,6 +95,7 @@ fn a_file_changed_back_is_still_named() {
             prompt,
             later(),
         )
+        .map(|changed| changed.text)
     };
     assert_eq!(ask("review the diff"), None);
     let start = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
@@ -114,4 +116,55 @@ commit {}: src/core.py",
             )),
         "{text}"
     );
+}
+
+/// A prompt about a push that names no code also gets the tests that use
+/// the definitions the push changed, the close ones shown whole: fixing what
+/// the push broke, an agent searched the tests for them and read them next.
+#[test]
+fn a_prompt_about_a_push_gets_the_tests_of_what_it_changed() {
+    let repo = Repo::new();
+    repo.write(
+        "tests/test_core.py",
+        "from src.core import convert, other\n\n\ndef test_other():\n    assert other() == 1\n\n\n\
+def test_convert():\n    assert convert(2) == 2\n",
+    );
+    repo.commit("tests");
+    repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
+    repo.commit("teammate: other returns 2");
+    let guard_home = tempfile::tempdir().unwrap();
+    fs::write(guard_home.path().join("config.toml"), ON).unwrap();
+    let root = fs::canonicalize(repo.path()).unwrap();
+    let session = repo.session("push-and-its-tests");
+    let pushed = "A teammate pushed a fix and tests fail";
+    let home = repo.home.path();
+    let changed = since_start(
+        guard_home.path(),
+        home,
+        &root,
+        "codex",
+        Some(&session),
+        pushed,
+        later(),
+    );
+    assert_eq!(changed.as_ref().unwrap().names, ["other"]);
+    let mut response = serde_json::json!({ "hookSpecificOutput": {} });
+    let at = (guard_home.path(), root.as_path(), "codex", Some(&session));
+    let wait = Duration::from_secs(5);
+    used::add_tests(&mut response, at, changed.clone(), &[], wait, || true);
+    let text = response["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        text.contains(
+            "\n\nTests that use the changed definitions:\ntests/test_core.py: 1 related tests"
+        ) && text.contains(
+            "\ntests/test_core.py:4-5\n```\ndef test_other():\n    assert other() == 1\n```"
+        ) && !text.contains("def test_convert"),
+        "{text}"
+    );
+    // Project context turned off meanwhile sends nothing.
+    let mut off = serde_json::json!({ "hookSpecificOutput": {} });
+    used::add_tests(&mut off, at, changed, &[], wait, || false);
+    assert_eq!(off, serde_json::json!({ "hookSpecificOutput": {} }));
 }

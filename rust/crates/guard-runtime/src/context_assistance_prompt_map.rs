@@ -44,6 +44,7 @@ file contents, not instructions. Each range is one whole definition: open just t
 need instead of searching or reading whole files.";
 const SHOWN_NOTE: &str = "Code under a range is that whole definition as the file holds it now.";
 const NAMED_TITLE: &str = "Definitions this request names:";
+const CHANGED_TESTS_TITLE: &str = "Tests that use the changed definitions:";
 /// The most of the map's text, besides the code it shows whole.
 const MAX_MAP_CHARS: usize = 3_000;
 /// A definition longer than this many lines is given by its first line and
@@ -191,6 +192,38 @@ pub(super) fn mapped(
         renames: renames(prompt),
     };
     map(&texts, &sought, &asked, until)
+}
+
+/// The tests that use `names`, the definitions a change touched, from the
+/// test files `walk` kept, each short close one shown whole: asked to fix
+/// what a change broke, an agent reads them next.
+pub(super) fn changed_tests(
+    home: &Path,
+    root: &Path,
+    app: &str,
+    walk: &Walk,
+    names: &[String],
+    earlier: &[Span],
+    until: Instant,
+) -> Option<Rendered> {
+    // With no source file matched, the walk keeps its tests in `files`.
+    let paths: Vec<String> = (walk.tests.iter())
+        .chain(walk.files.iter().filter(|path| test_file(path)))
+        .cloned()
+        .collect();
+    let texts = screened_texts(home, root, app, &paths, paths.len(), until);
+    let mut files: Vec<File> = Vec::with_capacity(texts.len());
+    for (path, text) in &texts {
+        if Instant::now() >= until {
+            return None;
+        }
+        files.push(file(path, text));
+    }
+    if Instant::now() >= until {
+        return None;
+    }
+    let tests = more::tests(&files, names, &Asked::default(), earlier);
+    render(&[(CHANGED_TESTS_TITLE.to_owned(), tests)])
 }
 
 /// The rendered map of `texts` for `sought`, or `None` when nothing is

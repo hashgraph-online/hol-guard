@@ -30,7 +30,7 @@ pub(super) fn holding(found: &[Section], (start, end): (usize, usize)) -> Option
 
 /// The current numbers of the lines a change adds, or the line it removes
 /// at when it adds none.
-fn touched(hunk: &Hunk) -> Vec<usize> {
+pub(super) fn touched(hunk: &Hunk) -> Vec<usize> {
     let mut at = hunk.start.max(1);
     let mut added = Vec::new();
     let mut removed = None;
