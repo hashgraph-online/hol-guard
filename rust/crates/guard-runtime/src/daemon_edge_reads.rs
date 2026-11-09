@@ -69,6 +69,8 @@ struct Handshake {
     session_signals: Option<Vec<String>>,
     #[serde(default)]
     cwd: Option<String>,
+    #[serde(default)]
+    daemon_fingerprint: Option<String>,
 }
 
 pub(super) struct ReadConfig {
@@ -86,6 +88,9 @@ pub(super) struct ReadConfig {
     /// `os.getcwd()` in the daemon. The edge runs from its own directory, and
     /// store reads resolve a relative config path from the daemon's.
     daemon_cwd: Option<String>,
+    /// `current_guard_daemon_runtime_fingerprint()`, which containment health
+    /// evidence is bound to.
+    daemon_fingerprint: Option<String>,
 }
 
 impl ReadConfig {
@@ -122,6 +127,12 @@ impl ReadConfig {
             user_home: handshake.user_home,
             session_signals,
             daemon_cwd: handshake.cwd.filter(|cwd| Path::new(cwd).is_absolute()),
+            daemon_fingerprint: handshake.daemon_fingerprint.filter(|fingerprint| {
+                fingerprint.len() == 64
+                    && fingerprint
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            }),
         })
     }
 }
@@ -360,6 +371,10 @@ fn respond(
     if let Some(request_id) = single_segment(request.path, "/v1/requests/", "") {
         return requests::detail(request_id, request.query, hosted, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
+    }
+    if request.path == "/v1/runtime/containment-health" {
+        return network::containment_health(config)
+            .map(|(status, body)| (status, body, caller.cors_origin, true));
     }
     if request.path == "/v1/network/status" {
         return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));

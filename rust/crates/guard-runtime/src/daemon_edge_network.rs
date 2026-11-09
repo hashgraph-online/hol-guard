@@ -2,8 +2,12 @@
 //! for the daemon: the default platform profiles, the host's `sys.platform`,
 //! and the supervisor's health. The daemon's supervisor never receives a
 //! backend advertisement, so its health is always the unavailable phase.
+//! Also `GET /v1/runtime/containment-health`, which the resident's own probe
+//! answers.
 
 use serde_json::{json, Value};
+
+use super::ReadConfig;
 
 /// `sys.platform` for this build, or `None` where Python would name a
 /// platform this edge does not know how to spell.
@@ -92,6 +96,19 @@ pub(in crate::daemon_edge) fn status() -> Option<(u16, Value)> {
     crate::network_status_build::dispatch(&request)
         .ok()
         .map(|body| (200, body))
+}
+
+/// `GET /v1/runtime/containment-health`: a fresh probe bound to the daemon's
+/// fingerprint, or `null` when the probe cannot run, as the daemon writes a
+/// failed probe. Left to the daemon until its handshake names a fingerprint.
+pub(in crate::daemon_edge) fn containment_health(config: &ReadConfig) -> Option<(u16, Value)> {
+    if !cfg!(any(target_os = "macos", target_os = "linux")) {
+        return None;
+    }
+    let fingerprint = config.daemon_fingerprint.as_deref()?;
+    let evidence = guard_command::contained_runner::containment_health_evidence(fingerprint)
+        .unwrap_or(Value::Null);
+    Some((200, json!({ "containment_health": evidence })))
 }
 
 #[cfg(test)]

@@ -35,6 +35,7 @@ def edge_handshake(
     dashboard_build: str | None,
     user_home: str | None = None,
     session_signals: list[str] | None = None,
+    daemon_fingerprint: str | None = None,
 ) -> bytes:
     """The line that lets the edge answer token-authenticated store reads."""
 
@@ -58,6 +59,9 @@ def edge_handshake(
         # The edge runs in a session of its own; approval-gate checks it sends
         # must carry the daemon's session, as the daemon's own checks do.
         payload["session_signals"] = session_signals
+    if daemon_fingerprint is not None:
+        # Containment health evidence is bound to the daemon's runtime identity.
+        payload["daemon_fingerprint"] = daemon_fingerprint
     return json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
@@ -75,6 +79,7 @@ def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], b
             dashboard_build=dashboard_build_id(static_dir),
             user_home=_user_home(),
             session_signals=session_signals(),
+            daemon_fingerprint=_daemon_fingerprint(),
         )
 
     def on_activity(kinds: bytes = b"a") -> None:
@@ -98,3 +103,17 @@ def _user_home() -> str | None:
 
 
 __all__ = ["HANDSHAKE_SCHEMA", "daemon_edge_callbacks", "edge_handshake"]
+
+
+def _daemon_fingerprint() -> str | None:
+    """The daemon's runtime identity, or ``None`` when the runtime cannot name it.
+
+    Without it the edge leaves containment health to the daemon.
+    """
+
+    from .manager import current_guard_daemon_runtime_fingerprint
+
+    try:
+        return current_guard_daemon_runtime_fingerprint()
+    except RuntimeError:
+        return None
