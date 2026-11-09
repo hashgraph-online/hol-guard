@@ -42,9 +42,9 @@ fn fail_closed_prompt() -> Value {
     json!({
         "policy_action": "block",
         "decision": "block",
-        "reason": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, add --guard-home with the affected home path to the recovery command.",
+        "reason": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, add --guard-home with the affected home path to the recovery command.",
         "reason_code": "native_prompt_unavailable",
-        "systemMessage": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, add --guard-home with the affected home path to the recovery command.",
+        "systemMessage": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, add --guard-home with the affected home path to the recovery command.",
         "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
     })
 }
