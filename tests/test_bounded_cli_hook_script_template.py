@@ -334,6 +334,8 @@ def test_generated_client_prompt_unavailability_matches_host_contract(tmp_path: 
     module = _load_script(tmp_path, harness=harness)
     payload, code = module._failure_payload("UserPromptSubmit", "Native prompt review unavailable.")
     assert code == 0
+    reason = payload["message"] if harness == "copilot" else payload["reason"]
+    assert "For a custom Guard home, add --guard-home with the affected home path" in reason
     if harness == "copilot":
         assert payload["behavior"] == "deny"
     else:
