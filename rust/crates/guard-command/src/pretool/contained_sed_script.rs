@@ -21,12 +21,22 @@ const MAX_SCRIPT_CHARS: usize = 1024;
 
 /// Whether `script` only reads standard input and writes standard output.
 pub(in crate::pretool) fn text_filter_script(script: &str) -> bool {
+    script_without_execution(script, false)
+}
+
+/// Workspace containment bounds file effects, but cannot undo executed input.
+pub(in crate::pretool) fn workspace_script(script: &str) -> bool {
+    script_without_execution(script, true)
+}
+
+fn script_without_execution(script: &str, file_effects: bool) -> bool {
     if script.len() > MAX_SCRIPT_CHARS {
         return false;
     }
     Reader {
         characters: script.chars().collect(),
         index: 0,
+        file_effects,
     }
     .walk()
 }
@@ -44,6 +54,7 @@ enum Address {
 struct Reader {
     characters: Vec<char>,
     index: usize,
+    file_effects: bool,
 }
 
 impl Reader {
@@ -242,6 +253,11 @@ impl Reader {
             // `r`/`R` read a file, `w`/`W` write one, GNU `e` runs a shell
             // command and `F` prints the input's name. None of them is the
             // standard input the stage was screened for.
+            'r' | 'R' | 'w' | 'W' if self.file_effects => {
+                self.file_argument();
+                true
+            }
+            'F' if self.file_effects => self.end_of_command(),
             'r' | 'R' | 'w' | 'W' | 'e' | 'F' => false,
             's' => self.substitute(),
             'y' => self.transliterate(),
@@ -333,6 +349,13 @@ impl Reader {
         false
     }
 
+    // Sed filenames consume the rest of the line, including semicolons.
+    fn file_argument(&mut self) {
+        while !matches!(self.peek(), None | Some('\n')) {
+            self.index += 1;
+        }
+    }
+
     fn substitute_flags(&mut self) -> bool {
         loop {
             match self.peek() {
@@ -340,6 +363,11 @@ impl Reader {
                 Some(character) if character.is_ascii_digit() => self.index += 1,
                 // `w FILE` and `W FILE` write the replaced line to a file,
                 // and `e` runs the replacement as a shell command.
+                Some('w' | 'W') if self.file_effects => {
+                    self.index += 1;
+                    self.file_argument();
+                    return true;
+                }
                 Some('w' | 'W' | 'e') => return false,
                 _ => return self.end_of_command(),
             }

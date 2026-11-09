@@ -24974,6 +24974,168 @@
       "expect": "not_allow"
     },
     {
+      "id": "sed-substitute-escaped-delimiter-redaction",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -E 's/\\/tmp\\/scratch-[a-z0-9]+/TMPDIR/g'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-substitute-case-insensitive-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -E 's/example/sample/gI'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-substitute-occurrence-count",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -E 's/example/sample/2g'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-substitute-quiet-print-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -n -E 's/example/sample/p'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-substitute-multiple-expressions",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -e 's/example/sample/' -e 's/retry/attempt/'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sed-substitute-second-expression-writes-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -e 's/example/sample/' -e 'w ${HOME}/notes.md'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-sed-substitute-escaped-delimiter-exec-flag",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -E 's/\\/tmp\\/scratch-[a-z0-9]+/TMPDIR/e'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "sed-substitute-alternate-delimiter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -E 's|example|sample|g'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-substitute-chained-semicolon",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -E 's/example/sample/; s/retry/attempt/'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sed-substitute-chained-write-command",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md | sed -E 's/example/sample/; w ${HOME}/notes.md'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "gauntlet-linked-modules-relative-vite-build",
       "fix_area": "shell",
       "harnesses": [
@@ -53027,6 +53189,108 @@
       "expect": "not_allow"
     },
     {
+      "id": "readiness-wait-process-liveness-null-sink",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while kill -0 4821 2>/dev/null; do sleep 15; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "readiness-wait-process-then-reports",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while kill -0 4194305 2>/dev/null; do sleep 15; done; echo \"build finished\"; date -u +%H:%M:%SZ"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "readiness-wait-port-then-reports",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "until nc -z localhost 5432; do sleep 1; done; echo ready"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "process-liveness-signal-zero",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "kill -0 4821" },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "process-liveness-signal-zero-named",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "kill -s 0 4821" },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-readiness-wait-redirects-after-done",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while kill -0 4821 2>/dev/null; do sleep 15; done > wait.log"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-readiness-wait-outcome-join",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while kill -0 4821 2>/dev/null; do sleep 15; done && echo done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-readiness-wait-continuation-removes-files",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while kill -0 4821 2>/dev/null; do sleep 15; done; rm -rf build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-process-liveness-terminates",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "kill -9 4821" },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-process-liveness-every-process",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "kill -0 -1" },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-retry-loop-breaks-on-a-loopback-answer",
       "fix_area": "queue",
       "harnesses": ["codex", "zcode", "claude-code", "omp"],
@@ -54184,6 +54448,58 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "hidden-listing-glob-dot-leading",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls .gitignore*"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hidden-listing-glob-dot-leading-long",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la .gitignore*"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-hidden-glob-stands-for-dot-directories",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -d .*"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
     }
   ],
   "mcp_cases": [
