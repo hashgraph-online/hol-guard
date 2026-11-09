@@ -1,6 +1,10 @@
 //! The words, quoted phrases and file names a typed prompt gives, which the
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
+use paths::without_paths;
+
+#[path = "context_assistance_prompt_paths.rs"]
+mod paths;
 
 pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
@@ -103,8 +107,9 @@ pub(crate) fn terms(prompt: &str) -> Vec<String> {
 
 /// The prompt's `terms`, each marked when the prompt wrote it whole as a
 /// name (`case_sensitive`, `IntRange`), not as a plain word or a piece of a
-/// name.
+/// name. An absolute path such as `/tmp/run-1/out.log` gives none.
 pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
+    let prompt = &without_paths(prompt);
     let mut code: Vec<(String, bool)> = Vec::new();
     let mut plain: Vec<(String, bool)> = Vec::new();
     for (word, shaped) in words(prompt) {
@@ -161,8 +166,6 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
-        let span = without_paths(span);
-        let span = span.as_str();
         for written in tokens(span) {
             let token = written.trim_matches(['.', '-', '/']);
             if file_name(token).is_some() {
@@ -219,27 +222,6 @@ fn command(span: &str) -> bool {
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && words
             .any(|word| word.starts_with('-') || word.contains('/') || file_name(word).is_some())
-}
-
-/// The span with each absolute path blanked: `/tmp/run-1/out.log`, `~/work`,
-/// `C:\Users\me`. Its folders name the machine, not the code asked about.
-fn without_paths(span: &str) -> String {
-    let absolute = |word: &str| {
-        let word = word.trim_start_matches(['(', '[', '"', '\'', '<']);
-        (word.starts_with('/') && word.matches('/').count() > 1)
-            || word.starts_with("~/")
-            || word.starts_with(r"\\")
-            || word.get(1..3) == Some(r":\")
-    };
-    span.split_inclusive(char::is_whitespace)
-        .map(|word| {
-            if absolute(word) {
-                " ".repeat(word.len())
-            } else {
-                word.to_owned()
-            }
-        })
-        .collect()
 }
 
 fn tokens(span: &str) -> impl Iterator<Item = &str> {

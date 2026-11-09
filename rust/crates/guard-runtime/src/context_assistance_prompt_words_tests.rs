@@ -20,10 +20,43 @@ fn an_absolute_path_gives_no_search_words() {
         "Output is in /private/tmp/run-501/tasks/b45t.output and C:\\Users\\tester\\wc-q\\out.txt; \
          fix parse in ~/work/app.",
     );
-    for word in ["private", "tmp", "task", "b45t", "user", "tester", "work", "app"] {
+    for word in [
+        "private", "tmp", "task", "b45t", "user", "tester", "work", "app",
+    ] {
         assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
     }
     assert!(found.contains(&"parse".to_owned()), "{found:?}");
+    // A path behind `=`, with forward slashes after a drive, or quoted with
+    // spaces in it is still a path.
+    let found = terms(
+        "Set output_file=/private/tmp/run-501/b45t.output, path=/home/alice/work, \
+         C:/Users/bob/proj and \"C:\\Program Files\\Vendor\\cache\" or `D:\\My Files\\stash`.",
+    );
+    for word in [
+        "private", "tmp", "home", "alice", "user", "bob", "proj", "program", "vendor", "cache",
+        "stash",
+    ] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"outputfile".to_owned()), "{found:?}");
+}
+
+/// Only the path is left out: a name written right after it stays, a path
+/// that holds a `tests` folder asks for no tests, and a web route is not a
+/// path on the machine.
+#[test]
+fn words_beside_a_path_and_web_routes_still_count() {
+    let found = terms("Run /tmp/repro.py:parse() then fix (/tmp/out),render in the app.");
+    for word in ["parse", "render"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    let found = terms("Fix parse; the log is /private/tmp/tests/task.output");
+    assert!(!found.contains(&"test".to_owned()), "{found:?}");
+    assert!(found.contains(&"parse".to_owned()), "{found:?}");
+    let found = terms("Fix the /api/users/{id} handler and `/v1/orders/refund`.");
+    for word in ["api", "user", "handler", "order", "refund"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
 }
 
 /// Quoted punctuation, such as the `>>>` of a doctest, is not a phrase.
