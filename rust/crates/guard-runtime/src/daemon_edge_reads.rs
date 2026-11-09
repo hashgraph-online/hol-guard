@@ -177,6 +177,7 @@ pub(super) struct NativeReads {
     /// The process the launcher started, when it waits on this one instead
     /// of becoming it (Windows has no exec); zero otherwise.
     launcher_pid: AtomicU32,
+    state_id: std::sync::OnceLock<String>,
     /// Connections being served, and when the last one began or ended: what
     /// the standalone daemon's idle shutdown reads.
     connections: AtomicUsize,
@@ -199,6 +200,7 @@ impl NativeReads {
             request_ids: AtomicU64::new(0),
             standalone: AtomicBool::new(false),
             launcher_pid: AtomicU32::new(0),
+            state_id: std::sync::OnceLock::new(),
             connections: AtomicUsize::new(0),
             touched: Mutex::new(Instant::now()),
         }
@@ -240,6 +242,16 @@ impl NativeReads {
     /// Names the launcher that waits on this process as the daemon's pid.
     pub(super) fn set_launcher_pid(&self, pid: u32) {
         self.launcher_pid.store(pid, Ordering::Release);
+    }
+
+    /// Records the `state_id` of the daemon state this process published.
+    pub(super) fn set_state_id(&self, state_id: String) {
+        let _ = self.state_id.set(state_id);
+    }
+
+    /// The `state_id` this process published, when it serves on its own.
+    pub(super) fn state_id(&self) -> Option<&str> {
+        self.state_id.get().map(String::as_str)
     }
 
     fn is_standalone(&self) -> bool {

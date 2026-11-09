@@ -33,6 +33,8 @@ const MAX_HANDLER_LIST_ITEMS: usize = 4_096;
 mod gate;
 #[path = "daemon_edge_gate_config.rs"]
 mod gate_config;
+#[path = "daemon_edge_reconnect.rs"]
+mod reconnect;
 #[path = "daemon_edge_resolve.rs"]
 mod resolve;
 #[path = "daemon_edge_route_calls.rs"]
@@ -83,6 +85,50 @@ pub(super) fn respond(
         let (status, body, no_store) =
             route_calls::respond(args, &payload, route_calls::call_library(config, name))?;
         return Some((status, body, caller.cors_origin, no_store));
+    }
+    if request.method == "POST"
+        && matches!(
+            request.path,
+            "/v1/update/reconnect/challenge" | "/v1/update/reconnect/verify"
+        )
+    {
+        // The dashboard reconnects before it holds the header key, so these
+        // run on the origin check alone, as the daemon runs them.
+        if request.has_header("Transfer-Encoding")
+            || request.has_header("X-Guard-Dashboard-Session")
+            || request.has_header("Authorization")
+        {
+            return None;
+        }
+        let local = local?;
+        let caller = super::super::auth::authorize_origin(request)?;
+        let payload = json_payload(request, body)?;
+        reads.report_activity();
+        let daemon = reconnect::Daemon {
+            guard_home: &config.guard_home,
+            local,
+            pid: reads.daemon_pid(),
+            state_id: reads.state_id(),
+        };
+        let (status, body) = if request.path.ends_with("/challenge") {
+            reconnect::challenge(&payload, &daemon)
+        } else {
+            reconnect::verify(&payload, &daemon)
+        };
+        return Some((status, body, caller.cors_origin, true));
+    }
+    if request.method == "POST" && request.path == "/v1/update/reconnect/prepare" {
+        if request.has_header("Transfer-Encoding")
+            || request.has_header("X-Guard-Dashboard-Session")
+            || request.has_header("Authorization")
+        {
+            return None;
+        }
+        let caller = authorize_token(request, &config.token)?;
+        json_payload(request, body)?;
+        reads.report_activity();
+        let (status, body) = reconnect_prepare(&config.guard_home);
+        return Some((status, body, caller.cors_origin, true));
     }
     if request.method == "POST" && request.path == "/v1/notifications/setup" {
         if request.has_header("Transfer-Encoding")
@@ -250,6 +296,26 @@ pub(super) fn respond(
 
 /// `_handle_requests_clear`: the native option check, the approval gate, then
 /// `clear_approval_requests`.
+/// `POST /v1/update/reconnect/prepare`: one stored browser verifier for the
+/// restart a dashboard update makes.
+fn reconnect_prepare(guard_home: &str) -> (u16, Value) {
+    let answer =
+        crate::dashboard_reconnect::dispatch(&serde_json::json!({"op": "prepare"}), guard_home);
+    match answer
+        .ok()
+        .and_then(|answer| answer.get("authorization").cloned())
+    {
+        Some(authorization @ Value::Object(_)) => (200, authorization),
+        _ => (
+            503,
+            serde_json::json!({
+                "error": "dashboard_reconnect_unavailable",
+                "reason_code": "dashboard_reconnect_identity_unavailable",
+            }),
+        ),
+    }
+}
+
 /// `POST /v1/apps/{app}/cloud/{action}`: the old Cloud handoff, now refused.
 fn legacy_cloud_handoff(path: &str) -> bool {
     crate::daemon_route_paths::route_class(path) == "none"

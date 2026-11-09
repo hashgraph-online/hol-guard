@@ -536,3 +536,22 @@ fn refuses_the_legacy_cloud_handoff_itself() {
         .replace(TOKEN, "wrong");
     assert_eq!(exchange(edge.address, &relayed), "daemon");
 }
+
+#[test]
+fn prepares_a_dashboard_reconnect_itself_or_reports_it_unavailable() {
+    let edge = spawn_configured_edge();
+    let request = post("{}", "").replace("/v1/read-state", "/v1/update/reconnect/prepare");
+    let answer = exchange(edge.address, &request);
+    let ok = answer.starts_with("HTTP/1.0 200") || answer.starts_with("HTTP/1.1 200");
+    let unavailable = answer.starts_with("HTTP/1.0 503") || answer.starts_with("HTTP/1.1 503");
+    assert!(ok || unavailable, "{answer}");
+    assert!(answer.contains("no-store"), "{answer}");
+    if ok {
+        assert!(answer.contains("\"verifier\""), "{answer}");
+    } else {
+        assert!(
+            answer.contains("dashboard_reconnect_identity_unavailable"),
+            "{answer}"
+        );
+    }
+}
