@@ -79,9 +79,9 @@ uv run --no-sync python -m ruff format --check src tests
 uv run --no-sync pytest tests/test_adapter_module_layout.py tests/test_adapter_packaged_manifest.py tests/test_guard_harness_contracts.py tests/test_guard_harness_setup.py tests/test_guard_harness_smoke.py --tb=short
 uv run --no-sync pytest tests/test_<harness>_adapter.py --tb=short
 
-cargo +1.88.0 fmt --manifest-path rust/Cargo.toml --all --check
-cargo +1.88.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
+cargo +1.89.0 fmt --manifest-path rust/Cargo.toml --all --check
+cargo +1.89.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
 Replace `<harness>` with the actual test module name and add event-specific tests. Test requirements and native projections are described in [CONTRIBUTING.md](../../CONTRIBUTING.md). For hook or policy behavior changes, run the [Guard Gauntlet](../../ci/gauntlet/README.md) live-agent acceptance workflow and attach verifiable benign/security-pair evidence for the final PR head. Unit tests alone do not constitute live enforcement proof.

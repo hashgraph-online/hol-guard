@@ -4,7 +4,7 @@ description: Install the pinned toolchain and reuse trusted CI compilation outpu
 inputs:
   toolchain:
     description: Exact Rust toolchain version.
-    default: "1.88.0"
+    default: "1.89.0"
   components:
     description: Optional space-separated components, such as rustfmt clippy.
     default: ""

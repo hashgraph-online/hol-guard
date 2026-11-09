@@ -1014,7 +1014,7 @@ mod tests {
         // No env_binary → this identity is bundled → manifest admission runs.
         let status = native_runtime_status(
             NativeMode::Auto,
-            &[id.clone()],
+            std::slice::from_ref(&id),
             Some("3.16.5"),
             None,
             None,
@@ -1117,7 +1117,7 @@ mod tests {
         let id = identity_of(&bin);
         let status = native_runtime_status(
             NativeMode::Auto,
-            &[id.clone()],
+            std::slice::from_ref(&id),
             Some("3.16.5"),
             Some(&id), // marks this identity as the env-override candidate
             None,

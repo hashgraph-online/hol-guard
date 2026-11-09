@@ -1611,8 +1611,7 @@ pub fn split_python_specifier(spec: &str) -> (String, Option<String>) {
         .name("version")
         .map(|m| m.as_str().trim().to_owned())
         .unwrap_or_default();
-    if operator.is_some() && !version.is_empty() {
-        let op = operator.unwrap();
+    if let Some(op) = operator.filter(|_| !version.is_empty()) {
         let specifier = if op == "==" || op == "===" {
             version.clone()
         } else {

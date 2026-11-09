@@ -507,16 +507,16 @@ Add fixture cases for destructive operations, safe previews, aliases, reordered 
 
 ## Development
 
-The development toolchain includes Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), and Rust 1.88.0, pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Rust builds the native runtime and extension compiler; Python supplies the CLI and development tooling. The commands below use a POSIX shell from the repository root. See [CONTRIBUTING.md](CONTRIBUTING.md) for Windows setup and the checks for each kind of change.
+The development toolchain includes Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), and Rust 1.89.0, pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Rust builds the native runtime and extension compiler; Python supplies the CLI and development tooling. The commands below use a POSIX shell from the repository root. See [CONTRIBUTING.md](CONTRIBUTING.md) for Windows setup and the checks for each kind of change.
 
 ```bash
 git clone https://github.com/hashgraph-online/hol-guard.git
 cd hol-guard
 uv sync --frozen --extra dev
-rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml \
+rustup toolchain install 1.89.0 --profile minimal --component rustfmt --component clippy
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml \
   -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml \
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml \
   -p hol-guard-runtime
 
 export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
