@@ -42,6 +42,8 @@ mod http;
 mod reads;
 #[path = "daemon_edge_replay.rs"]
 mod replay;
+#[path = "daemon_edge_serve.rs"]
+pub(crate) mod standalone;
 
 use reads::{NativeReads, Outcome};
 
@@ -306,7 +308,13 @@ fn serve_connection(
                 // The daemon's own listener is gone; its handler can still
                 // answer through the CLI.
                 match config {
-                    Some(config) => replay::replay(&client, &config, read_ahead, stalled_write),
+                    Some(config) => replay::replay(
+                        &client,
+                        &config,
+                        read_ahead,
+                        stalled_write,
+                        native_reads.daemon_pid(),
+                    ),
                     None => {
                         let _ = client.shutdown(Shutdown::Both);
                     }
@@ -315,7 +323,13 @@ fn serve_connection(
             };
             relay_connection(client, server, stalled_write, &read_ahead)
         }
-        (None, Some(config)) => replay::replay(&client, &config, read_ahead, stalled_write),
+        (None, Some(config)) => replay::replay(
+            &client,
+            &config,
+            read_ahead,
+            stalled_write,
+            native_reads.daemon_pid(),
+        ),
         (None, None) => {
             let _ = client.shutdown(Shutdown::Both);
         }

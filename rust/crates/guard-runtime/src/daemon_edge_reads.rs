@@ -25,7 +25,7 @@ use std::io::Write;
 use std::net::{Shutdown, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -165,6 +165,10 @@ pub(super) struct NativeReads {
     activity: Option<UnixStream>,
     last_activity: Mutex<Option<Instant>>,
     request_ids: AtomicU64,
+    /// Set when this process is the daemon itself rather than an edge in
+    /// front of one: it then answers liveness probes and names itself as the
+    /// daemon its replays serve.
+    standalone: AtomicBool,
 }
 
 impl NativeReads {
@@ -181,6 +185,25 @@ impl NativeReads {
             activity,
             last_activity: Mutex::new(None),
             request_ids: AtomicU64::new(0),
+            standalone: AtomicBool::new(false),
+        }
+    }
+
+    pub(super) fn mark_standalone(&self) {
+        self.standalone.store(true, Ordering::Release);
+    }
+
+    fn is_standalone(&self) -> bool {
+        self.standalone.load(Ordering::Acquire)
+    }
+
+    /// The process the published daemon state names: this one when it is the
+    /// daemon, otherwise the daemon that started this edge.
+    pub(super) fn daemon_pid(&self) -> u32 {
+        if self.is_standalone() {
+            std::process::id()
+        } else {
+            std::os::unix::process::parent_id()
         }
     }
 
@@ -283,6 +306,18 @@ pub(super) fn answer(
     };
     let (head, body) = bytes.split_at(head_len);
     let request = parse_request(head);
+    if reads.is_standalone() && request.as_ref().is_some_and(is_public_health_probe) {
+        // `_public_healthz_payload`: the probe every launcher and hook makes
+        // before trusting the published state, within a one-second budget.
+        let response = json_response(
+            200,
+            &serde_json::json!({"ok": true, "compatibility_version": DAEMON_COMPATIBILITY_VERSION}),
+            config.dashboard_build.as_deref(),
+            None,
+            false,
+        );
+        return write_answer(client, &response, reads, stalled_write);
+    }
     if let Some((stream, cors_origin)) = request
         .as_ref()
         .and_then(|request| streams::opens(request, config))
@@ -325,6 +360,19 @@ pub(super) fn answer(
         no_store,
     );
     write_answer(client, &response, reads, stalled_write)
+}
+
+/// `GUARD_DAEMON_COMPATIBILITY_VERSION`.
+pub(super) const DAEMON_COMPATIBILITY_VERSION: i64 = 2;
+
+/// A bodiless `GET /healthz` with no `Origin`. A browser's probe carries an
+/// origin the daemon checks first, so it is replayed.
+fn is_public_health_probe(request: &Request<'_>) -> bool {
+    request.method == "GET"
+        && request.path == "/healthz"
+        && !request.has_header("Origin")
+        && !request.has_header("Content-Length")
+        && !request.has_header("Transfer-Encoding")
 }
 
 fn write_answer(

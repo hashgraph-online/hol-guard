@@ -35,6 +35,7 @@ pub(in crate::daemon_edge) fn replay(
     config: &ReadConfig,
     read_ahead: Vec<u8>,
     stalled_write: Duration,
+    daemon_pid: u32,
 ) {
     let request = if read_ahead.is_empty() {
         read_request(client)
@@ -48,7 +49,7 @@ pub(in crate::daemon_edge) fn replay(
     let response = client
         .local_addr()
         .ok()
-        .and_then(|local| run(config, local.port(), request))
+        .and_then(|local| run(config, local.port(), daemon_pid, request))
         .filter(|response| !response.is_empty());
     let _ = client.set_write_timeout(Some(stalled_write));
     let mut writer = client;
@@ -128,17 +129,13 @@ pub(in crate::daemon_edge) fn content_length(head: &[u8]) -> Option<usize> {
 
 /// The CLI's raw response to `request`, or `None` when the daemon named no
 /// CLI or the CLI printed nothing in time.
-fn run(config: &ReadConfig, port: u16, request: Vec<u8>) -> Option<Vec<u8>> {
+fn run(config: &ReadConfig, port: u16, daemon_pid: u32, request: Vec<u8>) -> Option<Vec<u8>> {
     let (argv, guard_home, cwd) = config.cli()?;
     let (program, prefix) = argv.split_first()?;
     let mut command = Command::new(program);
     command
         .args(prefix)
-        .args(replay_args(
-            guard_home,
-            port,
-            std::os::unix::process::parent_id(),
-        ))
+        .args(replay_args(guard_home, port, daemon_pid))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -179,8 +176,8 @@ fn run(config: &ReadConfig, port: u16, request: Vec<u8>) -> Option<Vec<u8>> {
     }
 }
 
-/// The CLI arguments for one replay. `daemon_pid` is the daemon this edge
-/// serves (its parent), which the published daemon state names.
+/// The CLI arguments for one replay. `daemon_pid` is the process the
+/// published daemon state names.
 pub(in crate::daemon_edge) fn replay_args(
     guard_home: &str,
     port: u16,

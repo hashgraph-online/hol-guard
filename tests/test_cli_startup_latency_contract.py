@@ -103,6 +103,7 @@ def test_daemon_serve_cli_treats_home_as_guard_home_override(
 
     monkeypatch.setattr("codex_plugin_scanner.guard.store.GuardStore", FakeStore)
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.GuardDaemonServer", FakeDaemon)
+    monkeypatch.delenv("HOL_GUARD_NATIVE_DAEMON_SERVE", raising=False)
 
     code = daemon_serve.run_daemon_serve_cli(["daemon", "--serve", "--home", str(explicit_home)])
 

@@ -62,6 +62,13 @@ def run_daemon_serve_cli(argv: Sequence[str] | None = None) -> int:
     # the manager and its dependencies, which is most of this phase.
     import_started = time.monotonic()
     from ..config import resolve_guard_home
+    from ..daemon.native_serve import exec_native_daemon
+
+    exec_native_daemon(
+        resolve_guard_home(args.guard_home or args.home),
+        args.port or 0,
+        user_home=Path(args.home).expanduser().resolve() if args.home else None,
+    )
     from ..daemon.server import GuardDaemonServer
     from ..daemon.startup_phase import record_phase_since, timed_phase
     from ..store import GuardStore
