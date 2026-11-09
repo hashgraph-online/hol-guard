@@ -4,6 +4,9 @@
 use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
+const STORAGE_NOUN: &str =
+    r"(?:disks?|drives?|volumes?|partitions?|usb|ssd|hdd|sd\s*cards?|media)\b";
+
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
 /// `format` applied to what a program prints or to a piece of code (`format
 /// the value`, `format methods`) all choose how output is shaped; the bare
@@ -13,18 +16,23 @@ use std::sync::OnceLock;
 /// Two of the printed nouns also name storage once another word follows them:
 /// `format the time machine disk`, `format the logs volume`. The mask reads
 /// what comes after its own match and leaves such a phrase alone, so the verb
-/// stays in the text for the guarded reading below. The storage word may also
-/// close a short list (`format the values and logs volumes`, `format the
-/// values, cache and logs disks`), so up to four names joined by `and`, `or`,
-/// `&`, `/` or commas are read through before it.
+/// stays in the text for the guarded reading below. After `format` and a
+/// noun, the storage word may come after a list or other words (`format the
+/// values and logs volumes`, `format the logs and my backup disk`, `format the
+/// values and D: drive`), so any storage word later in the same sentence keeps
+/// the verb. An option such as `--format json` names how a command prints,
+/// whatever it lists, so only a storage word right after it does.
 pub(super) fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
-    static STORAGE: OnceLock<Regex> = OnceLock::new();
-    let storage = STORAGE.get_or_init(|| {
-        Regex::new(
-            r"(?i)^(?:\s*(?:,|\band\b|\bor\b|&|/)\s*(?:the\s+)?[a-z0-9_.-]+){0,4}\s*(?:machine\s+)?(?:disks?|drives?|volumes?|partitions?|usb|ssd|hdd|sd\s*cards?|media)\b",
-        )
-        .expect("bounded storage noun")
+    static NEXT: OnceLock<Regex> = OnceLock::new();
+    static SENTENCE: OnceLock<Regex> = OnceLock::new();
+    let next = NEXT.get_or_init(|| {
+        Regex::new(&format!(r"(?i)^\s*(?:machine\s+)?{STORAGE_NOUN}"))
+            .expect("bounded storage noun")
+    });
+    let sentence = SENTENCE.get_or_init(|| {
+        Regex::new(&format!(r"(?i)^[^.;!?\n]{{0,120}}?\b{STORAGE_NOUN}"))
+            .expect("bounded storage sentence")
     });
     OPTION
         .get_or_init(|| {
@@ -33,7 +41,9 @@ pub(super) fn mask_format_options(value: &str) -> String {
         })
         .replace_all(value, |captures: &Captures| {
             let whole = captures.get(0).expect("whole match present");
-            if storage.is_match(&value[whole.end()..]) {
+            let rest = &value[whole.end()..];
+            let verb = (whole.as_str().get(..6)).is_some_and(|w| w.eq_ignore_ascii_case("format"));
+            if next.is_match(rest) || (verb && sentence.is_match(rest)) {
                 return whole.as_str().to_owned();
             }
             format!(

@@ -49,6 +49,8 @@ fn format_naming_code_that_shapes_output_stays_benign() {
     assert_allowed("Question, no code changes: which function does this? \"Format the value like a 'human-readable' file size (i.e.\" Reply with its file path and function name.");
     assert_allowed("Add a format helper that pads each column to its widest entry.");
     assert_allowed("Format the error lines so each one names its file.");
+    // An output option names how a command prints whatever it lists.
+    assert_allowed("List each volume with --format json so the volume names line up.");
 }
 
 #[test]
@@ -83,6 +85,9 @@ fn the_same_verbs_on_a_guarded_object_stay_refused() {
         "Format the values and logs volumes",
         "Format the values, cache and logs disks",
         "Format the entries / time machine drives",
+        "Format the values and the external hard drive",
+        "Format the logs and my backup disk",
+        "Format the values and D: drive",
     ] {
         assert_not_benign(text);
     }
