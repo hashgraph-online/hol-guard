@@ -652,10 +652,11 @@ def test_a_settings_approval_is_bound_to_the_exact_settings_saved(
     from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
     from codex_plugin_scanner.guard.daemon import server_control_repair
 
-    subjects: list[object] = []
+    # The route names the change; the resident derives the binding from it.
+    changes: list[object] = []
 
     def gate(*_args: object, **kwargs: object) -> None:
-        subjects.append(kwargs.get("subject"))
+        changes.append(kwargs.get("settings_change"))
         raise ApprovalGateError("approval_gate_required", "stop here")
 
     monkeypatch.setattr(server_control_repair, "require_high_risk", gate)
@@ -674,9 +675,10 @@ def test_a_settings_approval_is_bound_to_the_exact_settings_saved(
             )
     finally:
         daemon.stop()
-    assert len(subjects) == 3
-    assert subjects[0] == subjects[1], "the same change keeps its subject on resubmit"
-    assert subjects[0] != subjects[2], "a different change is a different subject"
+    assert len(changes) == 3
+    assert changes[0] == {"kind": "save", "settings": {"receipt_redaction_level": "none"}}
+    assert changes[0] == changes[1], "the same change is named the same way on resubmit"
+    assert changes[0] != changes[2], "a different change is named differently"
 
 
 def test_a_confirmed_setup_returns_its_recovery_code_even_if_the_response_cannot_be_encoded(
