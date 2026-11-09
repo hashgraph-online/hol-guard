@@ -80,6 +80,45 @@ fn a_test_class_counts_by_the_tests_inside_it() {
     );
 }
 
+/// Every close test that fits the room is shown, not just the first four:
+/// a stub's six short tests are all there, so none is opened again.
+#[test]
+fn every_close_test_that_fits_is_shown() {
+    let mut tests = String::from("class TestIntersperse:\n");
+    for n in 0..6 {
+        tests.push_str(&format!(
+            "    def test_{n}(self):\n        assert list(intersperse('x', '01', n={n}))\n\n"
+        ));
+    }
+    let walk = Walk {
+        checked: 200,
+        holding: vec![3],
+        words: vec![3],
+        ..Walk::default()
+    };
+    let text = map(
+        &[
+            (
+                "src/more.py".to_owned(),
+                "def intersperse(e, iterable, n=1):\n    raise NotImplementedError\n".to_owned(),
+            ),
+            ("tests/test_more.py".to_owned(), tests),
+        ],
+        &sought(&walk, &[("intersperse".to_owned(), true)], &[]),
+        &Asked::default(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        text.contains("tests/test_more.py: 6 related tests, last TestIntersperse.test_5 17-18"),
+        "{text}"
+    );
+    for n in 0..6 {
+        assert!(text.contains(&format!("    def test_{n}(self):")), "{text}");
+    }
+}
+
 /// A helper defined inside a test is part of that test: the test that
 /// calls `print_exception` is listed, not its `def test()` helper.
 #[test]
