@@ -248,3 +248,23 @@ def test_worker_passes_answer_ok(tmp_path: Path) -> None:
 
 def test_worker_heartbeat_refuses_malformed_arguments(tmp_path: Path) -> None:
     assert "error" in _call(tmp_path, "worker.runtime_heartbeat", {"port": "x"})
+
+
+def test_worker_aibom_and_onefile_passes_answer(tmp_path: Path) -> None:
+    aibom = _call(tmp_path, "worker.aibom_inventory", {})
+    assert aibom["ok"]["status"] == "missing_workspace_context"  # type: ignore[index]
+    payload = GuardStore(tmp_path).get_sync_payload("aibom_inventory_daemon")
+    assert isinstance(payload, dict) and payload["status"] == "missing_workspace_context"
+    assert _call(tmp_path, "worker.onefile_reclaim", {})["ok"] == {"ok": True, "skipped": True}
+
+
+def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.workers.host import DurableApprovalAttention, _take_attention
+
+    store = GuardStore(tmp_path)
+    requests: list[dict[str, object]] = [{"request_id": "req-1", "approval_url": "http://127.0.0.1:1/approve/req-1"}]
+    DurableApprovalAttention(store).schedule(operation_id="op-1", requests=requests, browser_url="http://x/?k=secret")
+    taken = _take_attention(store)
+    assert taken == [{"operation_id": "op-1", "requests": requests}]
+    assert "secret" not in json.dumps(taken)
+    assert _take_attention(store) == []

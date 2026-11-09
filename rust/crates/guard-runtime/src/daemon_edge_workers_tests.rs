@@ -42,3 +42,18 @@ fn an_open_connection_holds_an_idle_daemon() {
     });
     assert_eq!(slept, 3);
 }
+
+#[test]
+fn a_worker_host_that_keeps_exiting_backs_off_and_a_stable_one_restarts_soon() {
+    let quick = Some(Duration::from_secs(1));
+    assert_eq!(
+        next_host_wait(HOST_RESTART_MIN, quick),
+        HOST_RESTART_MIN * 2
+    );
+    assert_eq!(next_host_wait(HOST_RESTART_MAX, quick), HOST_RESTART_MAX);
+    assert_eq!(next_host_wait(HOST_RESTART_MIN, None), HOST_RESTART_MIN * 2);
+    assert_eq!(
+        next_host_wait(HOST_RESTART_MAX, Some(HOST_STABLE)),
+        HOST_RESTART_MIN
+    );
+}

@@ -23,3 +23,11 @@ fn call_arguments_name_the_guard_home() {
         ["desktop", "library-call", "--guard-home", "/h"].map(str::to_owned)
     );
 }
+
+#[test]
+fn worker_host_arguments_name_the_guard_home() {
+    assert_eq!(
+        host_args("/h"),
+        ["desktop", "daemon-workers", "--guard-home", "/h"].map(str::to_owned)
+    );
+}

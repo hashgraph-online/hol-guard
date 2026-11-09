@@ -633,6 +633,16 @@ def _run_guard_desktop_command(
             print("Guard library call requires --guard-home.", file=sys.stderr)
             return 2
         return run_library_call(_Path(resolved_home))
+    if getattr(args, "desktop_command", None) == "daemon-workers":
+        from pathlib import Path as _Path
+
+        from ..workers.host import run_worker_host
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard daemon workers require --guard-home.", file=sys.stderr)
+            return 2
+        return run_worker_host(_Path(resolved_home))
     if getattr(args, "desktop_command", None) == "dashboard-update":
         from ..daemon.dashboard_update_runner import main as dashboard_update_main
 

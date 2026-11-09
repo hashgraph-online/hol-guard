@@ -149,7 +149,10 @@ def _replay_server_class() -> type:
             self.command_queue_lifecycle = None
             self.package_firewall_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.onefile_extraction_status = None
-            self.repair_self_check_status = None
+            from ..workers.host import REPAIR_SELF_CHECK_KEY
+
+            repair_status = store.get_sync_payload(REPAIR_SELF_CHECK_KEY)
+            self.repair_self_check_status = repair_status if isinstance(repair_status, dict) else None
             self.guard_cloud_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.guard_cloud_browser_session_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.package_firewall_mutation_lock = threading.Lock()
@@ -288,15 +291,11 @@ def _replay_server_class() -> type:
 
         @cached_property
         def approval_attention(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from ..browser_opener import open_browser_url
-            from ..runtime.approval_attention import ApprovalAttentionCoordinator
+            from ..workers.host import DurableApprovalAttention
 
-            return ApprovalAttentionCoordinator(
-                store=self.store,
-                runtime=self.runtime,
-                opener=open_browser_url,
-                home_dir=self.home_dir,
-            )
+            # This process ends with its request; the daemon's worker host
+            # opens the browser when the operation still waits.
+            return DurableApprovalAttention(self.store)
 
         @cached_property
         def hook_worker(self) -> Any:

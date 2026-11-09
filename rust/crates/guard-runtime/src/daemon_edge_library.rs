@@ -125,6 +125,39 @@ fn run(config: &ReadConfig, request: Vec<u8>) -> Option<Vec<u8>> {
     }
 }
 
+/// The CLI arguments for the worker host.
+pub(in crate::daemon_edge) fn host_args(guard_home: &str) -> [String; 4] {
+    [
+        "desktop".to_owned(),
+        "daemon-workers".to_owned(),
+        "--guard-home".to_owned(),
+        guard_home.to_owned(),
+    ]
+}
+
+/// Runs the worker host until it exits and returns `None` when it could not
+/// be started. Its standard input stays open while this process lives.
+pub(in crate::daemon_edge) fn run_host(config: &ReadConfig) -> Option<()> {
+    let (argv, guard_home, cwd) = config.cli()?;
+    let (program, prefix) = argv.split_first()?;
+    let mut command = Command::new(program);
+    command
+        .args(prefix)
+        .args(host_args(guard_home))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    isolate_group(&mut command);
+    let mut child = command.spawn().ok()?;
+    // Held, never written: the host stops when this end closes.
+    let _input = child.stdin.take();
+    let _ = child.wait();
+    Some(())
+}
+
 fn stop(mut child: Child) {
     kill_group(&child);
     let _ = child.kill();

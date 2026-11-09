@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from ..store import GuardStore
@@ -169,6 +170,117 @@ def idle_holds(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     return {"ok": True, "hold": bool(pending) or outbox_depth > 0}
 
 
+def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Syncs the AIBOM snapshots for the bound workspace, or the user-wide inventory without one."""
+
+    del args
+    from ..aibom_cli import (
+        _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+        remember_user_inventory_if_due,
+        sync_aibom_snapshots_if_due,
+    )
+    from ..runtime.runner import (
+        GuardSyncAuthorizationExpiredError,
+        GuardSyncNotConfiguredError,
+        _resolve_guard_sync_auth_context,
+    )
+
+    refreshed_at = _now()
+    min_interval = max(int(_AIBOM_AUTO_SYNC_INTERVAL_SECONDS), 1)
+    payload = store.get_sync_payload("aibom_inventory_context")
+    current_workspace_id = store.get_cloud_workspace_id()
+    bound = (
+        payload
+        if current_workspace_id is not None
+        and isinstance(payload, dict)
+        and payload.get("workspace_id") == current_workspace_id
+        else {}
+    )
+
+    def _path(value: object) -> Path | None:
+        return Path(value).expanduser() if isinstance(value, str) and value.strip() else None
+
+    home_dir = _path(bound.get("home_dir"))
+    workspace_dir = _path(bound.get("workspace_dir"))
+    try:
+        if workspace_dir is None:
+            # Without a workspace the cloud snapshot is left alone; the
+            # user-wide scan still feeds fleet posture inventory.
+            try:
+                user_inventory: dict[str, object] = remember_user_inventory_if_due(
+                    store,
+                    generated_at=refreshed_at,
+                    min_interval_seconds=min_interval,
+                    home_dir=home_dir,
+                )
+            except Exception as error:
+                user_inventory = {"collected": False, "error": str(error)}
+            store.set_sync_payload(
+                "aibom_inventory_daemon",
+                {
+                    "status": "missing_workspace_context",
+                    "reason": "missing_workspace_context",
+                    "skipped": True,
+                    "refreshed_at": refreshed_at,
+                    "user_inventory": user_inventory,
+                },
+                refreshed_at,
+            )
+            return {"ok": False, "status": "missing_workspace_context"}
+        auth_context = _resolve_guard_sync_auth_context(store)
+        with store.hold_cloud_sync_lock():
+            summary = sync_aibom_snapshots_if_due(
+                store,
+                generated_at=refreshed_at,
+                min_interval_seconds=min_interval,
+                auth_context=auth_context,
+                expected_workspace_id=current_workspace_id,
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
+            )
+        has_error = bool(summary.get("error"))
+        status = (
+            "error"
+            if has_error
+            else "synced"
+            if summary.get("synced") is True
+            else str(summary.get("reason") or "skipped")
+        )
+        store.set_sync_payload(
+            "aibom_inventory_daemon", {**summary, "status": status, "refreshed_at": refreshed_at}, refreshed_at
+        )
+        return {"ok": not has_error and status != "not_configured", "status": status}
+    except GuardSyncAuthorizationExpiredError as error:
+        record: dict[str, object] = {"status": "auth_expired", "refreshed_at": refreshed_at, "message": str(error)}
+    except GuardSyncNotConfiguredError:
+        record = {"status": "not_configured", "refreshed_at": refreshed_at}
+    except Exception as error:
+        record = {"error": str(error), "refreshed_at": refreshed_at, "status": "error"}
+    store.set_sync_payload("aibom_inventory_daemon", record, refreshed_at)
+    return {"ok": False, "status": record["status"]}
+
+
+def onefile_reclaim(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Reclaims orphaned one-file extraction directories left by earlier frozen runs."""
+
+    del store, args
+    import sys
+    import tempfile
+
+    from ..onefile_extraction import reclaim_orphaned_extraction_dirs
+
+    if not getattr(sys, "frozen", False):
+        return {"ok": True, "skipped": True}
+    # Directories still open, this call's own among them, are left in place.
+    reclaim_orphaned_extraction_dirs(
+        temp_root=Path(tempfile.gettempdir()),
+        current_meipass=getattr(sys, "_MEIPASS", None),
+        now=datetime.now(timezone.utc),
+        scan_open_paths=True,
+    )
+    return {"ok": True}
+
+
 WORKER_CALLS = {
     "worker.cloud_sync": cloud_sync,
     "worker.bundle_refresh": bundle_refresh,
@@ -177,4 +289,6 @@ WORKER_CALLS = {
     "worker.extension_catalog": extension_catalog,
     "worker.runtime_heartbeat": runtime_heartbeat,
     "worker.idle_holds": idle_holds,
+    "worker.aibom_inventory": aibom_inventory,
+    "worker.onefile_reclaim": onefile_reclaim,
 }
