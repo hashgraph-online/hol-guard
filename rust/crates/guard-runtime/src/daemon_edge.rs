@@ -257,7 +257,9 @@ fn serve(
             .name("daemon-edge-conn".into())
             .stack_size(CONNECTION_THREAD_STACK)
             .spawn(move || {
+                connection_reads.begin_connection();
                 serve_connection(client, upstream, stalled_write, &connection_reads);
+                connection_reads.end_connection();
                 relay_slots.release();
             });
         if spawned.is_err() {

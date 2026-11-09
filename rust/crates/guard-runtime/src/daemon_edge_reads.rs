@@ -25,7 +25,7 @@ use std::io::Write;
 use std::net::{Shutdown, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -169,6 +169,10 @@ pub(super) struct NativeReads {
     /// front of one: it then answers liveness probes and names itself as the
     /// daemon its replays serve.
     standalone: AtomicBool,
+    /// Connections being served, and when the last one began or ended: what
+    /// the standalone daemon's idle shutdown reads.
+    connections: AtomicUsize,
+    touched: Mutex<Instant>,
 }
 
 impl NativeReads {
@@ -186,7 +190,38 @@ impl NativeReads {
             last_activity: Mutex::new(None),
             request_ids: AtomicU64::new(0),
             standalone: AtomicBool::new(false),
+            connections: AtomicUsize::new(0),
+            touched: Mutex::new(Instant::now()),
         }
+    }
+
+    pub(super) fn begin_connection(&self) {
+        self.connections.fetch_add(1, Ordering::AcqRel);
+        self.touch();
+    }
+
+    pub(super) fn end_connection(&self) {
+        self.touch();
+        self.connections.fetch_sub(1, Ordering::AcqRel);
+    }
+
+    pub(super) fn active_connections(&self) -> usize {
+        self.connections.load(Ordering::Acquire)
+    }
+
+    /// How long since a connection began or ended.
+    pub(super) fn idle_for(&self) -> Duration {
+        self.touched
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .elapsed()
+    }
+
+    fn touch(&self) {
+        *self
+            .touched
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner()) = Instant::now();
     }
 
     pub(super) fn mark_standalone(&self) {
@@ -654,10 +689,10 @@ mod refusals;
 #[path = "daemon_edge_releases.rs"]
 mod releases;
 
-#[path = "daemon_edge_streams.rs"]
-mod streams;
 #[path = "daemon_edge_dispatch.rs"]
 mod dispatch;
+#[path = "daemon_edge_streams.rs"]
+mod streams;
 #[path = "daemon_edge_writes.rs"]
 mod writes;
 

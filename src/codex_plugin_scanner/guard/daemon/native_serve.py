@@ -29,7 +29,7 @@ _MAX_LAUNCH_BYTES = 16 * 1024
 def native_serve_executable(guard_home: Path) -> Path | None:
     """The native runtime that serves the daemon, or ``None`` to stay in Python."""
 
-    if os.name != "posix" or os.environ.get(NATIVE_SERVE_ENV, "").strip() != "1":
+    if os.name != "posix" or os.environ.get(NATIVE_SERVE_ENV, "").strip() == "0":
         return None
     from ..adapters.native_hook_bridge import native_hook_bridge_executable
 
@@ -50,6 +50,7 @@ def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None 
         _daemon_state_executable,
     )
     from .native_edge_handshake import _daemon_fingerprint, _user_home, guard_cli_command
+    from .server import _guard_daemon_idle_timeout_seconds
 
     home = os.path.abspath(guard_home)
     config: dict[str, object] = {
@@ -61,6 +62,7 @@ def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None 
         "busy_timeout_ms": max(1, min(60_000, int(sqlite_connect_timeout_seconds() * 1000))),
         "cwd": os.getcwd(),
         "cli_command": guard_cli_command(),
+        "workers": True,
         "state": {
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,
@@ -74,6 +76,7 @@ def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None 
         "user_home": str(user_home) if user_home is not None else _user_home(),
         "session_signals": session_signals() or None,
         "daemon_fingerprint": _daemon_fingerprint(),
+        "idle_timeout_seconds": _guard_daemon_idle_timeout_seconds(Path(home)),
     }
     config.update({key: value for key, value in optional.items() if value is not None})
     nonce = os.environ.get(_LAUNCH_NONCE_ENV, "")

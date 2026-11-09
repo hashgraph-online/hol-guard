@@ -11,16 +11,19 @@ import pytest
 from codex_plugin_scanner.guard.daemon import native_serve
 
 
-def test_native_serve_stays_in_python_unless_opted_in(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.delenv(native_serve.NATIVE_SERVE_ENV, raising=False)
+def test_native_serve_is_the_default_unless_opted_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     called: list[object] = []
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.native_hook_bridge.native_hook_bridge_executable",
         lambda *args, **kwargs: called.append(args) or tmp_path / "runtime",
     )
-
+    monkeypatch.setenv(native_serve.NATIVE_SERVE_ENV, "0")
     assert native_serve.native_serve_executable(tmp_path) is None
     assert called == []
+
+    monkeypatch.delenv(native_serve.NATIVE_SERVE_ENV, raising=False)
+    expected = tmp_path / "runtime" if os.name == "posix" else None
+    assert native_serve.native_serve_executable(tmp_path) == expected
 
 
 def test_launch_configuration_names_the_daemon_and_its_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

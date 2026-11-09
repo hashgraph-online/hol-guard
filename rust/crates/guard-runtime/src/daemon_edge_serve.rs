@@ -28,6 +28,9 @@ use super::reads::{NativeReads, HANDSHAKE_SCHEMA};
 use super::{serve, MAX_ACTIVE_CONNECTIONS, STALLED_WRITE_TIMEOUT};
 use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_raw};
 
+#[path = "daemon_edge_workers.rs"]
+mod workers;
+
 pub(crate) const SERVE_COMMAND: &str = "daemon-serve";
 pub(crate) const SERVE_FEATURE: &str = "daemon-serve-v1";
 pub(super) const LAUNCH_SCHEMA: &str = "guard-daemon-serve-launch.v1";
@@ -73,6 +76,12 @@ pub(super) struct LaunchConfig {
     cli_command: Vec<String>,
     #[serde(default)]
     launch_nonce: Option<String>,
+    /// Run the daemon's background jobs (`daemon_edge_workers.rs`).
+    #[serde(default)]
+    workers: bool,
+    /// Stop after this long with nothing served and no durable work held.
+    #[serde(default)]
+    idle_timeout_seconds: Option<f64>,
     state: Map<String, Value>,
 }
 
@@ -225,6 +234,21 @@ pub(crate) fn run(args: &[String]) -> i32 {
     reads.mark_standalone();
     reads.accept_handshake(&config.handshake(&secret));
     drop(secret);
+    if config.workers {
+        workers::start(
+            &reads,
+            workers::Registration {
+                session_id: random_hex(16),
+                host: config.host.clone(),
+                port,
+                started_at: now_iso(),
+            },
+            config
+                .idle_timeout_seconds
+                .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+                .map(std::time::Duration::from_secs_f64),
+        );
+    }
     println!("{}", json!({"port": port, "pid": std::process::id()}));
     let _ = io::stdout().flush();
     match serve(

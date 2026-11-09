@@ -20,6 +20,7 @@ from .control_route_calls import ROUTE_CALLS
 from .routes.calls import HANDLER_CALLS
 from .routes.offline import DISPATCH_CALLS
 from .store import GuardStore
+from .workers.ticks import WORKER_CALLS
 
 LibraryCall = Callable[[GuardStore, Mapping[str, Any]], object]
 
@@ -211,6 +212,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **ROUTE_CALLS,
     **HANDLER_CALLS,
     **DISPATCH_CALLS,
+    **WORKER_CALLS,
 }
 
 
