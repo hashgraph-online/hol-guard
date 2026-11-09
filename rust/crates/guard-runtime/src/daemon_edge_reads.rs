@@ -347,6 +347,8 @@ fn route(
             }),
         )),
         "/v1/receipts/analytics" => records::receipt_analytics(query, config, reads),
+        "/v1/settings" => settings::settings(config),
+        "/v1/settings/export" => settings::export(config),
         _ => {
             if let Some(session_id) = single_segment(path, "/v1/sessions/", "/resume") {
                 return records::session_resume(session_id, config, reads);
@@ -473,6 +475,9 @@ mod activity;
 
 #[path = "daemon_edge_requests.rs"]
 mod requests;
+
+#[path = "daemon_edge_settings.rs"]
+mod settings;
 
 #[path = "daemon_edge_writes.rs"]
 mod writes;
