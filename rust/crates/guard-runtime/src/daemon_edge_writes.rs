@@ -35,6 +35,8 @@ mod gate;
 mod gate_config;
 #[path = "daemon_edge_resolve.rs"]
 mod resolve;
+#[path = "daemon_edge_route_calls.rs"]
+mod route_calls;
 #[path = "daemon_edge_sessions.rs"]
 mod sessions;
 #[path = "daemon_edge_settings_write.rs"]
@@ -62,6 +64,24 @@ pub(super) fn respond(
         reads.report_activity();
         let (status, body, no_store) =
             resolve::respond(request.path, &payload, local, resolve::call_library(config))?;
+        return Some((status, body, caller.cors_origin, no_store));
+    }
+    if let Some((name, args)) = (request.method == "POST")
+        .then(|| route_calls::route(request.path))
+        .flatten()
+    {
+        // A dashboard session is checked only by the daemon.
+        if request.has_header("Transfer-Encoding")
+            || request.has_header("X-Guard-Dashboard-Session")
+            || request.has_header("Authorization")
+        {
+            return None;
+        }
+        let caller = authorize_token(request, &config.token)?;
+        let payload = json_payload(request, body)?;
+        reads.report_activity();
+        let (status, body, no_store) =
+            route_calls::respond(args, &payload, route_calls::call_library(config, name))?;
         return Some((status, body, caller.cors_origin, no_store));
     }
     if let Some(route) = sessions::Route::parse(request.method, request.path) {

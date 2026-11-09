@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .control_route_calls import ROUTE_CALLS
 from .store import GuardStore
 
 LibraryCall = Callable[[GuardStore, Mapping[str, Any]], object]
@@ -205,6 +206,7 @@ def _approval_resolve(store: GuardStore, args: Mapping[str, Any]) -> object:
 
 REGISTRY: dict[str, LibraryCall] = {
     "approval.resolve": _approval_resolve,
+    **ROUTE_CALLS,
 }
 
 

@@ -245,7 +245,7 @@ class _ControlPolicyRoutes:
         self._write_json(verdict.body)
 
     def _handle_policy_resolve(self, payload: dict[str, object]) -> None:
-        from .policy_authority_api import PolicyAuthorityApiError, resolve_policy_decision
+        from ..policy_authority_api import PolicyAuthorityApiError, resolve_policy_decision
 
         try:
             result = resolve_policy_decision(self.server.store, payload, now=_now())  # type: ignore[attr-defined]
@@ -255,7 +255,7 @@ class _ControlPolicyRoutes:
         self._write_json(result, extra_headers={"Cache-Control": "no-store"})
 
     def _handle_policy_claim(self, payload: dict[str, object]) -> None:
-        from .policy_authority_api import PolicyAuthorityApiError, claim_policy_decision
+        from ..policy_authority_api import PolicyAuthorityApiError, claim_policy_decision
 
         try:
             result = claim_policy_decision(self.server.store, payload, now=_now())  # type: ignore[attr-defined]

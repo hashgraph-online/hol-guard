@@ -126,3 +126,51 @@ def test_cli_answers_one_call_on_stdout(tmp_path: Path) -> None:
     )
     assert empty.returncode == 2
     assert empty.stdout == b""
+
+
+def test_policy_lookups_answer_with_route_replies(tmp_path: Path) -> None:
+    assert _call(tmp_path, "route.policy_resolve", {"payload": {}}) == {
+        "ok": {"status": 400, "body": {"error": "invalid_harness"}, "no_store": False}
+    }
+    resolved = _call(tmp_path, "route.policy_resolve", {"payload": {"harness": "codex", "artifact_id": "a"}})
+    assert resolved["ok"]["status"] == 200  # type: ignore[index]
+    assert resolved["ok"]["no_store"] is True  # type: ignore[index]
+    assert resolved["ok"]["body"]["decision"] is None  # type: ignore[index]
+    assert _call(tmp_path, "route.policy_claim", {"payload": {"decision": 1}}) == {
+        "ok": {"status": 400, "body": {"error": "invalid_decision"}, "no_store": False}
+    }
+
+
+def test_resume_retry_of_an_unknown_request_is_not_found(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "route.request_resume_retry", {"request_id": "req-missing", "payload": {}})
+    assert answer == {"ok": {"status": 404, "body": {"error": "not_found"}, "no_store": False}}
+
+
+def test_bulk_allow_rejects_a_malformed_body(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "route.bulk_allow_once", {"payload": {"request_ids": "nope"}})
+    assert answer["ok"]["status"] == 400  # type: ignore[index]
+
+
+def test_policy_writes_reject_malformed_bodies(tmp_path: Path) -> None:
+    for name in ("route.policy_clear", "route.policy_upsert"):
+        answer = _call(tmp_path, name, {"payload": {}})
+        assert answer["ok"]["status"] == 400, name  # type: ignore[index]
+
+
+def test_harness_action_rejects_an_unknown_harness(tmp_path: Path) -> None:
+    answer = _call(
+        tmp_path,
+        "route.harness_action",
+        {"harness": "not-a-harness", "action": "repair", "payload": {"dry_run": True}},
+    )
+    assert answer["ok"]["status"] in {400, 404}  # type: ignore[index]
+
+
+def test_insights_share_raises_on_an_invalid_boolean(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "route.insights_share", {"payload": {"includeTopArtifacts": "maybe"}})
+    assert answer["error"]["kind"] == "value"  # type: ignore[index]
+
+
+def test_cloud_exception_request_rejects_an_invalid_body(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "route.cloud_exception_request_create", {"payload": {}})
+    assert answer["ok"]["status"] in {400, 401, 403, 409, 502, 503}  # type: ignore[index]
