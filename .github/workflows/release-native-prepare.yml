@@ -134,7 +134,7 @@ jobs:
       - name: Restore exact release binaries
         id: native-cache
         if: env.UNSHIPPED_TARGET != 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: prepared-native
           # No fallback: a source, version, target, root, image or flag change
