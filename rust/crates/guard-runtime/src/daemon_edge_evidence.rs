@@ -40,16 +40,39 @@ pub(super) fn list(query: &str, config: &ReadConfig, reads: &NativeReads) -> Opt
     let limit = query_int(query, "limit", DEFAULT_LIMIT)
         .ok()?
         .clamp(1, MAX_LIMIT);
-    let mut args = json!({
-        "harness": harness,
-        "category": category,
-        "severity": severity,
-        "request_id": null,
-        "action_identity": null,
-        "before_cursor": before,
-        "include_details": false,
-    });
-    // `list_evidence` reads as many pages as the rows need.
+    let items = page_items(
+        json!({
+            "harness": harness,
+            "category": category,
+            "severity": severity,
+            "request_id": null,
+            "action_identity": null,
+            "before_cursor": before,
+            "include_details": false,
+        }),
+        limit,
+        home,
+        config,
+        reads,
+    )?;
+    let total = reads
+        .store_call(
+            config,
+            "count_evidence",
+            json!({"harness": harness, "category": category, "severity": severity}),
+        )?
+        .as_i64()?;
+    Some((200, json!({"items": items, "total": total})))
+}
+
+/// `list_evidence` items, redacted, read as many pages as the rows need.
+fn page_items(
+    mut args: Value,
+    limit: i64,
+    home: &str,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<Value>> {
     let mut items = Vec::new();
     while (items.len() as i64) < limit {
         args["limit"] = Value::from(limit - items.len() as i64);
@@ -63,14 +86,7 @@ pub(super) fn list(query: &str, config: &ReadConfig, reads: &NativeReads) -> Opt
         }
         args["after"] = page.get("after")?.clone();
     }
-    let total = reads
-        .store_call(
-            config,
-            "count_evidence",
-            json!({"harness": harness, "category": category, "severity": severity}),
-        )?
-        .as_i64()?;
-    Some((200, json!({"items": items, "total": total})))
+    Some(items)
 }
 
 /// `evidence_record_to_dict(_row_to_record(row, include_details=False))`.
@@ -110,6 +126,9 @@ fn plain_ascii(text: &str) -> bool {
     text.bytes()
         .all(|byte| matches!(byte, b' '..=b'~' | b'\t' | b'\n' | b'\r'))
 }
+
+#[path = "daemon_edge_evidence_export.rs"]
+pub(super) mod export;
 
 #[cfg(test)]
 #[path = "daemon_edge_evidence_tests.rs"]

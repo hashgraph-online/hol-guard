@@ -250,7 +250,17 @@ pub(super) fn answer(
         return Outcome::Relay(Vec::new());
     };
     let (head, body) = bytes.split_at(head_len);
-    let answer = parse_request(head).and_then(|request| match request.method {
+    let request = parse_request(head);
+    if let Some(request) = request
+        .as_ref()
+        .filter(|request| request.method == "GET" && request.path == "/v1/evidence/export")
+    {
+        let Some(response) = export_response(request, config, reads) else {
+            return Outcome::Relay(bytes);
+        };
+        return write_answer(client, &response, reads, stalled_write);
+    }
+    let answer = request.and_then(|request| match request.method {
         "POST" | "DELETE" => writes::respond(&request, body, config, reads),
         _ => respond(&request, config, reads),
     });
@@ -267,12 +277,55 @@ pub(super) fn answer(
         cors_origin.as_deref(),
         no_store,
     );
+    write_answer(client, &response, reads, stalled_write)
+}
+
+fn write_answer(
+    client: &TcpStream,
+    response: &[u8],
+    reads: &NativeReads,
+    stalled_write: Duration,
+) -> Outcome {
     let mut writer = client;
     let _ = client.set_write_timeout(Some(stalled_write));
-    let _ = writer.write_all(&response);
+    let _ = writer.write_all(response);
     let _ = client.shutdown(Shutdown::Both);
     reads.report_activity();
     Outcome::Answered
+}
+
+/// `GET /v1/evidence/export` as the daemon writes it: the export body with
+/// only its content type, or the daemon's JSON error.
+fn export_response(
+    request: &Request<'_>,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    if request.has_header("Content-Length") || request.has_header("Transfer-Encoding") {
+        return None;
+    }
+    let caller = authorize(request, &config.token)?;
+    reads.report_activity();
+    Some(
+        match evidence::export::export(request.query, config, reads)? {
+            evidence::export::Export::Error(status, body) => json_response(
+                status,
+                &body,
+                config.dashboard_build.as_deref(),
+                caller.cors_origin.as_deref(),
+                false,
+            ),
+            evidence::export::Export::Body(content_type, body) => {
+                let mut bytes = format!(
+                    "HTTP/1.0 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+                .into_bytes();
+                bytes.extend_from_slice(body.as_bytes());
+                bytes
+            }
+        },
+    )
 }
 
 fn respond(
@@ -342,7 +395,10 @@ fn route(
             let receipt = reads.store_call(
                 config,
                 "get_latest_receipt",
-                json!({"harness": harness, "artifact_id": artifact_id}),
+                json!({
+                    "harness": harness,
+                    "artifact_id": artifact_id,
+                }),
             )?;
             Some(if receipt.is_null() {
                 not_found()
@@ -404,7 +460,10 @@ fn route(
             let diff = reads.store_call(
                 config,
                 "artifact_latest_diff",
-                json!({"harness": harness, "artifact_id": artifact_id}),
+                json!({
+                    "harness": harness,
+                    "artifact_id": crate::claude_hook_bridge_url::py_unquote(artifact_id),
+                }),
             )?;
             Some(if diff.is_object() {
                 (200, diff)
@@ -468,7 +527,12 @@ pub(super) fn json_response(
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        409 => "Conflict",
         410 => "Gone",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
         _ => "Not Found",
     };
     let mut response = format!(
