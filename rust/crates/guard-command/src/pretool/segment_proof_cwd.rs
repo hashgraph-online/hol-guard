@@ -566,6 +566,9 @@ pub(in crate::pretool) fn after_read_prefix(
         segment.environment_names.is_empty()
             && segment.wrapper_chain.is_empty()
             && !segment.path_overridden
+            // `$((PATH=10))` assigns as it expands, which the steps after the
+            // `cd` would see.
+            && !super::super::shell_arithmetic::arithmetic_assigns(&segment.text)
             && segment
                 .executable
                 .as_deref()

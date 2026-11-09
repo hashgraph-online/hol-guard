@@ -8,6 +8,7 @@ pub mod staged_scanner;
 
 mod code_cursor;
 mod code_expression;
+mod code_shapes;
 mod code_value;
 mod continuation;
 mod field_copy;
@@ -369,7 +370,7 @@ fn counted_matches<'t>(
         // The parameter list is read from the lines after this one, which
         // `is_sample` does not see.
         if answers
-            && code_expression::opens_typed_parameter_list(
+            && code_shapes::opens_typed_parameter_list(
                 matched.as_str(),
                 &text[matched.end()..line_end],
                 &text[line_end..],

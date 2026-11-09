@@ -251,6 +251,9 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
         format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
         format!("ls {root} || cd {repository} && git status"),
         format!("ls {root} | cd {repository} && git status"),
+        format!("echo $((PATH=10)); cd {repository} && ls ."),
+        format!("echo $((PATH=10)) && cd {repository} && ls ."),
+        format!("echo $((PATH=10)); ls {root}"),
         format!("cat {home}/.ssh/id_ed25519; cd {repository} && git status"),
     ] {
         let result = decide(&space, &space.root, &command);

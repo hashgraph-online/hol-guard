@@ -424,6 +424,11 @@ fn extension_header_names_read_by_a_handler_are_not_credentials() {
         format!("    const token = req.header('{digits}');"),
         "    const token = req.header('X-Service-Maintenance-Token-Value');".to_string(),
         "    const token = 'x-service-maintenance-token';".to_string(),
+        "    const password = String('x-correct-horse-battery-staple');".to_string(),
+        "    const token = Buffer.from('x-alpha-bravo-charlie-delta-echo');".to_string(),
+        "    const token = req.headers['x-service-maintenance-token-value'];".to_string(),
+        "    const token = config.get('x-service-maintenance-token');".to_string(),
+        "    const token = req.header(sha256('x-alpha-bravo-charlie-delta'));".to_string(),
     ] {
         assert!(flagged(&text), "{text:?}");
     }
@@ -443,6 +448,8 @@ fn a_typeof_guarded_choice_between_variables_is_not_a_credential() {
         format!("    const apiKey = typeof raw === 'string' ? raw : '{secret}';"),
         format!("    const apiKey = typeof raw === '{secret}' ? raw : undefined;"),
         "    const apiKey = typeof raw === 'string' ? correcthorsebatterystaple : raw;".to_string(),
+        "    const password = typeof raw === 'string' ? raw : 123456;".to_string(),
+        "    const password = typeof raw === 'string' ? 98765432 : raw;".to_string(),
     ] {
         assert!(flagged(&text), "{text:?}");
     }
@@ -484,6 +491,9 @@ fn an_arrow_function_with_one_parameter_per_line_is_not_a_credential() {
         format!("  const maintenanceToken = (\n    '{secret}'\n  );\n"),
         format!("  const maintenanceToken = (\n    {secret}\n  );\n"),
         format!("  const maintenanceToken = ( '{secret}'\n  );\n"),
+        format!("let credentials = (\n    user: \"admin\",\n    value: \"{secret}\"\n)\n"),
+        "let token = (\n    user: admin,\n    value: hunter2production\n)\n".to_string(),
+        format!("  const maintenanceToken = (\n    req: Request,\n  ) => '{secret}';\n"),
     ] {
         assert!(flagged(&text), "{text:?}");
     }
