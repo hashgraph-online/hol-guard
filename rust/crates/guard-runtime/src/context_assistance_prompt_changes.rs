@@ -35,8 +35,6 @@ const BUDGET: usize = 2_000;
 /// The longest commit diff shown.
 const MAX_SHOWN_DIFF: usize = 1_500;
 const MAX_SESSIONS: usize = 64;
-/// A Git call starts only with at least this much of the wait left.
-const MIN_LEFT: Duration = Duration::from_millis(150);
 /// The longest one secret scan of a part or subject may take.
 const SCAN_TIME: Duration = Duration::from_millis(50);
 const GLOBAL: [&str; 4] = [
@@ -147,8 +145,11 @@ impl Git {
         })
     }
 
+    /// Runs `git` with `arguments` while the note's share of the wait lasts.
+    /// A call that starts is bounded by Git's own timeout. The share is short,
+    /// so asking for part of it to be left let only the first calls start.
     fn run(&self, arguments: &[&str], until: Instant) -> Option<String> {
-        if until.saturating_duration_since(Instant::now()) < MIN_LEFT {
+        if Instant::now() >= until {
             return None;
         }
         let all: Vec<&str> = GLOBAL.iter().chain(arguments).copied().collect();
