@@ -357,24 +357,12 @@ def _dispatch_guard_daemon_command(
         return _handle_daemon_repair(guard_home, getattr(args, "json", False), home_dir=home_dir)
     if daemon_command == "stop":
         return _handle_daemon_stop(guard_home, getattr(args, "json", False))
-    if store is None:
-        store = GuardStore(
-            guard_home,
-            prime_policy_integrity=False,
-        )
-    workspace_dir = (
-        context.workspace_dir if context is not None and context.workspace_dir is not None else workspace
-    )
-    daemon = GuardDaemonServer(
-        store,
-        port=args.port or 0,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-    )
     if args.serve:
-        daemon.serve()
-        return 0
-    _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
+        from .daemon_serve import serve_native_daemon
+
+        return serve_native_daemon(guard_home, args.port or 0, user_home=home_dir)
+    daemon_url = ensure_guard_daemon(guard_home, home_dir=home_dir)
+    _emit("doctor", {"daemon_url": daemon_url}, getattr(args, "json", False))
     return 0
 
 __all__ = [

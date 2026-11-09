@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -58,43 +57,26 @@ def run_daemon_serve_cli(argv: Sequence[str] | None = None) -> int:
         print("Choose daemon --serve.", file=sys.stderr)
         return 2
 
-    # Start the clock before any daemon import: the package initializer loads
-    # the manager and its dependencies, which is most of this phase.
-    import_started = time.monotonic()
     from ..config import resolve_guard_home
-    from ..daemon.native_serve import exec_native_daemon
 
-    exec_native_daemon(
+    return serve_native_daemon(
         resolve_guard_home(args.guard_home or args.home),
         args.port or 0,
         user_home=Path(args.home).expanduser().resolve() if args.home else None,
     )
-    from ..daemon.server import GuardDaemonServer
-    from ..daemon.startup_phase import record_phase_since, timed_phase
-    from ..store import GuardStore
-
-    record_phase_since("import_modules", import_started)
-
-    home_override = args.home
-    home_dir = Path(home_override).expanduser().resolve() if home_override else Path.home().resolve()
-    guard_home = resolve_guard_home(args.guard_home or home_override)
-    with timed_phase("store_open"):
-        store = GuardStore(
-            guard_home,
-            source="default",
-            prime_policy_integrity=False,
-            allow_system_keyring=False,
-        )
-    workspace_dir = Path(args.workspace).expanduser() if args.workspace else None
-    with timed_phase("server_init"):
-        daemon = GuardDaemonServer(
-            store,
-            port=args.port or 0,
-            home_dir=home_dir,
-            workspace_dir=workspace_dir,
-        )
-    daemon.serve()
-    return 0
 
 
-__all__ = ["is_daemon_serve_fast_path_argv", "run_daemon_serve_cli"]
+def serve_native_daemon(guard_home: Path, port: int, *, user_home: Path | None) -> int:
+    """Hands this process to the native daemon; returns only when it cannot run."""
+
+    from ..daemon.native_serve import exec_native_daemon
+
+    exec_native_daemon(guard_home, port, user_home=user_home)
+    print(
+        "The Guard daemon needs HOL Guard's native runtime. Run `hol-guard doctor` to repair the installation.",
+        file=sys.stderr,
+    )
+    return 1
+
+
+__all__ = ["is_daemon_serve_fast_path_argv", "run_daemon_serve_cli", "serve_native_daemon"]
