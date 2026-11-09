@@ -1,0 +1,309 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.pineprompt",
+  "version": "1.0.0",
+  "name": "Pineprompt MCP",
+  "description": "Read AI search visibility data from Pineprompt: brand mentions, positions, sentiment, cited sources and share of voice across ChatGPT, Gemini, Claude, Google AI Overviews, Google AI Mode and Copilot. Create, update, delete, attach, detach and invite tools require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.pineprompt",
+    "displayName": "Pineprompt",
+    "url": "https://pineprompt.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://pineprompt.com",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://pineprompt.com/mcp",
+    "serverNames": [
+      "pineprompt",
+      "pineprompt-mcp"
+    ]
+  },
+  "riskClasses": [
+    "external-analytics-read",
+    "external-account-write",
+    "external-content-deletion"
+  ],
+  "tools": [
+    {
+      "name": "attach-brand-to-segment-tool",
+      "state": "review"
+    },
+    {
+      "name": "attach-tag-to-prompt-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-brand-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-invitation-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-monitor-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-organization-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-project-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-prompt-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-segment-tool",
+      "state": "review"
+    },
+    {
+      "name": "create-tag-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-invitation-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-monitor-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-organization-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-project-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-prompt-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-segment-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-tag-tool",
+      "state": "review"
+    },
+    {
+      "name": "delete-user-tool",
+      "state": "review"
+    },
+    {
+      "name": "detach-brand-from-segment-tool",
+      "state": "review"
+    },
+    {
+      "name": "detach-tag-from-prompt-tool",
+      "state": "review"
+    },
+    {
+      "name": "get-brand-mention-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-citation-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-monitor-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-organization-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-position-time-series-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-project-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-prompt-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-response-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-segment-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-sentiment-time-series-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-share-of-voice-time-series-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-source-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-source-type-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-source-url-type-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-source-url-usage-time-series-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-source-usage-time-series-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-tag-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "get-visibility-time-series-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-brand-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-brand-mentions-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-brands-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-citations-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-monitor-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-monitors-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-organizations-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-platform-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-projects-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-prompt-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-prompts-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-responses-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-segments-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-source-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-source-url-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-source-url-prompt-analytics-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-sources-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-tags-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "list-users-tool",
+      "state": "inherit"
+    },
+    {
+      "name": "update-brand-tool",
+      "state": "review"
+    },
+    {
+      "name": "update-monitor-tool",
+      "state": "review"
+    },
+    {
+      "name": "update-organization-tool",
+      "state": "review"
+    },
+    {
+      "name": "update-project-tool",
+      "state": "review"
+    },
+    {
+      "name": "update-prompt-tool",
+      "state": "review"
+    },
+    {
+      "name": "update-segment-tool",
+      "state": "review"
+    },
+    {
+      "name": "update-tag-tool",
+      "state": "review"
+    },
+    {
+      "name": "update-user-tool",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://pineprompt.com",
+    "https://pineprompt.com/.well-known/oauth-authorization-server",
+    "https://pineprompt.com/.well-known/oauth-protected-resource"
+  ],
+  "saferAlternatives": [
+    "Use the list-* and get-* tools; they only read visibility, sentiment, position and citation data.",
+    "Keep create-*, update-*, delete-*, attach-*, detach-* and invite tools on Review; they change or remove projects, brands, prompts, monitors, users and invitations.",
+    "Connect with an OAuth account that has the narrowest role needed for the task."
+  ]
+}
