@@ -14,6 +14,13 @@ many of them, so building the full request on each wake made the waiting hooks
 compete with the approvals they were waiting for. The full request is read once
 the status changes, or at the deadline.
 
+Held reads woken by the same review event share one status read. The first to
+wake reads the status of every request still held open in a single query, and
+the others take their answer from it, so a bulk approval costs one read per
+review event rather than one per waiting hook. A recheck without a wake still
+reads its own request, since that is how a decision written by another process
+is seen.
+
 A held read keeps one of the daemon's request slots for as long as it waits,
 so only a few are held at once. Beyond that a read is answered immediately,
 and its hook falls back to polling, leaving the remaining slots for hook
@@ -30,11 +37,14 @@ from __future__ import annotations
 
 import threading
 import time
-from collections import OrderedDict
-from collections.abc import Callable
+import weakref
+from collections import Counter, OrderedDict
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from urllib.parse import parse_qs
 
-from ..review_event_wake import review_event_wake_signal
+from ..fork_safety import forget_in_child
+from ..review_event_wake import ReviewEventWakeSignal, review_event_wake_signal
 from ..store import GuardStore
 
 MAX_RESOLUTION_WAIT_SECONDS = 1.0
@@ -48,6 +58,68 @@ _held_reads = threading.BoundedSemaphore(MAX_HELD_RESOLUTION_READS)
 MAX_WOKEN_REQUESTS = 256
 _woken_lock = threading.Lock()
 _woken_requests: OrderedDict[str, None] = OrderedDict()
+
+
+class _SharedStatusReads:
+    """The statuses of every request held open on one store, read once per wake."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # Only one held read queries at a time; the rest wait for its answer.
+        self._reader = threading.Lock()
+        self._waiting: Counter[str] = Counter()
+        self._read_generation = -1
+        self._statuses: dict[str, str | None] = {}
+
+    @contextmanager
+    def holding(self, request_id: str) -> Iterator[None]:
+        with self._lock:
+            self._waiting[request_id] += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._waiting[request_id] -= 1
+                if self._waiting[request_id] <= 0:
+                    del self._waiting[request_id]
+                    self._statuses.pop(request_id, None)
+
+    def status_after(
+        self,
+        store: GuardStore,
+        signal: ReviewEventWakeSignal,
+        generation: int,
+        request_id: str,
+    ) -> str | None:
+        """The request's status as read no earlier than wake ``generation``."""
+
+        with self._reader:
+            with self._lock:
+                if self._read_generation >= generation and request_id in self._statuses:
+                    return self._statuses[request_id]
+                request_ids = sorted({*self._waiting, request_id})
+            # Take the generation before reading, so the answer is never reused
+            # for a wake raised by a commit the read may have missed.
+            read_generation = signal.generation()
+            statuses = store.get_approval_request_statuses(request_ids)
+            with self._lock:
+                self._read_generation = read_generation
+                self._statuses = {item: statuses.get(item) for item in request_ids if item in self._waiting}
+            return statuses.get(request_id)
+
+
+_shared_reads_lock = threading.Lock()
+_shared_reads: weakref.WeakKeyDictionary[ReviewEventWakeSignal, _SharedStatusReads] = weakref.WeakKeyDictionary()
+forget_in_child(_shared_reads)
+
+
+def _shared_status_reads(signal: ReviewEventWakeSignal) -> _SharedStatusReads:
+    with _shared_reads_lock:
+        reads = _shared_reads.get(signal)
+        if reads is None:
+            reads = _SharedStatusReads()
+            _shared_reads[signal] = reads
+        return reads
 
 
 def requested_resolution_wait_seconds(query: str) -> float:
@@ -101,14 +173,25 @@ def _wait_while_pending(
     monotonic: Callable[[], float],
 ) -> dict[str, object] | None:
     signal = review_event_wake_signal(store.path)
+    shared = _shared_status_reads(signal)
     deadline = monotonic() + timeout_seconds
-    while True:
+    with shared.holding(request_id):
         # Take the generation before reading, so a decision committed between
         # the read and the wait still ends the wait.
         generation = signal.generation()
-        if store.get_approval_request_status(request_id) != "pending":
-            return store.get_approval_request(request_id)
-        remaining = deadline - monotonic()
-        if remaining <= 0:
-            return store.get_approval_request(request_id)
-        signal.wait(generation, min(remaining, RESOLUTION_RECHECK_SECONDS))
+        status = store.get_approval_request_status(request_id)
+        while True:
+            if status != "pending":
+                return store.get_approval_request(request_id)
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                return store.get_approval_request(request_id)
+            woke = signal.wait(generation, min(remaining, RESOLUTION_RECHECK_SECONDS))
+            if woke != generation:
+                generation = woke
+                status = shared.status_after(store, signal, generation, request_id)
+            else:
+                # No wake in this process: a decision another process wrote is
+                # seen only by reading the request again.
+                generation = signal.generation()
+                status = store.get_approval_request_status(request_id)
