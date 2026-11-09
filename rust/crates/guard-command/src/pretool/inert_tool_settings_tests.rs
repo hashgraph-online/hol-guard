@@ -138,3 +138,42 @@ fn a_value_that_can_name_code_a_file_or_a_search_path_is_not_inert() {
         assert!(!inert_tool_setting(name, value), "{name}={value}");
     }
 }
+
+#[test]
+fn a_port_setting_carrying_a_port_number_is_inert() {
+    for (name, value) in [
+        ("PORT", "3000"),
+        ("port", "80"),
+        ("GUARD_TEST_PORT", "3027"),
+        ("GUARD_TEST_POSTGRES_PORT", "55477"),
+        ("DB_PORT", "5432"),
+        ("VITE_PORT", "65535"),
+    ] {
+        assert!(inert_tool_setting(name, value), "{name}={value}");
+    }
+}
+
+#[test]
+fn a_port_setting_carrying_anything_but_a_port_number_is_not() {
+    for (name, value) in [
+        // A host, with or without a port, moves the connection off this host.
+        ("PORT", "db.example.test"),
+        ("DB_PORT", "db.example.test:5432"),
+        ("PORT", "tcp://db.example.test:5432"),
+        // Outside the range a port can hold, so the value is not a port.
+        ("PORT", "0"),
+        ("PORT", "65536"),
+        ("PORT", "99999"),
+        // Not a bare number.
+        ("PORT", "+3000"),
+        ("PORT", " 3000"),
+        ("PORT", "3000 4000"),
+        ("PORT", ""),
+        // Names in the same families that steer more than a port.
+        ("PORTAL_URL", "3000"),
+        ("PGPORT", "5432"),
+        ("PORT_FILE", "3000"),
+    ] {
+        assert!(!inert_tool_setting(name, value), "{name}={value}");
+    }
+}

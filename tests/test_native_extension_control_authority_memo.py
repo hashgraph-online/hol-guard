@@ -46,9 +46,11 @@ _WRITER_SOURCES = frozenset(
         "migrate.rs",
         "pack_finish.rs",
         "pack_reserve.rs",
+        "policy_apply.rs",
         "policy_clear.rs",
         "reset.rs",
         "resume.rs",
+        "schema.rs",
         "writes.rs",
     }
 )
@@ -184,6 +186,7 @@ def test_unsettled_replies_always_go_back_to_the_resident(tmp_path: Path, payloa
         "migrate",
         "bootstrap",
         "reset",
+        "apply_review_memory",
         "abandon_bootstrap",
         "record_migration",
         "write_anchor",

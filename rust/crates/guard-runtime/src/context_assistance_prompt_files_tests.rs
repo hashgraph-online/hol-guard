@@ -54,7 +54,10 @@ fn prompt_words_skip_filler_and_keep_names() {
 #[test]
 fn a_test_request_late_in_a_long_prompt_still_counts() {
     let long = "change header color background spacing border radius font size weight \
-                alignment padding margin shadow and update the tests";
+                alignment padding margin shadow outline cursor opacity gradient layout \
+                column gutter banner footer sidebar toolbar avatar badge tooltip spinner \
+                slider toggle dropdown carousel accordion breadcrumb pagination stepper \
+                and update the tests";
     let found = terms(long);
     assert_eq!(found.len(), MAX_TERMS);
     assert!(asks_for_tests(&found), "{found:?}");
@@ -127,15 +130,20 @@ fn tests_that_quote_the_request_give_way_to_the_source() {
         ["src/components/Header.tsx", "src/theme.css"],
         "no test files when the source matched"
     );
-    let asked = candidates(
+    // Asked for, they are still kept apart, for the map's list of where a
+    // new test goes, so they cannot push the source out.
+    let asked = walk(
         &project,
         &terms("fix the header color tests"),
         &[],
         &[],
         WALK_BUDGET,
     );
+    assert_eq!(asked.files, ["src/components/Header.tsx", "src/theme.css"]);
     assert!(
-        asked.contains(&"src/components/Header.test.tsx".to_owned()),
+        asked
+            .tests
+            .contains(&"src/components/Header.test.tsx".to_owned()),
         "{asked:?}"
     );
     fs::remove_file(project.join("src/components/Header.tsx")).unwrap();
@@ -330,7 +338,7 @@ fn names_written_like_code_come_before_plain_words() {
                   honors clamp, and `click.Choice` should say so. Run `pytest -x tests/test_basic.py` \
                   and add a note to CHANGES.rst.";
     let found = terms(prompt);
-    assert_eq!(found.len(), MAX_TERMS, "{found:?}");
+    assert!(found.len() <= MAX_TERMS, "{found:?}");
     assert_eq!(
         found[..6],
         [

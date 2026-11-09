@@ -16,11 +16,11 @@ use guard_contracts::ExtensionControlAuthorityRequestV1;
 use rusqlite::params;
 use serde_json::{json, Value};
 
-use super::records::{degraded, store_fault, tampered, Anchor, Phase, Res};
+use super::records::{store_fault, tampered, Anchor, Phase, Res};
 use super::resume::immediate;
 use super::seals::{anchor_json, seal_manifest_op};
 use super::writes::open_writer;
-use super::{fault_value, Ctx, STORE_UNAVAILABLE};
+use super::{fault_value, Ctx};
 
 const INVALID_PLAN: &str = "invalid extension control authority plan";
 
@@ -28,8 +28,9 @@ pub(super) fn commit_prepare_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,
@@ -52,8 +53,9 @@ pub(super) fn bootstrap_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,
@@ -76,8 +78,9 @@ pub(super) fn write_manifest_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let outcome = immediate(&connection, || {
         write_manifest(&connection, request, key)?;

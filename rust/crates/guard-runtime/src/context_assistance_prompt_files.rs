@@ -5,11 +5,13 @@
 //! (a repository's own config can run code, so no `git` either). It only
 //! proposes paths: each one is read again through the CIGAR source screen,
 //! which refuses secrets, keys and credential files on its own.
+use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_ignore::{extend, ignored, root_chain};
+use crate::context_assistance_prompt_words::quoted;
 #[cfg(test)]
 pub(crate) use crate::context_assistance_prompt_words::terms;
-use crate::context_assistance_prompt_words::MAX_NAMED;
 pub(crate) use crate::context_assistance_prompt_words::{asks_for_tests, named, phrases};
+use crate::context_assistance_prompt_words::{in_path, spelled, whole_word, MAX_NAMED};
 use guard_secure_fs::{credential_directory_path, credential_named_path};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,9 +27,8 @@ const MAX_FILE_BYTES: u64 = 262_144;
 const MAX_DEPTH: usize = 10;
 /// Files kept per name the prompt gives.
 const MAX_NAMED_MATCHES: usize = 2;
-/// Test files kept aside when the prompt does not ask about tests, for the
-/// map of where a request's code is.
-const MAX_LEFT_OUT_TESTS: usize = 6;
+/// Test files kept aside for the map's list of where a new test goes.
+const MAX_KEPT_TESTS: usize = 6;
 const WALK_BUDGET: Duration = Duration::from_millis(350);
 
 const SKIPPED_DIRS: &[&str] = &[
@@ -102,6 +103,8 @@ struct Seen {
     modified: SystemTime,
     in_path: Vec<bool>,
     hits: Vec<u8>,
+    /// For each term, whether this is a code file holding it as a whole word.
+    whole: Vec<bool>,
     quoted: Vec<bool>,
     named: Option<usize>,
 }
@@ -113,10 +116,10 @@ struct Scored {
     named: Option<usize>,
 }
 
-/// What the walk found: the matched files, best first; the test files it
-/// left out of them because the prompt does not ask about tests, best first;
-/// how many files it checked; and how many of those hold each term and each
-/// quoted phrase.
+/// What the walk found: the matched files, best first; the best test files,
+/// kept apart from them; how many files it checked; how many of those hold
+/// each term and each quoted phrase; and how many code files hold each term
+/// as a whole word.
 #[derive(Debug, Default)]
 pub(crate) struct Walk {
     pub(crate) files: Vec<String>,
@@ -124,6 +127,23 @@ pub(crate) struct Walk {
     pub(crate) checked: usize,
     pub(crate) holding: Vec<usize>,
     pub(crate) quoting: Vec<usize>,
+    pub(crate) words: Vec<usize>,
+    /// How many files hold each term with `_` and `-` dropped, as `_a_b` holds
+    /// `ab`; and whether the walk read every file, none too big or unreadable.
+    pub(crate) spelled: Vec<usize>,
+    pub(crate) complete: bool,
+}
+
+impl Walk {
+    /// The files to read when no map is sent: the matched files, and the
+    /// tests kept apart from them when the request is about tests.
+    pub(crate) fn found(&self, terms: &[String]) -> Vec<String> {
+        let mut found = self.files.clone();
+        if asks_for_tests(terms) {
+            found.extend(self.tests.iter().cloned());
+        }
+        found
+    }
 }
 
 /// Project files the prompt names, then the ones that mention its words or
@@ -162,18 +182,25 @@ pub(crate) fn walk(
     let mut scanned = 0_u64;
     let mut files = 0_usize;
     let mut seen = Vec::new();
+    let mut complete = true;
+    let mut spelled_in = vec![0_usize; terms.len()];
     while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
+            complete = false;
             continue;
         };
+        // Test folders go deepest in the stack, so source is read first when
+        // the walk runs out of time.
+        let mut inside = Vec::new();
         for entry in entries.flatten() {
             visited += 1;
             if visited > MAX_VISITED || started.elapsed() >= budget {
-                return finish(seen, files, terms, phrases.len());
+                return finish(seen, files, terms, phrases.len(), (spelled_in, false));
             }
             let name = entry.file_name().to_string_lossy().into_owned();
             // `file_type` never follows a link, so a linked folder or file is skipped.
             let Ok(kind) = entry.file_type() else {
+                complete = false;
                 continue;
             };
             if name.starts_with('.') {
@@ -188,6 +215,7 @@ pub(crate) fn walk(
                 continue;
             }
             if kind.is_dir() {
+                complete &= depth < MAX_DEPTH;
                 if depth < MAX_DEPTH
                     && !SKIPPED_DIRS.contains(&name.as_str())
                     && !credential_directory_path(Path::new(&relative))
@@ -195,7 +223,10 @@ pub(crate) fn walk(
                     // A folder whose own ignore file cannot be read stays out.
                     let path = entry.path();
                     if let Ok(inner) = extend(rules.clone(), &path.join(".gitignore"), &relative) {
-                        stack.push((path, relative, depth + 1, inner));
+                        let tests = TEST_DIRS.contains(&name.as_str());
+                        inside.push((tests, (path, relative, depth + 1, inner)));
+                    } else {
+                        complete = false;
                     }
                 }
                 continue;
@@ -204,28 +235,37 @@ pub(crate) fn walk(
             {
                 continue;
             }
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
-            if metadata.len() == 0 || metadata.len() > MAX_FILE_BYTES {
+            let metadata = entry.metadata().ok();
+            let size = metadata.as_ref().map_or(u64::MAX, fs::Metadata::len);
+            if size == 0 || size > MAX_FILE_BYTES {
+                complete &= size == 0;
                 continue;
             }
             files += 1;
             let in_path = in_path(&relative, terms);
             let mut text = None;
-            if scanned + metadata.len() <= MAX_SCANNED_BYTES {
-                scanned += metadata.len();
+            complete &= scanned + size <= MAX_SCANNED_BYTES;
+            if scanned + size <= MAX_SCANNED_BYTES {
+                scanned += size;
                 text = guard_secure_fs::read_bounded(&entry.path(), MAX_FILE_BYTES as usize)
                     .ok()
                     .and_then(|read| String::from_utf8(read.bytes).ok())
                     .map(|text| text.to_lowercase());
+                complete &= text.is_some();
             }
             let text = text.unwrap_or_default();
             let hits: Vec<u8> = terms
                 .iter()
                 .map(|term| text.matches(term.as_str()).take(8).count() as u8)
                 .collect();
-            let quoted: Vec<bool> = phrases.iter().map(|p| text.contains(p.as_str())).collect();
+            let code = !prose(Path::new(&name));
+            let whole: Vec<bool> = (terms.iter().zip(&hits))
+                .map(|(term, &n)| code && n > 0 && whole_word(&text, term))
+                .collect();
+            for (count, held) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
+                *count += usize::from(held);
+            }
+            let quoted = quoted(&text, phrases);
             let named = named_as(&relative, named);
             if in_path.contains(&true)
                 || hits.iter().any(|&n| n > 0)
@@ -234,19 +274,29 @@ pub(crate) fn walk(
             {
                 seen.push(Seen {
                     relative,
-                    modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+                    modified: (metadata.and_then(|m| m.modified().ok()))
+                        .unwrap_or(SystemTime::UNIX_EPOCH),
                     in_path,
                     hits,
+                    whole,
                     quoted,
                     named,
                 });
             }
         }
+        inside.sort_by_key(|(tests, _)| !tests);
+        stack.extend(inside.into_iter().map(|(_, dir)| dir));
     }
-    finish(seen, files, terms, phrases.len())
+    finish(seen, files, terms, phrases.len(), (spelled_in, complete))
 }
 
-fn finish(seen: Vec<Seen>, checked: usize, terms: &[String], phrases: usize) -> Walk {
+fn finish(
+    seen: Vec<Seen>,
+    checked: usize,
+    terms: &[String],
+    phrases: usize,
+    (spelled, complete): (Vec<usize>, bool),
+) -> Walk {
     let holding = (0..terms.len())
         .map(|i| {
             seen.iter()
@@ -254,16 +304,22 @@ fn finish(seen: Vec<Seen>, checked: usize, terms: &[String], phrases: usize) -> 
                 .count()
         })
         .collect();
+    let words = (0..terms.len())
+        .map(|i| seen.iter().filter(|s| s.whole[i]).count())
+        .collect();
     let quoting = (0..phrases)
         .map(|i| seen.iter().filter(|s| s.quoted[i]).count())
         .collect();
-    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases), terms);
+    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases));
     Walk {
         files,
         tests,
         checked,
         holding,
         quoting,
+        words,
+        spelled,
+        complete,
     }
 }
 
@@ -348,7 +404,7 @@ fn named_as(relative: &str, named: &[String]) -> Option<usize> {
 /// out when a source file matched and the prompt did not ask about tests,
 /// since a test that quotes the same words would otherwise crowd out the
 /// file the request is about.
-fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
+fn ranked(scored: Vec<Scored>) -> (Vec<String>, Vec<String>) {
     let (mut pinned, mut scored): (Vec<Scored>, Vec<Scored>) =
         scored.into_iter().partition(|item| item.named.is_some());
     pinned.sort_by(|a, b| {
@@ -368,8 +424,10 @@ fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
         *count += 1;
         *count <= MAX_NAMED_MATCHES
     });
+    // Tests are kept aside even when the prompt asks for them, so source
+    // files fill the candidates and the map still finds where new tests go.
     let mut tests = Vec::new();
-    if !asks_for_tests(terms) && scored.iter().any(|item| !test_file(&item.relative)) {
+    if scored.iter().any(|item| !test_file(&item.relative)) {
         (tests, scored) = scored
             .into_iter()
             .partition(|item| test_file(&item.relative));
@@ -390,7 +448,7 @@ fn ranked(scored: Vec<Scored>, terms: &[String]) -> (Vec<String>, Vec<String>) {
         .collect();
     let tests = tests
         .into_iter()
-        .take(MAX_LEFT_OUT_TESTS)
+        .take(MAX_KEPT_TESTS)
         .map(|item| item.relative)
         .collect();
     (files, tests)
@@ -420,14 +478,6 @@ pub(crate) fn wanted_file(name: &str) -> bool {
         .extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| TEXT_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
-}
-
-fn in_path(relative: &str, terms: &[String]) -> Vec<bool> {
-    let lower = relative.to_lowercase().replace(['-', '_'], "");
-    terms
-        .iter()
-        .map(|term| lower.contains(term.as_str()))
-        .collect()
 }
 
 /// The path without Windows' `\\?\` prefix, as grants spell it.

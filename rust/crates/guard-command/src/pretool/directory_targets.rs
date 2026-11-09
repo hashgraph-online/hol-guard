@@ -5,6 +5,8 @@
 //! proved only when every backslash in its segment survives the shell, and
 //! only in the exact spelling of its canonical path.
 
+#[path = "directory_targets_home_variable.rs"]
+pub(crate) mod home_variable;
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
 #[path = "directory_targets_tmp_alias.rs"]
@@ -39,6 +41,23 @@ pub(crate) fn safe_directory_target(target: &str) -> bool {
 }
 
 pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<String> {
+    // `$HOME` and `${HOME}` name the directory `~` names, and reach the shell
+    // the same way. `home_targets_unquoted` has already turned back a segment
+    // that keeps the spelling literal, so the proof below is the tilde's own.
+    let spelled;
+    let value = match home_variable::tilde_spelling(value) {
+        Some(spelling) => {
+            // Unlike `~`, the expansion is split on the shell's IFS, so a
+            // home path holding whitespace reaches the program as several
+            // words the tilde proof would not describe.
+            if !home_variable::home_expands_to_one_word(context.home_dir) {
+                return None;
+            }
+            spelled = spelling;
+            spelled.as_str()
+        }
+        None => value,
+    };
     if context.home_dir.is_none() || context.cwd.is_none() || !safe_directory_target(value) {
         return None;
     }
@@ -102,13 +121,24 @@ pub(crate) fn verified_climb_target(
         return None;
     }
     let supplied = sibling::climbed(value, std::path::Path::new(context.cwd?))?;
+    // The user's private macOS temporary directory is as much theirs as home,
+    // and agents keep checkouts there, so a climb inside it clears the same
+    // screens an absolute `cd` to the same directory clears. Without this the
+    // two spellings of one directory would not answer alike.
+    let temporary =
+        super::read_paths::inside_private_temporary_directory(&supplied, context.home_dir);
     // The climb names its directory in the spelling the harness reports, so
     // the read screens below and every later operand proof see that spelling
     // rather than the `\\?\` verbatim form `canonicalize` answers with on
     // Windows, which no reported directory is written as.
     if !sibling::own_canonical_spelling(&supplied)
         || !supplied.is_dir()
-        || !super::read_paths::resolved_path_allowed(&supplied, context.home_dir, context.cwd)
+        || !super::read_paths::resolved_path_allowed_in_scope(
+            &supplied,
+            context.home_dir,
+            context.cwd,
+            temporary,
+        )
     {
         return None;
     }
@@ -207,16 +237,18 @@ pub(crate) fn drive_targets_quoted(segment: &crate::CommandSegmentV1) -> bool {
         || !shell_alters_backslash(&segment.text)
 }
 
-/// Whether every argument that begins with `~` reaches the program after the
-/// shell expands it to home, as the path proofs assume. A quoted or escaped
-/// `~` stays a literal relative path that names a different directory, so a
-/// segment that spells one is refused rather than proved against home.
+/// Whether every argument that names home reaches the program after the shell
+/// expands it, as the path proofs assume. A quoted or escaped `~`, and an
+/// equally quoted or escaped `$HOME`, stay literal relative paths that name a
+/// different directory, so a segment that spells one is refused rather than
+/// proved against home.
 pub(crate) fn home_targets_unquoted(segment: &crate::CommandSegmentV1) -> bool {
-    !segment
+    (!segment
         .arguments
         .iter()
         .any(|argument| argument.starts_with('~'))
-        || !shell_keeps_tilde_literal(&segment.text)
+        || !shell_keeps_tilde_literal(&segment.text))
+        && home_variable::home_variables_expand(segment)
 }
 
 /// Whether a `~`-spelled executable reaches the shell as the home path the

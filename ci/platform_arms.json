@@ -1363,6 +1363,22 @@
    "body": "70d0bf8ff484"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The binding capture is Unix-only (binding_capture_capture), as the Python writer, which fails closed on Windows. Off Unix the drain seals no Codex receipt and leaves the record unmarked, so nothing is captured, exactly as before.",
+   "file": "rust/crates/guard-runtime/src/hook_direct_evidence_record.rs",
+   "item": "fn capture(_guard_home: &Path, _record: &Value) -> bool",
+   "cfg": "not(unix)",
+   "body": "127adbcc8e75"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The capture marker is never read off Unix, so the drain does not wait on a capture there. The capture itself is Unix-only (fn capture), so a missing marker and an unavailable capture leave the same unmarked record.",
+   "file": "rust/crates/guard-runtime/src/hook_direct_evidence_record.rs",
+   "item": "fn capture_marker_present(_guard_home: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "41cbb2431a67"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows expands `USERPROFILE` in its own arm; elsewhere `None` leaves the home unknown, every home-relative rule stays unmatched, and a connector-setup review defers to the daemon.",
    "file": "rust/crates/guard-runtime/src/hook_direct_review_request.rs",
@@ -1756,7 +1772,7 @@
   },
   {
    "file": "rust/crates/guard-runtime/src/policy_store_persistence.rs",
-   "item": "fn read_private_json -- non-Unix block",
+   "item": "fn read_private_file -- non-Unix block",
    "verdict": "windows-equivalent",
    "note": "Opens the snapshot read-only without the POSIX open flags; the file is under the account's own private state root.",
    "cfg": "not(unix)",

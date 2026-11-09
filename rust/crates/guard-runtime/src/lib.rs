@@ -343,6 +343,8 @@ mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
+#[cfg(unix)]
+mod daemon_edge;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
 mod daemon_handler_headless;
@@ -523,6 +525,7 @@ mod guard_store_db;
 mod guard_store_devices;
 mod guard_store_evidence;
 mod guard_store_exact_cloud_apply;
+mod guard_store_exact_cloud_package;
 mod guard_store_exact_cloud_peek;
 mod guard_store_guard_event;
 #[cfg(test)]
@@ -939,6 +942,7 @@ mod opencode_proxy_entry;
 mod opencode_server_id;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
+mod package_approval_action;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
@@ -977,6 +981,7 @@ use guard_policy_bundle::{
     families as policy_bundle_families, json as policy_bundle_json, keys as policy_bundle_keys,
     python as policy_bundle_py, time as policy_bundle_time,
 };
+mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;
 mod policy_bundle_store_identities;

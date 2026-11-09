@@ -325,6 +325,12 @@ def build_fixture(root: Path) -> BenignFixture:
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.
     _write(parent / "docs" / "large-guide.md", "# Guide\n" + "Plain guide paragraph text.\n" * 1600)
+    # A committed handbook page named for what it documents. Listing `docs`
+    # prints the name, so a pattern that prints the same names must too.
+    _write(
+        parent / "docs" / "credential-rotation-runbook.md",
+        "# Rotating credentials\n\nOpen the provider console and issue a new value.\n",
+    )
     _write(parent / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic skill body.\n")
     _write(parent / "integrations" / "app" / ".claude-plugin" / "plugin.json", '{"author": "Example"}\n')
     # Git treats a link as a file: `node_modules/` alone leaves the `dashboard/node_modules` link unignored.
@@ -509,11 +515,27 @@ def build_fixture(root: Path) -> BenignFixture:
             _write(repository / ".gitignore", "node_modules/\n")
             _node_toolchain(repository / "dashboard")
             _sibling_test_runner(repository)
+        if name == "app-portal":
+            # Installed with pnpm, so the package store and the build cache sit
+            # beside `node_modules/.bin`. The tree itself is written after the
+            # commit below, untracked the way a real install is.
+            _write(repository / ".gitignore", "node_modules/\n")
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
         if name == "service-api":
             _git(repository, "remote", "add", "origin", "https://github.com/example-org/service-api.git", home=home)
             _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
+    # The package store and build cache a pnpm install leaves in `app-portal`.
+    # Agents list them to see which manager ran and whether a cache is warm.
+    # The tree itself is installed with the checkout, so only the store entry
+    # and the cache are written here.
+    portal = org / "app-portal"
+    store_entry = f"vitest@{_NODE_PACKAGES['vitest']}"
+    _write(
+        portal / "node_modules" / ".pnpm" / store_entry / "node_modules" / "vitest" / "package.json",
+        '{"name": "vitest"}\n',
+    )
+    _write(portal / "node_modules" / ".cache" / "vite" / "deps" / "_metadata.json", "{}\n")
     # A sibling checkout that keeps no workflows, where a probe finds nothing.
     docs_site = org / "docs-site"
     _write(docs_site / "README.md", "# docs-site\n")

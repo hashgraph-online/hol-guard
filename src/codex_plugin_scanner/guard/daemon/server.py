@@ -89,6 +89,7 @@ from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
+from ..runtime.cloud_policy_revision import cloud_policy_store_key, register_cloud_policy_wake
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
@@ -165,6 +166,7 @@ from .hook_policy_admission import prepare_native_hook_policy
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 from .lifecycle_journal import record_daemon_lifecycle_event
+from .live_decision_warmup import start_codex_live_decision_warmup
 from .local_cli_api import LocalCliApiService
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
@@ -175,6 +177,8 @@ from .manager import (
     release_guard_daemon_owner_lock,
     write_guard_daemon_state,
 )
+from .native_edge import NativeDaemonEdge, start_native_daemon_edge
+from .native_edge_handshake import daemon_edge_callbacks
 from .release_feed_read import (
     MAX_RELEASE_FEED_PAGE_SIZE,
     RELEASE_FEED_REQUEST_INVALID,
@@ -480,6 +484,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         capture_writer = getattr(self, "codex_binding_capture_writer", None)
         if capture_writer is not None:
             capture_writer.stop_capture()
+        native_edge = getattr(self, "native_edge", None)
+        if native_edge is not None:
+            native_edge.close()
         super().server_close()
 
     def __init__(
@@ -501,6 +508,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         # TCPServer calls server_close() when bind/activation fails. Treat the
         # request executors as already stopped until their construction finishes.
         self.request_executors_stopped = True
+        self.native_edge: NativeDaemonEdge | None = None
         self.store = store
         self.runtime = GuardSurfaceRuntime(store)
         self.auth_token = auth_token
@@ -592,6 +600,18 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.request_executors_stopped = False
         super().__init__(server_address, handler_class)
         self._socket_bound = True
+        try:
+            handshake, on_activity = daemon_edge_callbacks(self, _STATIC_DIR)
+            self.native_edge = start_native_daemon_edge(
+                self,
+                guard_home=store.guard_home,
+                host=str(self.server_address[0]),
+                handshake=handshake,
+                on_activity=on_activity,
+            )
+        except BaseException:
+            self.server_close()
+            raise
 
     def _initialize_request_services(self) -> None:
         from .hook_direct_counters import bind_hook_counter_sink
@@ -2759,7 +2779,8 @@ class _GuardDaemonHandler(
 
     def _refresh_dashboard_session_token(self, *, surface: str) -> str | None:
         claims = self._refreshable_dashboard_session_claims()
-        if claims is None:
+        if claims is None or claims.get("request_id") is not None:
+            # A session bound to one request ends with the link that opened it.
             return None
         started_at = self._optional_string(claims.get(LOCAL_DASHBOARD_SESSION_STARTED_AT_CLAIM))
         if started_at is None:
@@ -2832,6 +2853,25 @@ class _GuardDaemonHandler(
             }:
                 return claims
         return None
+
+    def _request_holds_link_bound_session(self) -> bool:
+        """Whether the caller presents a session opened from an approval link."""
+
+        session_token = self.headers.get("X-Guard-Dashboard-Session")
+        authorization = self.headers.get("Authorization")
+        bearer_token = None
+        if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+            bearer_token = authorization[7:].strip()
+        for candidate in (session_token, bearer_token):
+            if not isinstance(candidate, str) or not candidate.strip():
+                continue
+            claims = self._dashboard_session_token_claims(
+                candidate,
+                allow_expired_within_seconds=_LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS,
+            )
+            if claims is not None and claims.get("request_id") is not None:
+                return True
+        return False
 
     def _consume_dashboard_session_nonce(self, nonce: str) -> bool:
         now = time.monotonic()
@@ -3420,6 +3460,7 @@ class GuardDaemonServer:
         self._bundle_refresh_thread: threading.Thread | None = None
         self._command_queue_worker: CommandQueueWorker | None = None
         self._headless_cloud_sync_thread: threading.Thread | None = None
+        self._headless_cloud_sync_wake = threading.Event()
         self._command_activity_maintenance_thread: threading.Thread | None = None
         self._onefile_extraction_reclaim_thread: threading.Thread | None = None
         self._extension_control_refresh_thread: threading.Thread | None = None
@@ -3592,6 +3633,7 @@ class GuardDaemonServer:
             self._publish_listen_state()
             self._diagnostics.record("daemon_listen_ready")
             self._warm_desktop_bootstrap_cache()
+            start_codex_live_decision_warmup(self._diagnostics)
             if not continue_after_listen:
                 return
         self._complete_owned_service_after_listen(generation, already_locked=True)
@@ -3976,6 +4018,11 @@ class GuardDaemonServer:
     def _finish_service_locked(self) -> bool:
         self._owned_service_ready = False
         self._shutdown_started.set()
+        # The sync loop sleeps on its wake, not on shutdown. Wake it now so it
+        # exits while the other workers stop, before its join's deadline.
+        sync_wake = getattr(self, "_headless_cloud_sync_wake", None)
+        if sync_wake is not None:
+            sync_wake.set()
         contained = True
         close_discovery = getattr(getattr(self._server, "local_cli_api", None), "close_discovery", None)
         if callable(close_discovery):
@@ -4153,8 +4200,36 @@ class GuardDaemonServer:
             if self._headless_cloud_sync_backoff_seconds > 0
             else interval_seconds
         )
+        wake = getattr(self, "_headless_cloud_sync_wake", None)
+        if wake is None:
+            wake = self._headless_cloud_sync_wake = threading.Event()
+        # A policy published in Guard Cloud moves the revision the command lease
+        # reports; sync then instead of waiting out the interval.
+        unregister_policy_wake = register_cloud_policy_wake(
+            cloud_policy_store_key(self._server.store),
+            wake.set,
+        )
+        try:
+            self._run_headless_cloud_sync_loop(
+                wake=wake,
+                interval_seconds=interval_seconds,
+                backoff_seconds=backoff_seconds,
+            )
+        finally:
+            unregister_policy_wake()
+
+    def _run_headless_cloud_sync_loop(
+        self,
+        *,
+        wake: threading.Event,
+        interval_seconds: float,
+        backoff_seconds: float,
+    ) -> None:
         reported_failure: str | None = None
         while not self._shutdown_started.is_set():
+            # Cleared before the sync, so a wake that lands while it runs
+            # starts another one straight after instead of being lost.
+            wake.clear()
             try:
                 summary = _run_headless_cloud_sync_with_optional_publish(
                     store=self._server.store,
@@ -4179,7 +4254,8 @@ class GuardDaemonServer:
                 reported_failure = None
                 status = str(summary.get("status") or "")
             wait_seconds = interval_seconds if status == "synced" else backoff_seconds
-            if self._shutdown_started.wait(wait_seconds):
+            wake.wait(wait_seconds)
+            if self._shutdown_started.is_set():
                 return
 
     def _watch_for_idle_shutdown(self) -> None:

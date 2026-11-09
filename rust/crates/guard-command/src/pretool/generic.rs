@@ -1089,6 +1089,29 @@ fn evaluate_envelope(
             })
             .unwrap_or_else(|| "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into());
     }
+    // The helper-context review has two causes behind one reason code: a
+    // helper the probe read out of the effective configuration, and a probe
+    // that could not answer at all. The first is a program Guard cannot see
+    // and keeps its review however much the user allowed. The second is the
+    // same open question the Git execution-context floor above settles -- the
+    // user who allowed this read answered it: run it as this checkout
+    // configures it. The block above skips this reason so a found helper
+    // cannot be delegated to read-only containment, so the unanswered half
+    // settles here, after it, where lowering can raise nothing.
+    if event == "PreToolUse"
+        && result.reason_code == "native_git_helper_context_review"
+        && result.minimum_action == "review"
+        && helper_context_settled_by_allow(
+            controls,
+            command_model,
+            &result,
+            floor_context,
+            deadline,
+            execution_environment,
+        )
+    {
+        crate::native_command_controls::settle_with_explicit_allow(&mut result);
+    }
     let contained_test_reason = command_model.and_then(|model| {
         super::restricted_test_commands::package_script::contained_test_reason(
             model,
@@ -1344,6 +1367,43 @@ fn extension_rule_matched(result: &PreToolResultV1) -> bool {
 /// still be plain allow: anything the controls or an earlier Rust proof raised
 /// — unsettled extension uncertainty among it — means the Allow did not carry
 /// the command, and the floor stands.
+/// Whether an explicit extension Allow settles a helper-context review that
+/// only an unanswered probe produced.
+///
+/// The review is Rust's own judgment of the command's shape, so the controls
+/// never raised it; a result still carrying its reason at a review is one the
+/// controls left where Rust put it, and the Allow has to reach every segment
+/// and every uncertainty before it may answer the question the probe could
+/// not.
+fn helper_context_settled_by_allow(
+    controls: Option<&CompiledNativeCommandControls>,
+    command_model: Option<&crate::CanonicalCommandV1>,
+    result: &PreToolResultV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let (Some(controls), Some(model), Some(observations)) =
+        (controls, command_model, result.command_extensions.as_ref())
+    else {
+        return false;
+    };
+    result.action.bounded
+        && !result.action.sensitive_target
+        && super::git_helper_context::probe_left_helpers_unproven(
+            model,
+            context,
+            deadline,
+            execution_environment,
+        )
+        && controls.explicit_allow_settles_command(
+            model,
+            observations,
+            context,
+            execution_environment,
+        )
+}
+
 fn git_read_settled_by_allow(
     controls: Option<&CompiledNativeCommandControls>,
     command_model: Option<&crate::CanonicalCommandV1>,

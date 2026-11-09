@@ -152,6 +152,8 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
+    #[cfg(unix)]
+    features.push(crate::daemon_edge::EDGE_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     features.push(guard_contracts::SKILL_DOCUMENT_EVIDENCE_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
@@ -298,6 +300,7 @@ pub(crate) enum ResidentOperationV1 {
     LocalToolEligibility(LocalToolEligibilityRequestV1),
     LocalToolGrant(LocalToolGrantRequestV1),
     ShellHelpers(crate::shell_helpers_op::ShellHelpersRequest),
+    ExactCloudReview(crate::exact_cloud_review::ExactCloudReviewResidentRequest),
     ApprovalProofDecide(ApprovalProofRequestV1),
     CursorObserverProof(CursorObserverProofRequestV1),
     HookAuthorityState(HookAuthorityStateRequestV1),

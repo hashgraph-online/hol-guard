@@ -36,6 +36,13 @@ struct SavedApprovalStore {
     lookup_calls: RefCell<u32>,
     /// When set, lookups after this 1-based call return a store error.
     fail_lookup_after: Option<u32>,
+    /// When set, lookups after the first return this row instead.
+    later_decision: Option<Value>,
+    /// How many claims refuse before the store answers `claim_succeeds`.
+    refused_claims: RefCell<u32>,
+    /// When set, each later lookup offers `later_decision` one revision newer
+    /// than the lookup before it, as when sibling approvals keep landing.
+    later_revision_moves: bool,
 }
 
 impl SupplyChainStore for SavedApprovalStore {
@@ -105,8 +112,18 @@ impl SupplyChainStore for SavedApprovalStore {
                 ..PolicyDecisionLookup::default()
             };
         }
+        let decision = match &self.later_decision {
+            Some(later) if call > 1 && self.later_revision_moves => {
+                let mut row = later.clone();
+                let base = row["_approval_authority_revision"].as_i64().unwrap_or(0);
+                row["_approval_authority_revision"] = json!(base + i64::from(call) - 2);
+                Some(row)
+            }
+            Some(later) if call > 1 => Some(later.clone()),
+            _ => self.decision.clone(),
+        };
         PolicyDecisionLookup {
-            decision: self.decision.clone(),
+            decision,
             ignored_local_integrity: None,
             error: None,
         }
@@ -129,6 +146,11 @@ impl SupplyChainStore for SavedApprovalStore {
         self.claimed
             .borrow_mut()
             .push((decision.clone(), now.to_string()));
+        let mut refused = self.refused_claims.borrow_mut();
+        if *refused > 0 {
+            *refused -= 1;
+            return false;
+        }
         self.claim_succeeds
     }
     fn claim_local_once_approval(
@@ -313,6 +335,9 @@ fn resolve_recording(
         events: RefCell::new(Vec::new()),
         lookup_calls: RefCell::new(0),
         fail_lookup_after: None,
+        later_decision: None,
+        refused_claims: RefCell::new(0),
+        later_revision_moves: false,
     };
     let seams = Seams;
     let resolved = apply_stored_package_policy_override(
@@ -423,6 +448,9 @@ fn a_failed_lookup_keeps_the_review_and_records_its_code() {
         events: RefCell::new(Vec::new()),
         lookup_calls: RefCell::new(0),
         fail_lookup_after: None,
+        later_decision: None,
+        refused_claims: RefCell::new(0),
+        later_revision_moves: false,
     };
     let seams = Seams;
     let applied = apply_stored_package_policy_override(
@@ -581,6 +609,9 @@ fn a_failed_refresh_after_a_consumed_claim_keeps_the_review() {
         events: RefCell::new(Vec::new()),
         lookup_calls: RefCell::new(0),
         fail_lookup_after: Some(1),
+        later_decision: None,
+        refused_claims: RefCell::new(0),
+        later_revision_moves: false,
     };
     let initial = PackageProtectAuthority {
         intent: install_intent(),
@@ -640,3 +671,8 @@ fn a_failed_refresh_after_a_consumed_claim_keeps_the_review() {
     );
     let _ = std::fs::remove_dir_all(&home);
 }
+
+// Sibling approvals that move the authority revision before this request's
+// claim.
+#[path = "local_supply_chain_saved_claim_sibling_tests.rs"]
+mod sibling;

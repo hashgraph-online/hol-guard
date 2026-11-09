@@ -398,6 +398,38 @@ fn source_classifier_rejects_hidden_sensitive_and_escape_paths() {
 }
 
 #[test]
+fn project_documents_admit_prose_outside_docs_and_keep_every_other_check() {
+    let root = fixture_root("project_documents");
+    let workspace = root.join("workspace");
+    fs::create_dir_all(workspace.join(".secret")).unwrap();
+    fs::write(workspace.join("CHANGES.rst"), "Changes\n=======\n").unwrap();
+    fs::write(workspace.join("app.bin"), "bytes\n").unwrap();
+    fs::write(workspace.join(".secret/notes.rst"), "notes\n").unwrap();
+    fs::write(workspace.join(".env.txt"), "fixture=value\n").unwrap();
+
+    // Command checks keep reading a root changelog as not source.
+    assert_eq!(
+        classify_source_path("CHANGES.rst", &workspace, None, false).reason_code,
+        "not_source_like"
+    );
+    assert!(classify_project_document("CHANGES.rst", &workspace).allowed);
+    assert_eq!(
+        classify_project_document("app.bin", &workspace).reason_code,
+        "not_source_like"
+    );
+    assert_eq!(
+        classify_project_document(".secret/notes.rst", &workspace).reason_code,
+        "unsafe_hidden_dir"
+    );
+    assert!(!classify_project_document(".env.txt", &workspace).allowed);
+    assert_eq!(
+        classify_project_document("../CHANGES.rst", &workspace).reason_code,
+        "path_traversal"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn source_classifier_allows_workflow_and_sibling_git_source() {
     let root = fixture_root("external");
     let home = root.join("home");

@@ -4,32 +4,58 @@
 use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
+/// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`)
+/// and any `/dev` path (`/dev/sda1`, `/dev/vg0/lv0`) included. The streams
+/// and terminals in [`PSEUDO_DEVICE`] are taken out of the text first.
+const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/\w)";
+
+/// `/dev` paths that are where output goes or comes from, not storage, such
+/// as `/dev/null` or `/dev/stderr`. Any other `/dev` path may be a disk.
+const PSEUDO_DEVICE: &str =
+    r"(?i)/dev/(?:null|zero|full|u?random|std(?:in|out|err)|tty\w*|pts/\d+|fd/\d+|ptmx|console)\b";
+
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
-/// `format` applied to what a program prints all choose how output is shaped;
-/// the bare word, or an assignment such as `operation=format`, still asks to
-/// format a disk.
+/// `format` applied to what a program prints or to a piece of code (`format
+/// the value`, `format methods`) all choose how output is shaped; the bare
+/// word, or an assignment such as `operation=format`, still asks to format a
+/// disk.
 ///
 /// Two of the printed nouns also name storage once another word follows them:
 /// `format the time machine disk`, `format the logs volume`. The mask reads
 /// what comes after its own match and leaves such a phrase alone, so the verb
-/// stays in the text for the guarded reading below.
+/// stays in the text for the guarded reading below. After `format` and a
+/// noun, the storage word may come after a list or other words (`format the
+/// values and logs volumes`, `format the logs and my backup disk`, `format the
+/// values and D: drive`), so any storage word later in the same sentence keeps
+/// the verb, however long the sentence. A dot ends the sentence only before a
+/// space or the end of the text, not inside `2.5-inch` or `backup.img`, and
+/// a storage word right after such a dot (`backup.disk0`) still counts. An
+/// option such as `--format json` names how a command prints, whatever it
+/// lists, so only a storage word right after it does.
 pub(super) fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
-    static STORAGE: OnceLock<Regex> = OnceLock::new();
-    let storage = STORAGE.get_or_init(|| {
-        Regex::new(
-            r"(?i)^\s*(?:machine\s+)?(?:disks?|drives?|volumes?|partitions?|usb|ssd|hdd|sd\s*cards?|media)\b",
-        )
-        .expect("bounded storage noun")
+    static NEXT: OnceLock<Regex> = OnceLock::new();
+    static SENTENCE: OnceLock<Regex> = OnceLock::new();
+    static PSEUDO: OnceLock<Regex> = OnceLock::new();
+    let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
+    let next = NEXT.get_or_init(|| {
+        Regex::new(&format!(r"(?i)^\s*(?:machine\s+)?{STORAGE_NOUN}"))
+            .expect("bounded storage noun")
+    });
+    let sentence = SENTENCE.get_or_init(|| {
+        Regex::new(&format!(r"(?i)^(?:[^.;!?\n]|\.\S)*?\.?{STORAGE_NOUN}"))
+            .expect("bounded storage sentence")
     });
     OPTION
         .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report)\b")
+            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
                 .expect("bounded format option")
         })
         .replace_all(value, |captures: &Captures| {
             let whole = captures.get(0).expect("whole match present");
-            if storage.is_match(&value[whole.end()..]) {
+            let rest = pseudo.replace_all(&value[whole.end()..], "stream");
+            let verb = (whole.as_str().get(..6)).is_some_and(|w| w.eq_ignore_ascii_case("format"));
+            if next.is_match(&rest) || (verb && sentence.is_match(&rest)) {
                 return whole.as_str().to_owned();
             }
             format!(

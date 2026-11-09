@@ -19,14 +19,19 @@ blocked-request mode is blocked by the resident, and its record carries the
 receipt redaction level the proxy's config binds. It is recorded as
 ``_queue_approval_center_response`` records it: the ``policy-safe-alternative``
 block receipt with the risk categories of the call projected with its
-artifact, then the silent inbox row ``record_unprompted_review`` writes.
+artifact, then the silent inbox row ``record_unprompted_review`` writes. A
+current resident writes both itself, so only an older resident still hands
+those records here.
 
 Under the ``ask`` mode the resident writes the call's approval request itself
 and blocks on it, so its record carries that request instead of an inbox row:
 the ``approval-center-pending`` block receipt is written here, and then the
-desktop notice and the approval center the proxy raises once the row exists.
-The resident cannot open a browser or read the workspace config, so it carries
-the queued notices and the workspace the surface policy is resolved against.
+desktop notice the proxy raises once the row exists. A current resident
+raises the desktop notice itself as soon as it writes the request and then
+writes the receipt too, so this drain sees an ask record only when the
+resident could not read its notice, or from an older resident that carries
+the queued notices for this drain to raise. The record also carries the
+workspace the surface policy was once resolved against.
 """
 
 from __future__ import annotations
@@ -59,6 +64,7 @@ _RECORD_KEYS = frozenset(
 _APPEND_KEY = "evidence_append"
 # The silent inbox row, present only on a safe-alternative block's record.
 _REVIEW_KEY = "review"
+_REVIEW_FIELDS = frozenset({"redaction_level", "approval_center_url"})
 # The written approval request, present only on an ask block's record.
 _APPROVAL_KEY = "approval"
 # The remembered allow, present only on an inline-approved forward's record.
@@ -211,9 +217,16 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
 
 
 def _redaction_level(review: object) -> str | None:
-    """The redaction level a safe-alternative block's inbox row is written with."""
+    """The redaction level a safe-alternative block's inbox row is written with.
 
-    if not isinstance(review, Mapping) or set(review) != {"redaction_level"}:
+    A current resident also carries the approval center origin it writes the
+    row with itself; the daemon links the row to its own origin instead.
+    """
+
+    if not isinstance(review, Mapping) or not {"redaction_level"} <= set(review) <= _REVIEW_FIELDS:
+        return None
+    center = review.get("approval_center_url")
+    if center is not None and not isinstance(center, str):
         return None
     level = review["redaction_level"]
     return level if isinstance(level, str) and level in _REDACTION_LEVELS else None
@@ -263,16 +276,19 @@ def _queued_approval(approval: object) -> _QueuedApproval | None:
 
 
 def _raise_approval_surface(store: Any, guard_home: Path, harness: str, queued: _QueuedApproval) -> None:
-    """The desktop notice and approval center the ask branch raises.
+    """The desktop notice the ask branch raises.
 
     The request is written and the call is already blocked on it, so raising
     its surface is best effort here as it is in ``_notify_pending_approval``:
     a failure leaves the request in the approval center the user opens.
+
+    The proxy's ``_maybe_open_approval_center`` opens nothing for a relayed
+    call: the loaded config's surface policy is ``attention-aware`` or
+    ``native-only``, and ``ensure_surface`` defers or declines both.
     """
 
+    del guard_home, harness
     _raise_notices(store, queued.notices)
-    with contextlib.suppress(Exception):
-        _open_approval_center(store, guard_home, harness, queued)
 
 
 def _raise_notices(store: Any, notices: tuple[dict[str, Any], ...]) -> None:
@@ -286,45 +302,6 @@ def _raise_notices(store: Any, notices: tuple[dict[str, Any], ...]) -> None:
     for notice in notices:
         with contextlib.suppress(Exception):
             _notify_pending_approval(store=store, request=_QueuedNotice(**notice))  # pyright: ignore[reportArgumentType]
-
-
-def _open_approval_center(store: Any, guard_home: Path, harness: str, queued: _QueuedApproval) -> None:
-    """``_maybe_open_approval_center`` for a call the resident queued.
-
-    The proxy reads the surface policy from the config it loaded for the
-    call's workspace; the drain loads that config itself, without creating a
-    home the call already found.
-    """
-
-    from ..approvals import approval_prompt_flow, build_approval_browser_url
-    from ..browser_opener import open_browser_url
-    from ..config import load_guard_config
-    from ..proxy.stdio import _approval_surface_policy_for_browser  # pyright: ignore[reportPrivateUsage]
-    from ..runtime.surface_server import GuardSurfaceRuntime
-    from .manager import load_guard_daemon_auth_token
-
-    config = load_guard_config(
-        guard_home,
-        Path(queued.workspace) if queued.workspace is not None else None,
-        create_home=False,
-    )
-    approval_surface_policy = _approval_surface_policy_for_browser(
-        config.approval_surface_policy,
-        approval_prompt_flow(harness, managed_install=store.get_managed_install(harness)),
-    )
-    if approval_surface_policy in {"notify-only", "never-auto-open"}:
-        return
-    GuardSurfaceRuntime(store).ensure_surface(
-        surface="approval-center",
-        approval_center_url=queued.approval_center_url,
-        browser_url=build_approval_browser_url(
-            queued.review_url,
-            auth_token=load_guard_daemon_auth_token(guard_home),
-        ),
-        approval_surface_policy=approval_surface_policy,
-        open_key=queued.request_id,
-        opener=open_browser_url,
-    )
 
 
 def _record_unprompted_review(

@@ -2,21 +2,91 @@
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
 
-pub(crate) const MAX_TERMS: usize = 12;
+pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
 /// How far past an opening quote to look for its closing one, so a prompt
 /// full of unmatched quotes is still scanned in one pass.
-const MAX_PHRASE_SPAN: usize = 120;
+const MAX_PHRASE_SPAN: usize = 160;
+/// The most of a quote searched for. A longer one, such as a whole docstring
+/// sentence, is searched by its first words up to this length.
+const MAX_PHRASE_CHARS: usize = 80;
 /// Files the prompt names, such as `CHANGES.rst`, each standing for at most
 /// `MAX_NAMED_MATCHES` files with that name.
 pub(crate) const MAX_NAMED: usize = 4;
 const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
 const STOP_WORDS: &[&str] = &[
-    "about", "add", "also", "and", "any", "are", "build", "but", "can", "change", "could",
-    "create", "does", "fix", "for", "from", "get", "have", "help", "how", "into", "its", "just",
-    "let", "like", "make", "need", "new", "not", "now", "our", "please", "put", "should", "some",
-    "that", "the", "them", "then", "there", "this", "update", "use", "want", "what", "when",
-    "where", "which", "why", "will", "with", "would", "you", "your",
+    "about", "add", "after", "again", "all", "already", "also", "and", "any", "are", "because",
+    "been", "before", "being", "both", "build", "but", "can", "cannot", "change", "could",
+    "create", "did", "does", "during", "each", "either", "every", "few", "fix", "for", "from",
+    "further", "get", "had", "has", "have", "help", "here", "how", "into", "its", "itself", "just",
+    "let", "like", "make", "might", "more", "most", "must", "need", "new", "not", "now", "once",
+    "only", "other", "our", "over", "please", "put", "same", "should", "some", "still", "such",
+    "than", "that", "the", "them", "then", "there", "these", "they", "this", "those", "though",
+    "too", "until", "update", "use", "very", "want", "was", "were", "what", "when", "where",
+    "whether", "which", "while", "who", "whose", "why", "will", "with", "without", "would", "you",
+    "your",
+];
+/// Words that, written plainly, say what to do or how a task came about, not
+/// which code it is about: "find the root cause after the last commit" names
+/// no function `find`, `root` or `last`. Written like code they still count.
+const TASK_WORDS: &[&str] = &[
+    "actually",
+    "alone",
+    "answer",
+    "behavior",
+    "behaviour",
+    "broke",
+    "broken",
+    "bug",
+    "cause",
+    "check",
+    "code",
+    "commit",
+    "committed",
+    "describe",
+    "docstring",
+    "doctest",
+    "edit",
+    "everywhere",
+    "example",
+    "expected",
+    "explain",
+    "fail",
+    "failing",
+    "find",
+    "first",
+    "implement",
+    "implementation",
+    "last",
+    "leave",
+    "library",
+    "line",
+    "lines",
+    "look",
+    "output",
+    "pass",
+    "passes",
+    "passing",
+    "push",
+    "pushed",
+    "question",
+    "recently",
+    "refactor",
+    "remove",
+    "rename",
+    "reply",
+    "review",
+    "root",
+    "run",
+    "short",
+    "something",
+    "started",
+    "sure",
+    "teammate",
+    "track",
+    "usage",
+    "write",
+    "written",
 ];
 
 /// Lowercase words from the prompt worth looking for in paths and code.
@@ -46,6 +116,10 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
             let term = singular(&part);
             if term.chars().count() >= 3
                 && !STOP_WORDS.contains(&term.as_str())
+                // `passes` is a task word whose singular form, `passe`, is not.
+                && (shaped
+                    || !(TASK_WORDS.contains(&term.as_str())
+                        || TASK_WORDS.contains(&part.as_str())))
                 && !term.chars().all(|c| c.is_ascii_digit())
             {
                 if shaped {
@@ -79,15 +153,25 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 }
 
 /// The prompt's words, each marked when it is written like code: inside
-/// backticks, dotted (`click.Choice`), snake_case or camelCase. A file name
-/// gives its name without the extension.
+/// backticks, dotted (`click.Choice`), snake_case, camelCase or called
+/// (`URL(...).normalize()`). A file name gives no words: `named` finds the
+/// file, and its folders and name (`src/app/utils.py`) would map every
+/// definition that mentions them.
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
-        for token in tokens(span) {
-            let token = token.trim_matches(['.', '-', '/']);
-            let token = file_name(token).map_or(token, |(stem, _)| stem);
-            let shaped = ticked || token.contains(['.', '_']) || camel(token);
+        for written in tokens(span) {
+            let token = written.trim_matches(['.', '-', '/']);
+            if file_name(token).is_some() {
+                continue;
+            }
+            let end = written.as_ptr() as usize - span.as_ptr() as usize + written.len();
+            let called = span[end..].starts_with('(') && !span[end..].starts_with("(s)");
+            let shaped = ticked
+                || called
+                || (written.starts_with('.') && !token.contains('/'))
+                || token.contains(['.', '_'])
+                || camel(token);
             for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
                 found.push((piece.to_owned(), shaped));
             }
@@ -152,6 +236,44 @@ fn file_name(token: &str) -> Option<(&str, &str)> {
         .then_some((stem, extension))
 }
 
+/// The names the prompt writes as code, spelled as written: `_batched`,
+/// which `terms` reads as `batched`, and each dotted name whole as well
+/// (`peekable.prepend`), which names a member.
+pub(crate) fn spellings(prompt: &str) -> Vec<String> {
+    let dotted = (spans(prompt).into_iter())
+        .flat_map(|(span, _)| tokens(span))
+        .map(|token| token.trim_matches(['.', '-', '/']))
+        .filter(|token| token.contains('.') && !token.contains('/') && file_name(token).is_none())
+        .map(str::to_owned);
+    (words(prompt).into_iter())
+        .filter(|(_, shaped)| *shaped)
+        .map(|(word, _)| word)
+        .chain(dotted)
+        .collect()
+}
+
+/// What the prompt renames to what, both names written as code:
+/// "rename `a` to `b`", "`a` -> `b`". A name written twice, or two names
+/// side by side ("rename `a` and update `b`"), is no rename.
+pub(crate) fn renames(prompt: &str) -> Vec<(String, String)> {
+    let shaped = spellings(prompt);
+    let spaced = prompt.replace('`', " ");
+    let words: Vec<&str> = (spaced.split_whitespace())
+        .map(|word| word.trim_matches([',', ';', ':', '"', '\'', '(', ')']))
+        .map(|word| word.trim_end_matches('.'))
+        .collect();
+    (words.windows(3))
+        .filter(|three| matches!(three[1].to_lowercase().as_str(), "to" | "into" | "->"))
+        .filter(|three| {
+            [three[0], three[2]]
+                .iter()
+                .all(|word| shaped.iter().any(|known| known == word))
+        })
+        .filter(|three| term_form(three[0]) != term_form(three[2]))
+        .map(|three| (three[0].to_owned(), three[2].to_owned()))
+        .collect()
+}
+
 /// Files the prompt names, as typed (`CHANGES.rst`, `src/app/cli.py`).
 pub(crate) fn named(prompt: &str) -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
@@ -214,13 +336,73 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
             continue;
         };
         let phrase: String = chars[at + 1..at + 1 + end].iter().collect();
-        let phrase = phrase.trim().to_lowercase();
-        if (3..=80).contains(&phrase.chars().count()) && !found.contains(&phrase) {
+        // A quote pasted with its line breaks reads as the source does once
+        // unwrapped, however the source wraps it.
+        let phrase = if phrase.contains('\n') {
+            unwrapped(&phrase)
+        } else {
+            phrase
+        };
+        let phrase = first_words(phrase.trim().to_lowercase());
+        if phrase.chars().count() >= 3
+            && phrase.chars().any(char::is_alphanumeric)
+            && !found.contains(&phrase)
+        {
             found.push(phrase);
         }
         at += end + 2;
     }
     found
+}
+
+/// `phrase` cut to its first words that fit in `MAX_PHRASE_CHARS`. Every
+/// file that holds the whole quote holds these words too, and a quote that
+/// ends differently from the source (a period added or left off) still
+/// matches.
+fn first_words(phrase: String) -> String {
+    let Some((cut, _)) = phrase.char_indices().nth(MAX_PHRASE_CHARS) else {
+        return phrase;
+    };
+    let head = &phrase[..cut];
+    let words = if phrase[cut..].starts_with(char::is_whitespace) {
+        head
+    } else {
+        head.rsplit_once(char::is_whitespace)
+            .map_or(head, |(words, _)| words)
+    };
+    words.trim_end().to_owned()
+}
+
+/// `text` with each line break, and the indent and comment mark after it,
+/// read as one space: a docstring or comment wraps the sentence a prompt
+/// quotes on one line ("...return the\n    result(s).").
+pub(crate) fn unwrapped(text: &str) -> String {
+    let mut joined = String::with_capacity(text.len());
+    for line in text.lines().map(str::trim) {
+        let after = line.trim_start_matches(['#', '/', '*', '!']);
+        let line = if after.is_empty() || after.starts_with(char::is_whitespace) {
+            after.trim_start()
+        } else {
+            line
+        };
+        if !line.is_empty() {
+            joined.push_str(line);
+            joined.push(' ');
+        }
+    }
+    joined
+}
+
+/// For each of `phrases`, whether `text` holds it, on one line or wrapped.
+pub(crate) fn quoted(text: &str, phrases: &[String]) -> Vec<bool> {
+    let mut joined: Option<String> = None;
+    (phrases.iter())
+        .map(|phrase| {
+            text.contains(phrase.as_str())
+                || (text.contains('\n')
+                    && (joined.get_or_insert_with(|| unwrapped(text))).contains(phrase.as_str()))
+        })
+        .collect()
 }
 
 /// How `terms` spells `word`: lowercase, without `-` or `_`, singular.
@@ -236,4 +418,43 @@ fn singular(word: &str) -> String {
         return word[..word.len() - 1].into();
     }
     word.into()
+}
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_words_tests.rs"]
+mod tests;
+
+/// Whether `text` holds `term` with no letter, digit or `_` on either side,
+/// so `enum` is not found in `enumerate` nor `completion` in
+/// `shell_completion`.
+pub(crate) fn whole_word(text: &str, term: &str) -> bool {
+    let part = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+    text.match_indices(term).any(|(at, _)| {
+        !part(text[..at].chars().next_back()) && !part(text[at + term.len()..].chars().next())
+    })
+}
+
+/// For each of `terms`, whether `text` holds it once `_` and `-` are
+/// dropped. A term found as written, per `hits`, is held either way, so the
+/// text is joined only when one is not.
+pub(crate) fn spelled(text: &str, terms: &[String], hits: &[u8]) -> Vec<bool> {
+    let mut joined: Option<String> = None;
+    (terms.iter().zip(hits))
+        .map(|(term, &hits)| {
+            hits > 0
+                || (text.contains(['_', '-'])
+                    && joined
+                        .get_or_insert_with(|| text.replace(['_', '-'], ""))
+                        .contains(term.as_str()))
+        })
+        .collect()
+}
+
+/// For each of `terms`, whether the file's path holds it.
+pub(crate) fn in_path(relative: &str, terms: &[String]) -> Vec<bool> {
+    let lower = relative.to_lowercase().replace(['-', '_'], "");
+    terms
+        .iter()
+        .map(|term| lower.contains(term.as_str()))
+        .collect()
 }

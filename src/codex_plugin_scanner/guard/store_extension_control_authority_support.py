@@ -35,7 +35,7 @@ from .store_base import (
     SecretStore,
     SystemKeyringSecretStore,
 )
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 
 _LOGGER = logging.getLogger(__name__)
 _KEY_REF_SUFFIX = ":authentication-key"
@@ -94,7 +94,7 @@ class _ExtensionControlAuthoritySupportMixin:
 
     def _require_compatible_extension_control_schema(self) -> None:
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
 
     def read_persisted_extension_control_authority(self) -> ExtensionControlAuthorityView:
         """Read the authenticated authority using its persisted catalog identity."""
@@ -191,7 +191,7 @@ class _ExtensionControlAuthoritySupportMixin:
         if sys.platform != "darwin":
             return False
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
             snapshot_exists = (
                 connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
                 is not None

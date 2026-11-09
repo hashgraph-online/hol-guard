@@ -12,10 +12,10 @@ use guard_contracts::ExtensionControlAuthorityRequestV1;
 use rusqlite::params;
 use serde_json::{json, Value};
 
-use super::records::{degraded, query_row, tampered, Phase, Res};
+use super::records::{query_row, tampered, Phase, Res};
 use super::resume::immediate;
 use super::writes::open_writer;
-use super::{fault_value, Ctx, STORE_UNAVAILABLE};
+use super::{fault_value, Ctx};
 
 const HEAD_MISMATCH: &str = "extension control transition head mismatch";
 
@@ -23,8 +23,9 @@ pub(super) fn queue_change_op(
     request: &ExtensionControlAuthorityRequestV1,
     key: Option<&[u8]>,
 ) -> Result<Value, String> {
-    let Some(connection) = open_writer(request)? else {
-        return Ok(fault_value(&degraded(STORE_UNAVAILABLE), Vec::new()));
+    let connection = match open_writer(request)? {
+        Ok(connection) => connection,
+        Err(reply) => return Ok(reply),
     };
     let ctx = Ctx {
         connection: &connection,

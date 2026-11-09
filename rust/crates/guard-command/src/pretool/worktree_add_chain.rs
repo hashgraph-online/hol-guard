@@ -164,9 +164,9 @@ fn prove(
     // search path, so it answers for the same entry. Its own directory does
     // not move, which is what lets a relative entry be read here at all.
     let screened = if entered {
-        super::chain_route::search_path_outside(&destination, execution_environment)
+        super::search_path::search_path_outside(&destination, execution_environment)
     } else {
-        super::chain_route::routed_search_path_outside(
+        super::search_path::routed_search_path_outside(
             &destination,
             context.cwd.map(std::path::Path::new),
             execution_environment,
@@ -419,7 +419,7 @@ fn entered_checkout(
         // After the `cd` the shell looks up `git` and `gh` again, and a
         // search path entry that is relative, or that names a folder of the
         // new checkout, then resolves to what the ref it checks out supplies.
-        if !super::chain_route::search_path_outside(&destination, execution_environment) {
+        if !super::search_path::search_path_outside(&destination, execution_environment) {
             return None;
         }
         let after = after_creation(model, add);

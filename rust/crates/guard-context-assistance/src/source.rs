@@ -2,7 +2,7 @@
 //! as JSON authority. A root still needs an explicit app/workspace grant.
 use crate::{ContextDocument, RuntimeError};
 use guard_secure_fs::{
-    classify_source_path, contains_symlink_component, credential_directory_path,
+    classify_project_document, contains_symlink_component, credential_directory_path,
     credential_named_path, read_bounded,
 };
 use sha2::{Digest, Sha256};
@@ -81,7 +81,7 @@ impl SourceRoot {
         // The decision names the file by its canonical spelling, which on
         // Windows carries the `\\?\` prefix the stored root may leave off.
         let root = std::fs::canonicalize(&self.path).map_err(|_| RuntimeError::ScopeDenied)?;
-        let decision = classify_source_path(relative, &self.path, None, false);
+        let decision = classify_project_document(relative, &self.path);
         let selected = decision
             .resolved_path
             .filter(|_| decision.allowed)

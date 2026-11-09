@@ -109,6 +109,7 @@ Changing any of these produces a new command, and Guard asks again.
 | Resident exact-action answer | `rust/crates/guard-runtime/src/native_exact_action_op.rs` (`decide`, `Fallback::CommandHash`) |
 | Allow once retry binding, with no package exclusion | `rust/crates/guard-runtime/src/native_exact_action_op/binding.rs` and the `Reuse::Argv` fallback in `native_exact_action_op.rs` |
 | Saved package allows reused under `require-reapproval`, any scope | `rust/crates/guard-runtime/src/package_policy_resolve_approvals.rs` (`is_durable_exact_artifact_approval`) |
+| Cloud Allow once for a package install still waiting on the request it queued (read and spent once, only by that install; it outranks a broader row such as the package-request family rule, but not a block saved for the artifact) | `rust/crates/guard-runtime/src/package_policy_resolve_approvals.rs` (`is_waited_exact_cloud_package_approval`) and `rust/crates/guard-runtime/src/guard_store_exact_cloud_package.rs`, reached from the post-wait re-check in `src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py` |
 | Saved allows on the direct hook path | `rust/crates/guard-runtime/src/hook_direct_saved_decision.rs` (`approvable`) |
 | Approval scopes offered to the user | `rust/crates/guard-runtime/src/approval_scope_contract.rs` (`allow_is_non_overridable` excludes only non-review verdicts) |
 | Saved allows on the Python daemon path | `src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py` (`_native_review_is_approvable`) |
@@ -125,6 +126,9 @@ Changing any of these produces a new command, and Guard asks again.
 - `rust/crates/guard-runtime/src/native_exact_action_op_tests.rs` (`a_windows_launch_falls_back_to_the_command_hash`)
 - `rust/crates/guard-runtime/tests/fixtures/hook_direct_saved_decision_vectors.json` (`allow-guard-control`, `allow-package`)
 - `rust/crates/guard-runtime/src/package_policy_resolve_op_tests.rs` (`a_saved_allow_of_any_scope_lets_the_identical_require_reapproval_retry_run`, `a_changed_artifact_is_reviewed_again_whatever_scope_saved_the_allow`)
+- `rust/crates/guard-runtime/src/package_policy_resolve_op_tests.rs` (`a_waited_exact_cloud_allow_lets_the_install_run_once`, `a_waited_exact_cloud_allow_needs_its_resolved_package_request`)
+- `rust/crates/guard-runtime/src/guard_store_exact_cloud_package_tests.rs` (`the_allow_outranks_a_family_rule_row_but_not_a_block_saved_for_the_artifact`)
+- `tests/test_guard_exact_cloud_package_wait.py` (`test_the_install_that_waited_runs_once_and_a_later_retry_is_reviewed_again`, `test_a_family_rule_row_does_not_hide_the_waited_cloud_allow`, `test_a_block_saved_for_the_artifact_still_wins_over_the_waited_cloud_allow`)
 - `tests/test_guard_package_workspace_approval.py` (`test_workspace_package_approval_is_reused_across_linked_worktrees_with_the_same_dependency_graph`)
 - `tests/test_native_review_exact_action_always.py`
 - `tests/test_native_exact_action_read_only_identity.py`

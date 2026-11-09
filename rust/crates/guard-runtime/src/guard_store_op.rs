@@ -34,7 +34,9 @@ use crate::guard_store_approval_resolve::{
     resolve_matching_duplicate_requests,
 };
 use crate::guard_store_approval_sweep::resolve_matching_approval_requests;
-use crate::guard_store_approval_write::{add_approval_request, add_native_review_approval_request};
+use crate::guard_store_approval_write::{
+    add_approval_request, add_native_review_approval_request, clear_approval_requests,
+};
 use crate::guard_store_args::Args;
 use crate::guard_store_claude_review::{
     add_claude_approval_request, add_claude_native_review_approval_request,
@@ -403,6 +405,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "count_command_shadow_observations"
         | "get_guard_session"
         | "list_guard_sessions"
+        | "list_events_after"
+        | "list_cloud_exceptions"
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
@@ -477,6 +481,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
+        // One consistent view of the request and the allow issued for it.
+        "peek_waited_exact_cloud_package_allow" => Kind::Snapshot,
+        "consume_waited_exact_cloud_package_allow" => Kind::Write,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
@@ -546,6 +553,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_analytics"
         | "reconcile_receipt_events"
         | "mark_requests_read"
+        | "clear_approval_requests"
         | "mark_request_unread"
         | "clear_read_state"
         | "set_device_label"
@@ -853,6 +861,12 @@ fn dispatch(
                 connection, guard_home, args, owner,
             )
         }
+        "peek_waited_exact_cloud_package_allow" => {
+            crate::guard_store_exact_cloud_package::peek(connection, args)
+        }
+        "consume_waited_exact_cloud_package_allow" => {
+            crate::guard_store_exact_cloud_package::consume(connection, args)
+        }
         "record_local_once_approval" => {
             crate::guard_store_local_once_mint::record_local_once_approval(connection, args)
         }
@@ -881,12 +895,15 @@ fn dispatch(
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
         "mark_requests_read" => read_state::mark_read(connection, args),
+        "clear_approval_requests" => clear_approval_requests(connection, args),
         "mark_request_unread" => read_state::mark_unread(connection, args),
         "get_read_state" => read_state::ids(connection, args),
         "clear_read_state" => read_state::clear(connection, args),
         "set_device_label" => devices::set_label(connection, args),
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
+        "list_events_after" => cloud_events::list_after(connection, args),
+        "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),
         "count_guard_events_v1" => cloud_events::count(connection, args),

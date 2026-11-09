@@ -24,6 +24,8 @@
 //! runs when it asks whether the Allow settles its order check, through
 //! [`allow_settles_read_order`].
 
+use super::git_output_target::points_output_at_a_protected_file;
+
 use super::PathContext;
 use crate::CanonicalCommandV1;
 use std::collections::BTreeSet;
@@ -52,9 +54,9 @@ const REF_READS: &[&str] = &[
 
 /// Git operations that write no configuration a later read obeys. Some record
 /// an upstream (`push -u`, `checkout --track`, `branch -u`), and those
-/// `branch.*` keys name no program. Only a step whose first argument is one of
-/// these carries a read, so a leading `-C` that points the step at another
-/// repository ends the run.
+/// `branch.*` keys name no program. Only a step on this list carries a read,
+/// and only into the checkout it works in: a step whose leading `-C` points
+/// at another repository ends the run.
 const CONFIG_STABLE_STEPS: &[&str] = &[
     "add", "branch", "checkout", "commit", "fetch", "merge", "pull", "push", "reset", "restore",
     "stash", "switch", "tag",
@@ -105,10 +107,12 @@ const TREE_PRESERVING_WORKTREE_ACTIONS: &[&str] = &["list", "lock", "prune", "re
 ///
 /// `benign` holds the segments the native benign proof covers and `covered`
 /// every segment covered so far, by that proof, an enabled permission or a
-/// GitHub grant. A read qualifies when it is proven safe on its own, takes no
-/// leading Git option (so `-C` and `--git-dir` cannot route it elsewhere), and
-/// every earlier step is covered and either benign or a Git step on
-/// [`CONFIG_STABLE_STEPS`]. Any other step, such as an allowed `ln` or `git
+/// GitHub grant. A read qualifies when it is proven safe on its
+/// own, takes no leading Git option beyond one that routes or shapes its
+/// output (so `--git-dir` and `-c` cannot repoint it, and a `-C` must name
+/// the checkout the steps before it worked in), and every earlier step is
+/// covered and either benign or a Git step on [`CONFIG_STABLE_STEPS`]
+/// working in that same checkout. Any other step, such as an allowed `ln` or `git
 /// config`, could repoint the directory the read runs in or the program it
 /// starts, so it ends the run.
 pub(crate) fn git_reads_after_allowed_steps(
@@ -129,19 +133,35 @@ pub(crate) fn git_reads_after_allowed_steps(
         ..context
     };
     let mut added = Vec::new();
+    // The checkouts the carried steps worked in. A step with no leading
+    // option works where the command runs; one with a leading `-C` works
+    // where it points. A read is carried only when every step before it
+    // worked in the checkout the read itself runs in, which is the question
+    // the Git floor's own order check asks in `allow_settles_read_order`. A
+    // step routed somewhere else still ends the run.
+    let mut routes: Vec<std::path::PathBuf> = Vec::new();
     for (index, segment) in model.segments.iter().enumerate() {
         let git = git_segment(segment);
         if covered.contains(&index) {
-            if benign.contains(&index)
-                || (git && leading_operation_in(segment, CONFIG_STABLE_STEPS))
+            if benign.contains(&index) {
+                continue;
+            }
+            if let Some(route) = git
+                .then(|| config_stable_route(segment, proof_context))
+                .flatten()
             {
+                routes.push(route);
                 continue;
             }
             break;
         }
         let read = if git {
             ref_read(model, segment, proof_context)
+                && routed_checkout(segment, proof_context)
+                    .is_some_and(|route| routes.iter().all(|carried| *carried == route))
         } else {
+            // A Docker listing reads no checkout, so where a Git step before
+            // it worked changes nothing it looks at.
             docker_listing(model, segment, proof_context)
         };
         if !read {
@@ -152,6 +172,35 @@ pub(crate) fn git_reads_after_allowed_steps(
     added
 }
 
+/// The checkout a Git segment works in, when its leading options only route
+/// or shape what it prints. `None` when it carries any other leading option
+/// or the route cannot be named, so `--git-dir`, `--work-tree` and `-c` keep
+/// the refusal they had.
+fn routed_checkout(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    globals_only_route_or_print(&segment.arguments)
+        .then(|| super::git_remote_ops::routed_directory(segment, context))
+        .flatten()
+}
+
+/// The checkout a Git step on [`CONFIG_STABLE_STEPS`] works in, resolving the
+/// subcommand the way Git does rather than reading the first word: `git -C
+/// <dir> pull` is the same step as `git pull`, pointed at a checkout this
+/// names, and the caller compares that checkout with the read's own.
+fn config_stable_route(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    let index = crate::command_compatibility::git_command_index(&segment.arguments)?;
+    let operation = segment.arguments.get(index)?;
+    CONFIG_STABLE_STEPS
+        .contains(&operation.as_str())
+        .then(|| routed_checkout(segment, context))
+        .flatten()
+}
+
 /// Whether the user's Allow may settle the Git floor's order check for
 /// `steps`, the earlier steps it could not prove leave a later read's
 /// configuration as Guard read it. A step that writes configuration the read
@@ -159,9 +208,10 @@ pub(crate) fn git_reads_after_allowed_steps(
 /// configures it, and such a step rewrites that answer first. A step that may
 /// rewrite tracked files settles it only when no configuration include reaches
 /// the work tree, so no file it checks out becomes configuration the read
-/// obeys. Such a step with a leading option may act on another repository,
-/// whose files an absolute include could name, so it never settles. Steps
-/// outside Git keep the Allow's judgment.
+/// obeys, and only when it works in the very checkout the read runs in: a
+/// step routed elsewhere rewrites files an absolute include in the read's
+/// configuration could name, which that walk never examines. Steps outside
+/// Git keep the Allow's judgment.
 pub(crate) fn allow_settles_read_order(
     model: &CanonicalCommandV1,
     steps: &[usize],
@@ -170,6 +220,7 @@ pub(crate) fn allow_settles_read_order(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
     let mut first = None;
+    let mut writers: Vec<usize> = Vec::new();
     for &index in steps {
         let Some(segment) = model.segments.get(index) else {
             return false;
@@ -188,13 +239,10 @@ pub(crate) fn allow_settles_read_order(
         if preserves_tree(&segment.arguments) {
             continue;
         }
-        if segment
-            .arguments
-            .first()
-            .is_none_or(|argument| argument.starts_with('-'))
-        {
+        if !globals_only_route_or_print(&segment.arguments) {
             return false;
         }
+        writers.push(index);
         first = Some(first.map_or(index, |current: usize| current.min(index)));
     }
     let Some(first) = first else {
@@ -206,17 +254,39 @@ pub(crate) fn allow_settles_read_order(
         cwd: destination.as_deref().or(context.cwd),
         ..context
     };
+    // Where each tree-rewriting step actually works. The later-read walk below
+    // answers for the read's own checkout: it asks whether any configuration
+    // include reaches that work tree. A step routed somewhere else rewrites a
+    // checkout that walk never looks at, and an absolute include in the read's
+    // configuration can name a file there, so the read would obey what the
+    // step just checked out. Only a step working in the read's own checkout is
+    // answered for.
+    let routes: Vec<Option<std::path::PathBuf>> = writers
+        .iter()
+        .map(|&index| super::git_remote_ops::routed_directory(&model.segments[index], read_context))
+        .collect();
     (first + 1..model.segments.len()).all(|index| {
         // `... | xargs git log` runs its read as the child.
         let child = super::fanout_reads::git_xargs_child(model, index);
         let later = child.as_ref().unwrap_or(&model.segments[index]);
-        !git_segment(later)
-            || super::git_remote_ops::work_tree_outside_configuration(
-                later,
-                read_context,
-                deadline,
-                execution_environment,
-            )
+        if !git_segment(later) {
+            return true;
+        }
+        let Some(read_route) = super::git_remote_ops::routed_directory(later, read_context) else {
+            return false;
+        };
+        if routes
+            .iter()
+            .any(|route| route.as_deref() != Some(read_route.as_path()))
+        {
+            return false;
+        }
+        super::git_remote_ops::work_tree_outside_configuration(
+            later,
+            read_context,
+            deadline,
+            execution_environment,
+        )
     })
 }
 
@@ -234,6 +304,49 @@ fn read_directory(model: &CanonicalCommandV1, context: PathContext<'_>) -> Optio
         return None;
     }
     Some(cwd)
+}
+
+/// Whether every Git global option before the subcommand only chooses the
+/// directory the step runs in or shapes what it prints.
+///
+/// `git -c core.pager='sh -c true' pull && git log` is the shape this
+/// refuses: `-c` and `--config-env` set configuration the later read obeys,
+/// which is the one thing [`preserves_configuration`] cannot see, because the
+/// shared Git parser skips those options to reach the subcommand.
+/// `--exec-path`, `--git-dir`, `--work-tree`, `--namespace`, `--super-prefix`
+/// and `--bare` move the repository out from under the read, and
+/// `--paginate` starts the program `core.pager` names, so a step carrying
+/// one settles nothing either. A `-C <dir>` only picks the checkout
+/// the step works in; whatever it rewrites there is answered by the
+/// later-read walk below, the same way a step with no global option is.
+/// Git takes these options as whole words, so `-Cdir` and `-ckey=value`
+/// are not spellings of them and keep the refusal.
+fn globals_only_route_or_print(arguments: &[String]) -> bool {
+    let Some(end) = crate::command_compatibility::git_command_index(arguments) else {
+        return false;
+    };
+    let mut index = 0;
+    while index < end {
+        let argument = &arguments[index];
+        let option = argument.split('=').next().unwrap_or(argument);
+        if option == "-C" {
+            index += if argument.contains('=') { 1 } else { 2 };
+        } else if matches!(
+            option,
+            "-P" | "--no-pager"
+                | "--no-replace-objects"
+                | "--literal-pathspecs"
+                | "--glob-pathspecs"
+                | "--noglob-pathspecs"
+                | "--icase-pathspecs"
+                | "--no-optional-locks"
+        ) {
+            index += 1;
+        } else {
+            return false;
+        }
+    }
+    true
 }
 
 /// Whether a Git step, wherever its global options route it, writes no
@@ -278,15 +391,6 @@ fn preserves_tree(arguments: &[String]) -> bool {
     }
 }
 
-/// Whether the segment's first argument, with no global option before it, is
-/// one of `operations`.
-fn leading_operation_in(segment: &crate::CommandSegmentV1, operations: &[&str]) -> bool {
-    segment
-        .arguments
-        .first()
-        .is_some_and(|operation| operations.contains(&operation.as_str()))
-}
-
 fn git_segment(segment: &crate::CommandSegmentV1) -> bool {
     segment
         .executable
@@ -314,9 +418,17 @@ fn ref_read(
 ) -> bool {
     let stripped = super::without_stderr_merge(segment);
     let segment = stripped.as_ref().unwrap_or(segment);
-    let Some((operation, rest)) = segment.arguments.split_first() else {
+    // Git resolves the subcommand past its leading options, so `git -C <dir>
+    // rev-parse HEAD` is the same read as `git rev-parse HEAD`. The caller
+    // screens which leading options are acceptable and compares the checkout
+    // a `-C` points at with the one the steps before it worked in.
+    let Some(index) = crate::command_compatibility::git_command_index(&segment.arguments) else {
         return false;
     };
+    let Some(operation) = segment.arguments.get(index) else {
+        return false;
+    };
+    let rest = &segment.arguments[index + 1..];
     !segment.path_overridden
         && segment.wrapper_chain.is_empty()
         && segment
@@ -371,344 +483,6 @@ fn writes_nothing(arguments: &[String]) -> bool {
         .is_some_and(|operation| WRITES_NOTHING_STEPS.contains(&operation.as_str()))
 }
 
-/// Verbs that read a short `-o` as the file to write.
-///
-/// Everywhere else the same letter means something that writes nothing:
-/// `git ls-files -o` lists untracked files and `git push -o` carries a push
-/// option to the remote, so refusing `-o` outright would stop ordinary work.
-const SHORT_OUTPUT_VERBS: &[&str] = &["archive", "bundle", "format-patch"];
-
-/// Whether a step points its output at a file that decides what runs next.
-///
-/// Git's diff options reach every verb that can show a diff, so `log`, `show`,
-/// `whatchanged` and `rev-list` all take `--output=<file>` and write wherever
-/// it points. Git resolves any unambiguous long-option abbreviation, so every
-/// spelling from `--out` up is read as that option; the short form is read as
-/// the output file for the verbs that package a tree.
-///
-/// The file the option names decides the answer. A workspace-relative path
-/// Git packages into is the ordinary shape of the option and stays inside an
-/// Allow on the Git extension; a path Guard cannot place, or one that names
-/// Git's own tree, does not.
-fn points_output_at_a_protected_file(arguments: &[String]) -> bool {
-    let Some(index) = crate::command_compatibility::git_command_index(arguments) else {
-        return false;
-    };
-    let Some(operation) = arguments.get(index).map(String::as_str) else {
-        return false;
-    };
-    let short_writes = SHORT_OUTPUT_VERBS.contains(&operation);
-    let rest = arguments.get(index + 1..).unwrap_or_default();
-    rest.iter().enumerate().any(|(position, argument)| {
-        let (value, names_a_file) = match output_option_value(argument, short_writes) {
-            Some(value) => (value, true),
-            None => match verb_destination_value(operation, argument) {
-                Some((value, names_a_file)) => (value, names_a_file),
-                None => return false,
-            },
-        };
-        let target = match value {
-            Some(value) => Some(value),
-            None => rest.get(position + 1).map(String::as_str),
-        };
-        target.is_none_or(|target| {
-            if names_a_file {
-                !output_target_is_inert(target)
-            } else {
-                !output_target_is_placed(target)
-            }
-        })
-    })
-}
-
-/// Long options that name where one verb writes, beside the `--output` every
-/// diff-showing verb takes.
-///
-/// `git fast-export --export-marks=<file>` and
-/// `git read-tree --index-output=<file>` write a file wherever they are
-/// pointed, which is the same escape `git archive -o` keeps its review for.
-/// `--object-dir` moves the files `git commit-graph write` and
-/// `git multi-pack-index write` produce into another directory.
-///
-/// The flag says whether the value names a file Git chooses nothing about. A
-/// directory Git writes its own fixed names into cannot become the
-/// configuration, hook or attribute file a later step runs under, so
-/// `--object-dir .git/objects` -- the ordinary spelling -- stays inside the
-/// Allow, and only a path that leaves the workspace keeps its review.
-const VERB_DESTINATION_OPTIONS: &[(&str, &str, bool)] = &[
-    ("commit-graph", "object-dir", false),
-    ("fast-export", "export-marks", true),
-    ("multi-pack-index", "object-dir", false),
-    ("read-tree", "index-output", true),
-];
-
-/// The destination a verb-specific long option points at, as
-/// [`output_option_value`] reports one, with whether it names a file.
-///
-/// Git resolves any unambiguous long-option abbreviation, so every spelling
-/// from the first letter up is read as that option.
-fn verb_destination_value<'a>(
-    operation: &str,
-    argument: &'a str,
-) -> Option<(Option<&'a str>, bool)> {
-    let long = argument.strip_prefix("--")?;
-    let (name, attached) = match long.split_once('=') {
-        Some((name, value)) => (name, Some(value)),
-        None => (long, None),
-    };
-    if name.is_empty() {
-        return None;
-    }
-    VERB_DESTINATION_OPTIONS
-        .iter()
-        .find(|(verb, option, _)| *verb == operation && option.starts_with(name))
-        .map(|(_, _, names_a_file)| (attached, *names_a_file))
-}
-
-/// The file a single argument points Git's output at, when it is that option.
-///
-/// `Some(Some(path))` carries the value in the argument itself,
-/// `Some(None)` means the option is there and the next word carries its
-/// value, and `None` means the argument is not an output option at all.
-///
-/// Git's own option parser lets short flags travel in one cluster, so
-/// `git format-patch -no ../outside` writes exactly where `-n -o ../outside`
-/// would. The letter is therefore read wherever it sits in a single-dash
-/// run, not only at its head; a cluster the verb refuses outright fails
-/// before it writes anything, so reading one as an output option costs
-/// nothing.
-fn output_option_value(argument: &str, short_writes: bool) -> Option<Option<&str>> {
-    if let Some(rest) = argument.strip_prefix("--out") {
-        return Some(rest.split_once('=').map(|(_, value)| value));
-    }
-    if short_writes {
-        let cluster = argument
-            .strip_prefix('-')
-            .filter(|rest| !rest.starts_with('-'))?;
-        let position = cluster.find('o')?;
-        let rest = &cluster[position + 'o'.len_utf8()..];
-        return Some((!rest.is_empty()).then_some(rest));
-    }
-    None
-}
-
-/// Whether a path Git writes its output to leaves what a later step runs as
-/// Guard read it.
-///
-/// `snapshot.tar` or `patches/0001.patch` below the workspace is what
-/// `git archive -o` and `git format-patch -o` are for, and an Allow on the
-/// Git extension answers for them. A path that climbs out of the workspace or
-/// names `.git` -- `.git/config`, `.git/hooks/pre-commit`, `.gitattributes` --
-/// changes the configuration, hook or filter the next Git step runs under, so
-/// it keeps its review. A value Guard cannot place, because it is absent,
-/// home-relative or still carries a shell expansion, is treated the same way.
-fn output_target_is_inert(target: &str) -> bool {
-    output_target_is_placed(target)
-        && !target
-            .split(['/', '\\'])
-            .any(|component| component.starts_with(".git"))
-}
-
-/// Whether Guard can place a destination below the workspace. A path that
-/// climbs out of it, or one that is absolute, home-relative, drive-rooted or
-/// still carries a shell expansion, lands where Guard read nothing.
-fn output_target_is_placed(target: &str) -> bool {
-    if target.is_empty() || target.starts_with('-') || target.starts_with('~') {
-        return false;
-    }
-    if target.starts_with('/') || target.starts_with('\\') || target.contains('$') {
-        return false;
-    }
-    if target.len() > 1 && target.as_bytes()[1] == b':' {
-        return false;
-    }
-    !target.split(['/', '\\']).any(|component| component == "..")
-}
-
 #[cfg(test)]
-mod tests {
-    use super::{preserves_tree, REF_READS};
-
-    #[test]
-    fn working_tree_reads_are_not_ref_reads() {
-        for operation in ["status", "diff", "grep", "ls-files", "blame", "check-attr"] {
-            assert!(!REF_READS.contains(&operation), "{operation}");
-        }
-    }
-
-    fn words(command: &str) -> Vec<String> {
-        command.split_whitespace().map(str::to_owned).collect()
-    }
-
-    #[test]
-    fn a_read_leaves_a_later_step_running_what_guard_read() {
-        for command in [
-            "status --short --branch",
-            "log --oneline -5",
-            "ls-remote --heads origin",
-        ] {
-            assert!(super::writes_nothing(&words(command)), "{command}");
-        }
-        // Each of these writes somewhere a later step could read.
-        for command in [
-            "diff --output=hook",
-            "archive -o out.tar HEAD",
-            "config a.b c",
-        ] {
-            assert!(!super::writes_nothing(&words(command)), "{command}");
-        }
-    }
-
-    #[test]
-    fn a_step_that_writes_configuration_settles_no_order_check() {
-        // The steps a refresh chain puts before a read: each records only
-        // `branch.*` keys, or writes nothing at all.
-        for command in [
-            "fetch origin main",
-            "merge --ff-only origin/main",
-            "stash pop",
-            "checkout -B refresh origin/main",
-            "status --short --branch",
-            "log --oneline -5",
-            "rev-parse HEAD",
-        ] {
-            assert!(super::preserves_configuration(&words(command)), "{command}");
-        }
-        // A configuration write names the pager, textconv or filter program
-        // the read after it would run, so the Allow on the read cannot answer
-        // for it. An unresolvable step is refused for the same reason: an
-        // alias runs whatever the configuration says it does.
-        for command in [
-            "config core.pager sh",
-            "-C ../other config core.pager sh",
-            "remote add origin https://example.invalid/app.git",
-            "submodule update --init",
-            "refresh-cache",
-            "--unknown-global status",
-        ] {
-            assert!(
-                !super::preserves_configuration(&words(command)),
-                "{command}"
-            );
-        }
-    }
-
-    #[test]
-    fn an_output_file_that_decides_what_runs_next_is_not_a_read() {
-        // Git's diff options reach every verb that shows a diff, and the
-        // short form is the output file for the verbs that package a tree.
-        // Each of these lands on Git's own tree, climbs out of the workspace
-        // or is a value Guard cannot place.
-        for command in [
-            "log -1 --output=.git/config",
-            "show --output .git/hooks/pre-commit HEAD",
-            "whatchanged --out=.git/config",
-            "rev-list --output=.git/config HEAD",
-            "diff --output=.gitattributes",
-            "archive -o ../out.tar HEAD",
-            "archive -o /tmp/out.tar HEAD",
-            "archive -o ~/out.tar HEAD",
-            "archive -o $DEST/out.tar HEAD",
-            "format-patch -o .git/hooks HEAD~1",
-            // Git reads a clustered short flag exactly as the separate
-            // spelling, so `-no DIR` writes where `-n -o DIR` would.
-            "format-patch -no ../outside HEAD~1",
-            "format-patch -sno .git/hooks HEAD~1",
-            "format-patch -no../outside HEAD~1",
-            "archive --output",
-        ] {
-            assert!(
-                super::points_output_at_a_protected_file(&words(command)),
-                "{command}"
-            );
-        }
-        // Packaging a tree into a file the workspace names is the ordinary
-        // shape of the option. The same letter means something that writes
-        // nothing below, and a long option that merely starts with the same
-        // letters names no file.
-        for command in [
-            "archive -o out.tar HEAD",
-            "archive -oout.tar HEAD",
-            "archive --output=snapshot.tar HEAD",
-            "format-patch -o patches HEAD~1",
-            "format-patch -no patches HEAD~1",
-            "format-patch -nopatches HEAD~1",
-            "diff --output=hook",
-            "ls-files -o --exclude-standard",
-            "push -o ci.skip origin main",
-            "status --short --branch",
-            "log --oneline -5",
-            "log --one-line",
-        ] {
-            assert!(
-                !super::points_output_at_a_protected_file(&words(command)),
-                "{command}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_destination_option_outside_the_workspace_is_not_a_read() {
-        // These verbs write where the option points, so the same rule that
-        // holds `git archive -o ../out.tar` holds them.
-        for command in [
-            "fast-export --export-marks=../outside/marks --all",
-            "fast-export --export-marks ../outside/marks --all",
-            "fast-export --export-marks=.git/hooks/pre-commit --all",
-            "fast-export --export=/tmp/marks --all",
-            "read-tree --index-output=../outside/index HEAD",
-            "read-tree --index-output=.git/config HEAD",
-            "commit-graph write --object-dir=../outside",
-            "commit-graph write --object-dir ../outside",
-            "multi-pack-index --object-dir=/tmp/objects write",
-            "fast-export --export-marks",
-        ] {
-            assert!(
-                super::points_output_at_a_protected_file(&words(command)),
-                "{command}"
-            );
-        }
-        // The ordinary spellings. `git commit-graph` and
-        // `git multi-pack-index` write their own fixed names, so a directory
-        // inside the repository replaces no hook or configuration file, and
-        // the option name belongs to one verb only.
-        for command in [
-            "fast-export --export-marks=marks --all",
-            "fast-export --all",
-            "read-tree --index-output=tmp-index HEAD",
-            "read-tree -m -u HEAD",
-            "commit-graph write",
-            "commit-graph write --object-dir=.git/objects",
-            "commit-graph write --object-dir .git/objects",
-            "multi-pack-index --object-dir=.git/objects write",
-            "log --export-marks=../outside/marks",
-            "fast-export --reencode=yes --all",
-        ] {
-            assert!(
-                !super::points_output_at_a_protected_file(&words(command)),
-                "{command}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_step_routed_by_global_options_keeps_its_own_subcommand() {
-        for command in [
-            "push",
-            "-C repo worktree remove wt",
-            "-c a.b=c branch -D pr",
-        ] {
-            assert!(preserves_tree(&words(command)), "{command}");
-        }
-        // `--attr-source` takes a value, so `push` here is that value and the
-        // step is a checkout.
-        for command in [
-            "checkout main",
-            "--attr-source push checkout main",
-            "--attr-source=push checkout main",
-            "-C repo worktree add wt",
-        ] {
-            assert!(!preserves_tree(&words(command)), "{command}");
-        }
-    }
-}
+#[path = "git_read_after_allow_tests.rs"]
+mod tests;

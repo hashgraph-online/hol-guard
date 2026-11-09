@@ -21,6 +21,7 @@ from .agent_configuration import write_agent_configuration
 from .agent_prompt import fixture_authorization
 from .approval_retry_omp import OmpReview
 from .approval_retry_omp import enabled as approval_retry_enabled
+from .approval_retry_persistent import case_environment as approval_persistent_environment
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import (
@@ -248,7 +249,9 @@ def run_case(
             if scenario.id in GIT_ALLOW_CASES:
                 case["extension_control"] = configure_git_allow_controls(daemon, fixture.root / "guard-home")
             if scenario.id in EXTENSION_ALLOW_CASES:
-                case["extension_control"] = configure_extension_allow_controls(daemon, fixture.root / "guard-home")
+                case["extension_control"] = configure_extension_allow_controls(
+                    daemon, fixture.root / "guard-home", scenario.id
+                )
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.
@@ -304,6 +307,7 @@ def run_case(
             )
             case["guard_extension_sha256"] = digest_file(extension)
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
+            environment.update(approval_persistent_environment(scenario.id))
             if first_contact:
                 environment = realistic_environment(environment, fixture.home)
             if scenario.oracle == "watch-command":

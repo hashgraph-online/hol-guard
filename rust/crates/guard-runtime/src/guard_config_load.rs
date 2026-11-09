@@ -16,6 +16,7 @@ use serde_json::{json, Map, Value};
 use crate::guard_config_coerce as coerce;
 use crate::guard_config_harness as harness;
 use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
+use crate::managed_policy::ManagedPolicy;
 use crate::managed_policy_floor::effective_managed_policy;
 use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
 use crate::package_authority_config as base;
@@ -282,11 +283,46 @@ pub(crate) fn approval_wait_timeout_seconds_under(
     workspace: Option<&Path>,
     source: &ManagedPolicySource,
 ) -> Result<i64, String> {
-    let managed =
-        effective_managed_policy(&load_managed_policy(source)).map(|policy| ManagedInput {
-            settings: policy.settings.clone(),
-            locked_settings: policy.locked_settings.iter().cloned().collect(),
-        });
+    Ok(effective_config(guard_home, workspace, source)?
+        .get("approval_wait_timeout_seconds")
+        .and_then(Value::as_i64)
+        .unwrap_or(120))
+}
+
+/// Effective `desktop_notifications` for an in-process caller, composed as
+/// `approval_wait_timeout_seconds` is.
+pub(crate) fn desktop_notifications(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+) -> Result<bool, String> {
+    Ok(
+        effective_config(guard_home, workspace, &ManagedPolicySource::native())?
+            .get("desktop_notifications")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+    )
+}
+
+fn effective_config(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+    source: &ManagedPolicySource,
+) -> Result<Value, String> {
+    let policy = effective_managed_policy(&load_managed_policy(source));
+    load_under(guard_home, workspace, policy.as_ref())
+}
+
+/// `load_guard_config(guard_home, workspace)` composed against a managed
+/// policy the caller already resolved, as the native loader op reads it.
+pub(crate) fn load_under(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+    policy: Option<&ManagedPolicy>,
+) -> Result<Value, String> {
+    let managed = policy.map(|policy| ManagedInput {
+        settings: policy.settings.clone(),
+        locked_settings: policy.locked_settings.iter().cloned().collect(),
+    });
     let request = LoadRequest {
         schema: SCHEMA.to_owned(),
         guard_home: guard_home.to_path_buf(),
@@ -294,11 +330,7 @@ pub(crate) fn approval_wait_timeout_seconds_under(
         require_canonical_workspace: false,
         managed,
     };
-    let config = load(&request)?;
-    Ok(config
-        .get("approval_wait_timeout_seconds")
-        .and_then(Value::as_i64)
-        .unwrap_or(120))
+    load(&request)
 }
 
 fn watch_hours(value: Option<&Value>) -> i64 {

@@ -130,6 +130,19 @@ fn portable_identity(
                 if key == "search_path_sha256" {
                     continue;
                 }
+                // Inode numbers, device ids and the two timestamps say where a
+                // file sits on this host and when it was last written, not what
+                // it will run. `sha256`, `size`, `mode` and the resolved path
+                // already pin that. Keeping them would retire a saved package
+                // approval every time a reinstall, a corepack refresh or any
+                // other atomic rewrite put the same bytes back under a new
+                // inode, which is what made package approvals look unsaveable.
+                if matches!(
+                    key.as_str(),
+                    "change_time_ns" | "device" | "inode" | "modified_time_ns"
+                ) {
+                    continue;
+                }
                 let tracked = matches!(key.as_str(), "path" | "launch_cwd" | "command");
                 if let (true, Value::String(raw)) = (tracked, item) {
                     let replacement = if PyPath::new(raw).is_absolute() {

@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from .policy_bundle_activation import PrecomputedVerdicts
 from .policy_bundle_parser import policy_bundle_acceptance_checkpoint, policy_bundle_is_version_downgrade
-from .store_custom_extension_continuity import (
-    CustomExtensionContinuityMutation,
-    apply_custom_extension_continuity_mutation_locked,
-)
+from .store_custom_extension_continuity import CustomExtensionContinuityMutation
 
 
 def encoded_policy_activation_payloads(
@@ -97,20 +94,3 @@ def policy_checkpoint_rejection(
             )
         )
     return "bundle_version_downgrade" if downgrade else None
-
-
-def apply_continuity_rejection(
-    connection: sqlite3.Connection,
-    mutation: CustomExtensionContinuityMutation | None,
-    *,
-    boundary: Callable[[str], None],
-) -> str | None:
-    """Apply continuity inside the caller transaction or return its rejection."""
-
-    if mutation is None:
-        return None
-    try:
-        _ = apply_custom_extension_continuity_mutation_locked(connection, mutation, boundary=boundary)
-    except ValueError:
-        return "custom_extension_continuity_changed_during_activation"
-    return None

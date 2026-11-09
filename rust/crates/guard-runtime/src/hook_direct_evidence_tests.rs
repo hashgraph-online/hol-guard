@@ -1,5 +1,5 @@
 use super::{
-    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, HEADROOM_RECORDS,
+    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, Paged, HEADROOM_RECORDS,
     MAX_QUEUED_RECORDS, MAX_RECORD_BYTES,
 };
 use serde_json::{json, Value};
@@ -24,7 +24,7 @@ fn drained_from(
     ack_epoch: Option<&str>,
 ) -> Value {
     let request = request(max_records, ack_through, ack_epoch);
-    serde_json::from_slice(&drain(&request, queue).unwrap()).unwrap()
+    serde_json::from_slice(&drain(&request, queue, None).unwrap()).unwrap()
 }
 
 /// A page from `queue`, acknowledging `ack_through` from the same queue.
@@ -156,7 +156,7 @@ fn a_page_passes_over_plain_relay_records_and_the_ack_settles_them() {
     assert!(queue.offer(plain.clone()));
     let peeked = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
     assert_eq!(
-        peeked.records,
+        values(&peeked.records),
         [json!({ "index": 0 }), json!({ "index": 2 })]
     );
     assert_eq!(peeked.remaining, 0);
@@ -179,11 +179,14 @@ fn plain_relay_records_never_leave_an_empty_page_with_more_queued() {
         assert!(queue.offer(json!({ "index": index })));
     }
     let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 2);
-    assert_eq!(page.records, [json!({ "index": 0 }), json!({ "index": 1 })]);
+    assert_eq!(
+        values(&page.records),
+        [json!({ "index": 0 }), json!({ "index": 1 })]
+    );
     assert_eq!(page.remaining, 1);
     let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 2);
     assert_eq!(page.settled, [plain.clone(), plain.clone(), plain]);
-    assert_eq!(page.records, [json!({ "index": 2 })]);
+    assert_eq!(values(&page.records), [json!({ "index": 2 })]);
     assert_eq!(page.remaining, 0);
 }
 
@@ -207,7 +210,7 @@ fn a_receipt_the_resident_could_not_write_is_paged_to_the_daemon() {
     assert_eq!(page.settled, [plain.clone()]);
     queue.unwritten().requeue(page.settled);
     let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 3);
-    assert_eq!(page.records, [plain]);
+    assert_eq!(values(&page.records), [plain]);
     assert!(page.settled.is_empty());
 }
 
@@ -234,7 +237,7 @@ fn a_full_queue_still_takes_back_every_receipt_the_resident_could_not_write() {
         handed_back += page
             .records
             .iter()
-            .filter(|record| **record == plain)
+            .filter(|paged| paged.record == plain)
             .count();
         if page.records.is_empty() {
             break;
@@ -257,7 +260,7 @@ fn a_drain_with_no_store_hands_the_receipt_back_to_the_daemon() {
     loop {
         let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
         if !page.records.is_empty() {
-            assert_eq!(page.records, [plain]);
+            assert_eq!(values(&page.records), [plain]);
             break;
         }
         assert!(
@@ -285,10 +288,117 @@ fn a_partly_recorded_record_is_charged_for_the_markers_it_keeps() {
     let queue = DirectEvidenceQueue::default();
     let record = json!({"receipt": {}});
     assert!(queue
-        .try_offer_recorded(record, &["first_recorded", "second_recorded"], |_| 1)
+        .try_offer_recorded(record, &["first_recorded", "second_recorded"], false, |_| 1)
         .is_ok());
     let kept = json!({"receipt": {}, "first_recorded": true});
     let state = queue.state.lock().unwrap();
     assert_eq!(state.records[0].record, kept);
     assert_eq!(state.bytes, serde_json::to_vec(&kept).unwrap().len());
+}
+
+fn values(records: &[Paged]) -> Vec<Value> {
+    records.iter().map(|paged| paged.record.clone()).collect()
+}
+
+#[test]
+fn only_a_hook_record_that_leaves_the_daemon_nothing_is_settled() {
+    let settled = |record: &Value, capturing: bool| {
+        let paged = Paged {
+            seq: 1,
+            record: record.clone(),
+            activity: true,
+        };
+        super::record::settled(&paged, capturing)
+    };
+    let done = json!({
+        "harness": "claude-code",
+        "event": "PreToolUse",
+        "receipt": {"event_name": "PreToolUse"},
+        "receipt_valid": true,
+        "receipt_recorded": true,
+        "activity_recorded": true,
+    });
+    let edited = |edit: &dyn Fn(&mut serde_json::Map<String, Value>)| {
+        let mut record = done.clone();
+        edit(record.as_object_mut().unwrap());
+        record
+    };
+    let notice = json!({"request_id": "req-1", "connector_name": "Example CLI"});
+    let finished = [
+        done.clone(),
+        // A record from before the post-tool lane is a `PreToolUse`.
+        edited(&|record| {
+            record.remove("event");
+        }),
+        // A receipt the store refuses is never submitted.
+        edited(&|record| {
+            record.insert("receipt_valid".into(), json!(false));
+            record.remove("receipt_recorded");
+        }),
+        edited(&|record| {
+            record.insert("fence_wait_ms".into(), json!(300));
+            record.insert("fence_wait_recorded".into(), json!(true));
+        }),
+        edited(&|record| {
+            record.insert("fence_wait_ms".into(), json!(0));
+        }),
+        edited(&|record| {
+            record.insert("connector_setup_notice".into(), notice.clone());
+            record.insert("connector_notice_raised".into(), json!(true));
+        }),
+        // Only a `PreToolUse` raises a notice.
+        edited(&|record| {
+            record.insert("event".into(), json!("PostToolUse"));
+            record.insert("connector_setup_notice".into(), notice.clone());
+        }),
+        // The daemon records no activity for a prompt.
+        edited(&|record| {
+            record.insert("event".into(), json!("UserPromptSubmit"));
+            record.remove("activity_recorded");
+        }),
+    ];
+    for record in &finished {
+        assert!(settled(record, false), "{record}");
+    }
+    let codex = edited(&|record| {
+        record.insert("harness".into(), json!("codex"));
+    });
+    // Without the marker the daemon's capture records nothing either.
+    assert!(settled(&codex, false));
+    assert!(!settled(&codex, true));
+    let captured = edited(&|record| {
+        record.insert("harness".into(), json!("codex"));
+        record.insert("capture_recorded".into(), json!(true));
+    });
+    assert!(settled(&captured, true));
+    let left = [
+        edited(&|record| {
+            record.remove("receipt_recorded");
+        }),
+        edited(&|record| {
+            record.remove("activity_recorded");
+        }),
+        edited(&|record| {
+            record.insert("event".into(), json!("PostToolUse"));
+            record.remove("activity_recorded");
+        }),
+        edited(&|record| {
+            record.insert("fence_wait_ms".into(), json!(300));
+        }),
+        edited(&|record| {
+            record.insert("connector_setup_notice".into(), notice.clone());
+        }),
+        edited(&|record| {
+            record.insert("kind".into(), json!("mcp_tool_call"));
+        }),
+        edited(&|record| {
+            record.insert("event".into(), Value::Null);
+        }),
+        edited(&|record| {
+            record.insert("event".into(), json!("Stop"));
+        }),
+    ];
+    for record in &left {
+        assert!(!settled(record, false), "{record}");
+    }
 }

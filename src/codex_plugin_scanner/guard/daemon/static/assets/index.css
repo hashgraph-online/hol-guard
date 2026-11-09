@@ -2167,6 +2167,10 @@
     margin-block-end: calc(calc(var(--spacing) * 16) * calc(1 - var(--tw-space-y-reverse)));
   }
 
+  .gap-x-1\.5 {
+    column-gap: calc(var(--spacing) * 1.5);
+  }
+
   .gap-x-2 {
     column-gap: calc(var(--spacing) * 2);
   }
@@ -5909,6 +5913,20 @@
     }
   }
 
+  .decoration-brand-dark\/25 {
+    -webkit-text-decoration-color: var(--brand-dark);
+    -webkit-text-decoration-color: var(--brand-dark);
+    text-decoration-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .decoration-brand-dark\/25 {
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-dark) 25%, transparent);
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-dark) 25%, transparent);
+      text-decoration-color: color-mix(in oklab, var(--brand-dark) 25%, transparent);
+    }
+  }
+
   .underline-offset-2 {
     text-underline-offset: 2px;
   }
@@ -7092,10 +7110,18 @@
       text-decoration-line: underline;
     }
 
-    .hover\:decoration-brand-blue:hover {
+    .hover\:decoration-brand-blue:hover, .hover\:decoration-brand-blue\/50:hover {
       -webkit-text-decoration-color: var(--brand-blue);
       -webkit-text-decoration-color: var(--brand-blue);
       text-decoration-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:decoration-brand-blue\/50:hover {
+        -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
+        -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
+        text-decoration-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
+      }
     }
 
     .hover\:decoration-2:hover {

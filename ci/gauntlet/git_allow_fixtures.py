@@ -26,10 +26,13 @@ import os
 import subprocess
 from pathlib import Path
 
+from .extension_allow_fixtures import EXTENSION_ALLOW_WORKTREE_CASE
 from .fast_forward_fixtures import add_fast_forward_origin
 
 GIT_ALLOW_MERGE_CASE = "git-allow-merge-fast-forward-then-reads"
 GIT_ALLOW_STASH_CASE = "git-allow-stash-around-fast-forward"
+# The same refresh run from outside the checkout, every step carrying `-C`.
+GIT_ALLOW_ROUTED_MERGE_CASE = "git-allow-routed-merge-then-reads"
 # Reads the git extension has no permission for, after a step it allows.
 GIT_ALLOW_REF_READS_CASE = "git-allow-ref-reads-after-checkout"
 # A checkout and a pathspec named after Guard are the user's work, not Guard.
@@ -49,10 +52,28 @@ GIT_ALLOW_PLUMBING_CASE = "git-allow-plumbing-reads-under-allow"
 # a full git Allow has to carry it whatever the configuration probe managed to
 # answer for the reads along the way.
 GIT_ALLOW_READ_CHAIN_CASE = "git-allow-read-chain-status-log-remote"
+# Printing the configured remotes is a read of the configuration file, and its
+# ``--get-regexp`` operand is matched against the keys in that file rather than
+# expanded over the working tree. A full git Allow has to carry the step beside
+# it as well, because a floor raised over one operand is raised over the whole
+# command.
+GIT_ALLOW_CONFIG_PATTERN_CASE = "git-allow-config-pattern-then-worktree"
+# A refresh routed into another checkout with ``-C``, and the reads that follow
+# it there. The route is what the allow is proved against, so a read routed to
+# the same checkout as the step before it rides that step's allow.
+GIT_ALLOW_ROUTED_REFRESH_CASE = "git-allow-routed-refresh-then-reads"
+# A checkout whose own ``core.hooksPath`` names a directory inside it, which is
+# what husky, lefthook and pre-commit all configure. Guard protects any
+# directory that contains the configured hooks directory, and it screened the
+# working directory of every checkout subcommand, so such a repository became
+# its own protected destination and no git ALLOW could settle the ordinary
+# sibling worktree it started.
+GIT_ALLOW_RELATIVE_HOOKS_CASE = "git-allow-worktree-from-repo-relative-hooks-path"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
         GIT_ALLOW_STASH_CASE,
+        GIT_ALLOW_ROUTED_MERGE_CASE,
         GIT_ALLOW_REF_READS_CASE,
         GIT_ALLOW_NAMED_CHECKOUT_CASE,
         GIT_ALLOW_WORKTREE_CASE,
@@ -61,9 +82,16 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_UNMODELLED_CASE,
         GIT_ALLOW_PLUMBING_CASE,
         GIT_ALLOW_READ_CHAIN_CASE,
+        GIT_ALLOW_CONFIG_PATTERN_CASE,
+        GIT_ALLOW_ROUTED_REFRESH_CASE,
+        GIT_ALLOW_RELATIVE_HOOKS_CASE,
     }
 )
 GIT_EXTENSION_ID = "command.git"
+# The contributed-extension worktree case builds its worktree from the same
+# offline origin, but enables its own controls, so it joins the fixture shape
+# without joining the set whose controls this module signs.
+GIT_ORIGIN_SHAPE_CASES = GIT_ALLOW_CASES | {EXTENSION_ALLOW_WORKTREE_CASE}
 
 STASH_FILE = "src/settings.ts"
 STASH_COMMITTED = "export const retryLimit = 3;\n"
@@ -74,6 +102,11 @@ NAMED_WORKTREE = "pr/hol-guard-pr-12"
 SIBLING_WORKTREE = "review-wt"
 HOOKS_WORKTREE = ".git/hooks/review-wt"
 MIXED_WORKTREE = "mixed-wt"
+CONFIG_WORKTREE = "cfg-wt"
+ROUTED_WORKTREE = "routed-wt"
+RELATIVE_HOOKS_WORKTREE = "relhooks-wt"
+# Repo-relative, like the value husky and lefthook write.
+RELATIVE_HOOKS_DIR = ".githooks"
 UNMODELLED_ORIGIN = "origin.git"
 UNMODELLED_ARCHIVE = "snapshot.tar"
 PLUMBING_ARCHIVE = "plumbing.tar"
@@ -104,7 +137,7 @@ def add_git_allow_shape(workspace: Path, environment: dict[str, str], scenario_i
     synthetic upstream commit never touches it and ``git stash pop`` restores
     cleanly after the fast-forward.
     """
-    if scenario_id not in GIT_ALLOW_CASES:
+    if scenario_id not in GIT_ORIGIN_SHAPE_CASES:
         return
     environment = {**environment, **_IDENTITY}
     if scenario_id == GIT_ALLOW_NAMED_CHECKOUT_CASE:
@@ -119,7 +152,19 @@ def add_git_allow_shape(workspace: Path, environment: dict[str, str], scenario_i
         target.write_text(STASH_COMMITTED, encoding="utf-8", newline="\n")
         _git(workspace, environment, "add", "--", STASH_FILE)
         _git(workspace, environment, "commit", "--quiet", "-m", "Add retry limit")
+    if scenario_id == GIT_ALLOW_RELATIVE_HOOKS_CASE:
+        # An empty hooks directory inside the checkout, named by a relative
+        # ``core.hooksPath``. Nothing in it runs; the configuration alone is
+        # what used to make the checkout its own floor.
+        (workspace / RELATIVE_HOOKS_DIR).mkdir(parents=True, exist_ok=True)
+        _git(workspace, environment, "config", "core.hooksPath", RELATIVE_HOOKS_DIR)
     add_fast_forward_origin(workspace, workspace, environment)
+    if scenario_id == GIT_ALLOW_ROUTED_REFRESH_CASE:
+        # The checkout the chain routes into. It shares this repository, so the
+        # offline origin above is already reachable from it and the routed
+        # refresh needs no network.
+        _git(workspace, environment, "worktree", "add", "--quiet", "--detach", ROUTED_WORKTREE)
+        return
     if scenario_id == GIT_ALLOW_STASH_CASE:
         # Uncommitted work the chain stashes across the fast-forward and restores.
         (workspace / STASH_FILE).write_text(STASH_WORKING, encoding="utf-8", newline="\n")
@@ -199,6 +244,22 @@ def git_allow_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     if scenario_id == GIT_ALLOW_MIXED_WORKTREE_CASE:
         # The whole compound is denied, so the allowed checkout never ran either.
         return {"git-allow-mixed-worktree-absent": not (workspace.parent / MIXED_WORKTREE).exists()}
+    if scenario_id == GIT_ALLOW_CONFIG_PATTERN_CASE:
+        # The checkout is the second step, so it exists only if the
+        # configuration read before it ran rather than waiting for the user.
+        sibling = workspace.parent / CONFIG_WORKTREE
+        heads = _heads(sibling) if (sibling / ".git").is_file() else None
+        return {"git-allow-config-pattern-checkout-at-origin": heads is not None and heads[0] == heads[1]}
+    if scenario_id == GIT_ALLOW_ROUTED_REFRESH_CASE:
+        # The refresh and the reads after it all route into the same checkout,
+        # so that checkout, not this one, is where the chain landed.
+        routed = workspace / ROUTED_WORKTREE
+        heads = _heads(routed) if (routed / ".git").is_file() else None
+        return {"git-allow-routed-checkout-at-origin": heads is not None and heads[0] == heads[1]}
+    if scenario_id == GIT_ALLOW_RELATIVE_HOOKS_CASE:
+        sibling = workspace.parent / RELATIVE_HOOKS_WORKTREE
+        heads = _heads(sibling) if (sibling / ".git").is_file() else None
+        return {"git-allow-relative-hooks-worktree-at-origin": heads is not None and heads[0] == heads[1]}
     if scenario_id == GIT_ALLOW_READ_CHAIN_CASE:
         # Every step reads, so the checkout is still where the fixture left
         # it: one commit behind the origin this lane builds.

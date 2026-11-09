@@ -21,6 +21,13 @@ const PROBE_ENVIRONMENT: &[&str] = &[
     "GIT_CEILING_DIRECTORIES",
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
 ];
+/// Set for an offline probe. Git then allows no transport, even one the
+/// repository's configuration allows (`/` names none; an empty value can read
+/// as unset), and a partial clone does not fetch a missing object. So the
+/// probe never reaches the network or starts a remote helper; a missing
+/// object fails it instead.
+const OFFLINE_ENVIRONMENT: &[(&str, &str)] =
+    &[("GIT_ALLOW_PROTOCOL", "/"), ("GIT_NO_LAZY_FETCH", "1")];
 
 #[derive(Clone)]
 pub(crate) struct ProbeOutput {
@@ -81,7 +88,12 @@ impl Prober<'_> {
 
     /// Like [`Prober::run`], but keeps stderr as well (bounded the same way).
     pub(crate) fn run_capturing_stderr(&self, arguments: &[&str]) -> Option<ProbeOutput> {
-        self.execute(arguments, None, true)
+        self.execute(arguments, None, true, false)
+    }
+
+    /// Like [`Prober::run`], with Git's fetches off (see [`OFFLINE_ENVIRONMENT`]).
+    pub(crate) fn run_offline(&self, arguments: &[&str]) -> Option<ProbeOutput> {
+        self.execute(arguments, None, false, true)
     }
 
     pub(crate) fn run_with_input(
@@ -89,7 +101,7 @@ impl Prober<'_> {
         arguments: &[&str],
         input: Option<Vec<u8>>,
     ) -> Option<ProbeOutput> {
-        self.execute(arguments, input, false)
+        self.execute(arguments, input, false, false)
     }
 
     fn execute(
@@ -97,6 +109,7 @@ impl Prober<'_> {
         arguments: &[&str],
         input: Option<Vec<u8>>,
         capture_stderr: bool,
+        offline: bool,
     ) -> Option<ProbeOutput> {
         let mut command = Command::new(self.git);
         command
@@ -118,6 +131,9 @@ impl Prober<'_> {
             if let Some(value) = self.environment.get(*name) {
                 command.env(name, value);
             }
+        }
+        if offline {
+            command.envs(OFFLINE_ENVIRONMENT.iter().copied());
         }
         let deadline = Instant::now() + PROBE_TIMEOUT;
         let mut child = command.spawn().ok()?;
