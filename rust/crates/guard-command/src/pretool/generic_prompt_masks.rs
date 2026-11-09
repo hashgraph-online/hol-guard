@@ -5,8 +5,9 @@ use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
 /// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`)
-/// and device paths (`/dev/sda1`, `/dev/mmcblk0p1`) included.
-const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/\w)";
+/// and block device paths (`/dev/sda1`, `/dev/mmcblk0p1`) included. Other
+/// `/dev` paths, such as `/dev/null` or `/dev/stderr`, are not storage.
+const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/(?:sd|hd|vd|xvd|nvme|mmcblk|r?disk|mapper/|md|dm-|loop|sr)\w*)";
 
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
 /// `format` applied to what a program prints or to a piece of code (`format
