@@ -244,8 +244,9 @@ fn file_name(token: &str) -> Option<(&str, &str)> {
 
 /// The names the prompt writes as code, spelled as written: `_batched`,
 /// which `terms` reads as `batched`, and each dotted name whole as well
-/// (`peekable.prepend`), which names a member.
+/// (`peekable.prepend`), which names a member. An absolute path gives none.
 pub(crate) fn spellings(prompt: &str) -> Vec<String> {
+    let prompt = &without_paths(prompt);
     let dotted = (spans(prompt).into_iter())
         .flat_map(|(span, _)| tokens(span))
         .map(|token| token.trim_matches(['.', '-', '/']))

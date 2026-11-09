@@ -57,6 +57,9 @@ fn words_beside_a_path_and_web_routes_still_count() {
     for word in ["api", "user", "handler", "order", "refund"] {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
     }
+    // Nor does a path give names written as code.
+    let found = spellings("Fix `parse` in C:\\Users\\alice\\Parser.parse and /tmp/my_run/out.log");
+    assert_eq!(found, ["parse"]);
 }
 
 /// Quoted punctuation, such as the `>>>` of a doctest, is not a phrase.
