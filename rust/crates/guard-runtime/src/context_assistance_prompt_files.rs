@@ -440,7 +440,9 @@ fn ranked(scored: Vec<Scored>) -> (Vec<String>, Vec<String>) {
     // Tests are kept aside even when the prompt asks for them, so source
     // files fill the candidates and the map still finds where new tests go.
     let mut tests = Vec::new();
-    if scored.iter().any(|item| !test_file(&item.relative)) {
+    // A source the prompt names counts too, so a test cannot hide it.
+    let source = |item: &Scored| !test_file(&item.relative);
+    if pinned.iter().chain(&scored).any(source) {
         (tests, scored) = scored
             .into_iter()
             .partition(|item| test_file(&item.relative) && !item.quoted_alone);

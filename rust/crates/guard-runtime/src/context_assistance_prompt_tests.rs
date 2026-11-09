@@ -465,3 +465,31 @@ fn a_quote_only_a_test_named_module_holds_is_shown() {
     let found = search().found(&words);
     assert!(!found.contains(&"src/tests.py".to_owned()), "{found:?}");
 }
+
+/// A prompt that names its source file, with no other source matching, still
+/// sets aside a test that repeats more of its words, so the test cannot raise
+/// the bar the named file is measured against and hide it.
+#[test]
+fn a_test_cannot_push_out_the_source_file_the_prompt_names() {
+    let prompt = "In types.py, convert should suggest a choice for an invalid value.";
+    let source = "def convert(raw):\n    return raw\n";
+    let test = "def test_invalid_choice_suggests():\n    \
+assert convert('bad') == 'suggest a choice for an invalid value'\n";
+    let files = [("src/types.py", source), ("src/test_types.py", test)];
+    let (home, _project, root) = project(ON, &files);
+    let words = crate::context_assistance_prompt_files::terms(prompt);
+    let named = crate::context_assistance_prompt_words::named(prompt);
+    assert_eq!(named, ["types.py".to_owned()]);
+    let found = walk(
+        &root,
+        &words,
+        &phrases(prompt),
+        &named,
+        Duration::from_secs(5),
+    )
+    .found(&words);
+    assert_eq!(found, ["src/types.py".to_owned()]);
+    let later = Instant::now() + Duration::from_secs(5);
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    assert!(read.text.contains("src/types.py (lines"), "{}", read.text);
+}
