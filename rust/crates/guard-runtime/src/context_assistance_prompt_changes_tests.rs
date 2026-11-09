@@ -297,7 +297,7 @@ fn a_session_gets_its_uncommitted_edits_and_commits_since_its_first_prompt() {
     );
     // The whole diff is small, so the note ends with it, the agent's own
     // edits included, and points at no command to run.
-    let command = format!("git diff -U1 {}", &base[..7]);
+    let command = format!("git diff {}", &base[..7]);
     for show_diffs in [true, false] {
         let text = repo.changes_shown(Some(&base), show_diffs).unwrap();
         assert!(

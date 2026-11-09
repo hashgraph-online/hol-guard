@@ -23,7 +23,6 @@ use super::seen::Session;
 use crate::context_assistance_engine::screened_texts;
 use crate::git_execution_safety_binary::resolve_trusted_git;
 use crate::git_execution_safety_config::Environment;
-use crate::git_execution_safety_probe::Prober;
 use labels::{commits, render, uncommitted, Commit, Named, Since};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -148,16 +147,7 @@ impl Git {
     }
 
     fn run(&self, arguments: &[&str], until: Instant) -> Option<String> {
-        if until.saturating_duration_since(Instant::now()) < MIN_LEFT {
-            return None;
-        }
-        let all: Vec<&str> = GLOBAL.iter().chain(arguments).copied().collect();
-        let prober = Prober {
-            git: &self.path,
-            cwd: &self.root,
-            environment: &self.environment,
-        };
-        let output = prober.run_offline(&all)?;
+        let output = self.output(arguments, until)?;
         output
             .success()
             .then(|| output.text().map(str::to_owned))
@@ -382,6 +372,8 @@ pub(super) fn changes(
     let pending = (allowed == Allowed::Everything && !commits.is_empty())
         .then(|| uncommitted(git, until))
         .flatten();
+    // Which files are untracked is the other thing it runs `git status` for.
+    let untracked = tree::untracked(git, until);
     let paths: BTreeSet<&str> = changed.iter().map(|hunk| hunk.path.as_str()).collect();
     // A file a commit or the working tree changes back is named too, when
     // Guard's read accepts it.
@@ -394,6 +386,13 @@ pub(super) fn changes(
                 .flat_map(|(_, _, names)| names.iter().map(String::as_str)),
         )
         .chain(pending.iter().flatten().map(String::as_str))
+        .chain(
+            untracked
+                .iter()
+                .flatten()
+                .take(tree::MAX_UNTRACKED)
+                .map(String::as_str),
+        )
         .collect::<BTreeSet<_>>()
         .into_iter()
         .map(str::to_owned)
@@ -448,6 +447,7 @@ pub(super) fn changes(
         [pending.as_ref(), back.as_ref()],
         whole.as_ref(),
     )
+    .map(|note| note + &tree::status(git, &against, untracked.as_deref(), &readable, until))
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file
@@ -483,6 +483,8 @@ fn clean(text: &str) -> bool {
 mod code;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
+#[path = "context_assistance_prompt_changes_tree.rs"]
+mod tree;
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_changes_tests.rs"]

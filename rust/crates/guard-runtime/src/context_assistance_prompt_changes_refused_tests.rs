@@ -17,7 +17,7 @@ fn a_commit_deleting_an_unread_file_shows_only_the_read_files() {
     repo.commit("strip values");
     let text = repo.changes(Some(&base)).unwrap();
     assert!(text.contains("src/core.py: convert 4-5"), "{text}");
-    let command = format!("git diff -U1 {} -- src/core.py", &base[..7]);
+    let command = format!("git diff {} -- src/core.py", &base[..7]);
     let rest = format!("`git diff {}` also shows 1 other changed file", &base[..7]);
     assert!(
         text.contains(&format!("has what `{command}` prints now; {rest})"))
@@ -58,7 +58,7 @@ fn a_refused_file_leaves_the_others_diff_shown() {
     let short = &base[..7];
     assert!(
         text.contains(&format!(
-            "(the end of this note has what `git diff -U1 {short} -- src/core.py` prints now; \
+            "(the end of this note has what `git diff {short} -- src/core.py` prints now; \
 `git diff {short} -- src/urls.py` shows the rest)"
         )) && text.contains("\n+    return value.strip()\n"),
         "{text}"
