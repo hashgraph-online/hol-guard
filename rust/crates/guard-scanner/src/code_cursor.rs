@@ -90,7 +90,23 @@ pub(crate) fn environment_call(path_env: bool, name: &[u8]) -> Option<(usize, Li
 /// A quoted argument that cannot be a credential: one short word, or a literal
 /// that reads as a slug, a host or a path of at most three words.
 pub(crate) fn literal_ok(literal: &[u8]) -> bool {
-    short_literal(literal) || word_like(literal)
+    short_literal(literal) || word_like(literal) || extension_header_name(literal)
+}
+
+/// An `x-` extension header name such as `x-service-maintenance-token`, the
+/// argument of `req.header(...)` or `headers.get(...)`. It may run past the
+/// three words a slug allows, but only in lower-case letters, with no digits
+/// to encode anything.
+fn extension_header_name(literal: &[u8]) -> bool {
+    let Some(rest) = literal.strip_prefix(b"x-") else {
+        return false;
+    };
+    let words: Vec<&[u8]> = rest.split(|&byte| byte == b'-').collect();
+    literal.len() <= 64
+        && (1..=5).contains(&words.len())
+        && words
+            .iter()
+            .all(|word| (1..16).contains(&word.len()) && word.iter().all(u8::is_ascii_lowercase))
 }
 
 /// At most one short word, with any blanks or punctuation around it, as in

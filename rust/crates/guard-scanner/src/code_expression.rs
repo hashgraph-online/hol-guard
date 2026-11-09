@@ -48,6 +48,9 @@ pub(crate) fn is_code_expression(matched: &str, rest_of_line: &str) -> bool {
     {
         return false;
     }
+    if separator == b':' && fetch_credentials_mode(&matched[..index], tail, rest_of_line) {
+        return true;
+    }
     let mut body = tail.trim_start();
     let mut mode = Mode::Assign;
     if body.starts_with('=') {
@@ -82,6 +85,29 @@ pub(crate) fn is_code_expression(matched: &str, rest_of_line: &str) -> bool {
         // whose arguments, perhaps a literal, are on a later line.
         && expression.matches('(').count() == expression.matches(')').count() + 1
         && reads_as_code(mode, &expression[1..])
+}
+
+/// `const requireToken = (` with nothing after the bracket, when the next
+/// non-blank line opens a typed parameter such as `req: Request,`. That is the
+/// first line of an arrow function whose parameters are listed one per line,
+/// the shape [`is_code_expression`] already accepts when the first parameter
+/// shares the line. A literal on the next line never opens a typed parameter.
+pub(crate) fn opens_typed_parameter_list(
+    matched: &str,
+    rest_of_line: &str,
+    following_lines: &str,
+) -> bool {
+    let Some(index) = matched.find('=') else {
+        return false;
+    };
+    if matched[index + 1..].trim() != "(" || !rest_of_line.trim().is_empty() {
+        return false;
+    }
+    following_lines
+        .split('\n')
+        .map(|line| line.trim_end_matches('\r').trim())
+        .find(|line| !line.is_empty())
+        .is_some_and(|line| starts_typed_parameter(line.as_bytes()))
 }
 
 /// Whether `expression`, the value after the separator, is code in `mode`.
@@ -165,6 +191,12 @@ impl<'a> Cursor<'a> {
                 }
                 structural = true;
                 break;
+            } else if self.equality_operator() {
+                if !self.guarded_choice() {
+                    return false;
+                }
+                structural = true;
+                break;
             } else {
                 break;
             }
@@ -204,6 +236,57 @@ impl<'a> Cursor<'a> {
                 self.chain()
             }
         }
+    }
+
+    /// `===`, `!==`, `==` or `!=`, stepped over.
+    fn equality_operator(&mut self) -> bool {
+        for operator in [b"===".as_slice(), b"!==", b"==", b"!="] {
+            if self.starts_with(operator) {
+                self.at += operator.len();
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The rest of `x === 'string' ? x : undefined` after the operator: a
+    /// label or an operand, then a choice between two operands. Neither branch
+    /// may be a literal, and neither may be a bare word long enough to spell
+    /// a passphrase, so a value chosen here is always some other variable.
+    fn guarded_choice(&mut self) -> bool {
+        self.skip_blanks();
+        if let Some(literal) = leading_literal(&self.bytes[self.at..]) {
+            let quote = self.bytes[self.at];
+            if self.bytes.get(self.at + literal.len() + 1) != Some(&quote) || !label(literal) {
+                return false;
+            }
+            self.at += literal.len() + 2;
+        } else if self.operand(false).is_none() {
+            return false;
+        }
+        self.skip_blanks();
+        if self.peek(0) != b'?' || matches!(self.peek(1), b'?' | b'.') {
+            return false;
+        }
+        self.at += 1;
+        let branch = |cursor: &mut Self| {
+            cursor.skip_blanks();
+            let start = cursor.at;
+            cursor.operand(true).is_some_and(|operand| {
+                operand.structural
+                    || operand.dotted
+                    || !spelled_word(&cursor.bytes[start..cursor.at])
+            })
+        };
+        if !branch(self) {
+            return false;
+        }
+        self.skip_blanks();
+        if self.peek(0) != b':' {
+            return false;
+        }
+        self.at += 1;
+        branch(self)
     }
 
     fn rest_is(&self, expected: &[u8]) -> bool {
@@ -297,6 +380,28 @@ impl<'a> Cursor<'a> {
             && self.scan(None, 1) != Scan::Fail
             && equality_literals_ok(&self.bytes[start..self.at])
     }
+}
+
+/// `credentials: 'omit'` in a Fetch request: the key takes only the modes
+/// `omit`, `same-origin` and `include`, so the value names a cookie policy and
+/// never holds secret material. Anything after the literal other than the end
+/// of the entry keeps the finding.
+fn fetch_credentials_mode(key: &str, tail: &str, rest_of_line: &str) -> bool {
+    let key = key.trim().trim_matches(['"', '\'']);
+    if key != "credentials" {
+        return false;
+    }
+    let value = format!("{tail}{rest_of_line}");
+    let value = value.trim();
+    ["omit", "same-origin", "include"].iter().any(|mode| {
+        ['"', '\''].iter().any(|quote| {
+            value
+                .strip_prefix(*quote)
+                .and_then(|rest| rest.strip_prefix(mode))
+                .and_then(|rest| rest.strip_prefix(*quote))
+                .is_some_and(|rest| matches!(rest.trim(), "" | "," | "}" | "})" | "});" | "},"))
+        })
+    })
 }
 
 /// A bare run of at least sixteen lower-case letters, as in a passphrase.

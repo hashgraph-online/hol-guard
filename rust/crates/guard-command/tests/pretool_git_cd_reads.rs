@@ -224,6 +224,8 @@ fn read_prefix_before_a_verified_cd_keeps_the_cd_compound_decision() {
              && git remote -v && echo \"---\" && git log --oneline -5"
         ),
         format!("pwd && cd {repository} && git log -1 --format=%h | head -1"),
+        format!("ls {root}; cd {repository} && git status"),
+        format!("sleep 1; cd {repository} && git status --short | head -5"),
     ] {
         let result = decide(&space, &space.root, &command);
         assert_eq!(
@@ -247,8 +249,9 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
         format!("touch {root}/marker && cd {repository} && git status"),
         format!("ls {root} && cd {repository} && rm -rf app"),
         format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
-        format!("ls {root}; cd {repository} && git status"),
         format!("ls {root} || cd {repository} && git status"),
+        format!("ls {root} | cd {repository} && git status"),
+        format!("cat {home}/.ssh/id_ed25519; cd {repository} && git status"),
     ] {
         let result = decide(&space, &space.root, &command);
         assert_ne!(

@@ -527,8 +527,10 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
 
 /// The command from its only `cd` onward, when everything before that `cd`
 /// is a proven read that neither depends on nor changes the directory or Git
-/// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` then gets
-/// the same decision as `cd /tmp/a/app && git status`. The prefix keeps its
+/// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` and
+/// `sleep 30; cd /tmp/a/app && git status` then get the same decision as
+/// `cd /tmp/a/app && git status`: after `;` the `cd` runs whatever the prefix
+/// returned, and the rest still runs only once it succeeded. The prefix keeps its
 /// own proof against the original directory; Git segments stay out of it so
 /// the Git execution floor always sees every Git read with its directory.
 pub(in crate::pretool) fn after_read_prefix(
@@ -556,7 +558,7 @@ pub(in crate::pretool) fn after_read_prefix(
             .take(length)
             .collect();
         let last = index + 2 == start + 1;
-        if (last && separator.trim() != "&&") || !matches!(separator.trim(), "&&" | "|") {
+        if (last && separator.trim() == "|") || !matches!(separator.trim(), "&&" | "|" | ";") {
             return None;
         }
     }

@@ -366,6 +366,17 @@ fn counted_matches<'t>(
         {
             return false;
         }
+        // The parameter list is read from the lines after this one, which
+        // `is_sample` does not see.
+        if answers
+            && code_expression::opens_typed_parameter_list(
+                matched.as_str(),
+                &text[matched.end()..line_end],
+                &text[line_end..],
+            )
+        {
+            return false;
+        }
         !is_sample(
             classifier,
             matched.as_str(),
