@@ -207,9 +207,13 @@ pub(super) fn changed_tests(
     until: Instant,
 ) -> Option<Rendered> {
     let texts = screened_texts(home, root, app, &walk.tests, walk.tests.len(), until);
-    let files: Vec<File> = (texts.iter())
-        .map(|(path, text)| file(path, text))
-        .collect();
+    let mut files: Vec<File> = Vec::with_capacity(texts.len());
+    for (path, text) in &texts {
+        if Instant::now() >= until {
+            return None;
+        }
+        files.push(file(path, text));
+    }
     if Instant::now() >= until {
         return None;
     }
