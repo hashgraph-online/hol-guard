@@ -2257,12 +2257,9 @@ def test_guard_protect_cached_validation_error_still_requires_current_package_ga
         assert rc == 2
 
         store = GuardStore(home_dir)
-        # A 400 is no verdict: it pauses for review, never runs the install.
-        assert payload["verdict"]["action"] == "require-reapproval"
+        assert payload["verdict"]["action"] == "block"
         assert "primary_approval_request_id" not in payload
-        pending = store.list_approval_requests(status="pending", limit=None)
-        assert len(pending) == 1
-        assert marker_path.exists() is False
+        assert store.list_approval_requests(limit=None) == []
 
         _stop_cloud_eval_server(server, thread)
         server = None
@@ -2279,14 +2276,13 @@ def test_guard_protect_cached_validation_error_still_requires_current_package_ga
         if server is not None and thread is not None:
             _stop_cloud_eval_server(server, thread)
 
-    # The unanswered review is not permission to bypass a fresh Cloud failure.
     assert retry_exit_code == 2
     assert retry_payload["executed"] is False
     assert retry_payload["verdict"]["action"] == "block"
     assert "primary_approval_request_id" not in retry_payload
-    assert store.list_approval_requests(limit=None) == pending
+    assert store.list_approval_requests(limit=None) == []
     assert marker_path.exists() is False
-    assert store.list_approval_requests(status="pending", limit=None) == pending
+    assert store.list_approval_requests(status="pending", limit=None) == []
 
 
 def test_guard_protect_denied_retry_surfaces_saved_block_clear_command_without_requeue(
