@@ -109,7 +109,8 @@ def second_stub(x):
 
 /// Only the first line of each definition beside a stub is shown, so only
 /// those lines count as shown later in the session: writing the next stub,
-/// the agent still gets the line in a listed function's body that calls it.
+/// the agent still gets the line in a listed function's body that calls it,
+/// once.
 #[test]
 fn listing_a_definition_beside_a_stub_does_not_hide_its_body() {
     let list = files(&[("src/pkg/two.py", TWO)]);
@@ -139,7 +140,8 @@ fn listing_a_definition_beside_a_stub_does_not_hide_its_body() {
     )
     .unwrap()
     .text;
-    assert!(next.contains("return second_stub(x)"), "{next}");
+    // Once: in the helper's code, not again in the lines naming the stub.
+    assert_eq!(next.matches("return second_stub(x)").count(), 1, "{next}");
 }
 
 const DECORATED: &str = "@second_stub
@@ -188,7 +190,7 @@ fn listing_a_decorated_definition_does_not_hide_its_decorator() {
     )
     .unwrap()
     .text;
-    assert!(next.contains("@second_stub"), "{next}");
+    assert_eq!(next.matches("@second_stub").count(), 1, "{next}");
 }
 
 const CACHE: &str = "class Cache(object):

@@ -20,13 +20,15 @@ const MAX_BESIDE_CODE_CHARS: usize = 1_800;
 /// in file order, each as its lines and first line, a class with its members.
 /// The nearest short functions also come with their code, unless the map or
 /// an earlier prompt already shows it. Not shown again when an earlier prompt
-/// of the session was shown the same list.
+/// of the session was shown the same list. Also returns where the code shown
+/// is, so another list can leave those lines out without the session saving
+/// them as shown.
 pub(super) fn beside(
     files: &[File],
     chosen: &[Pick],
     asked: &Asked,
     shown: &[Span],
-) -> Option<(String, Entry)> {
+) -> Option<(String, Entry, Vec<Span>)> {
     let (file, at) = chosen.iter().find_map(|pick| {
         let file = &files[pick.file];
         (pick.whole && stubbed(file, pick.at)).then_some((file, pick.at))
@@ -41,6 +43,7 @@ pub(super) fn beside(
     let mut kept: Vec<(usize, usize, String)> = Vec::new();
     let mut length = 0;
     let mut room = MAX_BESIDE_CODE_CHARS;
+    let mut bodies = Vec::new();
     for other in near {
         let mut line = line(file, other);
         if length + line.len() + 1 > MAX_BESIDE_CHARS {
@@ -51,6 +54,7 @@ pub(super) fn beside(
             if code.len() <= room && !shown.contains(&span) {
                 room -= code.len();
                 line.push_str(&fenced(&code));
+                bodies.push(span);
             }
         }
         kept.push((file.sections[other].start, shown_line(file, other), line));
@@ -81,7 +85,7 @@ pub(super) fn beside(
         text,
         shown: vec![span],
     };
-    Some((title, entry))
+    Some((title, entry, bodies))
 }
 
 /// The line `line` shows of a definition: its first line under any

@@ -300,8 +300,19 @@ pub(super) fn map(
         .chain(tests.iter().flat_map(|entry| entry.shown.iter().cloned()))
         .collect();
     blocks.push(("Tests:".to_owned(), tests));
-    // A function left to be written: where else it is named, with the text.
-    let stub = (!asked.everywhere).then(|| rename::stub(&files, &chosen, &shown, until));
+    // A function left to be written: what is defined beside it, for the
+    // helpers it can call, and where else it is named, with the text. A line
+    // inside a neighbor's code shown here is not listed again.
+    let near = (!asked.everywhere)
+        .then(|| beside::beside(&files, &chosen, asked, &shown))
+        .flatten();
+    let beside_shown: Vec<Span> = (shown.iter().cloned())
+        .chain(
+            near.iter()
+                .flat_map(|(_, _, bodies)| bodies.iter().cloned()),
+        )
+        .collect();
+    let stub = (!asked.everywhere).then(|| rename::stub(&files, &chosen, &beside_shown, until));
     blocks.extend(stub.flatten().map(|(title, lines)| (title, quoted(lines))));
     let imported = (!asked.everywhere).then(|| imports::imports(&files, &chosen, asked));
     blocks.extend(
@@ -309,9 +320,7 @@ pub(super) fn map(
             .flatten()
             .map(|(title, entry)| (title, vec![entry])),
     );
-    // And what is defined beside it, for the helpers it can call.
-    let near = (!asked.everywhere).then(|| beside::beside(&files, &chosen, asked, &shown));
-    blocks.extend(near.flatten().map(|(title, entry)| (title, vec![entry])));
+    blocks.extend(near.map(|(title, entry, _)| (title, vec![entry])));
     let mut docs = Vec::new();
     if asked.docs {
         // Every word of the prompt: a doc section is about "choices" and
