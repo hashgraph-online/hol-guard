@@ -407,6 +407,12 @@ fn route(
             })
         }
         "/v1/inventory" => inventory::list(config, reads),
+        "/v1/policy/cloud-exceptions" => {
+            let harness = query_value(query, "harness").ok()?;
+            let items =
+                reads.store_call(config, "list_cloud_exceptions", json!({"harness": harness}))?;
+            items.is_array().then(|| (200, json!({"items": items})))
+        }
         "/v1/events" => {
             let (_, _, _, fields) =
                 crate::daemon_handler_requests::events_cursor(query).into_parts();

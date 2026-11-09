@@ -406,6 +406,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_session"
         | "list_guard_sessions"
         | "list_events_after"
+        | "list_cloud_exceptions"
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
@@ -902,6 +903,7 @@ fn dispatch(
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "list_events_after" => cloud_events::list_after(connection, args),
+        "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),
         "count_guard_events_v1" => cloud_events::count(connection, args),

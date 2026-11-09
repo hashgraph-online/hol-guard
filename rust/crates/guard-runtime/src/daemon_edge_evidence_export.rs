@@ -126,13 +126,19 @@ pub(in crate::daemon_edge) fn json_text(exported_at: &str, items: &[Value]) -> O
 /// that a spreadsheet would read as a formula prefixed with `'`.
 pub(in crate::daemon_edge) fn csv_text(exported_at: &str, items: &[Value]) -> Option<String> {
     let mut out = String::new();
-    row(&mut out, &["privacy_warning".into(), PRIVACY_WARNING.into()]);
+    row(
+        &mut out,
+        &["privacy_warning".into(), PRIVACY_WARNING.into()],
+    );
     row(&mut out, &["exported_at".into(), exported_at.into()]);
     row(&mut out, &["total_rows".into(), items.len().to_string()]);
     out.push_str("\r\n");
     row(
         &mut out,
-        &FIELDS.iter().map(|field| (*field).to_owned()).collect::<Vec<_>>(),
+        &FIELDS
+            .iter()
+            .map(|field| (*field).to_owned())
+            .collect::<Vec<_>>(),
     );
     for item in items {
         let mut cells = Vec::with_capacity(FIELDS.len());
