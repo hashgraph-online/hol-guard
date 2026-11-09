@@ -301,6 +301,18 @@ def _lease_job_with_401_retry(
     return _lease_next_job(store, refreshed_auth_context, state=state, **batch)
 
 
+def _start_review_drains(
+    on_exact_review_lease: Callable[[ReviewLeaseBatch], object],
+    jobs: list[dict[str, object]],
+    *,
+    more_may_be_ready: bool,
+) -> None:
+    try:
+        on_exact_review_lease(ReviewLeaseBatch(jobs=tuple(jobs), more_may_be_ready=more_may_be_ready))
+    except Exception as error:
+        _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
+
+
 def _authorize_in_connection_scope(store: GuardStore, job: dict[str, object]) -> AuthorizedCommandJob:
     # Every SQLite connection pays for a schema load on its first statement,
     # and authorizing a job reads the store many times over. One connection
@@ -467,18 +479,24 @@ def poll_command_queue_once(
             if not _current_lane().is_drain:
                 maybe_auto_update(store, context)
             return status(store)
-        auth_context = _resolve_command_queue_auth_context(store)
-        _record_leased_job(store, state, item)
-    if on_exact_review_lease is not None and uses_exact_transport(item):
-        # A Review decision rarely comes alone: a bulk approval queues one
-        # job per request. Settle the rest beside this one; this job settles
-        # here whether or not they start.
+        hand_over = on_exact_review_lease if uses_exact_transport(item) else None
+        more_may_be_ready = batch_size == 1 or len(extras) + 1 >= batch_size
+        if hand_over is not None:
+            # A Review decision rarely comes alone: a bulk approval queues one
+            # job per request. Settle the rest beside this one; this job
+            # settles here whether or not they start. They are handed over
+            # before anything else can fail, so a failure below never leaves
+            # them leased to no one until their lease runs out.
+            _start_review_drains(hand_over, extras, more_may_be_ready=more_may_be_ready)
         try:
-            on_exact_review_lease(
-                ReviewLeaseBatch(jobs=tuple(extras), more_may_be_ready=batch_size == 1 or len(extras) + 1 >= batch_size)
-            )
-        except Exception as error:
-            _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
+            auth_context = _resolve_command_queue_auth_context(store)
+            _record_leased_job(store, state, item)
+        except Exception:
+            # Nothing has run for this job yet, so a drain worker can still
+            # settle it now rather than after its lease expires.
+            if hand_over is not None:
+                _start_review_drains(hand_over, [item], more_may_be_ready=more_may_be_ready)
+            raise
     authorization = start_command_authorization(
         store,
         item,
