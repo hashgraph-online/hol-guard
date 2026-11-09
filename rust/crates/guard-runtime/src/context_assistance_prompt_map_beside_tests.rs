@@ -61,8 +61,9 @@ implementation; the docstring and tests describe the expected behavior.";
     assert!(
         text.contains(
             "\n\nOther definitions in src/pkg/trace.py:\n5-14 class Frames(object):\n  members: \
-__init__ 6-7, from_traceback 9-11, __str__ 13-14\n17-18 def format_only(etype, value):\n\
-26-27 def install():"
+__init__ 6-7, from_traceback 9-11, __str__ 13-14\n17-18 def format_only(etype, value):\n```\n\
+def format_only(etype, value):\n    return ['%s: %s' % (etype.__name__, value)]\n```\n\
+26-27 def install():\n```\ndef install():\n    sys.excepthook = print_it\n```"
         ),
         "{text}"
     );
@@ -73,7 +74,8 @@ src/pkg/trace.py, written as a doctest.";
 }
 
 /// A method left to be written gets the other members of its class, not the
-/// file's top-level functions.
+/// file's top-level functions, and the code of those the note does not
+/// already show.
 #[test]
 fn a_method_left_to_be_written_comes_with_its_classs_members() {
     let (home, _project, root) = project(ON, &[("src/pkg/bag.py", BAG)]);
@@ -83,7 +85,8 @@ implementation; the docstring and tests describe the expected behavior.";
     assert!(
         text.contains(
             "\n\nOther members of Bag in src/pkg/bag.py:\n2-3 def __init__(self):\n\
-5-6 def getlist(self, key):"
+5-6 def getlist(self, key):\n```\n    def getlist(self, key):\n        \
+return list(self._map[key])\n```"
         ),
         "{text}"
     );
@@ -106,7 +109,8 @@ def second_stub(x):
 
 /// Only the first line of each definition beside a stub is shown, so only
 /// those lines count as shown later in the session: writing the next stub,
-/// the agent still gets the line in a listed function's body that calls it.
+/// the agent still gets the line in a listed function's body that calls it,
+/// once.
 #[test]
 fn listing_a_definition_beside_a_stub_does_not_hide_its_body() {
     let list = files(&[("src/pkg/two.py", TWO)]);
@@ -136,7 +140,8 @@ fn listing_a_definition_beside_a_stub_does_not_hide_its_body() {
     )
     .unwrap()
     .text;
-    assert!(next.contains("return second_stub(x)"), "{next}");
+    // Once: in the helper's code, not again in the lines naming the stub.
+    assert_eq!(next.matches("return second_stub(x)").count(), 1, "{next}");
 }
 
 const DECORATED: &str = "@second_stub
@@ -154,8 +159,8 @@ def second_stub(f):
     raise NotImplementedError
 ";
 
-/// A listed definition shows its `def` line, not the decorator above it, so
-/// a decorator naming the next stub is still listed for that stub later.
+/// A listed definition's code shown beside one stub does not count as shown
+/// for the next: a decorator naming the next stub is still listed for it.
 #[test]
 fn listing_a_decorated_definition_does_not_hide_its_decorator() {
     let list = files(&[("src/pkg/deco.py", DECORATED)]);
@@ -166,8 +171,13 @@ fn listing_a_decorated_definition_does_not_hide_its_decorator() {
         later(),
     )
     .unwrap();
-    assert!(first.text.contains("1-3 def helper(x):"), "{}", first.text);
-    assert!(!first.text.contains("@second_stub"), "{}", first.text);
+    assert!(
+        first
+            .text
+            .contains("1-3 def helper(x):\n```\n@second_stub\ndef helper(x):"),
+        "{}",
+        first.text
+    );
     let again = Asked {
         earlier: first.shown.clone(),
         ..Asked::default()
@@ -180,5 +190,77 @@ fn listing_a_decorated_definition_does_not_hide_its_decorator() {
     )
     .unwrap()
     .text;
-    assert!(next.contains("@second_stub"), "{next}");
+    assert_eq!(next.matches("@second_stub").count(), 1, "{next}");
+}
+
+const CACHE: &str = "class Cache(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self._mapping = {}
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def setdefault(self, key, default=None):
+        \"\"\"Set default if the key is not in the cache.\"\"\"
+        raise NotImplementedError
+
+    def __getitem__(self, key):
+        return self._mapping[key]
+";
+
+/// Writing a method again, the agent reads how its neighbors use the class's
+/// state before it writes. The nearest short ones come with their code, so
+/// it can write the body without opening the class; one too long for what is
+/// left of the room is still listed by its lines.
+#[test]
+fn a_stub_comes_with_the_code_of_its_nearest_neighbors() {
+    let long: String = (0..70)
+        .map(|n| format!("        self._mapping[{n}] = {n}\n"))
+        .collect();
+    let text = format!("{CACHE}\n    def fill(self):\n{long}");
+    let list = files(&[("src/pkg/cache.py", &text)]);
+    let mapped = map(
+        &list,
+        &looking_for(&[("setdefault", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    for code in [
+        "```\n    def get(self, key, default=None):\n        try:\n            return self[key]",
+        "```\n    def __getitem__(self, key):\n        return self._mapping[key]\n```",
+        "```\n    def __init__(self, capacity):\n        self.capacity = capacity",
+    ] {
+        assert!(mapped.contains(code), "{code} in {mapped}");
+    }
+    assert!(mapped.contains("\n19-89 def fill(self):"), "{mapped}");
+    assert!(!mapped.contains("self._mapping[7] = 7"), "{mapped}");
+}
+
+/// A line calling the stub inside a neighbor's code is left out of the stub's
+/// list because the code beside it shows that line. When the map has no room
+/// left for that block, the list keeps the line, so it is not lost.
+#[test]
+fn a_line_left_to_the_code_beside_a_stub_is_listed_when_that_code_does_not_fit() {
+    let path = format!("src/{}cache.py", "deep/".repeat(359));
+    let text =
+        format!("{CACHE}\n    def ensure(self, key):\n        return self.setdefault(key, None)\n");
+    let mapped = map(
+        &files(&[(&path, &text)]),
+        &looking_for(&[("setdefault", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(!mapped.contains("Other members of Cache"), "{mapped}");
+    assert!(
+        mapped.contains("return self.setdefault(key, None)"),
+        "{mapped}"
+    );
 }
