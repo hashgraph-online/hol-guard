@@ -1,11 +1,11 @@
-import { r as reactExports, f as fetchContextAssistance, j as jsxRuntimeExports, c as controlContextAssistance, a as contextStatusCopy, S as SectionLabel, H as HiMiniChevronRight, b as formatRelativeTime, h as harnessDisplayName, d as formatNumber, n as normalizeHarnessSlug, e as HiMiniChevronUp, g as HiMiniChevronDown, A as ActionButton, i as HiMiniArrowPath, k as HiMiniCheck, l as HiMiniNoSymbol, m as HiMiniHandRaised, o as HiMiniArrowUpTray, p as HiMiniCube, q as HiMiniPencilSquare, s as HiMiniCommandLine, t as HiMiniMagnifyingGlass, u as HiMiniDocumentText, v as HiMiniCheckCircle, T as Tag, w as HiMiniArrowRight, x as isConnectableAppHarness, y as HiMiniLockClosed, z as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, B as HomeInsightsMetrics, C as EvidenceActivityHeatmapMini, D as homeCommandActivityModel, F as createCommandActivityClient, I as fetchCommandActivityApi, J as getRecoveryCapabilities, K as resolveRecoveryInstructions, L as HiMiniShieldExclamation, M as HiMiniClipboardDocument, N as openRecoveryView, O as useReceiptAnalytics, P as updateSettings, Q as turnProtectionOnUpdate, R as useProtectionPresentationState, U as protectionHealthFor, V as unavailableProtectionHealth, W as buildHomeRuntimeErrorCopy, X as RuntimeErrorState, Y as watchBannerModel, Z as WatchProtectionBanner, _ as EvidenceInsightsShareModal, $ as OperatorHealthCard, a0 as HiMiniShieldCheck, a1 as DeviceProofCard, a2 as guardActionDisposition, a3 as approvalLeftActionStopped, a4 as guardActionActivityCopy, a5 as HiMiniSparkles, a6 as HiMiniXMark, a7 as EmptyState, a8 as resolveCloudIntelCopy, a9 as HiMiniCloud, aa as HiMiniQuestionMarkCircle, ab as useFocusTrap, ac as approvalProofRequiresPassword, ad as HiMiniExclamationTriangle, ae as HiMiniBolt, af as Badge, ag as HiMiniMinusCircle } from "../guard-dashboard.js";
-import { ah } from "../guard-dashboard.js";
-import { H as HomeProtectionModule } from "./home-protection-module-DIttScQc.js";
+import { r as reactExports, f as fetchContextAssistance, j as jsxRuntimeExports, c as controlContextAssistance, a as contextStatusCopy, S as SectionLabel, H as HiMiniChevronRight, b as formatRelativeTime, h as harnessDisplayName, d as formatNumber, n as normalizeHarnessSlug, e as HiMiniChevronUp, g as HiMiniChevronDown, A as ActionButton, i as HiMiniArrowPath, k as HiMiniCheck, l as HiMiniNoSymbol, m as HiMiniHandRaised, o as HiMiniArrowUpTray, p as HiMiniCube, q as HiMiniPencilSquare, s as HiMiniCommandLine, t as HiMiniMagnifyingGlass, u as HiMiniDocumentText, v as HiMiniCheckCircle, T as Tag, w as HiMiniArrowRight, x as isConnectableAppHarness, y as HiMiniLockClosed, z as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, B as HomeInsightsMetrics, C as EvidenceActivityHeatmapMini, D as homeCommandActivityModel, F as createCommandActivityClient, I as fetchCommandActivityApi, J as getRecoveryCapabilities, K as recoveryRunsInDesktopWindow, L as resolveDesktopWindowRecoveryInstructions, M as resolveRecoveryInstructions, N as HiMiniShieldExclamation, O as DESKTOP_WINDOW_RECOVERY_MESSAGE, P as HiMiniClipboardDocument, Q as openRecoveryView, R as useReceiptAnalytics, U as updateSettings, V as turnProtectionOnUpdate, W as useProtectionPresentationState, X as protectionHealthFor, Y as unavailableProtectionHealth, Z as buildHomeRuntimeErrorCopy, _ as RuntimeErrorState, $ as watchBannerModel, a0 as WatchProtectionBanner, a1 as EvidenceInsightsShareModal, a2 as OperatorHealthCard, a3 as HiMiniShieldCheck, a4 as DeviceProofCard, a5 as guardActionDisposition, a6 as approvalLeftActionStopped, a7 as guardActionActivityCopy, a8 as HiMiniSparkles, a9 as HiMiniXMark, aa as EmptyState, ab as resolveCloudIntelCopy, ac as HiMiniCloud, ad as HiMiniQuestionMarkCircle, ae as useFocusTrap, af as approvalProofRequiresPassword, ag as HiMiniExclamationTriangle, ah as HiMiniBolt, ai as Badge, aj as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { ak } from "../guard-dashboard.js";
+import { H as HomeProtectionModule } from "./home-protection-module-CKLh5X9E.js";
 import { c as cigarHomeCopy } from "./workspace-model-hR3eI7UO.js";
 import { B as BrandHero, a as BrandHeroFacts, b as BrandHeroBadge, u as useReducedMotion, c as brandMarkSvg } from "./brand-hero-COty1p6U.js";
 import { A as ABOUT_LOCAL_SECTION_TITLE, a as ABOUT_LOCAL_SECTION_BODY } from "./about-content-Dr9zFg1V.js";
 import { S as SUPPORTED_APPS_FULL } from "./app-catalog-Ca_M7GbC.js";
-import "./supply-chain-protection-stats-Ba1xsVTU.js";
+import "./supply-chain-protection-stats--m3HVz8Q.js";
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 function homeStatusLabel(props) {
   if (props.stopping) return "Stopping";
@@ -962,9 +962,10 @@ function ServiceRecoveryPanel(props) {
     () => getRecoveryCapabilities({ bridge: props.bridge, installMode: props.installMode }),
     [props.bridge, props.installMode]
   );
+  const inDesktopWindow = reactExports.useMemo(() => recoveryRunsInDesktopWindow(capability), [capability]);
   const instructions = reactExports.useMemo(
-    () => resolveRecoveryInstructions(capability.installMode),
-    [capability.installMode]
+    () => inDesktopWindow ? resolveDesktopWindowRecoveryInstructions() : resolveRecoveryInstructions(capability.installMode),
+    [inDesktopWindow, capability.installMode]
   );
   const [showInstructions, setShowInstructions] = reactExports.useState(capability.kind === "fallback");
   const [opening, setOpening] = reactExports.useState(false);
@@ -1059,7 +1060,7 @@ function ServiceRecoveryPanel(props) {
             }
           )
         ] }),
-        capability.kind === "fallback" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-slate-600", role: "status", "data-testid": "service-recovery-fallback", children: fallbackMessage(capability) }) : null,
+        capability.kind === "fallback" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-slate-600", role: "status", "data-testid": "service-recovery-fallback", children: inDesktopWindow ? DESKTOP_WINDOW_RECOVERY_MESSAGE : fallbackMessage(capability) }) : null,
         handoffStatus ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900", role: "status", "aria-live": "polite", children: handoffStatus }) : null,
         handoffError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950", role: "alert", "aria-live": "assertive", children: handoffError }) : null,
         showInstructions ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-xl border border-slate-200 bg-white p-4", "data-testid": "service-recovery-instructions", children: [
@@ -1963,7 +1964,7 @@ function CollapsibleCard(props) {
 export {
   HomeWorkspace,
   STREAK_MILESTONE_MESSAGES,
-  ah as buildDaemonErrorCopy,
+  ak as buildDaemonErrorCopy,
   buildDailyStory,
   buildEmptyStateCopy,
   buildHomeRuntimeErrorCopy,
