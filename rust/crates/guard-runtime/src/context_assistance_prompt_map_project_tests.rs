@@ -183,7 +183,7 @@ project, including tests. Behavior must not change.";
     assert!(
         text.contains(
             "\n\nEvery line naming `_batched`; no other project file holds it:\n\
-pkg/recipes.py:1: def _batched(iterable, n):\npkg/recipes.py:5: batched = _batched\n"
+pkg/recipes.py:1:def _batched(iterable, n):\npkg/recipes.py:5:batched = _batched\n"
         ),
         "{text}"
     );
@@ -318,11 +318,11 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         "{text}"
     );
     for listed in [
-        "\nsrc/pkg/compiler.py:2: def _import_common(self, node):",
-        "\nsrc/pkg/compiler.py:6: self._import_common(node)",
-        "\nsrc/pkg/compiler.py:10: self._import_common(node)",
-        "\ntests/test_compiler.py:2: CodeGenerator()._import_common(None)",
-        "\ndocs/api.md:1: Call `_import_common` once.",
+        "\nsrc/pkg/compiler.py:2:    def _import_common(self, node):",
+        "\nsrc/pkg/compiler.py:6:        self._import_common(node)",
+        "\nsrc/pkg/compiler.py:10:        self._import_common(node)",
+        "\ntests/test_compiler.py:2:    CodeGenerator()._import_common(None)",
+        "\ndocs/api.md:1:Call `_import_common` once.",
     ] {
         assert!(text.contains(listed), "{text}");
     }
@@ -340,12 +340,12 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
     // The stub's other names, with their text, and not its own lines.
     for listed in [
         "\n\nOther lines naming `getchar` in the files read:\n",
-        "\nsrc/pkg/termui.py:1: _getchar = None",
-        "\nsrc/pkg/_termui_impl.py:1: def getchar(echo):",
+        "\nsrc/pkg/termui.py:1:_getchar = None",
+        "\nsrc/pkg/_termui_impl.py:1:def getchar(echo):",
     ] {
         assert!(text.contains(listed), "{text}");
     }
-    assert!(!text.contains("termui.py:4: "), "{text}");
+    assert!(!text.contains("termui.py:4:"), "{text}");
     let text = map("Add a usage example to the docstring of `test_undefined` in src/pkg/tests.py.");
     assert!(
         text.contains("\nsrc/pkg/tests.py:1-2 def test_undefined(value):"),
@@ -476,9 +476,9 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
     assert!(
         text.contains(
             "\n\nEvery line naming `_old_name`; no other project file holds it:\n\
-             src/core.py:1: def _old_name():\nsrc/core.py:6: return _old_name()\n\
-             tests/test_core.py:2: assert _old_name() == 1\ndocs/api.md:1: Call `_old_name` once.\n\n\
-             Lines naming a longer name holding `_old_name`:\ndocs/api.md:3: `_old_name_cache`"
+             src/core.py:1:def _old_name():\nsrc/core.py:6:    return _old_name()\n\
+             tests/test_core.py:2:    assert _old_name() == 1\ndocs/api.md:1:Call `_old_name` once.\n\n\
+             Lines naming a longer name holding `_old_name`:\ndocs/api.md:3:`_old_name_cache`"
         ),
         "{text}"
     );
@@ -490,7 +490,7 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
         assert!(
             text.contains(
                 "\n\nLines naming `_old_name` in the files read; other files may hold it too:\n\
-                 src/core.py:1: def _old_name():"
+                 src/core.py:1:def _old_name():"
             ),
             "{text}"
         );

@@ -45,7 +45,7 @@ everywhere in the project, including tests. Behavior must not change.";
 `_get_default_module_async`; with `_get_default_module_impl` written in place of \
 `_get_default_module`, they would build `_get_default_module_impl_async` instead. Every name they \
 build must still be defined after the rename:\n\
-src/pkg/compiler.py:3: self.write(f\"_get_default_module{self.choose_async('_async')}(context)\")\n"
+src/pkg/compiler.py:3:        self.write(f\"_get_default_module{self.choose_async('_async')}(context)\")\n"
         ),
         "{text}"
     );
@@ -102,6 +102,41 @@ everywhere in the project, including tests.";
         text.contains(
             "These lines build a longer name from `_get_default_module`, such as \
 `_get_default_module_async`. Every name they build"
+        ),
+        "{text}"
+    );
+}
+
+/// Each line naming the old name keeps its indentation, as a search prints
+/// it, so the agent can write the renamed lines at the right depth without
+/// searching again first.
+#[test]
+fn a_rename_lists_each_line_at_its_indentation() {
+    let cache = "class Cache:
+    def _evict(self):
+        self.items.clear()
+
+    def put(self, key, value):
+        if len(self.items) > 8:
+            self._evict()
+        self.items[key] = value
+";
+    let list = [
+        ("src/pkg/cache.py", cache),
+        (
+            "tests/test_cache.py",
+            "def test_evict():\n    Cache()._evict()\n",
+        ),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(
+        text.contains(
+            "\n\nEvery line naming `_evict`; no other project file holds it:\n\
+src/pkg/cache.py:2:    def _evict(self):\n\
+src/pkg/cache.py:7:            self._evict()\n\
+tests/test_cache.py:2:    Cache()._evict()\n"
         ),
         "{text}"
     );
