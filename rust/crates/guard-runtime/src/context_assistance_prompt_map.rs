@@ -156,6 +156,14 @@ impl File<'_> {
             None => own,
         }
     }
+
+    /// The name tests use to reach the section. A special method such as
+    /// `__exit__` runs through its class, so tests name the class.
+    fn tested_name(&self, at: usize) -> Option<String> {
+        let special = written_name(self.opening(at)).is_some_and(|name| name.starts_with("__"));
+        let at = self.parent[at].filter(|_| special).unwrap_or(at);
+        self.sections[at].name.clone()
+    }
 }
 
 /// The map for a prompt, read through Guard's checks, or `None` when no
@@ -258,7 +266,7 @@ pub(super) fn map(
     let mut mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)
         .take(2)
-        .filter_map(|pick| files[pick.file].sections[pick.at].name.clone())
+        .filter_map(|pick| files[pick.file].tested_name(pick.at))
         .chain(used.iter().take(3).map(|word| (*word).to_owned()))
         .collect();
     if asked.everywhere {
