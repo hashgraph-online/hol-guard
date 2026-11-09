@@ -44,6 +44,7 @@ from typing import Any, Final
 
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
+from .command_queue_http import format_redacted_error
 from .command_queue_state import (
     COMMAND_QUEUE_STATE_KEY,
     CommandQueueLane,
@@ -78,6 +79,19 @@ class ReviewLeaseBatch:
 
     jobs: tuple[dict[str, object], ...] = ()
     more_may_be_ready: bool = True
+
+
+def start_review_drains(
+    on_exact_review_lease: Callable[[ReviewLeaseBatch], object],
+    jobs: list[dict[str, object]],
+    *,
+    more_may_be_ready: bool,
+) -> None:
+    """Hands leased Review jobs to the drain pool; a failure only logs."""
+    try:
+        on_exact_review_lease(ReviewLeaseBatch(jobs=tuple(jobs), more_may_be_ready=more_may_be_ready))
+    except Exception as error:
+        _LOGGER.warning("Guard Review drain start failed: error=%s", format_redacted_error(error))
 
 
 @dataclass(frozen=True)
