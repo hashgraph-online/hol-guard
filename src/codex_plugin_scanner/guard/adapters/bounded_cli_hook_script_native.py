@@ -395,7 +395,10 @@ def _failure_payload(event_name: str, reason: str) -> tuple[dict[str, object], i
     # Local configuration cannot authenticate the mode of an unavailable evaluator.
     prompt_event = _compact(event_name) in {"userpromptsubmit", "userpromptsubmitted"}
     if prompt_event:
-        prompt_reason = "HOL Guard could not complete native prompt review safely."
+        prompt_reason = (
+            "HOL Guard could not check this prompt, so it was blocked. "
+            "If HOL Guard is not running, open HOL Guard and send the prompt again."
+        )
         if HARNESS == "copilot":
             return {"behavior": "deny", "message": prompt_reason, "interrupt": False}, 0
         payload = {

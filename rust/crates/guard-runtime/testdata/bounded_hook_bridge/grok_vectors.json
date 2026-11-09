@@ -208,11 +208,11 @@
   },
   {
    "input": "{\"hook_event_name\":\"  UserPromptSubmit  \"}",
-   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"systemMessage\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
   },
   {
    "input": "{\"hook_event_name\":\"user_prompt_submitted\"}",
-   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"systemMessage\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
   },
   {
    "input": "{\"hook_event_name\":\"PermissionRequestV2\"}",
@@ -276,7 +276,7 @@
   },
   {
    "input": "{\"hookEventName\":\"UserPromptSubmit\"}",
-   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"systemMessage\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
   },
   {
    "input": "{\"event\":\"pretoolcall\"}",
@@ -304,7 +304,7 @@
   },
   {
    "input": "{\"hook_event_name\":\"UserPromptSubmit\",\"eventName\":\"user_prompt_submit\"}",
-   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"systemMessage\":\"HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
   },
   {
    "input": "{\"hook_event_name\":\"PreToolUse\",\"hook_event_name\":\"SessionStart\"}",

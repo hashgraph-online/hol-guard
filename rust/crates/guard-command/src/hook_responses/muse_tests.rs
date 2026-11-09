@@ -42,9 +42,9 @@ fn fail_closed_prompt() -> Value {
     json!({
         "policy_action": "block",
         "decision": "block",
-        "reason": "HOL Guard could not complete native prompt review safely.",
+        "reason": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.",
         "reason_code": "native_prompt_unavailable",
-        "systemMessage": "HOL Guard could not complete native prompt review safely.",
+        "systemMessage": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.",
         "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
     })
 }
