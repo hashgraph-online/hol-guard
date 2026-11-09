@@ -256,7 +256,7 @@ fn system_lsof() -> Option<Vec<u8>> {
 /// most `limit` bytes. Output past the limit kills the child at once rather
 /// than leaving it blocked on a full pipe until the timeout.
 pub(crate) fn bounded_stdout(command: Command, limit: u64, timeout: Duration) -> Option<Vec<u8>> {
-    bounded_output(command, limit, timeout, false, None)
+    bounded_output(command, limit, timeout, false)
 }
 
 /// [`bounded_stdout`] with `command` in a process group of its own. A query
@@ -267,18 +267,7 @@ pub(crate) fn bounded_stdout_in_group(
     limit: u64,
     timeout: Duration,
 ) -> Option<Vec<u8>> {
-    bounded_output(command, limit, timeout, true, None)
-}
-
-/// [`bounded_stdout_in_group`] with `input` written to the child's stdin and
-/// stdin closed after it, so a request body never shows in the process list.
-pub(crate) fn bounded_stdout_in_group_with_input(
-    command: Command,
-    input: Vec<u8>,
-    limit: u64,
-    timeout: Duration,
-) -> Option<Vec<u8>> {
-    bounded_output(command, limit, timeout, true, Some(input))
+    bounded_output(command, limit, timeout, true)
 }
 
 fn bounded_output(
@@ -286,33 +275,16 @@ fn bounded_output(
     limit: u64,
     timeout: Duration,
     group: bool,
-    input: Option<Vec<u8>>,
 ) -> Option<Vec<u8>> {
     if group {
         isolate_group(&mut command);
     }
-    let stdin = if input.is_some() {
-        Stdio::piped()
-    } else {
-        Stdio::null()
-    };
     let mut child = command
-        .stdin(stdin)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    if let Some(input) = input {
-        let Some(mut writer) = child.stdin.take() else {
-            stop(&mut child, group);
-            return None;
-        };
-        // A writer thread: a child that never reads cannot block the timeout.
-        std::thread::spawn(move || {
-            use std::io::Write;
-            let _ = writer.write_all(&input);
-        });
-    }
     let Some(stdout) = child.stdout.take() else {
         stop(&mut child, group);
         return None;

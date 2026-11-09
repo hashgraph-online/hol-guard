@@ -420,10 +420,6 @@ fn respond(
         return plugin_updates::read(config)
             .map(|(status, body)| (status, body, caller.cors_origin, true));
     }
-    if request.path == "/v1/update/status" {
-        return update_status::read(config)
-            .map(|(status, body)| (status, body, caller.cors_origin, true));
-    }
     if request.path == "/v1/network/status" {
         return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));
     }
@@ -652,14 +648,10 @@ mod requests;
 #[path = "daemon_edge_settings.rs"]
 mod settings;
 
-#[path = "daemon_edge_cli_query.rs"]
-mod cli_query;
 #[path = "daemon_edge_network.rs"]
 mod network;
 #[path = "daemon_edge_plugin_updates.rs"]
 mod plugin_updates;
-#[path = "daemon_edge_update_status.rs"]
-mod update_status;
 
 #[path = "daemon_edge_streams.rs"]
 mod streams;
