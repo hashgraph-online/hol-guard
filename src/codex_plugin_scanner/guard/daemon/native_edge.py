@@ -103,7 +103,7 @@ def _close_liveness(liveness: socket.socket) -> None:
         liveness.close()
 
 
-def _read_activity(liveness: socket.socket, on_activity: Callable[[], None]) -> None:
+def _read_activity(liveness: socket.socket, on_activity: Callable[[bytes], None]) -> None:
     while True:
         try:
             chunk = liveness.recv(64)
@@ -112,13 +112,13 @@ def _read_activity(liveness: socket.socket, on_activity: Callable[[], None]) -> 
         if not chunk:
             return
         with suppress(Exception):
-            on_activity()
+            on_activity(chunk)
 
 
 def _offer_handshake(
     liveness: socket.socket,
     handshake: Callable[[], bytes | None] | None,
-    on_activity: Callable[[], None] | None,
+    on_activity: Callable[[bytes], None] | None,
 ) -> None:
     """Start the activity reader, then send the handshake.
 
@@ -150,7 +150,7 @@ def _spawn(
     public: socket.socket,
     upstream_port: int,
     handshake: Callable[[], bytes | None] | None = None,
-    on_activity: Callable[[], None] | None = None,
+    on_activity: Callable[[bytes], None] | None = None,
 ) -> _EdgeProcess | None:
     try:
         liveness, child_end = socket.socketpair()
@@ -195,7 +195,7 @@ class NativeDaemonEdge:
         process: _EdgeProcess,
         resolve_executable: Callable[[], Path | None],
         handshake: Callable[[], bytes | None] | None = None,
-        on_activity: Callable[[], None] | None = None,
+        on_activity: Callable[[bytes], None] | None = None,
     ) -> None:
         self._server = server
         self._handshake = handshake
@@ -317,7 +317,7 @@ def start_native_daemon_edge(
     guard_home: Path,
     host: str,
     handshake: Callable[[], bytes | None] | None = None,
-    on_activity: Callable[[], None] | None = None,
+    on_activity: Callable[[bytes], None] | None = None,
 ) -> NativeDaemonEdge | None:
     """Move the server onto a private port behind a native edge.
 

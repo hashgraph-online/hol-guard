@@ -401,3 +401,30 @@ def test_the_store_reads_a_request_status_without_its_review_payload(tmp_path: P
     assert store.get_approval_request_status("req-missing") is None
     assert store.get_approval_request_statuses(["req-status", "req-missing"]) == {"req-status": "pending"}
     assert store.get_approval_request_statuses([]) == {}
+
+
+def test_a_held_read_marks_an_agent_as_waiting(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.runtime import review_wait_activity
+
+    monkeypatch.setattr(review_wait_activity, "_last_wait_at", None)
+    store = _ScriptedStore(tmp_path / "guard.db", "req-marks")
+    approval = store.get_approval_request("req-marks")
+    assert approval is not None
+
+    wait_for_request_resolution(store, "req-marks", approval, 0.05)
+
+    assert review_wait_activity.review_wait_recent()
+
+
+def test_a_decided_request_does_not_mark_an_agent_as_waiting(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.runtime import review_wait_activity
+
+    monkeypatch.setattr(review_wait_activity, "_last_wait_at", None)
+    store = _ScriptedStore(tmp_path / "guard.db", "req-done")
+    store.resolve()
+    approval = store.get_approval_request("req-done")
+    assert approval is not None
+
+    wait_for_request_resolution(store, "req-done", approval, 5.0)
+
+    assert not review_wait_activity.review_wait_recent()

@@ -27,6 +27,9 @@ from tests.coverage_ci import under_coverage_scale
 
 @contextmanager
 def _running_daemon(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[GuardDaemonServer]:
+    # These cases measure the Python listener's own admission, so no native
+    # edge may answer a request before it reaches the daemon's handlers.
+    monkeypatch.setenv("HOL_GUARD_DAEMON_NATIVE_EDGE", "0")
     monkeypatch.setattr(
         daemon_manager,
         "_guard_daemon_process_inventory_for_guard_home",

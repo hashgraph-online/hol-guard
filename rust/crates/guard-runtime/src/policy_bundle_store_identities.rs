@@ -171,6 +171,19 @@ pub(crate) fn lookup_bundle_authority(
     cached_bundle_authority(connection, now).map(Some).ok_or(())
 }
 
+/// `validated_synced_policy_bundle`: the cached bundle while it is live
+/// authority, `Some(None)` when it is missing or not, and `None` when the
+/// resident cannot decide the way the Python store would.
+pub(crate) fn validated_synced_bundle(
+    connection: &Connection,
+) -> Option<Option<Map<String, Value>>> {
+    let bundle = match sync_payload(connection, "policy_bundle")? {
+        Some(Value::Object(bundle)) if !bundle.is_empty() => bundle,
+        _ => return Some(None),
+    };
+    validated(connection, &bundle, epoch_now()?.as_secs_f64())
+}
+
 /// `cached_policy_bundle_validation`: the payload rules are read from, or
 /// `Some(None)` when the bundle is not live authority.
 fn validated(
@@ -402,7 +415,7 @@ fn host_name() -> Option<String> {
 
 /// One `sync_state` payload as `get_sync_payload` reads it: `Some(None)` when
 /// missing or not a JSON object or list, `None` when it cannot be read.
-fn sync_payload(connection: &Connection, key: &str) -> Option<Option<Value>> {
+pub(crate) fn sync_payload(connection: &Connection, key: &str) -> Option<Option<Value>> {
     let Some(text) = sync_state_payload(connection, key).ok()? else {
         return Some(None);
     };
