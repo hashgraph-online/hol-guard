@@ -274,7 +274,12 @@ fn a_workspace_scan_keeps_the_project_items_of_other_workspaces() {
         &[user_skill.clone(), beta_skill],
     );
     assert_eq!(names(&rows), ["alpha-skill", "beta-skill", "shared"]);
-    let rows = scan(&rows, None, "2026-10-20T00:00:00Z", &[user_skill.clone()]);
+    let rows = scan(
+        &rows,
+        None,
+        "2026-10-20T00:00:00Z",
+        std::slice::from_ref(&user_skill),
+    );
     assert_eq!(names(&rows), ["alpha-skill", "beta-skill", "shared"]);
     // Rescanning alpha is what removes an alpha item.
     let rows = scan(&rows, alpha, "2026-10-21T00:00:00Z", &[user_skill]);
@@ -309,7 +314,7 @@ fn table_rows_win_over_the_same_stored_item_unless_removed() {
         json!({"artifact_type": "mcp_server", "harness": "codex", "artifact_name": "other", "config_path": "/nonexistent-hg/.codex/o"}),
     ];
     let table = json!({"artifact_type": "mcp_server", "harness": "codex", "artifact_name": " chrome-devtools", "config_path": "/nonexistent-hg/.codex/c"});
-    assert_eq!(union(&[table.clone()], &stored_rows), [1]);
+    assert_eq!(union(std::slice::from_ref(&table), &stored_rows), [1]);
     for (key, value) in [
         ("present", json!(0)),
         ("present", json!(false)),

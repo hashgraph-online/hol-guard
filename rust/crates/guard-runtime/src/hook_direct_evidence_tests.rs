@@ -207,7 +207,7 @@ fn a_receipt_the_resident_could_not_write_is_paged_to_the_daemon() {
     let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
     assert!(page.records.is_empty());
     let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 3);
-    assert_eq!(page.settled, [plain.clone()]);
+    assert_eq!(page.settled, std::slice::from_ref(&plain));
     queue.unwritten().requeue(page.settled);
     let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 3);
     assert_eq!(values(&page.records), [plain]);

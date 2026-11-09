@@ -39,7 +39,7 @@ fn blocked_request_mode_binds_only_when_every_config_agrees() {
         json!("ask")
     );
     assert_eq!(
-        uniform_blocked_request_mode(&[safe.clone()]),
+        uniform_blocked_request_mode(std::slice::from_ref(&safe)),
         json!("safe-alternative")
     );
     assert_eq!(uniform_blocked_request_mode(&[ask, safe]), Value::Null);
