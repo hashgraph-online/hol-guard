@@ -97,6 +97,11 @@ fn the_same_verbs_on_a_guarded_object_stay_refused() {
         "Format the entries on disk0",
         "Format the values on disk2s1",
         "Format the entries on nvme0n1",
+        // A device path is storage, and so is a device name after a dot.
+        "Format the entries on /dev/sda1",
+        "Format the values on /dev/mmcblk0p1",
+        "Format the entries on /dev/mapper/backup.disk0",
+        "Format the entries in backup.disk0",
     ] {
         assert_not_benign(text);
     }

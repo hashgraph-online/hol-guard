@@ -5,8 +5,8 @@ use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
 /// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`)
-/// included.
-const STORAGE_NOUN: &str = r"(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b";
+/// and device paths (`/dev/sda1`, `/dev/mmcblk0p1`) included.
+const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/\w)";
 
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
 /// `format` applied to what a program prints or to a piece of code (`format
@@ -22,7 +22,8 @@ const STORAGE_NOUN: &str = r"(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partiti
 /// values and logs volumes`, `format the logs and my backup disk`, `format the
 /// values and D: drive`), so any storage word later in the same sentence keeps
 /// the verb, however long the sentence. A dot ends the sentence only before a
-/// space or the end of the text, not inside `2.5-inch` or `backup.img`. An
+/// space or the end of the text, not inside `2.5-inch` or `backup.img`, and
+/// a storage word right after such a dot (`backup.disk0`) still counts. An
 /// option such as `--format json` names how a command prints, whatever it
 /// lists, so only a storage word right after it does.
 pub(super) fn mask_format_options(value: &str) -> String {
@@ -34,7 +35,7 @@ pub(super) fn mask_format_options(value: &str) -> String {
             .expect("bounded storage noun")
     });
     let sentence = SENTENCE.get_or_init(|| {
-        Regex::new(&format!(r"(?i)^(?:[^.;!?\n]|\.\S)*?\b{STORAGE_NOUN}"))
+        Regex::new(&format!(r"(?i)^(?:[^.;!?\n]|\.\S)*?\.?{STORAGE_NOUN}"))
             .expect("bounded storage sentence")
     });
     OPTION
