@@ -302,7 +302,7 @@
     "https://pineprompt.com/.well-known/oauth-protected-resource"
   ],
   "saferAlternatives": [
-    "Use the list-* and get-* tools; they only read visibility, sentiment, position and citation data.",
+    "Use the list-* and get-* tools; they only read data: visibility, sentiment, position and citation analytics, plus users, organizations, projects, prompts, brands, monitors and other workspace records.",
     "Keep create-*, update-*, delete-*, attach-*, detach-* and invite tools on Review; they change or remove projects, brands, prompts, monitors, users and invitations.",
     "Connect with an OAuth account that has the narrowest role needed for the task."
   ]
