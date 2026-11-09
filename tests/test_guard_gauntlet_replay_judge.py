@@ -279,6 +279,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-rg-files-no-ignore-service-lane",
         "neg-rg-path-before-files-flag-credential-store",
         "neg-rg-replace-widens-home-search",
+        # Sed writes aimed outside the workspace remain contained. The exec
+        # flag is intentionally excluded: it can damage the writable worktree.
+        "neg-sed-substitute-chained-write-command",
+        "neg-sed-substitute-second-expression-writes-a-file",
         # A `cat` that names a private key after a sibling run: the review stands,
         # and a contained run in the sibling root reaches no key at all.
         "neg-sibling-cd-jest-cat-reads-private-key",
