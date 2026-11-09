@@ -161,6 +161,8 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
+        let span = without_paths(span);
+        let span = span.as_str();
         for written in tokens(span) {
             let token = written.trim_matches(['.', '-', '/']);
             if file_name(token).is_some() {
@@ -217,6 +219,27 @@ fn command(span: &str) -> bool {
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && words
             .any(|word| word.starts_with('-') || word.contains('/') || file_name(word).is_some())
+}
+
+/// The span with each absolute path blanked: `/tmp/run-1/out.log`, `~/work`,
+/// `C:\Users\me`. Its folders name the machine, not the code asked about.
+fn without_paths(span: &str) -> String {
+    let absolute = |word: &str| {
+        let word = word.trim_start_matches(['(', '[', '"', '\'', '<']);
+        (word.starts_with('/') && word.matches('/').count() > 1)
+            || word.starts_with("~/")
+            || word.starts_with(r"\\")
+            || word.get(1..3) == Some(r":\")
+    };
+    span.split_inclusive(char::is_whitespace)
+        .map(|word| {
+            if absolute(word) {
+                " ".repeat(word.len())
+            } else {
+                word.to_owned()
+            }
+        })
+        .collect()
 }
 
 fn tokens(span: &str) -> impl Iterator<Item = &str> {
