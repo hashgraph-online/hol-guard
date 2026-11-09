@@ -39,7 +39,7 @@ pub(super) struct Whole {
     rest: Option<String>,
 }
 
-/// What `git diff -U1` prints for `against`, when it is small, every file it
+/// What `git diff` prints for `against`, when it is small, every file it
 /// changes is one Guard's read accepted and it holds no secret. An agent
 /// asked about changes reads it here instead of running that command. When
 /// Guard's read refused some changed files, it is the diff of the others,
@@ -58,9 +58,9 @@ pub(super) fn whole(
         .map(|at| if commit_id(at) { &at[..7] } else { at })
         .collect();
     let short = short.join(" ");
-    let diff = run_diff(git, against, &[], until)?;
+    let diff = run_diff(git, against, &[], "-U1", until)?;
     if shown_files(&diff, texts) {
-        return small(diff, texts, format!("git diff -U1 {short}"), None);
+        return fitted(git, against, &[], texts, &short, None, until);
     }
     let changed: BTreeSet<String> = hunks(&diff).into_iter().map(|hunk| hunk.path).collect();
     let (paths, left): (Vec<String>, Vec<String>) =
@@ -79,15 +79,49 @@ pub(super) fn whole(
             let files = if others == 1 { "file" } else { "files" };
             format!("`git diff {short}` also shows {others} other changed {files}")
         };
-    let diff = run_diff(git, against, &paths, until)?;
-    let command = format!("git diff -U1 {short} -- {}", paths.join(" "));
-    small(diff, texts, command, Some(rest))
+    fitted(git, against, &paths, texts, &short, Some(rest), until)
 }
 
-/// `git diff -U1` for `against`, limited to `paths` when there are any.
-fn run_diff(git: &Git, against: &[&str], paths: &[String], until: Instant) -> Option<String> {
+/// The diff with Git's usual three lines of context, as an agent prints it
+/// itself, or with one when that is too big. Given one line, agents reviewing
+/// a session printed the diff again.
+fn fitted(
+    git: &Git,
+    against: &[&str],
+    paths: &[String],
+    texts: &[(String, String)],
+    short: &str,
+    rest: Option<String>,
+    until: Instant,
+) -> Option<Whole> {
+    let limit = if paths.is_empty() {
+        String::new()
+    } else {
+        format!(" -- {}", paths.join(" "))
+    };
+    for (context, flag) in [("-U3", ""), ("-U1", "-U1 ")] {
+        let Some(diff) = run_diff(git, against, paths, context, until) else {
+            continue;
+        };
+        let command = format!("git diff {flag}{short}{limit}");
+        if let Some(whole) = small(diff, texts, command, rest.clone()) {
+            return Some(whole);
+        }
+    }
+    None
+}
+
+/// `git diff` with `context` lines for `against`, limited to `paths` when
+/// there are any.
+fn run_diff(
+    git: &Git,
+    against: &[&str],
+    paths: &[String],
+    context: &str,
+    until: Instant,
+) -> Option<String> {
     let limit = if paths.is_empty() { None } else { Some("--") };
-    let arguments: Vec<&str> = ["diff", "-U1"]
+    let arguments: Vec<&str> = ["diff", context]
         .into_iter()
         .chain(DIFF)
         .chain(against.iter().copied())
@@ -149,7 +183,7 @@ impl Named {
         }
     }
 
-    fn text(&self) -> String {
+    pub(super) fn text(&self) -> String {
         let files = if self.others == 1 { "file" } else { "files" };
         match (self.files.is_empty(), self.others) {
             (_, 0) => self.files.join(", "),
@@ -252,8 +286,9 @@ impl<'a> Since<'a> {
 }
 
 /// The note: what changed, file by file, at current line numbers, then the
-/// commits, the files not committed yet and those changed back, then the
-/// whole diff. Nothing when no accepted file changed and no commit was made.
+/// commits, the files not committed yet and those changed back, `status`,
+/// then the whole diff. What comes before the whole diff fits in
+/// `MAX_NOTE`. Nothing when no accepted file changed and no commit was made.
 pub(super) fn render(
     since: Since,
     changed: &[Hunk],
@@ -261,6 +296,7 @@ pub(super) fn render(
     commits: &[Commit],
     [pending, back]: [Option<&Named>; 2],
     whole: Option<&Whole>,
+    status: &str,
 ) -> Option<String> {
     let mut files = Vec::new();
     for (path, text) in texts {
@@ -287,6 +323,7 @@ pub(super) fn render(
     if files.is_empty() && commits.is_empty() {
         return None;
     }
+    let max_note = MAX_NOTE.saturating_sub(status.len());
     // Pointing at `git diff` when the note holds its output only gets it run.
     let all = match (whole, since.base()) {
         (Some(whole), _) => {
@@ -330,7 +367,7 @@ pub(super) fn render(
             format!("{}{files}", line.trim_end())
         })
         .collect();
-    let room = MAX_NOTE.saturating_sub(out.len() + CUT.len());
+    let room = max_note.saturating_sub(out.len() + CUT.len());
     let mut reserved = 0;
     let held: Vec<usize> = (subjects.iter())
         .map(|subject| {
@@ -352,7 +389,7 @@ pub(super) fn render(
             format!("\n\n{LABELS_TITLE}")
         };
         let part = format!("{title}\n{file}");
-        if out.len() + part.len() + reserved + CUT.len() > MAX_NOTE {
+        if out.len() + part.len() + reserved + CUT.len() > max_note {
             cut = true;
             continue;
         }
@@ -361,7 +398,7 @@ pub(super) fn render(
     }
     for ((commit, subject), held) in commits.iter().zip(&subjects).zip(held) {
         reserved -= held;
-        let fits = |part: &str| out.len() + part.len() + reserved + CUT.len() <= MAX_NOTE;
+        let fits = |part: &str| out.len() + part.len() + reserved + CUT.len() <= max_note;
         let full = (commit.diff.as_ref())
             .map(|diff| format!("{subject}:\n```diff\n{}\n```", diff.trim_end()));
         let part = match full {
@@ -387,13 +424,14 @@ pub(super) fn render(
     });
     let pending = pending.map(|pending| format!("\n\nNot committed yet: {}", pending.text()));
     for part in [pending, back].into_iter().flatten() {
-        if out.len() + part.len() + CUT.len() <= MAX_NOTE {
+        if out.len() + part.len() + CUT.len() <= max_note {
             out.push_str(&part);
         }
     }
     if cut {
         out.push_str(CUT);
     }
+    out.push_str(status);
     if let Some(whole) = whole {
         out.push_str(&format!(
             "\n\n`{}` prints:\n```diff\n{}\n```",

@@ -39,7 +39,16 @@ fn the_newest_commits_short_changed_definitions_are_shown_whole() {
         ("src/store.py".to_owned(), STORE.to_owned()),
     ];
     let base = "0123456789abcdef0123456789abcdef01234567";
-    let text = render(Since::Newest(base), &changed, &texts, &[], [None; 2], None).unwrap();
+    let text = render(
+        Since::Newest(base),
+        &changed,
+        &texts,
+        &[],
+        [None; 2],
+        None,
+        "",
+    )
+    .unwrap();
     let shown = concat!(
         "\n\nChanged definitions as they read now:\nsrc/store.py:5-7\n```\n",
         "    def put(self, key):\n",
@@ -49,7 +58,16 @@ fn the_newest_commits_short_changed_definitions_are_shown_whole() {
     assert!(text.ends_with(shown), "{text}");
     assert_eq!(text.matches("def put(").count(), 1, "{text}");
     assert!(!text.contains("x = 1") && !text.contains("body"), "{text}");
-    let session = render(Since::Start(base), &changed, &texts, &[], [None; 2], None).unwrap();
+    let session = render(
+        Since::Start(base),
+        &changed,
+        &texts,
+        &[],
+        [None; 2],
+        None,
+        "",
+    )
+    .unwrap();
     assert!(!session.contains("as they read now"), "{session}");
 }
 
@@ -66,7 +84,16 @@ fn every_short_definition_a_change_spans_is_shown_to_its_closing_brace() {
     }];
     let texts = vec![("src/f.js".to_owned(), text.to_owned())];
     let base = "0123456789abcdef0123456789abcdef01234567";
-    let note = render(Since::Newest(base), &changed, &texts, &[], [None; 2], None).unwrap();
+    let note = render(
+        Since::Newest(base),
+        &changed,
+        &texts,
+        &[],
+        [None; 2],
+        None,
+        "",
+    )
+    .unwrap();
     let shown = concat!(
         "src/f.js:1-3\n```\nfunction f() {\n  return \"}\";\n}\n```\n",
         "src/f.js:5-7\n```\nfunction g() {\n  return 2;\n}\n```",
@@ -86,7 +113,16 @@ fn newest(path: &str, text: &str, changed: &[(usize, &str)]) -> String {
         .collect();
     let texts = vec![(path.to_owned(), text.to_owned())];
     let base = "0123456789abcdef0123456789abcdef01234567";
-    render(Since::Newest(base), &changed, &texts, &[], [None; 2], None).unwrap()
+    render(
+        Since::Newest(base),
+        &changed,
+        &texts,
+        &[],
+        [None; 2],
+        None,
+        "",
+    )
+    .unwrap()
 }
 
 /// A change to a short class and a method inside it shows the class once,
