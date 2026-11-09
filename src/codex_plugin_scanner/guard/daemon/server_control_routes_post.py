@@ -23,15 +23,15 @@ from ..native_resident_revival import native_route_unavailable_body
 from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .background_diagnostics import failure_detail, record_background_event
 from .command_activity_api import handle_command_activity_feedback
-from .context_assistance_http import WRITE_PATHS as CONTEXT_ASSISTANCE_WRITE_PATHS
-from .context_assistance_http import respond as respond_context_assistance
+from ..routes.context_assistance_http import WRITE_PATHS as CONTEXT_ASSISTANCE_WRITE_PATHS
+from ..routes.context_assistance_http import respond as respond_context_assistance
 from .extension_control_api import ExtensionControlApiError
 from ..continuation_runtime_local import apply_local_approval_continuation
 from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
 from .plugin_updates_http import handle_plugin_updates_dismiss
 from .server_common import _now
-from .workspace_assessment_api import handle_workspace_assessment_post
+from ..routes.workspace_assessment_api import handle_workspace_assessment_post
 
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 

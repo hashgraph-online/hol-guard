@@ -125,7 +125,7 @@ class TestDaemonMcpPolicyRequestSurface:
 
         native_mcp_probe(store.guard_home)
         from codex_plugin_scanner.guard import approval_gate
-        from codex_plugin_scanner.guard.daemon import mcp_policy_decisions as server
+        from codex_plugin_scanner.guard.routes import mcp_policy_decisions as server
 
         native_gate = approval_gate._approval_gate_native
 

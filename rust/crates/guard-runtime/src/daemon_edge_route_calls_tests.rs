@@ -95,3 +95,29 @@ fn malformed_answers_and_raised_calls_close_the_connection() {
         Some((200, json!({"x": 1}), true))
     );
 }
+
+#[test]
+fn daemon_handlers_run_behind_one_call() {
+    for path in [
+        "/v1/context-assistance/workspace-grant",
+        "/v1/context-assistance/codex-lean",
+        "/v1/harness-versions/acknowledge",
+        "/v1/supply-chain/workspace-assessments",
+        "/v1/supply-chain/workspace-assessments/pause",
+        "/v1/supply-chain/workspace-fix-proposals/p-1/apply",
+        "/v1/mcp-policy/requests/r-1/decision",
+    ] {
+        let (name, args) = route(path).unwrap_or_else(|| unreachable!());
+        assert_eq!(name, "route.handler_post", "{path}");
+        assert_eq!(args["path"], path);
+    }
+    for path in [
+        "/v1/context-assistance",
+        "/v1/harness-versions",
+        "/v1/supply-chain/workspace-assessments/delete",
+        "/v1/supply-chain/workspace-fix-proposals/p-1",
+        "/v1/mcp-policy/requests/r-1",
+    ] {
+        assert_eq!(route(path), None, "{path}");
+    }
+}

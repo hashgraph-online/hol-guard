@@ -20,9 +20,63 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
         "/v1/requests/bulk-allow-once" => "route.bulk_allow_once",
         "/v1/insights/share" => "route.insights_share",
         "/v1/policy/cloud-exception-requests" => "route.cloud_exception_request_create",
+        _ if runs_handler(path) => {
+            let mut args = Map::new();
+            args.insert("path".to_owned(), Value::String(path.to_owned()));
+            return Some(("route.handler_post", args));
+        }
         _ => return segment_route(path),
     };
     Some((name, Map::new()))
+}
+
+/// `/v1/context-assistance/...` writes, run before the daemon's route classes.
+const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
+    "/v1/context-assistance/versions",
+    "/v1/context-assistance/recheck",
+    "/v1/context-assistance/activate",
+    "/v1/context-assistance/stop",
+    "/v1/context-assistance/workspace",
+    "/v1/context-assistance/workspace-access",
+    "/v1/context-assistance/workspace-grant",
+    "/v1/context-assistance/folders",
+    "/v1/context-assistance/codex-lean",
+];
+const HARNESS_VERSION_WRITES: [&str; 3] = [
+    "/v1/harness-versions/refresh",
+    "/v1/harness-versions/acknowledge",
+    "/v1/harness-versions/clear-acknowledgement",
+];
+const WORKSPACE_ASSESSMENT_WRITES: [&str; 7] = [
+    "/v1/supply-chain/workspace-assessments",
+    "/v1/supply-chain/workspace-fix-proposals",
+    "/v1/supply-chain/workspace-export-preview",
+    "/v1/supply-chain/workspace-assessments/run",
+    "/v1/supply-chain/workspace-assessments/cancel",
+    "/v1/supply-chain/workspace-assessments/pause",
+    "/v1/supply-chain/workspace-assessments/resume",
+];
+const FIX_PROPOSALS_PREFIX: &str = "/v1/supply-chain/workspace-fix-proposals/";
+
+/// Whether `route.handler_post` runs the daemon's own handler for `path`
+/// (`routes/calls.py`).
+fn runs_handler(path: &str) -> bool {
+    if CONTEXT_ASSISTANCE_WRITES.contains(&path)
+        || HARNESS_VERSION_WRITES.contains(&path)
+        || WORKSPACE_ASSESSMENT_WRITES.contains(&path)
+    {
+        return true;
+    }
+    if crate::daemon_route_paths::route_class(path) != "none" {
+        return false;
+    }
+    if path.starts_with(FIX_PROPOSALS_PREFIX) && path.ends_with("/apply") {
+        return true;
+    }
+    matches!(
+        crate::daemon_route_paths::segments(path).as_slice(),
+        ["v1", "mcp-policy", "requests", _, "decision"]
+    )
 }
 
 /// Routes with path arguments, split as the daemon splits its path.

@@ -16,7 +16,7 @@ from tests.test_native_business_source_store import _grant, _install, _key
 
 
 def test_read_only_inspection_allows_native_publication(store, env_flags, native_mcp_probe, monkeypatch):
-    from codex_plugin_scanner.guard.daemon import business_policy_recovery_inspection as inspection
+    from codex_plugin_scanner.guard.routes import business_policy_recovery_inspection as inspection
     from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
     native_mcp_probe(store.guard_home)

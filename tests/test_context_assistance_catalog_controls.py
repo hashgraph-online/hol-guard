@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from codex_plugin_scanner.guard import native_context_assistance as native
 from codex_plugin_scanner.guard.cli import commands_router
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
-from codex_plugin_scanner.guard.daemon import context_assistance_versions_http as http
+from codex_plugin_scanner.guard.routes import context_assistance_versions_http as http
 
 
 def test_catalog_cli_reads_bounded_stdin_and_forwards_only_signed_bytes(monkeypatch, tmp_path):

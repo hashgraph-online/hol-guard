@@ -174,3 +174,35 @@ def test_insights_share_raises_on_an_invalid_boolean(tmp_path: Path) -> None:
 def test_cloud_exception_request_rejects_an_invalid_body(tmp_path: Path) -> None:
     answer = _call(tmp_path, "route.cloud_exception_request_create", {"payload": {}})
     assert answer["ok"]["status"] in {400, 401, 403, 409, 502, 503}  # type: ignore[index]
+
+
+def _handler_post(home: Path, path: str, payload: object) -> dict[str, object]:
+    return _call(home, "route.handler_post", {"path": path, "payload": payload})
+
+
+def test_handler_post_records_the_reply_each_handler_writes(tmp_path: Path) -> None:
+    cases = [
+        ("/v1/harness-versions/acknowledge", {"harness": "not-a-harness"}, 400, {"error": "invalid_harness"}),
+        (
+            "/v1/mcp-policy/requests/r-1/decision",
+            {"action": "maybe"},
+            400,
+            {"resolved": False, "error": "missing_required_fields"},
+        ),
+        ("/v1/supply-chain/workspace-assessments/cancel", {"run_id": ""}, 400, {"error": "invalid_run_id"}),
+        ("/v1/supply-chain/workspace-fix-proposals/../apply", {}, 400, {"error": "invalid_proposal_id"}),
+    ]
+    for path, payload, status, body in cases:
+        answer = _handler_post(tmp_path, path, payload)
+        assert answer["ok"] == {"status": status, "body": body, "no_store": False}, path
+
+
+def test_handler_post_keeps_the_no_store_header(tmp_path: Path) -> None:
+    answer = _handler_post(tmp_path, "/v1/context-assistance/codex-lean", {"enabled": "yes"})
+    assert answer["ok"]["status"] == 400  # type: ignore[index]
+    assert answer["ok"]["no_store"] is True  # type: ignore[index]
+
+
+def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
+    assert "error" in _handler_post(tmp_path, "/v1/settings", {})
+    assert _handler_post(tmp_path, "/v1/context-assistance/stop", [])["error"]["kind"] == "library_call"  # type: ignore[index]

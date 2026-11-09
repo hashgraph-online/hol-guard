@@ -17,15 +17,15 @@ from ..native_daemon_handler import native_events_cursor
 from ..runtime.network_status import build_network_status
 from ..store import GuardStore
 from .command_activity_health_repair import auto_repair_command_activity_health_if_degraded
-from .context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
-from .context_assistance_http import respond as respond_context_assistance
+from ..routes.context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
+from ..routes.context_assistance_http import respond as respond_context_assistance
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
 from .local_cli_http import handle_local_cli_list
 from .plugin_updates_http import handle_plugin_updates_read
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
-from .workspace_assessment_api import handle_workspace_assessment_get
+from ..routes.workspace_assessment_api import handle_workspace_assessment_get
 
 m = _ServerProxy()
 

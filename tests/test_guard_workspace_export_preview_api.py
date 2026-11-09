@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_workspace_export_preview as export_preview
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.workspace_assessment_api import handle_workspace_assessment_post
+from codex_plugin_scanner.guard.routes.workspace_assessment_api import handle_workspace_assessment_post
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.workspace_assessment_worker import admit_workspace
 from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request

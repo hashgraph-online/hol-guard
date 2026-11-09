@@ -380,6 +380,6 @@ class _ControlSyncRoutes:
         self._write_json(_settings_response_payload(guard_home, settings))
 
     def _handle_mcp_policy_decision(self, request_id: str, payload: dict[str, object]) -> None:
-        from .mcp_policy_decisions import handle_mcp_policy_decision
+        from ..routes.mcp_policy_decisions import handle_mcp_policy_decision
 
         handle_mcp_policy_decision(cast(Any, self), request_id, payload)

@@ -258,7 +258,7 @@
           "src/codex_plugin_scanner/guard/native_workspace_snapshot.py",
           "src/codex_plugin_scanner/guard/native_workspace_fix.py",
           "src/codex_plugin_scanner/guard/store_workspace_assessment_schema.py",
-          "src/codex_plugin_scanner/guard/daemon/workspace_assessment_api.py"
+          "src/codex_plugin_scanner/guard/routes/workspace_assessment_api.py"
         ]
       },
       {
@@ -289,7 +289,7 @@
           "src/codex_plugin_scanner/guard/daemon/extension_control_*.py",
           "src/codex_plugin_scanner/guard/daemon/local_cli_profiles_api.py",
           "src/codex_plugin_scanner/guard/daemon/mcp_discovery_jobs.py",
-          "src/codex_plugin_scanner/guard/daemon/mcp_policy_decisions.py",
+          "src/codex_plugin_scanner/guard/routes/mcp_policy_decisions.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_v2_client.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py",
           "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py"
