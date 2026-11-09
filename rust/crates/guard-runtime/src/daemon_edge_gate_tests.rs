@@ -47,17 +47,33 @@ fn refusal(status: u16, error: &str, message: &str) -> Gate {
 
 #[test]
 fn reads_the_resident_answer_as_the_daemon_client_does() {
-    let read = |envelope: Value| answer(&envelope, REQUEST_ID, DIGEST, true);
+    let read = |envelope: Value| answer(&envelope, REQUEST_ID, DIGEST, true, true);
     assert_eq!(
         read(result("ok", json!({"payload": {"grant": null}}))),
-        Some(Gate::Passed)
+        Some(Gate::Passed(None))
     );
+    let grant = json!({
+        "grant_id": "g", "purpose": "settings_write", "issued_at": "2026-01-01T00:00:00Z",
+        "expires_at": "2026-01-01T00:05:00Z", "action": "", "scope": "", "subject": "",
+        "session_nonce": "", "factor_set": ["password"], "strict": false,
+        "used_cooldown": false, "password_verified": true, "totp_verified": false,
+    });
     assert_eq!(
-        read(result(
-            "ok",
-            json!({"payload": {"grant": {"grant_id": "g"}}})
-        )),
-        Some(Gate::Passed)
+        read(result("ok", json!({"payload": {"grant": grant.clone()}}))),
+        Some(Gate::Passed(Some(Box::new(
+            serde_json::from_value(grant).unwrap()
+        ))))
+    );
+    // A consumer check passes on any answer the resident accepted.
+    assert_eq!(
+        answer(
+            &result("ok", json!({"payload": {"ok": true}})),
+            REQUEST_ID,
+            DIGEST,
+            true,
+            false
+        ),
+        Some(Gate::Passed(None))
     );
     assert_eq!(
         read(result(
@@ -78,6 +94,7 @@ fn reads_the_resident_answer_as_the_daemon_client_does() {
     for envelope in [
         result("ok", json!({"payload": {}})),
         result("ok", json!({"payload": {"grant": "g"}})),
+        result("ok", json!({"payload": {"grant": {"grant_id": "g"}}})),
         result("ok", json!({})),
         result("denied", json!({"payload": {"grant": null}})),
         result("error", json!({"code": 1})),
@@ -102,10 +119,10 @@ fn reads_the_resident_answer_as_the_daemon_client_does() {
 fn an_unprovisioned_resident_passes_only_an_unset_gate() {
     let envelope = json!({"error": "native_policy_verifier_key_missing", "retryable": false});
     assert_eq!(
-        answer(&envelope, REQUEST_ID, DIGEST, false),
-        Some(Gate::Passed)
+        answer(&envelope, REQUEST_ID, DIGEST, false, true),
+        Some(Gate::Passed(None))
     );
-    assert_eq!(answer(&envelope, REQUEST_ID, DIGEST, true), None);
+    assert_eq!(answer(&envelope, REQUEST_ID, DIGEST, true, true), None);
 }
 
 #[test]

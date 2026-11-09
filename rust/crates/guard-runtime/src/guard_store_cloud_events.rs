@@ -54,6 +54,36 @@ pub(crate) fn add_event(connection: &rusqlite::Connection, args: &Args<'_>) -> S
     Ok(Value::Null)
 }
 
+/// `list_events_after`: the local event log past `event_id`, oldest first.
+/// A stored payload that is not a mapping reads as an empty one, and one that
+/// is not JSON at all fails the read as `json.loads` does.
+pub(crate) fn list_after(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
+    let rows = query_all(
+        connection,
+        "select event_id, event_name, payload_json, occurred_at from guard_events \
+         where event_id > ? order by event_id asc limit ?",
+        &[
+            Value::from(args.int("event_id")?),
+            Value::from(args.int("limit")?),
+        ],
+    )?;
+    let mut items = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let payload = match serde_json::from_str::<Value>(text(row, "payload_json")) {
+            Ok(Value::Object(payload)) => payload,
+            Ok(_) => Map::new(),
+            Err(_) => return Err(PAYLOAD_INVALID),
+        };
+        items.push(json!({
+            "event_id": row.get("event_id").cloned().unwrap_or(Value::Null),
+            "event_name": text(row, "event_name"),
+            "occurred_at": text(row, "occurred_at"),
+            "payload": payload,
+        }));
+    }
+    Ok(Value::Array(items))
+}
+
 /// `add_guard_event_v1`: queue one event, or record that the queue is full.
 pub(crate) fn add(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
     let event = Value::Object(args.object("event")?.clone());

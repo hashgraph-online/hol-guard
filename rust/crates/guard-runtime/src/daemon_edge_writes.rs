@@ -31,6 +31,8 @@ const MAX_HANDLER_LIST_ITEMS: usize = 4_096;
 mod gate;
 #[path = "daemon_edge_sessions.rs"]
 mod sessions;
+#[path = "daemon_edge_settings_write.rs"]
+mod settings_write;
 
 pub(super) fn respond(
     request: &Request<'_>,
@@ -53,6 +55,32 @@ pub(super) fn respond(
         reads.report_activity();
         return sessions::respond(&route, &payload, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
+    }
+    if request.method == "POST"
+        && matches!(
+            request.path,
+            "/v1/settings" | "/v1/settings/import" | "/v1/settings/reset"
+        )
+    {
+        if request.has_header("Transfer-Encoding") {
+            return None;
+        }
+        let caller = authorize_token(request, &config.token)?;
+        let payload = json_payload(request, body)?;
+        let answer = if request.path == "/v1/settings/reset" {
+            reads.report_activity();
+            settings_write::reset(&payload, config, reads)
+        } else {
+            let entries = py_payload(request, body)?;
+            reads.report_activity();
+            let missing_error = if request.path == "/v1/settings/import" {
+                "invalid_settings_import"
+            } else {
+                "invalid_settings"
+            };
+            settings_write::apply(&entries, &payload, missing_error, config, reads)
+        };
+        return answer.map(|(status, body)| (status, body, caller.cors_origin, false));
     }
     let route = (request.method, request.path);
     if request.has_header("Transfer-Encoding")
@@ -128,7 +156,7 @@ fn requests_clear(
             refusal.insert("status".to_owned(), queue_status);
             Some((status, Value::Object(refusal)))
         }
-        gate::Gate::Passed => {
+        gate::Gate::Passed(_) => {
             // The gate has run, so a failed write closes the connection
             // rather than have the daemon check the gate again.
             let cleared = reads.store_call(

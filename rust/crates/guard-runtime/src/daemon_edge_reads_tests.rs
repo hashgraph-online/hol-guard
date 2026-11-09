@@ -385,7 +385,7 @@ fn relays_every_post_it_does_not_read_as_the_daemon_does() {
         post(body, "Transfer-Encoding: chunked\r\n"),
         post(body, "Origin: http://x\r\n"),
         post(r#"{"request_id":NaN}"#, ""),
-        post(body, "").replace("/v1/read-state", "/v1/settings"),
+        post(body, "").replace("/v1/read-state", "/v1/policy/clear"),
         format!("{}GET /v1/read-state HTTP/1.1\r\n\r\n", post(body, "")),
         post(body, "").replace(
             &format!("Content-Length: {}", body.len()),

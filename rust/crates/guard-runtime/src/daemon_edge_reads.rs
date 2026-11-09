@@ -67,6 +67,8 @@ struct Handshake {
     user_home: Option<String>,
     #[serde(default)]
     session_signals: Option<Vec<String>>,
+    #[serde(default)]
+    cwd: Option<String>,
 }
 
 pub(super) struct ReadConfig {
@@ -81,6 +83,9 @@ pub(super) struct ReadConfig {
     /// The daemon's local OS-session facts, which approval-gate checks bind a
     /// recent TOTP proof to. The edge runs in a session of its own.
     session_signals: Option<Vec<String>>,
+    /// `os.getcwd()` in the daemon. The edge runs from its own directory, and
+    /// store reads resolve a relative config path from the daemon's.
+    daemon_cwd: Option<String>,
 }
 
 impl ReadConfig {
@@ -116,6 +121,7 @@ impl ReadConfig {
             dashboard_build,
             user_home: handshake.user_home,
             session_signals,
+            daemon_cwd: handshake.cwd.filter(|cwd| Path::new(cwd).is_absolute()),
         })
     }
 }
@@ -185,6 +191,16 @@ impl NativeReads {
         let _ = writer.write_all(b"a");
     }
 
+    /// Tells the daemon an edge write changed Guard's policy inputs, so it
+    /// republishes the native policy snapshot as its own writes do. Never
+    /// throttled: a lost notice would leave the snapshot stale.
+    fn report_policy_mutation(&self) {
+        if let Some(activity) = &self.activity {
+            let mut writer = activity;
+            let _ = writer.write_all(b"p");
+        }
+    }
+
     fn store_call(&self, config: &ReadConfig, method: &str, args: Value) -> Option<Value> {
         self.store_write(config, method, args).ok()
     }
@@ -234,7 +250,17 @@ pub(super) fn answer(
         return Outcome::Relay(Vec::new());
     };
     let (head, body) = bytes.split_at(head_len);
-    let answer = parse_request(head).and_then(|request| match request.method {
+    let request = parse_request(head);
+    if let Some(request) = request
+        .as_ref()
+        .filter(|request| request.method == "GET" && request.path == "/v1/evidence/export")
+    {
+        let Some(response) = export_response(request, config, reads) else {
+            return Outcome::Relay(bytes);
+        };
+        return write_answer(client, &response, reads, stalled_write);
+    }
+    let answer = request.and_then(|request| match request.method {
         "POST" | "DELETE" => writes::respond(&request, body, config, reads),
         _ => respond(&request, config, reads),
     });
@@ -251,12 +277,55 @@ pub(super) fn answer(
         cors_origin.as_deref(),
         no_store,
     );
+    write_answer(client, &response, reads, stalled_write)
+}
+
+fn write_answer(
+    client: &TcpStream,
+    response: &[u8],
+    reads: &NativeReads,
+    stalled_write: Duration,
+) -> Outcome {
     let mut writer = client;
     let _ = client.set_write_timeout(Some(stalled_write));
-    let _ = writer.write_all(&response);
+    let _ = writer.write_all(response);
     let _ = client.shutdown(Shutdown::Both);
     reads.report_activity();
     Outcome::Answered
+}
+
+/// `GET /v1/evidence/export` as the daemon writes it: the export body with
+/// only its content type, or the daemon's JSON error.
+fn export_response(
+    request: &Request<'_>,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    if request.has_header("Content-Length") || request.has_header("Transfer-Encoding") {
+        return None;
+    }
+    let caller = authorize(request, &config.token)?;
+    reads.report_activity();
+    Some(
+        match evidence::export::export(request.query, config, reads)? {
+            evidence::export::Export::Error(status, body) => json_response(
+                status,
+                &body,
+                config.dashboard_build.as_deref(),
+                caller.cors_origin.as_deref(),
+                false,
+            ),
+            evidence::export::Export::Body(content_type, body) => {
+                let mut bytes = format!(
+                    "HTTP/1.0 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+                .into_bytes();
+                bytes.extend_from_slice(body.as_bytes());
+                bytes
+            }
+        },
+    )
 }
 
 fn respond(
@@ -286,6 +355,10 @@ fn respond(
     }
     if let Some(request_id) = single_segment(request.path, "/v1/requests/", "/resume") {
         return requests::resume(request_id, config, reads)
+            .map(|(status, body)| (status, body, caller.cors_origin, false));
+    }
+    if let Some(request_id) = single_segment(request.path, "/v1/requests/", "") {
+        return requests::detail(request_id, request.query, hosted, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
     route(request.path, request.query, config, reads)
@@ -322,13 +395,34 @@ fn route(
             let receipt = reads.store_call(
                 config,
                 "get_latest_receipt",
-                json!({"harness": harness, "artifact_id": artifact_id}),
+                json!({
+                    "harness": harness,
+                    "artifact_id": artifact_id,
+                }),
             )?;
             Some(if receipt.is_null() {
                 not_found()
             } else {
                 (200, receipt)
             })
+        }
+        "/v1/inventory" => inventory::list(config, reads),
+        "/v1/policy/cloud-exceptions" => {
+            let harness = query_value(query, "harness").ok()?;
+            let items =
+                reads.store_call(config, "list_cloud_exceptions", json!({"harness": harness}))?;
+            items.is_array().then(|| (200, json!({"items": items})))
+        }
+        "/v1/events" => {
+            let (_, _, _, fields) =
+                crate::daemon_handler_requests::events_cursor(query).into_parts();
+            let cursor = fields.get("cursor").and_then(Value::as_i64)?;
+            let items = reads.store_call(
+                config,
+                "list_events_after",
+                json!({"event_id": cursor, "limit": 200}),
+            )?;
+            items.is_array().then(|| (200, json!({"items": items})))
         }
         "/v1/read-state" => read_state(config, reads).map(|ids| (200, json!({"ids": ids}))),
         "/v1/evidence" => evidence::list(query, config, reads),
@@ -343,6 +437,8 @@ fn route(
             }),
         )),
         "/v1/receipts/analytics" => records::receipt_analytics(query, config, reads),
+        "/v1/settings" => settings::settings(config),
+        "/v1/settings/export" => settings::export(config),
         _ => {
             if let Some(session_id) = single_segment(path, "/v1/sessions/", "/resume") {
                 return records::session_resume(session_id, config, reads);
@@ -370,7 +466,10 @@ fn route(
             let diff = reads.store_call(
                 config,
                 "artifact_latest_diff",
-                json!({"harness": harness, "artifact_id": artifact_id}),
+                json!({
+                    "harness": harness,
+                    "artifact_id": crate::claude_hook_bridge_url::py_unquote(artifact_id),
+                }),
             )?;
             Some(if diff.is_object() {
                 (200, diff)
@@ -434,7 +533,12 @@ pub(super) fn json_response(
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        409 => "Conflict",
         410 => "Gone",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
         _ => "Not Found",
     };
     let mut response = format!(
@@ -464,11 +568,17 @@ mod evidence;
 #[path = "daemon_edge_records.rs"]
 mod records;
 
+#[path = "daemon_edge_inventory.rs"]
+mod inventory;
+
 #[path = "daemon_edge_activity.rs"]
 mod activity;
 
 #[path = "daemon_edge_requests.rs"]
 mod requests;
+
+#[path = "daemon_edge_settings.rs"]
+mod settings;
 
 #[path = "daemon_edge_writes.rs"]
 mod writes;

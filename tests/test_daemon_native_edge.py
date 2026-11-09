@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -189,6 +190,7 @@ def test_handshake_names_the_store_and_clamps_the_busy_timeout(tmp_path: Path) -
         "store_path": str(tmp_path / "guard.db"),
         "source": "default",
         "busy_timeout_ms": 60_000,
+        "cwd": os.getcwd(),
     }
     assert (
         json.loads(
@@ -228,7 +230,7 @@ def test_edge_activity_reaches_the_daemon_after_the_handshake() -> None:
     daemon_end, edge_end = socket.socketpair()
     touched = threading.Event()
     try:
-        native_edge._offer_handshake(daemon_end, lambda: b"hello\n", touched.set)
+        native_edge._offer_handshake(daemon_end, lambda: b"hello\n", lambda _kinds: touched.set())
         edge_end.settimeout(10)
         assert edge_end.recv(16) == b"hello\n"
         edge_end.sendall(b"a")
@@ -246,7 +248,7 @@ def test_edge_gets_no_handshake_when_activity_cannot_be_read(monkeypatch: pytest
 
     monkeypatch.setattr(threading.Thread, "start", no_thread)
     try:
-        native_edge._offer_handshake(daemon_end, lambda: b"hello\n", lambda: None)
+        native_edge._offer_handshake(daemon_end, lambda: b"hello\n", lambda _kinds: None)
         daemon_end.close()
         edge_end.settimeout(10)
         assert edge_end.recv(16) == b""
@@ -318,6 +320,33 @@ def test_edge_callbacks_read_the_server_store_and_touch_its_heartbeat(tmp_path: 
     assert payload["source"] == "default"
     assert "dashboard_build" not in payload
     assert payload["user_home"] == str(Path.home())
+    assert payload["cwd"] == os.getcwd()
     on_activity()
     assert server.last_activity_monotonic > 0
     assert len(touched) == 1
+
+
+def test_an_edge_policy_notice_republishes_the_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    notified: list[Path] = []
+    monkeypatch.setattr(native_edge_handshake, "notify_native_policy_mutation", notified.append)
+
+    class _Store:
+        guard_home = tmp_path
+        path = tmp_path / "guard.db"
+        guard_source = "default"
+
+    class _Heartbeat:
+        def touch(self, now: str) -> None:
+            return None
+
+    class _Server:
+        store = _Store()
+        auth_token = "token"
+        runtime_heartbeat = _Heartbeat()
+        last_activity_monotonic = 0.0
+
+    _, on_activity = native_edge_handshake.daemon_edge_callbacks(_Server(), tmp_path / "static")
+    on_activity(b"aa")
+    assert notified == []
+    on_activity(b"ap")
+    assert notified == [tmp_path]
