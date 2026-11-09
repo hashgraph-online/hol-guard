@@ -1,11 +1,18 @@
 import {
   PULSE_FACE_SCAN_OPTIONS,
   PULSE_POLL_PATH,
+  dropFinishedPulseToast,
+  nextPulseToasts,
   pulseEnrollmentBody,
   pulseSetupRefusalMessage,
   sendWithPulseApproval,
   waitForPulseApproval,
+  type PulseApprovalDetail,
 } from "./pulse-approval";
+import { approvalProofCooldownOptionShown, approvalProofModalTitle } from "./approval-center-review-cards";
+import { withLocalProtectionDeadline } from "./guard-api";
+import { pulseSetupCanClose } from "./pulse-setup-modal";
+import { bulkPulsePrompt } from "./queue-bulk-approval-credentials";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
@@ -192,6 +199,111 @@ function setupRefusalsUsePlainWords(): void {
   assert(pulseSetupRefusalMessage("approval_gate_required", "medium") === null, "PULSE-8: other refusals keep their message");
 }
 
+
+// Review of #7490.
+
+async function aStalledCheckCannotHoldTheWaitOpen(): Promise<void> {
+  const never = () => new Promise<Response>(() => undefined);
+  const started = Date.now();
+  const outcome = await waitForPulseApproval(
+    never,
+    { requestId: "azr_1", matchCode: "ABC123", decideBy: null },
+    null,
+    { deadlineMs: 120, intervalMs: 0, pollTimeoutMs: 30 },
+  );
+  assert(outcome === "error", "PULSE-9: a check that never answers ends as unreachable, not pending");
+  assert(Date.now() - started < 1000, "PULSE-9: the wait ends at its window");
+  const controller = new AbortController();
+  const waiting = waitForPulseApproval(
+    never,
+    { requestId: "azr_1", matchCode: null, decideBy: null },
+    controller.signal,
+    { deadlineMs: 60_000, intervalMs: 0, pollTimeoutMs: 60_000 },
+  );
+  setTimeout(() => controller.abort(), 20);
+  assert((await waiting) === "cancelled", "PULSE-9: cancelling ends a stalled check at once");
+}
+
+async function aShortDeadlineStopsOnceThePulseRequestExists(): Promise<void> {
+  const daemon = pulseDaemon(["approved"]);
+  let pendingCalls = 0;
+  const response = await sendWithPulseApproval(daemon.send, "/v1/requests/r1/decision", decision, {
+    ...fast,
+    onPending: () => {
+      pendingCalls += 1;
+    },
+  });
+  assert(response.status === 200 && pendingCalls === 1, "PULSE-10: the caller hears once that the Pulse wait started");
+  let ungated = 0;
+  await sendWithPulseApproval(async () => json(200, { ok: true }), "/v1/settings", decision, {
+    onPending: () => {
+      ungated += 1;
+    },
+  });
+  assert(ungated === 0, "PULSE-10: an ungated request never stops the caller's deadline");
+  const slowApproval = await withLocalProtectionDeadline(async (_signal, stopDeadline) => {
+    stopDeadline();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    return "approved";
+  }, 20, "too slow");
+  assert(slowApproval === "approved", "PULSE-10: a stopped deadline lets a slow face scan finish");
+  let refused = false;
+  try {
+    await withLocalProtectionDeadline(() => new Promise(() => undefined), 20, "too slow");
+  } catch {
+    refused = true;
+  }
+  assert(refused, "PULSE-10: without a Pulse wait the deadline still applies");
+}
+
+function eachApprovalKeepsItsOwnMatchCode(): void {
+  const first: PulseApprovalDetail = { requestId: "a", matchCode: "AAA111", decideBy: null, status: "pending" };
+  const second: PulseApprovalDetail = { requestId: "b", matchCode: "BBB222", decideBy: null, status: "pending" };
+  let toasts = nextPulseToasts(nextPulseToasts([], first), second);
+  toasts = nextPulseToasts(toasts, { ...first, status: "approved" });
+  const waiting = toasts.find((entry) => entry.requestId === "b");
+  assert(toasts.length === 2 && waiting?.status === "pending" && waiting.matchCode === "BBB222",
+    "PULSE-11: a finished approval does not hide another one's match code");
+  toasts = dropFinishedPulseToast(toasts, "a");
+  assert(toasts.length === 1 && toasts[0].requestId === "b", "PULSE-11: only the finished entry is removed");
+  assert(dropFinishedPulseToast(toasts, "b").length === 1, "PULSE-11: a waiting entry is never removed");
+}
+
+function setupCannotCloseWhileFinishing(): void {
+  assert(pulseSetupCanClose("confirm") && pulseSetupCanClose("connect") && pulseSetupCanClose("approve"),
+    "PULSE-12: setup can close before Guard finishes it");
+  assert(!pulseSetupCanClose("verifying"), "PULSE-12: setup cannot close while Guard turns Pulse on");
+  assert(!pulseSetupCanClose("recovery"), "PULSE-12: setup cannot close while the recovery code is shown");
+}
+
+function theBulkPromptCountsWhatThePhoneShows(): void {
+  assert(bulkPulsePrompt(1) === "Approve this request in your YID app.", "PULSE-13: one request");
+  assert(bulkPulsePrompt(3) === "Approve these 3 requests in your YID app.",
+    "PULSE-13: the count is the number of requests sent to the phone");
+}
+
+function pulseModeNeverAsksForAPasswordOrCode(): void {
+  assert(approvalProofModalTitle(false, false, false, true) === "Approve in the YID app",
+    "PULSE-14: the approval window names the YID app in Pulse mode");
+  assert(approvalProofModalTitle(false, false, false) === "Authenticator code required",
+    "PULSE-14: the authenticator title is unchanged");
+  const gate: GuardApprovalGatePublicConfig = {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 300,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+    totp_enabled: false,
+    pulse_enabled: true,
+  };
+  assert(!approvalProofCooldownOptionShown(gate), "PULSE-14: no password-cooldown checkbox in Pulse mode");
+  assert(approvalProofCooldownOptionShown({ ...gate, pulse_enabled: false }),
+    "PULSE-14: the password gate keeps its checkbox");
+}
+
 await approvedRequestIsResubmittedWithTheSameBody();
 await resubmissionDropsThePasswordAndCode();
 await rejectionAndExpiryFailClosed();
@@ -203,4 +315,10 @@ await pollingStopsOnTheDeadline();
 proofFieldsAskForNothingLocal();
 setupSendsTheChosenFaceScan();
 setupRefusalsUsePlainWords();
+await aStalledCheckCannotHoldTheWaitOpen();
+await aShortDeadlineStopsOnceThePulseRequestExists();
+eachApprovalKeepsItsOwnMatchCode();
+setupCannotCloseWhileFinishing();
+theBulkPromptCountsWhatThePhoneShows();
+pulseModeNeverAsksForAPasswordOrCode();
 console.log("pulse-approval tests passed");

@@ -23,6 +23,16 @@ const ENROLLMENT_OUTCOME_MESSAGES = {
 
 type SetupStep = "confirm" | "connect" | "approve" | "verifying" | "recovery";
 
+/**
+ * Whether the setup window may close. Not while Guard is finishing setup
+ * ("verifying"): Pulse turns on when that call returns, with a recovery code
+ * shown only once, so closing then would lose the code. Not while the code is
+ * shown either: only "I saved it" closes the window then.
+ */
+export function pulseSetupCanClose(step: SetupStep): boolean {
+  return step !== "verifying" && step !== "recovery";
+}
+
 const STEP_TEXT: Record<SetupStep, { label: string; title: string; description: string }> = {
   confirm: {
     label: "Step 1 of 3",
@@ -164,9 +174,8 @@ export function PulseSetupModal(props: {
   const confirmReady = password.trim().length > 0 && (!props.totpEnabled || totpCode.trim().length > 0);
   const connectReady = agentKey.trim().length > 0;
 
-  // The recovery code is shown once: only "I saved it" closes the window then.
   const closeUnlessShowingCode = () => {
-    if (step !== "recovery") props.onClose();
+    if (pulseSetupCanClose(step)) props.onClose();
   };
 
   return (
@@ -186,7 +195,7 @@ export function PulseSetupModal(props: {
           <button
             type="button"
             onClick={closeUnlessShowingCode}
-            hidden={step === "recovery"}
+            hidden={!pulseSetupCanClose(step)}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-dark"
             aria-label="Close Pulse setup"
           >

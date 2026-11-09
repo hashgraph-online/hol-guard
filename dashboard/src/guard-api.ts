@@ -105,6 +105,7 @@ import {
   pulseSetupRefusalMessage,
   sendWithPulseApproval,
   type PulseMinTier,
+  type PulseWaitTiming,
 } from "./pulse-approval";
 
 const GUARD_TOKEN_PARAM = "guard-token";
@@ -235,22 +236,31 @@ export class GuardOperationTimeoutError extends Error {
   }
 }
 
-function withLocalProtectionDeadline<T>(
-  operation: (signal: AbortSignal) => Promise<T>,
+/**
+ * Run `operation` under a deadline. The operation can stop the deadline
+ * (`stopDeadline`) once it is waiting on the user rather than on Guard: a Pulse
+ * approval has its own 16-minute window and fails closed.
+ */
+export function withLocalProtectionDeadline<T>(
+  operation: (signal: AbortSignal, stopDeadline: () => void) => Promise<T>,
   timeoutMs: number,
   message: string,
 ): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const stopDeadline = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       reject(new GuardOperationTimeoutError(message));
       controller.abort();
     }, timeoutMs);
   });
-  return Promise.race([Promise.resolve().then(() => operation(controller.signal)), deadline]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  });
+  return Promise.race([Promise.resolve().then(() => operation(controller.signal, stopDeadline)), deadline]).finally(
+    stopDeadline,
+  );
 }
 
 function fetchLocalProtectionJson(
@@ -259,8 +269,8 @@ function fetchLocalProtectionJson(
   timeoutMs: number,
   message: string,
 ): Promise<{ response: Response; payload: unknown }> {
-  return withLocalProtectionDeadline(async (signal) => {
-    const response = await fetchGuardApi(input, { ...init, signal });
+  return withLocalProtectionDeadline(async (signal, stopDeadline) => {
+    const response = await fetchWithGuardAuth(input, { ...init, signal }, { onPending: stopDeadline });
     const payload = (await response.json().catch(() => null)) as unknown;
     return { response, payload };
   }, timeoutMs, message);
@@ -1032,9 +1042,13 @@ function withGuardAuthForToken(
   };
 }
 
-export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function fetchWithGuardAuth(
+  input: RequestInfo,
+  init?: RequestInit,
+  pulse?: PulseWaitTiming,
+): Promise<Response> {
   // Every gated request goes through the Pulse flow when the gate asks for it.
-  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init);
+  return sendWithPulseApproval(fetchWithGuardAuthOnce, input, init, pulse);
 }
 
 async function fetchWithGuardAuthOnce(input: RequestInfo, init?: RequestInit): Promise<Response> {
@@ -4697,12 +4711,16 @@ export async function confirmApprovalGatePulseEnrollment(payload: {
   });
 }
 
-/** Return to the approval password. The Pulse layer asks the YID app first. */
-export async function disableApprovalGatePulse(): Promise<GuardSettingsPayload> {
+/**
+ * Return to the approval password. The Pulse layer asks the YID app first;
+ * aborting `signal` stops waiting for it.
+ */
+export async function disableApprovalGatePulse(signal?: AbortSignal): Promise<GuardSettingsPayload> {
   return readJson("/v1/approval-gate/pulse/disable", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
+    signal,
   });
 }
 

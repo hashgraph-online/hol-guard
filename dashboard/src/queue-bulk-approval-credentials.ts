@@ -12,6 +12,17 @@ export function bulkApproveUsesPulse(gate: GuardApprovalGatePublicConfig | null 
   return isBulkApproveGateReady(gate) && gate?.pulse_enabled === true;
 }
 
+/**
+ * The YID app line for a bulk approval. The batch sent to the phone holds one
+ * request per selected group (its first request), so the count here is the
+ * number of groups, the same count the YID app shows.
+ */
+export function bulkPulsePrompt(selectedGroupCount: number): string {
+  return selectedGroupCount === 1
+    ? "Approve this request in your YID app."
+    : `Approve these ${selectedGroupCount} requests in your YID app.`;
+}
+
 /** An open cooldown window already proves the password for non-strict approvals. */
 export function bulkApproveCooldownOpen(gate: GuardApprovalGatePublicConfig | null | undefined): boolean {
   return (

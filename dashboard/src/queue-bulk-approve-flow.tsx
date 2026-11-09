@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { bulkApproveConsequenceCopyForSelection } from "./approval-retry-guidance";
 import { BulkDrawerShell } from "./queue-bulk-drawer-shell";
 import { toneRing, toneChip, toneIcon } from "./queue-bulk-risk-presentation";
-import { bulkApproveCooldownOpen, bulkApproveUsesPulse, isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
+import {
+  bulkApproveCooldownOpen,
+  bulkApproveUsesPulse,
+  bulkPulsePrompt,
+  isBulkApproveGateReady,
+} from "./queue-bulk-approval-credentials";
 import {
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
@@ -461,9 +466,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
             )}
             {bulkApproveUsesPulse(props.approvalGate) && (
               <p className="text-sm text-brand-dark/80">
-                {props.selectedActionCount === 1
-                  ? "Approve this action in your YID app."
-                  : `Approve these ${props.selectedActionCount} actions in your YID app.`}
+                {bulkPulsePrompt(props.selectedGroups.length)}
               </p>
             )}
             {props.approvalGate?.totp_enabled !== true &&

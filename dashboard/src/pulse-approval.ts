@@ -18,8 +18,22 @@ export const PULSE_POLL_PATH = "/v1/approval-gate/pulse/poll";
 // The 15-minute decision window plus the 60 s consent grace the resident adds.
 const PULSE_DEADLINE_MS = 960_000;
 const PULSE_POLL_INTERVAL_MS = 10_000;
+// One check is one bounded resident call (at most 8 s); a check that has not
+// answered by then is treated like an unreachable Pulse and tried again.
+const PULSE_POLL_TIMEOUT_MS = 20_000;
 
-export type PulseWaitTiming = { deadlineMs?: number; intervalMs?: number };
+export type PulseWaitTiming = {
+  deadlineMs?: number;
+  intervalMs?: number;
+  /** Longest one check may take before it counts as unreachable. */
+  pollTimeoutMs?: number;
+  /**
+   * Called once the daemon has created the Pulse request, before the wait
+   * starts. A caller with its own short deadline stops counting it here: the
+   * wait has its own 16-minute window and fails closed.
+   */
+  onPending?: () => void;
+};
 
 export type PulseApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "error" | "cancelled";
 
@@ -88,18 +102,52 @@ function pause(ms: number, signal?: AbortSignal | null): Promise<void> {
   });
 }
 
-/** One check of the request: an answer, "retry" when Pulse could not be reached, or a final error. */
+/**
+ * One check of the request: an answer, "retry" when Pulse could not be reached
+ * or the check did not answer within `timeoutMs`, or a final error.
+ */
 async function checkOnce(
   send: Send,
   requestId: string,
-  signal?: AbortSignal | null,
+  signal: AbortSignal | null | undefined,
+  timeoutMs: number,
+): Promise<PulseApprovalStatus | "retry"> {
+  const check = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stop = () => check.abort();
+  // Ends the check on the timeout, or at once when the caller cancels, even if
+  // the request itself never settles.
+  const cutOff = new Promise<"retry" | "cancelled">((resolve) => {
+    timer = setTimeout(() => {
+      check.abort();
+      resolve("retry");
+    }, timeoutMs);
+    stop = () => {
+      check.abort();
+      resolve("cancelled");
+    };
+  });
+  signal?.addEventListener("abort", stop, { once: true });
+  try {
+    return await Promise.race([checkResponse(send, requestId, check.signal, signal), cutOff]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", stop);
+  }
+}
+
+async function checkResponse(
+  send: Send,
+  requestId: string,
+  checkSignal: AbortSignal,
+  signal: AbortSignal | null | undefined,
 ): Promise<PulseApprovalStatus | "retry"> {
   try {
     const response = await send(PULSE_POLL_PATH, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ request_id: requestId }),
-      signal: signal ?? undefined,
+      signal: checkSignal,
     });
     const payload = await peekJson(response);
     if (response.ok) {
@@ -126,13 +174,16 @@ export async function waitForPulseApproval(
   signal?: AbortSignal | null,
   timing: PulseWaitTiming = {},
 ): Promise<Exclude<PulseApprovalStatus, "pending">> {
-  const { deadlineMs = PULSE_DEADLINE_MS, intervalMs = PULSE_POLL_INTERVAL_MS } = timing;
+  const { deadlineMs = PULSE_DEADLINE_MS, intervalMs = PULSE_POLL_INTERVAL_MS, pollTimeoutMs = PULSE_POLL_TIMEOUT_MS } =
+    timing;
   announce({ ...detail, status: "pending" });
   const deadline = Date.now() + deadlineMs;
   let unreachable = false;
   for (let remaining = deadlineMs; remaining > 0; remaining = deadline - Date.now()) {
     await pause(Math.min(intervalMs, remaining), signal);
-    const status = signal?.aborted ? "cancelled" : await checkOnce(send, detail.requestId, signal);
+    // A check never runs past the window, so a stalled one cannot hold the wait open.
+    const checkMs = Math.max(1, Math.min(pollTimeoutMs, deadline - Date.now()));
+    const status = signal?.aborted ? "cancelled" : await checkOnce(send, detail.requestId, signal, checkMs);
     unreachable = status === "retry";
     if (status !== "pending" && status !== "retry") {
       announce({ ...detail, status });
@@ -169,6 +220,7 @@ export async function sendWithPulseApproval(
   if (pending?.error !== "approval_gate_pulse_pending" || typeof requestId !== "string" || requestId === "") {
     return response;
   }
+  timing?.onPending?.();
   const outcome = await waitForPulseApproval(
     send,
     {
@@ -219,4 +271,26 @@ export function pulseSetupRefusalMessage(code: unknown, minTier: PulseMinTier): 
     return "Choose Standard or Strict face scan, then try again.";
   }
   return null;
+}
+
+/**
+ * The approvals the toast shows, one per Pulse request. An event replaces only
+ * its own request's entry, so a finished approval never hides the match code
+ * of another one that is still waiting.
+ */
+export function nextPulseToasts(
+  current: readonly PulseApprovalDetail[],
+  detail: PulseApprovalDetail,
+): PulseApprovalDetail[] {
+  return current.some((entry) => entry.requestId === detail.requestId)
+    ? current.map((entry) => (entry.requestId === detail.requestId ? detail : entry))
+    : [...current, detail];
+}
+
+/** Drop a finished request's toast; a request that is waiting again stays. */
+export function dropFinishedPulseToast(
+  current: readonly PulseApprovalDetail[],
+  requestId: string,
+): PulseApprovalDetail[] {
+  return current.filter((entry) => entry.requestId !== requestId || entry.status === "pending");
 }

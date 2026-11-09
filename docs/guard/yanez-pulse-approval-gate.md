@@ -246,7 +246,7 @@ Python and dashboard grant decoders keep working.
 | `cargo test -p hol-guard-runtime --lib approval_gate` (Pulse acceptance, review cases, minimum face scan, settings-change bindings, summary, and all existing gate parity vectors) | 137 | pass |
 | `pytest tests/test_guard_approval_gate_pulse.py` (CLI/dashboard parity, defer, wait, cooldown, fixed scopes, secret handling, settings saves, minimum face scan, settings-change bindings, extension changes) | 32 | pass |
 | The Python approval-gate, Pulse, native parity, daemon-route, bridge, cooldown prompt, nudge and settings API suites together | 237 | pass |
-| `tsx src/pulse-approval.test.ts` (resubmission, reject, expire, outage, pass-through, deadline, proof fields, face scan choice, setup refusals) | 11 cases | pass |
+| `tsx src/pulse-approval.test.ts` (resubmission, reject, expire, outage, pass-through, deadline, a stalled check, proof fields, face scan choice, setup refusals, short request deadlines, overlapping approvals, closing setup, bulk count, Pulse-mode wording) | 17 cases | pass |
 | Existing dashboard tests: approval-gate, guard-api, queue-bulk-approve, settings-workspace, settings-save-proof-modal, approval-retry-ux | | pass |
 
 Acceptance cases covered in Rust: accept; reject; expiry; pending is not

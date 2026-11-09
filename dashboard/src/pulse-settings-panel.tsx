@@ -1,4 +1,4 @@
-import { useCallback, useId, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
 import { disableApprovalGatePulse, recoverApprovalGatePulse } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardSettingsPayload } from "./guard-types";
@@ -29,6 +29,10 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
   const [recoveryCode, setRecoveryCode] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancelDisable = useRef<AbortController | null>(null);
+
+  // Leaving the page stops waiting for the YID app.
+  useEffect(() => () => cancelDisable.current?.abort(), []);
 
   const reset = useCallback(() => {
     setStep("closed");
@@ -50,8 +54,14 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
   }, []);
 
   const handleDisable = useCallback(() => run(async () => {
-    onSettingsPayload(await disableApprovalGatePulse());
-    reset();
+    const controller = new AbortController();
+    cancelDisable.current = controller;
+    try {
+      onSettingsPayload(await disableApprovalGatePulse(controller.signal));
+      reset();
+    } finally {
+      cancelDisable.current = null;
+    }
   }), [onSettingsPayload, reset, run]);
 
   const handleRecover = useCallback(() => run(async () => {
@@ -104,9 +114,11 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
               <ActionButton variant="outline" disabled={pending} onClick={handleDisable}>
                 {pending ? "Waiting for the YID app…" : "Turn off Pulse"}
               </ActionButton>
-              <ActionButton variant="outline" disabled={pending} onClick={() => setStep("recover")}>
-                Lost the YID app?
-              </ActionButton>
+              {pending ? (
+                <ActionButton variant="outline" onClick={() => cancelDisable.current?.abort()}>Cancel</ActionButton>
+              ) : (
+                <ActionButton variant="outline" onClick={() => setStep("recover")}>Lost the YID app?</ActionButton>
+              )}
             </div>
           </>
         ) : !pulseEnabled ? (
