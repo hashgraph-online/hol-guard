@@ -104,6 +104,7 @@ def test_dev_mcp_sensitive_tools_require_review() -> None:
         "desktop_close_app",
         "desktop_focus_window",
         "desktop_clipboard",
+        "desktop_screenshot",
         "delete_path",
         "delete_recursive",
         "reset_project_brain",

@@ -82,7 +82,7 @@
     },
     {
       "name": "desktop_screenshot",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "desktop_status",
