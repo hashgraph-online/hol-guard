@@ -88,6 +88,7 @@ from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
+from ..routes.context_assistance_versions_http import request_body_limit as context_request_body_limit
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_policy_revision import cloud_policy_store_key, register_cloud_policy_wake
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
@@ -137,7 +138,6 @@ from .command_queue_worker import (
     start_command_queue_worker,
     stop_command_queue_worker,
 )
-from ..routes.context_assistance_versions_http import request_body_limit as context_request_body_limit
 from .dashboard_bundle import DASHBOARD_BUILD_HEADER, dashboard_build_id, pin_dashboard_bundle
 from .diagnostics import DaemonDiagnostics
 from .discovery import (

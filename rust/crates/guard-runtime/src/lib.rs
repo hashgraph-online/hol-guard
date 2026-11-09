@@ -522,7 +522,6 @@ mod guard_store_connector_context;
 mod guard_store_continuity_write;
 mod guard_store_db;
 mod guard_store_devices;
-mod guard_store_sync_state;
 mod guard_store_evidence;
 mod guard_store_exact_cloud_apply;
 mod guard_store_exact_cloud_package;
@@ -614,6 +613,7 @@ mod guard_store_state_ops_vectors_tests;
 mod guard_store_storage_maintenance;
 #[cfg(test)]
 mod guard_store_storage_maintenance_vectors_tests;
+mod guard_store_sync_state;
 mod guard_store_temporary_mcp;
 mod guard_store_tool_call_evidence;
 #[cfg(test)]
