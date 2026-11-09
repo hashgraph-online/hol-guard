@@ -13,6 +13,21 @@ from scripts.ci.rust_test_archive_inputs import EXTERNAL_ROOTS, Inputs
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_only_runtime_partitions_have_cold_build_and_execution_headroom():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    job = workflow["jobs"]["native-workspace"]
+    assert job["timeout-minutes"] == (
+        "${{ (matrix.check == 'test-runtime-1' || matrix.check == 'test-runtime-2') && 30 || 15 }}"
+    )
+    assert job["strategy"]["matrix"]["check"] == [
+        "clippy",
+        "test-core",
+        "test-command",
+        "test-runtime-1",
+        "test-runtime-2",
+    ]
+
+
 def test_test_compilation_html_is_uploaded_only_for_non_clippy_archive_misses():
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     steps = workflow["jobs"]["native-workspace"]["steps"]
