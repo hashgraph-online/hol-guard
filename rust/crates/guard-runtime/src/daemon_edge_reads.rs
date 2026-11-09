@@ -429,6 +429,8 @@ fn route(
         "/v1/sessions" => records::sessions(config, reads),
         "/v1/command-activity" => activity::list(query, config, reads),
         "/v1/command-activity/analytics" => activity::analytics(query, config, reads),
+        "/v1/command-activity/diagnostics" => activity::extensions::diagnostics(config, reads),
+        "/v1/command-extensions" => activity::extensions::page(query, config),
         "/v1/connect/state" => Some((
             410,
             json!({

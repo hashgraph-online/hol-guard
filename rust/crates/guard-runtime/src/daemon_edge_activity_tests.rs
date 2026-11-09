@@ -50,12 +50,7 @@ fn rejects_list_queries_with_the_code_the_daemon_raises_first() {
 
 #[test]
 fn relays_list_queries_the_daemon_reads_its_own_way() {
-    for query in [
-        "limit=%zz",
-        "limit=+5",
-        "limit=%C3%A9",
-        "occurred_through=9999-12-31",
-    ] {
+    for query in ["limit=%zz", "limit=%C3%A9", "occurred_through=9999-12-31"] {
         assert!(list_query(query, TOKEN).is_none(), "{query}");
     }
 }
@@ -197,5 +192,25 @@ fn only_numbers_python_prints_the_same_way_are_answered() {
     assert!(prints_alike(&json!({"a": [1, 0.5, 0.0, -2.25, 12345.678]})));
     for value in [json!(1e16), json!(0.00001), json!([1.5e20])] {
         assert!(!prints_alike(&value), "{value}");
+    }
+}
+
+#[test]
+fn reads_integers_as_python_int_reads_them() {
+    for (text, expected) in [
+        ("5", Some(Ok(5))),
+        ("+5", Some(Ok(5))),
+        ("-0", Some(Ok(0))),
+        (" 1_0\t", Some(Ok(10))),
+        ("007", Some(Ok(7))),
+        ("x", Some(Err("invalid_integer"))),
+        ("1__0", Some(Err("invalid_integer"))),
+        ("_1", Some(Err("invalid_integer"))),
+        ("1.5", Some(Err("invalid_integer"))),
+        ("+", Some(Err("invalid_integer"))),
+        ("\u{0661}", None),
+        ("99999999999999999999", None),
+    ] {
+        assert_eq!(bounded_int(Some(text.to_owned()), 1), expected, "{text}");
     }
 }

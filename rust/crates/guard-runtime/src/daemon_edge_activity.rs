@@ -330,17 +330,47 @@ fn single_values(
     Some(Ok(values))
 }
 
-/// `_bounded_int`: plain decimal text only; any other spelling goes to the
-/// daemon, whose `int()` reads more forms than the edge reproduces.
+/// `_bounded_int`: `int(value)` for ASCII text — surrounding whitespace, a
+/// sign, and single underscores between digits — or the daemon's
+/// `invalid_integer`. Other text goes to the daemon, whose `int()` also reads
+/// non-ASCII digits.
 fn bounded_int(value: Option<String>, default: i64) -> Parsed<i64> {
     let Some(value) = value else {
         return Some(Ok(default));
     };
-    let digits = value.strip_prefix('-').unwrap_or(&value);
-    if digits.is_empty() || digits.len() > 18 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+    // `int()` also strips the separators U+001C..U+001F; leave those to it.
+    if !value.is_ascii() || value.bytes().any(|byte| (0x1c..=0x1f).contains(&byte)) {
         return None;
     }
-    Some(Ok(value.parse().ok()?))
+    let trimmed =
+        value.trim_matches(|c: char| c.is_ascii_whitespace() || c == '\x0b' || c == '\x0c');
+    let (negative, body) = match trimmed.as_bytes().first() {
+        Some(b'-') => (true, &trimmed[1..]),
+        Some(b'+') => (false, &trimmed[1..]),
+        _ => (false, trimmed),
+    };
+    let well_formed = !body.is_empty()
+        && !body.starts_with('_')
+        && !body.ends_with('_')
+        && !body.contains("__")
+        && body
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'_');
+    if !well_formed {
+        return Some(Err("invalid_integer"));
+    }
+    let digits: String = body.chars().filter(|c| *c != '_').collect();
+    let digits = digits.trim_start_matches('0');
+    if digits.len() > 18 {
+        // Larger than any page bound; the daemon reports it out of range.
+        return None;
+    }
+    let magnitude: i64 = if digits.is_empty() {
+        0
+    } else {
+        digits.parse().ok()?
+    };
+    Some(Ok(if negative { -magnitude } else { magnitude }))
 }
 
 /// `_optional_date`: the canonical `YYYY-MM-DD` spelling of a real date, as
@@ -443,6 +473,8 @@ fn midnight(days: i64) -> Option<String> {
 
 #[path = "daemon_edge_activity_cursor.rs"]
 mod cursor;
+#[path = "daemon_edge_activity_extensions.rs"]
+pub(super) mod extensions;
 
 #[cfg(test)]
 #[path = "daemon_edge_activity_tests.rs"]
