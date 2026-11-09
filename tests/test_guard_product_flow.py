@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_artifact_content_hash as content_hash_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -17,7 +18,6 @@ from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import detect_all
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 

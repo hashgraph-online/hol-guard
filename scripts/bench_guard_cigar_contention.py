@@ -85,7 +85,7 @@ def main() -> int:
     from scripts.cigar_benchmark_processes import ProcessSampler
     from scripts.native_slo_capacity import _measure_classified_wave
     from scripts.native_slo_contract import summarize
-    from scripts.native_slo_diagnostics import capture_inflight_failure, capture_transport_refusals
+    from scripts.native_slo_diagnostics import capture_inflight_failure
     from scripts.native_slo_session import AdapterSession
 
     status = native_runtime_status()
@@ -117,7 +117,6 @@ def main() -> int:
             session = AdapterSession(args.runtime, diagnostics_dir=root / "diagnostics")
             stack.callback(session.close)
             if args.transport_diagnostics:
-                capture_transport_refusals(session.daemon._server)
                 stack.push(partial(capture_inflight_failure, destination=root / "failure-live.json"))
             if args.mode != "baseline-off":
                 configure(args.runtime, session.guard_home, args.mode == "on")

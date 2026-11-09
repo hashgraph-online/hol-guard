@@ -668,7 +668,7 @@ def _start_installed_daemon(
     *, guard_home: Path, home: Path, workspace: Path, identity: Any, register_workspace_policy: bool = True
 ) -> Any:
     """Start the installed Guard daemon that the generated extension will use."""
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
 
     store: Any | None = None

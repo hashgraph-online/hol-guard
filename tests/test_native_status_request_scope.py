@@ -328,7 +328,7 @@ def test_daemon_hook_dispatch_enters_the_request_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A live ``POST /v1/hooks/<harness>`` runs its handler inside the scope."""
-    from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.daemon import server as server_module
     from codex_plugin_scanner.guard.store import GuardStore
 
@@ -373,7 +373,7 @@ def test_hook_dispatch_opens_the_scope_before_route_classification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Route facts for a hook POST already see the request scope; other POSTs do not."""
-    from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.daemon import server as server_module
     from codex_plugin_scanner.guard.native_daemon_route import NativeDaemonRouteError
     from codex_plugin_scanner.guard.store import GuardStore

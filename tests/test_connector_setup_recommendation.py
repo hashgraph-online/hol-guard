@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import approval_connector_recommendation as recommendation
 from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
     CONNECTOR_RECOMMENDATION_SCHEMA,

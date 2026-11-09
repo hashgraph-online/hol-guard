@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from scripts.daemon_hook_auth import _DaemonResponseError
 from scripts.daemon_hook_client import authenticated_claude_hook_response
 

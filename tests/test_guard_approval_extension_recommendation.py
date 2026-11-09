@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import approval_extension_recommendation as recommendation_module
 from codex_plugin_scanner.guard.daemon.approval_extension_recommendation import RECOMMENDATION_SCHEMA
 from codex_plugin_scanner.guard.models import GuardApprovalRequest

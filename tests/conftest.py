@@ -577,22 +577,11 @@ def _isolate_trust_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_daemon_background_refresh_workers(
+def _isolate_daemon_headless_queue(
     request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Start daemon refresh workers only in tests that exercise them."""
-    from codex_plugin_scanner.guard.daemon import server as daemon_server
-
-    worker_markers = {
-        "daemon_aibom_refresh": "_start_aibom_inventory_refresh",
-        "daemon_bundle_refresh": "_start_supply_chain_bundle_refresh",
-        "daemon_headless_refresh": "_start_headless_cloud_sync",
-        "daemon_plugin_telemetry": "_start_plugin_telemetry",
-    }
-    for marker, method_name in worker_markers.items():
-        if request.node.get_closest_marker(marker) is None:
-            monkeypatch.setattr(daemon_server.GuardDaemonServer, method_name, lambda _self: None)
+    """Queue headless Cloud sync only in tests that exercise it."""
     if request.node.get_closest_marker("daemon_headless_queue") is None:
         patch_daemon_global(
             monkeypatch,
@@ -601,13 +590,6 @@ def _isolate_daemon_background_refresh_workers(
                 "status": "not_configured",
                 "message": "Cloud sync is isolated for this test.",
             },
-        )
-    if request.node.get_closest_marker("daemon_service_workers") is None:
-        monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
-        monkeypatch.setattr(
-            daemon_server,
-            "start_cloud_sync_sync_worker",
-            lambda _store, existing, *, on_authority_changed=None: existing,
         )
 
 

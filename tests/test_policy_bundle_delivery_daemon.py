@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import policy_bundle_v2
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer, server_control_sync
+from codex_plugin_scanner.guard.daemon import server_control_sync
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
 )

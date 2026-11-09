@@ -15,7 +15,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.dashboard_reconnect import (
     DASHBOARD_RECONNECT_CHALLENGE_TTL_SECONDS,
     consume_dashboard_reconnect_challenge,

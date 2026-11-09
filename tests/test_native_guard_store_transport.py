@@ -228,7 +228,7 @@ def test_idle_watcher_does_not_stay_alive_on_an_unavailable_outbox(
 ) -> None:
     import time
 
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
 
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=1)

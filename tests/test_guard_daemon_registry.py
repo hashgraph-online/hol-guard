@@ -68,7 +68,7 @@ class TestHealthzEndpoint:
     """L306: public /healthz stays redacted; detailed health requires daemon auth."""
 
     def _start_server(self, tmp_path: Path) -> tuple[str, object]:
-        from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
         from codex_plugin_scanner.guard.store import GuardStore
 
         guard_home = tmp_path / "guard-home"

@@ -130,7 +130,7 @@ def test_configured_discovery_failure_reaches_the_daemon_log(tmp_path: Path, mon
 
 
 def test_the_daemon_wires_its_log_recorder_into_discovery(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
 
     daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
     daemon.start()

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TypedDict, cast
 from unittest.mock import patch
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
 

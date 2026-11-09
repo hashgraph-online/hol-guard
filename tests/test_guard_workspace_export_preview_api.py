@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_workspace_export_preview as export_preview
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.routes.workspace_assessment_api import handle_workspace_assessment_post
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.workspace_assessment_worker import admit_workspace

@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_catalog_read as transport
 from codex_plugin_scanner.guard.cli import extension_catalog_reads as reads
 from codex_plugin_scanner.guard.cli import extension_controls_commands
@@ -28,7 +29,6 @@ from codex_plugin_scanner.guard.daemon.catalog_v2_client import (
 )
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 

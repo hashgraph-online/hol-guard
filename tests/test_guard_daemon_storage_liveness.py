@@ -17,6 +17,7 @@ from typing import TypeGuard, cast, final
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import store_review_event_outbox, store_storage_gate
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.discovery import (
@@ -24,7 +25,7 @@ from codex_plugin_scanner.guard.daemon.discovery import (
     load_authenticated_daemon_state,
 )
 from codex_plugin_scanner.guard.daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer, _GuardDaemonHttpServer
+from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHttpServer
 from codex_plugin_scanner.guard.native_daemon_route import _MAX_CONCURRENT_ASKS, native_route_facts
 from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_connect_timeout_override,

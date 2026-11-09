@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import recovery_worker
 from codex_plugin_scanner.guard.daemon import server as server_module
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_runtime_fixtures import patch_popen_past_native_runtime
 

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard import supply_chain_workspace_audit as workspace_audit_module
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.local_supply_chain import (
     evaluate_package_request_artifact,
     managed_install_audit_workspace_dirs,

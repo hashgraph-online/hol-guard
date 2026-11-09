@@ -468,8 +468,9 @@ def test_cached_bootstrap_document_covers_refresh_and_failure_paths(monkeypatch:
 
 
 def test_desktop_bootstrap_route_records_auth_and_build_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.cli import commands_dispatch_desktop as desktop
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer, _GuardDaemonHandler
+    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 
     events: list[str] = []
 

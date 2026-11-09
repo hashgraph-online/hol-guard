@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, update_settings
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
     CloudReviewSettingsError,
     change_cloud_review_settings,

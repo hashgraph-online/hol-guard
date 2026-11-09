@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.cli import commands_dispatch_local, network_status_command
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_parser
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -17,7 +18,6 @@ from codex_plugin_scanner.guard.daemon.client import (
     GuardDaemonTimeoutError,
     GuardDaemonTransportError,
 )
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.network_capability_contract import default_platform_profiles
 from codex_plugin_scanner.guard.runtime.network_policy_contract import EnforcementGrade
 from codex_plugin_scanner.guard.runtime.network_status import (

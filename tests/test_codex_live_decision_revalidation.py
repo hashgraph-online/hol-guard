@@ -52,8 +52,8 @@ def test_daemon_server_import_is_order_independent() -> None:
             sys.executable,
             "-c",
             (
-                "from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer; "
-                "print(GuardDaemonServer.__name__)"
+                "from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler; "
+                "print(_GuardDaemonHandler.__name__)"
             ),
         ],
         check=False,
@@ -62,7 +62,7 @@ def test_daemon_server_import_is_order_independent() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == "GuardDaemonServer"
+    assert completed.stdout.strip() == "_GuardDaemonHandler"
 
 
 def _fixture(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], Path]:

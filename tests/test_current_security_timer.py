@@ -7,6 +7,7 @@ test. These small security fixtures isolate the independent observation lane.
 import threading
 from types import SimpleNamespace
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.catalog_delivery import (
     active_security,
     cache_io,
@@ -14,7 +15,6 @@ from codex_plugin_scanner.guard.catalog_delivery import (
     discovery,
     transport,
 )
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.test_extension_pack_preparation import delivery as delivery
 from tests.test_native_active_pack_security import device as device

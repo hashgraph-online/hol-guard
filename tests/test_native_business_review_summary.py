@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import business_review_summary as route
 from codex_plugin_scanner.guard.runtime import native_business_review_summary as adapter
 from codex_plugin_scanner.guard.store import GuardStore

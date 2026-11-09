@@ -9,12 +9,12 @@ from typing import cast
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.client import GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.daemon.manager import (
     current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,
 )
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.containment_health import (
     ContainmentHealthEvidence,
     containment_health_signals,

@@ -18,12 +18,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_catalog_read as transport
 from codex_plugin_scanner.guard import native_runtime_resilience as resilience
 from codex_plugin_scanner.guard.daemon import catalog_read_v2
 from codex_plugin_scanner.guard.daemon import server as server_module
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_catalog_read import NativeCatalogReadResult
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore

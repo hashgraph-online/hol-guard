@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import package_firewall_entitlement as entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.cli.connect_flow import (
@@ -20,7 +21,6 @@ from codex_plugin_scanner.guard.cli.connect_flow import (
     run_guard_browser_connect_command,
 )
 from codex_plugin_scanner.guard.cli.oauth_client import GuardDpopKeyMaterial
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_package_firewall_entitlement
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module

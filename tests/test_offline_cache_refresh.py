@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.catalog_delivery import active_security, cache_io, discovery
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 
 @pytest.mark.parametrize("outage", [False, True])

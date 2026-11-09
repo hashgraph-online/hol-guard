@@ -65,7 +65,7 @@ def workers():
 
 
 def periodic(state):
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
 
     class Stop:
         calls = 0

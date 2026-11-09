@@ -16,12 +16,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import dashboard_update as dashboard_update_module
 from codex_plugin_scanner.guard.daemon.dashboard_update import (
     build_dashboard_update_runner_command,
@@ -417,7 +417,7 @@ def test_desktop_update_request_concurrent_writes_stay_valid(tmp_path: Path) -> 
     def write(version: str) -> None:
         try:
             dashboard_update_module.write_desktop_update_request(guard_home, latest_version=version)
-        except BaseException as error:  # noqa: BLE001 - collected and asserted below
+        except BaseException as error:
             errors.append(error)
 
     threads = [threading.Thread(target=write, args=(f"3.53.0a{index}",)) for index in range(8)]

@@ -13,10 +13,10 @@ from typing import Any
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_policy_bundle as bridge
 from codex_plugin_scanner.guard import policy_bundle_parser as parser
 from codex_plugin_scanner.guard import policy_bundle_trusted_keys as trusted_keys
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,

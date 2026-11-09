@@ -120,10 +120,8 @@ def _replay_server_class() -> type:
             self._replay_daemon_pid = daemon_pid
             self.store = store
             self.runtime = GuardSurfaceRuntime(store)
-            self.native_edge = None
             self.server_address = (host, port)
             self._socket_bound = True
-            self.request_executors_stopped = True
             self.auth_token = auth_key
             self.runtime_host = host
             state = load_runtime_identity(store.guard_home)

@@ -12,12 +12,12 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.client import (
     GuardDaemonResponseSchemaError,
     GuardSurfaceDaemonClient,
 )
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.managed_controls.feature_flags import GUARD_EXTENSION_CATALOG_SYNC_V1
 from codex_plugin_scanner.guard.runtime import extension_control_limits as limits_module
 from codex_plugin_scanner.guard.runtime import managed_controls_sync, runner

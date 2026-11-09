@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.lifecycle_journal import (
     load_bounded_incident_lifecycle_events,
     load_daemon_lifecycle_events,
     record_daemon_lifecycle_event,
 )
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 

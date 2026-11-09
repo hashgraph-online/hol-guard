@@ -11,8 +11,8 @@ from http.server import HTTPServer
 from pathlib import Path
 from urllib.parse import urlencode
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,

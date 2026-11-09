@@ -19,12 +19,12 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, require_high_risk, update_settings
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.daemon.manager import _guard_daemon_pid_is_proven_dead
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime_transition import (
@@ -59,7 +59,7 @@ for name in ('_start_aibom_inventory_refresh', '_start_supply_chain_bundle_refre
 server.start_command_queue_worker = lambda _store, existing: existing
 server.start_cloud_sync_sync_worker = lambda _store, existing, **_kwargs: existing
 _ctl_cloud_sync._queue_headless_cloud_sync = lambda **_kwargs: {'status': 'not_configured'}
-daemon = server.GuardDaemonServer(GuardStore(guard), host='127.0.0.1', port=0, home_dir=home)
+daemon = GuardDaemonServer(GuardStore(guard), host='127.0.0.1', port=0, home_dir=home)
 try:
     daemon.start()
     publish_ready_pid(ready, os.getpid())

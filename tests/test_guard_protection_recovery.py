@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
@@ -17,7 +18,6 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     apply_managed_install,
     grok_hooks_protection_ready,
 )
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.server_control_connect_flow import (
     _repair_command_activity_persistence_health,
 )

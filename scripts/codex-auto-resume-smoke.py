@@ -110,7 +110,7 @@ def _run_scenario(*, decision: str, args: argparse.Namespace) -> SmokeScenarioRe
 
 
 def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: Path) -> SmokeScenarioResult:
-    from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = temp_dir / "home"

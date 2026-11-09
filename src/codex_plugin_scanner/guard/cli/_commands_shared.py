@@ -256,7 +256,6 @@ def _load_lazy_export(module_name: str, attribute_name: str):
     return getattr(importlib.import_module(module_name, __package__), attribute_name)
 
 
-GuardDaemonServer = _load_lazy_export("..daemon", "GuardDaemonServer")
 ensure_guard_daemon = _load_lazy_export("..daemon", "ensure_guard_daemon")
 load_guard_surface_daemon_client = _load_lazy_export("..daemon", "load_guard_surface_daemon_client")
 repair_approval_center_locator = _load_lazy_export("..daemon", "repair_approval_center_locator")

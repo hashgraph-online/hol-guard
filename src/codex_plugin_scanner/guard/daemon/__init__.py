@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from .runtime_repair import repair_guard_daemon_runtime
 
 __all__ = [
-    "GuardDaemonServer",
     "GuardSurfaceDaemonClient",
     "ensure_guard_daemon",
     "guard_daemon_url_for_home",
@@ -29,10 +28,6 @@ def __getattr__(name: str) -> Any:
 
         globals()[name] = repair_guard_daemon_runtime
         return repair_guard_daemon_runtime
-    if name == "GuardDaemonServer":
-        from .server import GuardDaemonServer
-
-        return GuardDaemonServer
     if name in {"GuardSurfaceDaemonClient", "load_guard_surface_daemon_client"}:
         from .client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
 
