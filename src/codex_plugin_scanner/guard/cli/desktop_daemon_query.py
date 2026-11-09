@@ -97,8 +97,49 @@ def _capabilities(guard_home: Path, payload: dict[str, object]) -> Answer:
     }
 
 
+def _store(guard_home: Path) -> object:
+    from ..store import GuardStore
+
+    return GuardStore(guard_home)
+
+
+def _policy(guard_home: Path, payload: dict[str, object]) -> Answer:
+    from ..daemon.managed_controls_api import managed_policy_rows
+
+    harness = payload.get("harness")
+    harness_filter = harness if isinstance(harness, str) else None
+    store = _store(guard_home)
+    return 200, {
+        "items": managed_policy_rows(store, harness_filter),  # type: ignore[arg-type]
+        "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),  # type: ignore[attr-defined]
+    }
+
+
+def _cloud_review(guard_home: Path, payload: dict[str, object]) -> Answer:
+    del payload
+    from ..daemon.cloud_review_settings import cloud_review_settings_status
+
+    return 200, cloud_review_settings_status(_store(guard_home))  # type: ignore[arg-type]
+
+
+def _cloud_actions_status(guard_home: Path, payload: dict[str, object]) -> Answer:
+    del payload
+    from ..daemon.cloud_actions_status import CloudActionsStatusUnavailableError, cloud_actions_local_status
+
+    try:
+        return 200, cloud_actions_local_status(_store(guard_home))  # type: ignore[arg-type]
+    except CloudActionsStatusUnavailableError:
+        return 503, {
+            "error": "status_unavailable",
+            "message": "Guard could not read the Cloud actions status on this computer.",
+        }
+
+
 _QUERIES: dict[str, Callable[[Path, dict[str, object]], Answer]] = {
     "capabilities": _capabilities,
+    "cloud-actions-status": _cloud_actions_status,
+    "cloud-review": _cloud_review,
+    "policy": _policy,
     "harnesses": _harnesses,
     "update-status": _update_status,
 }

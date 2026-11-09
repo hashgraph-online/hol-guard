@@ -410,6 +410,20 @@ fn respond(
         }
         return Some((status, Value::Object(body), caller.cors_origin, false));
     }
+    if let Some((name, no_store)) = match request.path {
+        "/v1/cloud-review" => Some(("cloud-review", true)),
+        "/v1/cloud-actions/status" => Some(("cloud-actions-status", true)),
+        _ => None,
+    } {
+        return cli_query::query(config, name, None, cli_query::ROUTE_TIMEOUT)
+            .map(|(status, body)| (status, Value::Object(body), caller.cors_origin, no_store));
+    }
+    if request.path == "/v1/policy" {
+        let harness = query_value(request.query, "harness").ok()?;
+        let input = serde_json::json!({ "harness": harness });
+        return cli_query::query(config, "policy", Some(&input), cli_query::ROUTE_TIMEOUT)
+            .map(|(status, body)| (status, Value::Object(body), caller.cors_origin, false));
+    }
     if request.path == "/v1/update/status" {
         return update_status::read(config)
             .map(|(status, body)| (status, body, caller.cors_origin, true));
