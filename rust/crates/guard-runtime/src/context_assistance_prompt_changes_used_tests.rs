@@ -61,6 +61,28 @@ fn a_change_across_two_definitions_names_both() {
 /// `splitvalue`.
 #[test]
 fn a_test_calling_a_name_with_an_underscore_is_shown() {
+    let text = tests_shown(true);
+    assert!(
+        text.contains("tests/test_group.py: 1 related tests")
+            && text.contains("def test_words():\n    assert Group([]).split_value("),
+        "{text}"
+    );
+}
+
+/// When no source file holds the changed name any more, only its tests
+/// match the search, and they are still shown.
+#[test]
+fn the_tests_are_shown_when_only_tests_hold_the_name() {
+    let text = tests_shown(false);
+    assert!(
+        text.contains("tests/test_group.py: 1 related tests"),
+        "{text}"
+    );
+}
+
+/// What `add_tests` adds for a change to `Group.split_value`, with
+/// `src/group.py` on disk or not.
+fn tests_shown(with_source: bool) -> String {
     let guard_home = tempfile::tempdir().unwrap();
     fs::write(
         guard_home.path().join("config.toml"),
@@ -73,7 +95,9 @@ fn a_test_calling_a_name_with_an_underscore_is_shown() {
     let root = fs::canonicalize(repo.path()).unwrap();
     fs::create_dir_all(root.join("src")).unwrap();
     fs::create_dir_all(root.join("tests")).unwrap();
-    fs::write(root.join("src/group.py"), GROUP).unwrap();
+    if with_source {
+        fs::write(root.join("src/group.py"), GROUP).unwrap();
+    }
     let test = "from src.group import Group\n\n\ndef test_words():\n    \
 assert Group([]).split_value(\"a b\") == [\"a\", \"b\"]\n";
     fs::write(root.join("tests/test_group.py"), test).unwrap();
@@ -97,12 +121,6 @@ assert Group([]).split_value(\"a b\") == [\"a\", \"b\"]\n";
         Duration::from_secs(5),
         || true,
     );
-    let text = response["hookSpecificOutput"]["additionalContext"]
-        .as_str()
-        .unwrap_or_default();
-    assert!(
-        text.contains("tests/test_group.py: 1 related tests")
-            && text.contains("def test_words():\n    assert Group([]).split_value("),
-        "{text}"
-    );
+    let text = response["hookSpecificOutput"]["additionalContext"].as_str();
+    text.unwrap_or_default().to_owned()
 }

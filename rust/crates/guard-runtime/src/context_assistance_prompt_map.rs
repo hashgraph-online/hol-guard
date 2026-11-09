@@ -206,7 +206,12 @@ pub(super) fn changed_tests(
     earlier: &[Span],
     until: Instant,
 ) -> Option<Rendered> {
-    let texts = screened_texts(home, root, app, &walk.tests, walk.tests.len(), until);
+    // With no source file matched, the walk keeps its tests in `files`.
+    let paths: Vec<String> = (walk.tests.iter())
+        .chain(walk.files.iter().filter(|path| test_file(path)))
+        .cloned()
+        .collect();
+    let texts = screened_texts(home, root, app, &paths, paths.len(), until);
     let mut files: Vec<File> = Vec::with_capacity(texts.len());
     for (path, text) in &texts {
         if Instant::now() >= until {
