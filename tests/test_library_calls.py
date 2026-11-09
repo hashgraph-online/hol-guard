@@ -250,6 +250,12 @@ def test_worker_heartbeat_refuses_malformed_arguments(tmp_path: Path) -> None:
     assert "error" in _call(tmp_path, "worker.runtime_heartbeat", {"port": "x"})
 
 
+def test_worker_reconcile_leaves_an_unmanaged_home_untouched(tmp_path: Path) -> None:
+    reconciled = _call(tmp_path, "worker.reconcile_artifacts", {"home": str(tmp_path / "home")})
+    assert reconciled["ok"]["ok"] is True  # type: ignore[index]
+    assert reconciled["ok"]["repaired_harnesses"] == []  # type: ignore[index]
+
+
 def test_worker_aibom_and_onefile_passes_answer(tmp_path: Path) -> None:
     aibom = _call(tmp_path, "worker.aibom_inventory", {})
     assert aibom["ok"]["status"] == "missing_workspace_context"  # type: ignore[index]

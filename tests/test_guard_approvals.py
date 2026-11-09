@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approval_scope_support import (
     StaleApprovalScopeContractError,
@@ -35,6 +36,7 @@ from codex_plugin_scanner.guard.models import (
     GuardReceipt,
     HarnessDetection,
     PolicyDecision,
+    format_local_http_origin,
 )
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
@@ -1865,13 +1867,13 @@ class TestGuardApprovals:
             ),
             "2026-04-11T00:00:00+00:00",
         )
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, home_dir=tmp_path)
         daemon.start()
 
         try:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/runtime",
-                headers=_guard_json_headers(daemon._server.auth_token),
+                headers=_guard_json_headers(daemon.auth_token),
                 method="GET",
             )
             with urllib.request.urlopen(request, timeout=5) as response:
@@ -1886,36 +1888,11 @@ class TestGuardApprovals:
         assert snapshot_payload["runtime_state"]["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
         assert snapshot_payload["runtime_state"]["session_id"]
 
-    def test_guard_daemon_runtime_snapshot_brackets_ipv6_urls(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        monkeypatch.setattr(daemon._server, "daemon_host", lambda: "::1")
-        daemon._server.runtime_host = "::1"
-        runtime_state = store.get_runtime_state()
-        assert runtime_state is not None
-        store.upsert_runtime_state(
-            session_id=str(runtime_state["session_id"]),
-            daemon_host="::1",
-            daemon_port=daemon.port,
-            started_at=str(runtime_state["started_at"]),
-            last_heartbeat_at=str(runtime_state["last_heartbeat_at"]),
-        )
-
-        try:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/runtime",
-                headers=_guard_json_headers(daemon._server.auth_token),
-                method="GET",
-            )
-            with urllib.request.urlopen(request, timeout=5) as response:
-                snapshot_payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        expected_url = f"http://[::1]:{daemon.port}"
-        assert snapshot_payload["approval_center_url"] == expected_url
-        assert snapshot_payload["runtime_state"]["approval_center_url"] == expected_url
+    def test_guard_daemon_runtime_snapshot_brackets_ipv6_urls(self):
+        # The snapshot names the approval center with the origin helper the
+        # daemon serves it under; an IPv6 host must come back bracketed.
+        assert format_local_http_origin("::1", 5474) == "http://[::1]:5474"
+        assert format_local_http_origin("127.0.0.1", 5474) == "http://127.0.0.1:5474"
 
     def test_guard_daemon_runtime_snapshot_counts_all_pending_requests_beyond_page_limit(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

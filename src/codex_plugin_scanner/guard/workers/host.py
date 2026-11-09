@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,8 +29,13 @@ _LOGGER = logging.getLogger(__name__)
 
 REPAIR_SELF_CHECK_KEY = "daemon_repair_self_check_status"
 ATTENTION_PREFIX = "daemon_approval_attention:"
+REFRESH_REQUEST_KEY = "daemon_worker_refresh_request"
+REFRESH_STATUS_KEY = "daemon_worker_refresh_status"
 _REFRESH_SECONDS = 10.0
 _ATTENTION_POLL_SECONDS = 1.0
+_REFRESH_POLL_SECONDS = 0.2
+_REFRESH_WAIT_SECONDS = 5.0
+_REFRESH_OPERATION = "guard.review.resolveExact"
 
 
 def _now() -> str:
@@ -58,6 +65,34 @@ class DurableApprovalAttention:
         queue_approval_attention(self._store, operation_id=operation_id, requests=requests)
 
 
+class DurableWorkerRefresh:
+    """Asks the worker host to apply changed Cloud connectivity and consent.
+
+    A request handler does not own the workers, so it leaves a request in the
+    store and waits briefly for the host's answer, as the daemon's refresh route
+    did in process.
+    """
+
+    def __init__(self, store: GuardStore, *, wait_seconds: float = _REFRESH_WAIT_SECONDS) -> None:
+        self._store = store
+        self._wait_seconds = wait_seconds
+
+    def refresh_command_queue_worker(self) -> dict[str, object]:
+        nonce = uuid.uuid4().hex
+        self._store.set_sync_payload(REFRESH_REQUEST_KEY, {"nonce": nonce}, _now())
+        deadline = time.monotonic() + self._wait_seconds
+        while time.monotonic() < deadline:
+            status = self._store.get_sync_payload(REFRESH_STATUS_KEY)
+            if isinstance(status, dict) and status.get("nonce") == nonce:
+                return {
+                    "operation": _REFRESH_OPERATION,
+                    "running": status.get("running") is True,
+                    "sync_running": status.get("sync_running") is True,
+                }
+            time.sleep(_REFRESH_POLL_SECONDS)
+        return {"operation": _REFRESH_OPERATION, "running": False, "sync_running": False}
+
+
 def _take_attention(store: GuardStore) -> list[dict[str, object]]:
     with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         rows = connection.execute(
@@ -85,6 +120,7 @@ class WorkerHost:
         self._cloud_review_sync: Any = None
         self._lock = threading.Lock()
         self._threads: list[threading.Thread] = []
+        self._hook_worker: Any = None
 
     def _record(self, code: str) -> None:
         _LOGGER.warning("Guard worker host error: %s", code)
@@ -98,22 +134,37 @@ class WorkerHost:
             self._command_queue = start_command_queue_worker(self.store, self._command_queue)
         return True
 
-    def refresh_queues(self) -> None:
+    def refresh_queues(self) -> tuple[bool, bool]:
         """Applies changed Cloud connectivity and consent, as the daemon's refresh route did."""
 
         from ..daemon.command_queue_worker import refresh_command_queue_worker
         from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
 
         with self._lock:
-            self._command_queue, _ = refresh_command_queue_worker(
+            self._command_queue, running = refresh_command_queue_worker(
                 self.store, self._command_queue, shutting_down=self.stop.is_set()
             )
-            self._cloud_review_sync, _ = refresh_cloud_review_sync_worker(
+            self._cloud_review_sync, sync_running = refresh_cloud_review_sync_worker(
                 self.store,
                 self._cloud_review_sync,
                 shutting_down=self.stop.is_set(),
                 on_authority_changed=self._start_command_queue_after_authority,
             )
+        return running, sync_running
+
+    def answer_refresh_request(self) -> None:
+        """Answers a request handler's refresh request left in the store."""
+
+        request = self.store.get_sync_payload(REFRESH_REQUEST_KEY)
+        if not isinstance(request, dict) or not isinstance(request.get("nonce"), str):
+            return
+        self.store.delete_sync_payload(REFRESH_REQUEST_KEY)
+        running, sync_running = self.refresh_queues()
+        self.store.set_sync_payload(
+            REFRESH_STATUS_KEY,
+            {"nonce": request["nonce"], "running": running, "sync_running": sync_running},
+            _now(),
+        )
 
     def _loop(self, name: str, body: Callable[[], None], interval: float) -> None:
         def run() -> None:
@@ -139,6 +190,7 @@ class WorkerHost:
         from ..runtime.surface_server import GuardSurfaceRuntime
         from ..workspace_assessment_worker import start_workspace_assessment_worker
 
+        self._start_policy_publication()
         attention = ApprovalAttentionCoordinator(
             store=self.store,
             runtime=GuardSurfaceRuntime(self.store),
@@ -156,6 +208,7 @@ class WorkerHost:
                 on_authority_changed=self._start_command_queue_after_authority,
             )
         self._loop("queue-refresh", self.refresh_queues, _REFRESH_SECONDS)
+        self._loop("refresh-request", self.answer_refresh_request, _REFRESH_POLL_SECONDS)
 
         def publish(status: dict[str, object]) -> None:
             self.store.set_sync_payload(REPAIR_SELF_CHECK_KEY, status, _now())
@@ -169,6 +222,34 @@ class WorkerHost:
         assessment = start_workspace_assessment_worker(self.store, stop=self.stop, on_error=self._record)
         if isinstance(assessment, threading.Thread):
             self._threads.append(assessment)
+
+    def _start_policy_publication(self) -> None:
+        """Keeps the native policy snapshot, its direct-lane ACK and evidence drain live.
+
+        The daemon's hook worker owned the publisher for the daemon's whole
+        life: it publishes the snapshot the resident enforces, renews the
+        direct-lane lease and drains direct-hook evidence. A request handler
+        ends with its request, so this host owns it now.
+        """
+
+        from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
+        from ..daemon.hook_worker import HookWorker
+        from ..native_hook_evidence_writer import NativeHookEvidenceWriter
+
+        try:
+            # Direct answers are bound only while their evidence has a writer,
+            # so the drain gets the same writer the daemon's hooks use.
+            self._hook_worker = HookWorker(
+                store=self.store,
+                home_dir=self.home_dir,
+                activity_writer=NativeHookEvidenceWriter(store=self.store),
+                evidence_dispatch=HookEvidenceDispatch(),
+                capture_writer=None,
+                wait_for_native_policy=False,
+            )
+        except Exception:
+            _LOGGER.exception("Guard worker host could not start native policy publication")
+            self._hook_worker = None
 
     def _schedule_attention(self, attention: Any) -> None:
         from ..daemon.manager import ensure_guard_daemon_auth_token
@@ -205,6 +286,12 @@ class WorkerHost:
             self._cloud_review_sync = stop_cloud_sync_sync_worker(self._cloud_review_sync)
         for thread in self._threads:
             thread.join(timeout=2.0)
+        hook_worker = getattr(self, "_hook_worker", None)
+        if hook_worker is not None:
+            try:
+                hook_worker.close(deadline_monotonic=time.monotonic() + 5.0)
+            except Exception:
+                _LOGGER.exception("Guard worker host could not stop native policy publication")
 
 
 def run_worker_host(guard_home: Path) -> int:

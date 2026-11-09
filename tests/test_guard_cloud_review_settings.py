@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, update_settings
 from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
     CloudReviewSettingsError,
@@ -269,7 +269,7 @@ def test_quick_recovery_checks_the_request_history_identity(tmp_path: Path) -> N
 def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
     update_settings(store.guard_home, {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"})
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon = NativeGuardDaemon(store, home_dir=tmp_path)
     daemon.start()
     try:
         url = f"http://127.0.0.1:{daemon.port}/v1/cloud-review"
@@ -284,7 +284,7 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
         with pytest.raises(urllib.error.HTTPError) as missing_session:
             send({}, _payload())
         assert missing_session.value.code == 401
-        headers = {"X-Guard-Token": daemon._server.auth_token, "Content-Type": "application/json"}
+        headers = {"X-Guard-Token": daemon.auth_token, "Content-Type": "application/json"}
         with pytest.raises(urllib.error.HTTPError) as remote_origin:
             send({**headers, "Origin": "https://hol.org"}, _payload())
         assert remote_origin.value.code == 403

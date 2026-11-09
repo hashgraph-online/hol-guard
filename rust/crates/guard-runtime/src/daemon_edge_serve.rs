@@ -268,6 +268,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
     reads.accept_handshake(&config.handshake(&secret));
     drop(secret);
     if config.workers {
+        // Guard-owned hooks and launchers are brought in line with this
+        // runtime before the daemon reports ready, as its start always did.
+        workers::reconcile_artifacts(&reads, config.user_home.as_deref());
         workers::start(
             &reads,
             workers::Registration {

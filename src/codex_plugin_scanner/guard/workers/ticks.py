@@ -120,6 +120,21 @@ def extension_catalog(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
     return {"ok": True}
 
 
+def reconcile_artifacts(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Brings Guard-owned artifacts in line with the active runtime before the daemon reports ready."""
+
+    from ..runtime_artifact_reconciliation import reconcile_runtime_artifacts
+
+    home = args.get("home")
+    result = reconcile_runtime_artifacts(store, home_dir=Path(home) if isinstance(home, str) and home else None)
+    return {
+        "ok": True,
+        "healthy": result.healthy,
+        "repaired_harnesses": list(result.repaired_harnesses),
+        "failed_harnesses": list(result.failed_harnesses),
+    }
+
+
 def runtime_heartbeat(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Records that the daemon at ``host:port`` is alive."""
 
@@ -288,6 +303,7 @@ WORKER_CALLS = {
     "worker.maintain_activity": maintain_activity,
     "worker.extension_catalog": extension_catalog,
     "worker.runtime_heartbeat": runtime_heartbeat,
+    "worker.reconcile_artifacts": reconcile_artifacts,
     "worker.idle_holds": idle_holds,
     "worker.aibom_inventory": aibom_inventory,
     "worker.onefile_reclaim": onefile_reclaim,

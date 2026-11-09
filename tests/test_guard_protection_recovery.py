@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
@@ -414,7 +414,9 @@ def test_daemon_ownership_change_repairs_stale_managed_grok_hooks(
     (ctx.home_dir / ".grok" / "config.toml").unlink()
     assert grok_hooks_protection_ready(ctx) is False
 
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # The production daemon (with its workers) reconciles managed hooks
+    # before it reports ready.
+    daemon = NativeGuardDaemon(store, home_dir=ctx.home_dir, workers=True)
     daemon.start()
     try:
         assert grok_hooks_protection_ready(ctx) is True

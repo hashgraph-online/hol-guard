@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon.client import load_running_guard_surface_daemon_client
 from codex_plugin_scanner.guard.local_supply_chain import _resolve_stored_package_policy_override
@@ -100,7 +101,7 @@ def test_package_reuses_native_signed_policy_through_running_daemon(
     )
 
     daemon_store = GuardStore(guard_home, prime_policy_integrity=False)
-    daemon_store._policy_integrity_secret_store = _MemorySecretStore()
+    # The daemon resolves in its own process; both sides read the test keyring file.
     daemon_store.ensure_policy_integrity_ready_for_write(now="2026-08-27T00:00:00Z")
     daemon_store.upsert_policy(
         PolicyDecision(
@@ -118,7 +119,7 @@ def test_package_reuses_native_signed_policy_through_running_daemon(
     )
     one_shot_store = _OneShotStore(guard_home)
 
-    daemon = GuardDaemonServer(daemon_store, host="127.0.0.1", port=0)
+    daemon = NativeGuardDaemon(daemon_store, home_dir=tmp_path)
     daemon.start()
     try:
         resolution = _resolve_stored_package_policy_override(

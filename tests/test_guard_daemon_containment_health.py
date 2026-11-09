@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.daemon.client import GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.daemon.manager import (
     current_guard_daemon_runtime_fingerprint,
@@ -24,7 +25,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 def test_authenticated_daemon_returns_fresh_execution_owned_health(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
-    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon = NativeGuardDaemon(GuardStore(guard_home), home_dir=tmp_path)
     daemon.start()
     try:
         auth_token = load_guard_daemon_auth_token(guard_home)

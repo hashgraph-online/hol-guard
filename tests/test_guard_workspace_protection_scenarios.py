@@ -33,6 +33,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.store import GuardStore
@@ -416,6 +417,7 @@ def test_restoring_protection_leaves_the_known_risk_open(
     )
     patch_daemon_global(monkeypatch, "_activate_package_firewall_runtime", lambda context: (200, {}))
     patch_daemon_global(monkeypatch, "_resolve_guard_sync_auth_context", lambda _store: {"sync_url": "local"})
+    monkeypatch.setattr(guard_runner, "_resolve_guard_sync_auth_context", lambda _store: {"sync_url": "local"})
 
     def refresh_bundle(actual: GuardStore, *, auth_context: dict[str, object]) -> dict[str, object]:
         _cache_feed(actual, blocked=True, bundle_version="1747699200000-feedface")

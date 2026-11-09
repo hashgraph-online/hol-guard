@@ -160,6 +160,16 @@ pub(super) fn next_wait(job: &Job, answer: Option<Value>) -> Duration {
     }
 }
 
+/// Refreshes the artifacts Guard already manages for the active runtime
+/// (`reconcile_runtime_artifacts`). A failure leaves them for the next start.
+pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) {
+    let _ = pass(
+        reads,
+        "worker.reconcile_artifacts",
+        json!({ "home": user_home }),
+    );
+}
+
 fn pass(reads: &NativeReads, call: &str, args: Value) -> Option<Value> {
     let config = reads.config()?;
     library::call(&config, call, args).ok()

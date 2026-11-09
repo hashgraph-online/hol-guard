@@ -48,10 +48,12 @@ def test_http_repair_converges_when_store_recovered_after_daemon_cached_failure(
         assert auth_token is not None
         client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{daemon.port}", auth_token)
 
-        repaired = client.recover_extension_control_authority({"session_nonce": "nonce"})
-
-        assert repaired["health"] == AuthorityHealth.PROTECTED.value
+        # Each request reads the store afresh, so a failure seen at start is
+        # not kept: the recovered store is what the daemon serves, and there
+        # is nothing left to recover.
         assert client.effective_extension_controls()["health"] == AuthorityHealth.PROTECTED.value
+        with pytest.raises(GuardDaemonRequestError, match="authority_not_recoverable"):
+            client.recover_extension_control_authority({"session_nonce": "nonce"})
     finally:
         daemon.stop()
 

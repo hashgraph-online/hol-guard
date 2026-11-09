@@ -159,7 +159,9 @@ def _replay_server_class() -> type:
                 self.diagnostics,
                 attempt_timeout_seconds=daemon_server._AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS,
             )
-            self.command_queue_lifecycle = None
+            from ..workers.host import DurableWorkerRefresh
+
+            self.command_queue_lifecycle = DurableWorkerRefresh(store)
             self.package_firewall_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.onefile_extraction_status = None
             from ..workers.host import REPAIR_SELF_CHECK_KEY

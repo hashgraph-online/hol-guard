@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.cli import commands_dispatch_local, network_status_command
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_parser
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -111,7 +111,7 @@ def test_network_status_reads_live_authenticated_daemon(
     monkeypatch.setattr(client, "_STATUS_REQUEST_TIMEOUT_S", 2.0)
     monkeypatch.setattr(network_status_command, "_NETWORK_STATUS_DAEMON_IDENTITY_TIMEOUT_S", 2.0)
     guard_home = tmp_path / "guard-home"
-    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    daemon = NativeGuardDaemon(GuardStore(guard_home), home_dir=tmp_path)
     emitted: list[dict[str, object]] = []
     monkeypatch.setattr(
         commands_dispatch_local,
