@@ -1,22 +1,34 @@
 //! What else the file or class holding a function left to be written
 //! defines. Writing the body again, an agent pages through the file for the
-//! helpers it can call; the first line of each definition near the function,
-//! with its lines, lets it open just the ones it needs.
+//! helpers it can call and for how its neighbors do the same kind of work;
+//! the first line of each definition near the function, with its lines, and
+//! the code of the nearest short ones save it that look.
 use super::super::sections::members;
+use super::more::{fenced, whole};
 use super::rename::stubbed;
 use super::{Asked, Entry, File, Pick, Span, MAX_LINE_CHARS};
 
 /// The most of the list, and of one class's member list in it.
 const MAX_BESIDE_CHARS: usize = 1_400;
 const MAX_CLASS_MEMBERS_CHARS: usize = 240;
+/// The most code shown under the nearest listed definitions.
+const MAX_BESIDE_CODE_CHARS: usize = 1_800;
 
 /// For the first chosen definition whose body is left to be written, the
 /// definitions beside it: the other members of its class, or the file's
 /// other top-level definitions. The nearest ones that fit are kept and listed
 /// in file order, each as its lines and first line, a class with its members.
-/// Not shown again when an earlier prompt of the session was shown the same
-/// list.
-pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(String, Entry)> {
+/// The nearest short functions also come with their code, unless the map or
+/// an earlier prompt already shows it. Not shown again when an earlier prompt
+/// of the session was shown the same list. Also returns where the code shown
+/// is, so another list can leave those lines out without the session saving
+/// them as shown.
+pub(super) fn beside(
+    files: &[File],
+    chosen: &[Pick],
+    asked: &Asked,
+    shown: &[Span],
+) -> Option<(String, Entry, Vec<Span>)> {
     let (file, at) = chosen.iter().find_map(|pick| {
         let file = &files[pick.file];
         (pick.whole && stubbed(file, pick.at)).then_some((file, pick.at))
@@ -30,12 +42,21 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
     near.sort_by_key(|&other| file.sections[other].start.abs_diff(start));
     let mut kept: Vec<(usize, usize, String)> = Vec::new();
     let mut length = 0;
+    let mut room = MAX_BESIDE_CODE_CHARS;
+    let mut bodies = Vec::new();
     for other in near {
-        let line = line(file, other);
+        let mut line = line(file, other);
         if length + line.len() + 1 > MAX_BESIDE_CHARS {
             break;
         }
         length += line.len() + 1;
+        if let Some((span, code)) = whole(file, other) {
+            if code.len() <= room && !shown.contains(&span) {
+                room -= code.len();
+                line.push_str(&fenced(&code));
+                bodies.push(span);
+            }
+        }
         kept.push((file.sections[other].start, shown_line(file, other), line));
     }
     kept.sort_by_key(|(start, _, _)| *start);
@@ -64,7 +85,7 @@ pub(super) fn beside(files: &[File], chosen: &[Pick], asked: &Asked) -> Option<(
         text,
         shown: vec![span],
     };
-    Some((title, entry))
+    Some((title, entry, bodies))
 }
 
 /// The line `line` shows of a definition: its first line under any

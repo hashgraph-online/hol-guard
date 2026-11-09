@@ -324,18 +324,36 @@ pub(super) fn map(
         .chain(tests.iter().flat_map(|entry| entry.shown.iter().cloned()))
         .collect();
     blocks.push(("Tests:".to_owned(), tests));
-    // A function left to be written: where else it is named, with the text.
-    let stub = (!asked.everywhere).then(|| rename::stub(&files, &chosen, &shown, until));
-    blocks.extend(stub.flatten().map(|(title, lines)| (title, quoted(lines))));
+    // A function left to be written: what is defined beside it, for the
+    // helpers it can call, and where else it is named, with the text. A line
+    // inside a neighbor's code shown here is not listed again.
+    let near = (!asked.everywhere)
+        .then(|| beside::beside(&files, &chosen, asked, &shown))
+        .flatten();
+    let beside_shown: Vec<Span> = (shown.iter().cloned())
+        .chain(
+            near.iter()
+                .flat_map(|(_, _, bodies)| bodies.iter().cloned()),
+        )
+        .collect();
+    let stub = |covered: &[Span]| {
+        let lines = (!asked.everywhere).then(|| rename::stub(&files, &chosen, covered, until));
+        lines.flatten().map(|(title, lines)| (title, quoted(lines)))
+    };
+    let at_stub = blocks.len();
+    let listed_stub = stub(&beside_shown);
+    let stub_blocks = usize::from(listed_stub.is_some());
+    blocks.extend(listed_stub);
+    let beside_span = (near.as_ref())
+        .filter(|(_, _, bodies)| !bodies.is_empty())
+        .map(|(_, entry, _)| entry.shown.clone());
     let imported = (!asked.everywhere).then(|| imports::imports(&files, &chosen, asked));
     blocks.extend(
         imported
             .flatten()
             .map(|(title, entry)| (title, vec![entry])),
     );
-    // And what is defined beside it, for the helpers it can call.
-    let near = (!asked.everywhere).then(|| beside::beside(&files, &chosen, asked));
-    blocks.extend(near.flatten().map(|(title, entry)| (title, vec![entry])));
+    blocks.extend(near.map(|(title, entry, _)| (title, vec![entry])));
     let mut docs = Vec::new();
     if asked.docs {
         // Every word of the prompt: a doc section is about "choices" and
@@ -352,6 +370,21 @@ pub(super) fn map(
     }
     docs.extend(more::changelog(&files, asked));
     blocks.push(("Docs:".to_owned(), plain(docs)));
+    let rendered = render(&blocks);
+    // The stub's list left out the lines inside the code shown beside it. When
+    // that block does not fit, the list keeps them after all.
+    let beside_left_out = beside_span.is_some_and(|span| {
+        !(rendered.as_ref()).is_some_and(|done| span.iter().all(|one| done.shown.contains(one)))
+    });
+    if !beside_left_out {
+        return rendered;
+    }
+    if stub_blocks == 1 {
+        blocks.remove(at_stub);
+    }
+    if let Some(block) = stub(&shown) {
+        blocks.insert(at_stub, block);
+    }
     render(&blocks)
 }
 
