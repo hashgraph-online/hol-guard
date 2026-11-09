@@ -577,3 +577,16 @@ fn prepares_a_dashboard_reconnect_itself_or_reports_it_unavailable() {
         );
     }
 }
+
+#[test]
+fn update_status_forbids_revalidation() {
+    let stored = json_response(200, &json!({"a": 1}), None, None, true);
+    let patched = String::from_utf8(max_age_zero(stored)).unwrap();
+    assert!(
+        patched.contains("Cache-Control: no-store, max-age=0\r\n"),
+        "{patched}"
+    );
+    assert!(patched.ends_with("{\"a\":1}"), "{patched}");
+    let plain = json_response(200, &json!({}), None, None, false);
+    assert_eq!(max_age_zero(plain.clone()), plain);
+}

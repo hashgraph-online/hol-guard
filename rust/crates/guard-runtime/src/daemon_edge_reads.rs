@@ -481,13 +481,20 @@ pub(super) fn answer(
     if status == writes::DROPPED {
         return Outcome::Answered;
     }
-    let response = json_response(
+    let mut response = json_response(
         status,
         &body,
         config.dashboard_build.as_deref(),
         cors_origin.as_deref(),
         no_store,
     );
+    if no_store
+        && request.as_ref().is_some_and(|request| {
+            request.method == "GET" && dispatch::MAX_AGE_ZERO_READS.contains(&request.path)
+        })
+    {
+        response = max_age_zero(response);
+    }
     write_answer(client, &response, reads, stalled_write)
 }
 
@@ -736,6 +743,24 @@ pub(super) fn encoded_response(
     let mut bytes = response.into_bytes();
     bytes.extend_from_slice(&escaped);
     bytes
+}
+
+/// `response` with its `Cache-Control: no-store` header forbidding
+/// revalidation too, as the daemon's update status read did.
+fn max_age_zero(response: Vec<u8>) -> Vec<u8> {
+    const PLAIN: &[u8] = b"Cache-Control: no-store\r\n";
+    const ZERO: &[u8] = b"Cache-Control: no-store, max-age=0\r\n";
+    let Some(at) = response
+        .windows(PLAIN.len())
+        .position(|window| window == PLAIN)
+    else {
+        return response;
+    };
+    let mut patched = Vec::with_capacity(response.len() + ZERO.len() - PLAIN.len());
+    patched.extend_from_slice(&response[..at]);
+    patched.extend_from_slice(ZERO);
+    patched.extend_from_slice(&response[at + PLAIN.len()..]);
+    patched
 }
 
 #[path = "daemon_edge_reads_routes.rs"]

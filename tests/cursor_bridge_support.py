@@ -48,10 +48,14 @@ def keyed_guard_home(guard_home: Path) -> Iterator[Path]:
 
 
 @contextmanager
-def live_cursor_daemon(guard_home: Path) -> Iterator[None]:
-    """Serve the loopback daemon the bridge asks when no resident answers."""
+def live_cursor_daemon(guard_home: Path, home_dir: Path | None = None) -> Iterator[None]:
+    """Serve the loopback daemon the bridge asks when no resident answers.
 
-    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
+    The resident answers a hook only for the home its policy was published
+    for, so ``home_dir`` is the home the hook runs under.
+    """
+
+    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0, home_dir=home_dir)
     daemon.start()
     try:
         yield

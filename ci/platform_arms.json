@@ -1011,6 +1011,14 @@
    "body": "e1db85fb6831"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "The lifecycle journal is private on Unix by file mode; on Windows the files inherit the Guard home's ACL, as the Python journal's files did. Nothing reads the mode back, so the record and its readers behave the same.",
+   "file": "rust/crates/guard-runtime/src/daemon_edge_lifecycle.rs",
+   "item": "fn private_mode(_path: &Path, _mode: u32)",
+   "cfg": "not(unix)",
+   "body": "582acc1fd689"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Containment health is a macOS and Linux probe; off Unix the native read declines and the route goes to the daemon handler, as before this port. Proven by the Windows cargo check of hol-guard-runtime.",
    "file": "rust/crates/guard-runtime/src/daemon_edge_network.rs",

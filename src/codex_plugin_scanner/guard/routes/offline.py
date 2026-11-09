@@ -9,7 +9,10 @@ dispatch wrote: ``{"status": int, "body": {...}, "no_store": bool}``.
 A handler that reaches for state only a running daemon holds (its locks, rate
 limits, extension-control service or listening address) raises
 ``LiveDaemonStateError``; the call then answers ``{"relay": true}`` so the
-request is relayed instead of answered.
+request is relayed instead of answered. The reads in ``_PUBLISHED_READS`` run
+on the server state the daemon's request replay builds from the published
+daemon state instead: its listening address, its runtime identity and the
+connect state it keeps on disk.
 """
 
 from __future__ import annotations
@@ -24,6 +27,19 @@ from urllib.parse import urlparse
 from ..store import GuardStore
 
 _NO_STORE = {"Cache-Control": "no-store"}
+# The update status read forbids revalidation too; the native daemon writes
+# that header for its path.
+_NO_STORE_MAX_AGE_ZERO = {"Cache-Control": "no-store, max-age=0"}
+_PUBLISHED_READS = frozenset(
+    {
+        "/v1/cloud/connect",
+        "/v1/local-clis",
+        "/v1/runtime",
+        "/v1/supply-chain/entitlement",
+        "/v1/supply-chain/package-shims",
+    }
+)
+_STATE_LIMIT_BYTES = 64 * 1024
 _IGNORED_HEADERS = frozenset({"X-Content-Type-Options"})
 
 
@@ -51,12 +67,39 @@ class _OfflineServer:
         raise LiveDaemonStateError(name)
 
 
+def _published_server(store: GuardStore) -> Any:
+    """The replay server for the daemon the Guard home's published state names."""
+
+    from ..daemon.manager import _state_path
+    from ..daemon.request_replay import _replay_server_class
+
+    try:
+        with _state_path(store.guard_home).open("rb") as handle:
+            state = json.loads(handle.read(_STATE_LIMIT_BYTES).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise LiveDaemonStateError("daemon_state") from error
+    host = state.get("host") if isinstance(state, dict) else None
+    port = state.get("port") if isinstance(state, dict) else None
+    pid = state.get("pid") if isinstance(state, dict) else None
+    if (
+        not isinstance(host, str)
+        or not isinstance(port, int)
+        or isinstance(port, bool)
+        or not 0 < port < 65536
+        or not isinstance(pid, int)
+        or isinstance(pid, bool)
+    ):
+        raise LiveDaemonStateError("daemon_state")
+    # The native daemon checked the caller, so the handler needs no auth token.
+    return _replay_server_class()(store, port, host, Path.home(), "", pid)
+
+
 def _handler_class() -> type:
     from ..daemon.server import _GuardDaemonHandler
 
     class _OfflineHandler(_GuardDaemonHandler):  # type: ignore[misc, valid-type]
-        def __init__(self, store: GuardStore, method: str, path: str) -> None:  # pyright: ignore[reportMissingSuperCall]
-            self.server = _OfflineServer(store)  # type: ignore[assignment]  # pyright: ignore[reportAttributeAccessIssue]
+        def __init__(self, server: Any, method: str, path: str) -> None:  # pyright: ignore[reportMissingSuperCall]
+            self.server = server  # pyright: ignore[reportAttributeAccessIssue]
             self.headers = Message()
             self.command = method
             self.path = path
@@ -75,7 +118,9 @@ def _handler_class() -> type:
             return None
 
         def _daemon_server(self) -> Any:
-            raise LiveDaemonStateError("daemon_server")
+            if isinstance(self.server, _OfflineServer):
+                raise LiveDaemonStateError("daemon_server")
+            return self.server
 
         def _write_json_bytes(
             self,
@@ -87,6 +132,8 @@ def _handler_class() -> type:
             if self.reply is not None:
                 raise OfflineReplyError("second_reply")
             headers = {key: value for key, value in (extra_headers or {}).items() if key not in _IGNORED_HEADERS}
+            if headers == _NO_STORE_MAX_AGE_ZERO and self.command == "GET":
+                headers = _NO_STORE
             if headers not in ({}, _NO_STORE):
                 if self.command == "GET":
                     # A read the daemon answers with its own headers is relayed.
@@ -122,9 +169,17 @@ def dispatch(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     ):
         raise LibraryCallError("invalid_arguments")
     target = f"{path}?{query}" if query else path
-    handler = _handler_class()(store, method, target)
     parsed = urlparse(target)
     parts = [part for part in parsed.path.split("/") if part]
+    published = method == "GET" and (
+        parsed.path in _PUBLISHED_READS
+        or (len(parts) == 4 and parts[0:2] == ["v1", "sessions"] and parts[3] == "resume")
+    )
+    try:
+        server = _published_server(store) if published else _OfflineServer(store)
+    except LiveDaemonStateError:
+        return {"relay": True}
+    handler = _handler_class()(server, method, target)
     try:
         if method == "POST":
             route = native_route_facts("POST", parsed.path, guard_home=store.guard_home)
@@ -138,6 +193,9 @@ def dispatch(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
         if handler.reply is not None:
             raise
         return {"relay": True}
+    finally:
+        if published:
+            server.server_close()
     if handler.reply is None:
         raise OfflineReplyError("no_reply")
     return handler.reply

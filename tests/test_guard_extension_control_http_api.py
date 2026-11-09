@@ -64,7 +64,7 @@ def test_http_routes_authenticate_before_reading_sensitive_post_body(
     # Keep this home unenrolled so the routes still prove how they answer a
     # missing authority; default enrollment has its own daemon tests.
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._GuardDaemonHTTPServer._enroll_authority_by_default",
+        "codex_plugin_scanner.guard.extension_control_host.ExtensionControlHost._enroll_authority_by_default",
         lambda _server: None,
     )
     store = GuardStore(tmp_path / "guard-home")

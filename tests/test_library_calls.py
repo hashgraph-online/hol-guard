@@ -251,6 +251,21 @@ def test_dispatch_relays_routes_that_need_a_running_daemon(tmp_path: Path) -> No
     assert _dispatch(tmp_path, "GET", "/v1/no-such-route") == {"ok": {"relay": True}}
 
 
+def test_dispatch_answers_live_reads_from_the_published_daemon_state(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.daemon.manager import _state_path
+
+    state = _state_path(tmp_path)
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"host": "127.0.0.1", "port": 5999, "pid": 1, "state_id": "s1"}))
+    connect = _dispatch(tmp_path, "GET", "/v1/cloud/connect")["ok"]
+    assert connect["status"] == 200  # type: ignore[index]
+    assert set(connect["body"]) == {"connect_required", "connect_flow", "dashboard_url"}  # type: ignore[index]
+    update = _dispatch(tmp_path, "GET", "/v1/update/status")["ok"]
+    assert update["status"] == 200 and update["no_store"] is True  # type: ignore[index]
+    state.write_text(json.dumps({"host": "127.0.0.1", "port": True, "pid": 1}))
+    assert _dispatch(tmp_path, "GET", "/v1/cloud/connect") == {"ok": {"relay": True}}
+
+
 def test_dispatch_refuses_malformed_arguments(tmp_path: Path) -> None:
     assert _dispatch(tmp_path, "PUT", "/v1/policy")["error"]["kind"] == "library_call"  # type: ignore[index]
     assert _dispatch(tmp_path, "POST", "/v1/policy/sync", [])["error"]["kind"] == "library_call"  # type: ignore[index]

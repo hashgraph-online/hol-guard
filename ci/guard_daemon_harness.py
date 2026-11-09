@@ -9,10 +9,13 @@ background workers and makes no lifecycle promises.
 
 from __future__ import annotations
 
+import os
 import socket
 import socketserver
 import threading
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +56,11 @@ def _server_class() -> type:
             self.workspace_dir = workspace_dir.expanduser().resolve(strict=False) if workspace_dir else None
             self.idle_timeout_seconds = idle_timeout_seconds
             self._replay_daemon_pid = None
+            # The published state names this server's session, and the
+            # identity challenge proves it, as the daemon's own did.
+            if not self.runtime_session_id:
+                self.runtime_session_id = uuid.uuid4().hex
+                self.runtime_started_at = datetime.now(timezone.utc).isoformat()
 
         def server_bind(self) -> None:
             socketserver.TCPServer.server_bind(self)
@@ -164,6 +172,15 @@ class GuardDaemonServer:
             return
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True, name="guard-daemon-harness")
         self._thread.start()
+        self._publish_state()
+
+    def _publish_state(self) -> None:
+        """Publish where this daemon listens, as the daemon did once it served.
+
+        A hook bridge the resident defers finds the daemon through this state.
+        """
+
+        self._server.publish_trust_state()
 
     def serve(self) -> None:
         self._server.serve_forever()
@@ -178,6 +195,10 @@ class GuardDaemonServer:
             thread.join(timeout=5)
             self._thread = None
         self._server.server_close()
+        if thread is not None:
+            from codex_plugin_scanner.guard.daemon.manager import clear_guard_daemon_state_if_current
+
+            clear_guard_daemon_state_if_current(self.store.guard_home, pid=os.getpid(), port=self.port)
         hook_worker = self._hook_worker
         self._hook_worker = None
         if hook_worker is not None:
