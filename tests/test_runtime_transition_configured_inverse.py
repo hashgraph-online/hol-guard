@@ -80,6 +80,8 @@ class OwnedDaemonLifecycle:
         self.log = tempfile.TemporaryFile()  # noqa: SIM115 -- closed with the child
         config = launch_configuration(self.guard, 0, user_home=self.home)
         config["workers"] = True
+        # A pytest home idles out after seconds; this daemon lives across the transition.
+        config["idle_timeout_seconds"] = None
         environment = {
             **os.environ,
             "HOME": str(self.home),

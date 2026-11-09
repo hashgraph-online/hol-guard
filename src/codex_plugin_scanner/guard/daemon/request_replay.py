@@ -27,7 +27,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
-from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..store import GuardStore
 from .request_replay_state import (
     _STATE_LIMIT_BYTES,
@@ -270,32 +269,23 @@ def _replay_server_class() -> type:
                 retry_interval_seconds=0.05,
             )
 
-        @cached_property
-        def extension_control_api(self) -> Any:
-            from ..catalog_delivery.projection import capture
-            from ..runtime.extension_control_runtime import ExtensionControlRuntime
-            from .extension_control_api import ExtensionControlApiService
+        # The extension-control service is the resident's, one per Guard home.
+        @property
+        def extension_control_api(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
+            from ..extension_control_host import host_for
 
-            try:
-                self._migrate_installed_authority()
-                self._enroll_authority_by_default()
-                _, registry, _ = capture(self.store)
-                view = self._startup_extension_control_view(registry)
-            except (daemon_server._InstalledAuthorityMigrationError, NativePolicySnapshotError):
-                registry = daemon_server.BUILT_IN_COMMAND_EXTENSION_REGISTRY
-                view = self.store._tampered_view(registry.catalog_digest)
-                self._extension_control_on_core_registry = True
-            self.__dict__["extension_control_runtime"] = ExtensionControlRuntime(view)
-            return ExtensionControlApiService(
-                store=self.store,
-                registry=registry,
-                runtime=self.__dict__["extension_control_runtime"],
-            )
+            return host_for(self.store).api
 
-        @cached_property
-        def extension_control_runtime(self) -> Any:
-            _ = self.extension_control_api
-            return self.__dict__["extension_control_runtime"]
+        @property
+        def extension_control_runtime(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
+            from ..extension_control_host import host_for
+
+            return host_for(self.store).runtime
+
+        def refresh_extension_control_runtime(self) -> Any:
+            from ..extension_control_host import host_for
+
+            return host_for(self.store).refresh()
 
         @cached_property
         def local_cli_api(self) -> Any:

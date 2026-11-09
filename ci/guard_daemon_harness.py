@@ -151,6 +151,8 @@ def _server_class() -> type:
             socketserver.BaseServer.__init__(self, (host, port), HarnessHandler)
             self.identity_challenges: dict[str, dict[str, Any]] = {}
             self.identity_challenges_lock = threading.Lock()
+            self._request_threads: list[threading.Thread] = []
+            self._request_threads_lock = threading.Lock()
             family = socket.AF_INET6 if ":" in host else socket.AF_INET
             self.socket = socket.socket(family, socket.SOCK_STREAM)
             try:
@@ -181,6 +183,9 @@ def _server_class() -> type:
                 daemon=True,
                 name="guard-daemon-harness-request",
             )
+            with self._request_threads_lock:
+                self._request_threads = [item for item in self._request_threads if item.is_alive()]
+                self._request_threads.append(thread)
             thread.start()
 
         def _serve_one(self, request: Any, client_address: Any) -> None:
@@ -196,12 +201,19 @@ def _server_class() -> type:
 
         def shutdown(self) -> None:
             socketserver.BaseServer.shutdown(self)
+            # Streams end at shutdown; close waits for their handlers, as the
+            # daemon's threading server did.
+            self.shutdown_started.set()
 
         def request_serve_stop(self) -> None:
             self.shutdown_started.set()
 
         def server_close(self) -> None:
             socketserver.TCPServer.server_close(self)
+            with self._request_threads_lock:
+                threads, self._request_threads = self._request_threads, []
+            for thread in threads:
+                thread.join(timeout=5)
             self.audit_persistence.close()
             replay.server_close(self)
 

@@ -106,7 +106,7 @@ def test_native_daemon_answers_the_reads(tmp_path: Path) -> None:
             assert "catalog_digest" in json.loads(response.read())
         if sys.platform != "win32":
             # The daemon answered from its resident library process, not a relay.
-            listed = subprocess.run(["ps", "-ax", "-o", "command="], capture_output=True, text=True, check=True)
+            listed = subprocess.run(["ps", "-ax", "-ww", "-o", "command="], capture_output=True, text=True, check=True)
             assert any(
                 "library-serve" in line and str(store.guard_home) in line for line in listed.stdout.splitlines()
             )
