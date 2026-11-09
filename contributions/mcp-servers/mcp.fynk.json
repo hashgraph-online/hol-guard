@@ -11,7 +11,7 @@
     "displayName": "fynk",
     "url": "https://fynk.com"
   },
-  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#1E1B4B" },
+  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#121719" },
   "homepage": "https://fynk.com/en/integrations/mcp-server/",
   "launch": {
     "kind": "remote-http",
