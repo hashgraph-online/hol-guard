@@ -162,3 +162,61 @@ fn a_rename_names_the_search_only_when_it_finds_just_these_lines() {
         assert!(text.contains("no other project file holds it:\n"), "{text}");
     }
 }
+
+/// `rg` also searches files the map does not read for context: a `.pyi`
+/// stub, `setup.cfg`, a `Makefile`, a build folder no ignore file names. One
+/// of them naming the old name means the list cannot say no other file
+/// holds it. One naming something else, an ignored build folder, bytecode
+/// and images leave the list whole.
+#[test]
+fn a_rename_looks_in_the_files_rg_searches_but_the_map_does_not_read() {
+    let cache = "class Cache:\n    def _evict(self):\n        self.items.clear()\n";
+    let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
+    let cases: [(&[(&str, &str)], bool); 8] = [
+        (
+            &[(
+                "src/pkg/cache.pyi",
+                "class Cache:\n    def _evict(self) -> None: ...\n",
+            )],
+            false,
+        ),
+        (
+            &[("setup.cfg", "[tool]\nhook = pkg.cache:Cache._evict\n")],
+            false,
+        ),
+        (
+            &[("Makefile", "evict:\n\tpython -c 'Cache()._evict()'\n")],
+            false,
+        ),
+        (&[("build/lib/pkg/cache.py", cache)], false),
+        (&[("Makefile", "test:\n\tpytest\n")], true),
+        (
+            &[
+                (".gitignore", "build/\n"),
+                ("build/lib/pkg/cache.py", cache),
+            ],
+            true,
+        ),
+        (
+            &[(
+                "src/pkg/__pycache__/cache.cpython-312.pyc",
+                "\0\0\r\n_evict",
+            )],
+            true,
+        ),
+        (&[("docs/logo.png", "\0\0\0\r_evict")], true),
+    ];
+    for (more, whole) in cases {
+        let mut list = vec![("src/pkg/cache.py", cache)];
+        list.extend_from_slice(more);
+        let (home, _project, root) = project(ON, &list);
+        let text = prompt_map(home.path(), &root, prompt).unwrap();
+        let said = "Every line naming `_evict`, all that `rg -nw '_evict'` finds; no other project file holds it:\n";
+        assert_eq!(text.contains(said), whole, "{more:?}\n{text}");
+        assert_eq!(
+            text.contains("other files may hold it too"),
+            !whole,
+            "{more:?}\n{text}"
+        );
+    }
+}

@@ -4,7 +4,7 @@
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
 use super::{Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
-use crate::context_assistance_prompt_words::term_form;
+use crate::context_assistance_prompt_words::{term_form, whole_word};
 use std::time::Instant;
 
 /// Names listed for one prompt: the old name, and at most one more.
@@ -230,8 +230,10 @@ fn every_line(
     whole &= item.spelled == Some(holding);
     // Named as the search an agent runs, since a list it only had to trust
     // was searched for again before half the renames.
-    let searched = (listed.iter()).all(|(file, lines)| searched_alike(file, &name, lines));
-    let title = if whole && building.is_empty() && searched {
+    let searched = whole
+        && building.is_empty()
+        && (listed.iter()).all(|(file, lines)| searched_alike(file, &name, lines, until));
+    let title = if searched {
         format!(
             "Every line naming `{name}`, all that `rg -nw '{name}'` finds; no other project file holds it:"
         )
@@ -283,18 +285,19 @@ fn every_line(
 }
 
 /// Whether `rg -nw` for `name` finds just `lines` in `file`: the lines
-/// writing `name` with no letter, digit or `_` either side.
-fn searched_alike(file: &File, name: &str, lines: &[usize]) -> bool {
-    let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
-    let finds = |line: &str| {
-        (line.match_indices(name)).any(|(at, _)| {
-            !word(line[..at].chars().next_back()) && !word(line[at + name.len()..].chars().next())
-        })
-    };
-    (file.lines.iter().enumerate())
-        .filter(|(_, line)| finds(line))
-        .map(|(at, _)| at + 1)
-        .eq(lines.iter().copied())
+/// writing `name` with no letter, digit or `_` either side. `false` once
+/// `until` passes, so the list then makes no claim.
+fn searched_alike(file: &File, name: &str, lines: &[usize], until: Instant) -> bool {
+    let mut found = Vec::new();
+    for (at, line) in file.lines.iter().enumerate() {
+        if at % CHECK_EVERY == 0 && Instant::now() >= until {
+            return false;
+        }
+        if whole_word(line, name) {
+            found.push(at + 1);
+        }
+    }
+    found == lines
 }
 
 /// For a rename of a definition no test names, the source definitions
