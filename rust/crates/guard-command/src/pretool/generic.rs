@@ -1241,9 +1241,9 @@ fn evaluate_envelope(
     {
         result.minimum_action = "sandbox-required".into();
         result.policy_action = "sandbox-required".into();
-        result.reason_code = contained_test_reason
-            .expect("checked required test profile")
-            .into();
+        if let Some(reason) = contained_test_reason {
+            result.reason_code = reason.into();
+        }
         result.reason = concat!(
             "HOL Guard requires protected read-only execution for this repository action. ",
             "Direct execution remains blocked.",

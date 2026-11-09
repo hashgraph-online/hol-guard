@@ -113,7 +113,7 @@ pub(crate) fn parse_ini_section(
             option_name = None;
         } else if current.is_none() {
             return Err(IniError::Syntax);
-        } else if let Some((raw_name, raw_value)) = option_line(value) {
+        } else if let (Some(index), Some((raw_name, raw_value))) = (current, option_line(value)) {
             let name = raw_name.to_lowercase();
             if raw_name.is_empty() {
                 pending_error = true;
@@ -123,7 +123,6 @@ pub(crate) fn parse_ini_section(
                 return Err(IniError::Duplicate);
             }
             elements_options.insert(key);
-            let index = current.expect("section");
             let options = options_mut(&mut defaults, &mut sections, index);
             options.insert(name.clone(), vec![py_strip(raw_value).to_owned()]);
             option_name = Some(name);

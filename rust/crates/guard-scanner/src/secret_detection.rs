@@ -1201,7 +1201,7 @@ impl SecretFinding {
     pub fn to_public_dict(
         &self,
         fingerprint_key: Option<&[u8]>,
-    ) -> Result<PublicFinding, FingerprintError> {
+    ) -> Result<PublicFinding<'_>, FingerprintError> {
         let fingerprint = match fingerprint_key {
             Some(key) => Some(self.fingerprint(key)?),
             None => None,

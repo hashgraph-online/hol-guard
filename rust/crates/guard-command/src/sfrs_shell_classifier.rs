@@ -246,8 +246,8 @@ fn proposal_control_block(controls: Option<&ToolActionControls>) -> bool {
     resolve_extension_controls(
         &controls.layers,
         Some(&*catalog),
-        &[permission.extension_id.clone()],
-        &[permission.permission_id.clone()],
+        std::slice::from_ref(&permission.extension_id),
+        std::slice::from_ref(&permission.permission_id),
         ControlSurface::CommandEvaluation,
         &[],
         controls.authority_failure,

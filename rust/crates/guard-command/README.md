@@ -46,12 +46,12 @@ and tested.
 
 ## Build and check
 
-Run these commands from the repository root. The workspace requires Rust 1.88
-and pins Rust 1.88.0 in [`rust-toolchain.toml`](../../rust-toolchain.toml).
+Run these commands from the repository root. The workspace requires Rust 1.89
+and pins Rust 1.89.0 in [`rust-toolchain.toml`](../../rust-toolchain.toml).
 
 ```sh
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command
 ```
 
 `guard-command-source schema` and `descriptor-schema` print the native editor

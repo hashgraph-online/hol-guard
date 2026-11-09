@@ -276,7 +276,7 @@ pub(crate) fn observed_mcp_history(connection: &Connection, args: &Args<'_>) -> 
              from approval_requests where {OBSERVED_LABEL} \
              order by coalesce(last_seen_at, created_at) desc limit ?"
         ),
-        &[limit.clone()],
+        std::slice::from_ref(&limit),
     )?;
     let receipts = query_all(
         connection,

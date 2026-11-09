@@ -1323,8 +1323,7 @@ fn evaluate_tool_call_inner(
     );
     let mut pending_decision: Option<Value> = None;
     let mut claim_disposition: Option<ApprovalReuseClaimDisposition> = None;
-    if reuse.should_claim && saved_decision.is_some() {
-        let decision = saved_decision.as_ref().expect("checked is_some");
+    if let Some(decision) = saved_decision.as_ref().filter(|_| reuse.should_claim) {
         let raw_claim_disposition = store.approval_reuse_claim_disposition(decision);
         if let Some("consumed" | "retained") = raw_claim_disposition.as_deref() {
             claim_disposition = match raw_claim_disposition.as_deref() {
