@@ -470,6 +470,100 @@ def resolve_scenarios(
     )
 
 
+# The most extensions and permissions the projection lists, and the most rows one
+# answer holds (``MAX_EXTENSIONS``, ``MAX_PERMISSIONS`` and ``PAGE_ROWS`` in
+# ``extension_control_projection_op.rs``).
+_MAX_PROJECTED_EXTENSIONS: Final = 512
+_MAX_PROJECTED_PERMISSIONS: Final = 4096
+_PROJECTED_PAGE_ROWS: Final = 2048
+_EFFECTIVE_STATES: Final = frozenset({"allowed", "blocked"})
+_LAYER_STATES: Final = frozenset({"enabled", "disabled", "inherited"})
+_PROJECTED_ROW_FIELDS: Final = {
+    "effective_state": str,
+    "local_state": str,
+    "managed_state": str,
+    "reason_codes": list,
+}
+
+
+def _projected_rows(value: object, count: int) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or len(value) != count:
+        raise _invalid()
+    rows: list[dict[str, Any]] = []
+    for raw in value:
+        row = _shape(raw, _PROJECTED_ROW_FIELDS)
+        if (
+            row["effective_state"] not in _EFFECTIVE_STATES
+            or row["local_state"] not in _LAYER_STATES
+            or row["managed_state"] not in _LAYER_STATES
+        ):
+            raise _invalid()
+        rows.append({**row, "reason_codes": list(_strings(row["reason_codes"]))})
+    return rows
+
+
+def project_extension_controls(
+    registry: CommandSafetyExtensionRegistry,
+    layers: Sequence[ExtensionControlLayer],
+    authority_failure: ResolverFailureCode | None,
+    *,
+    guard_home: Path | None = None,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Every extension and permission's effective state, as the Extension Control Center lists them.
+
+    The resident resolves each one for command evaluation against ``layers``
+    and reports what the local and the managed layer set on it, a page of rows
+    per ask; a larger registry is cut to the first 512 extensions and 4096
+    permissions. Ids and catalog facts come from the registry, never the reply.
+    """
+
+    extensions = registry.extensions[:_MAX_PROJECTED_EXTENSIONS]
+    permissions = registry.permissions[:_MAX_PROJECTED_PERMISSIONS]
+    total = len(extensions) + len(permissions)
+    query: dict[str, object] = {
+        "kind": "project",
+        "registry": _registry_wire(registry, trust_classes=True),
+        "layers": [_layer_wire(layer) for layer in layers],
+        "authority_failure": None if authority_failure is None else authority_failure.value,
+        "start": 0,
+    }
+    if _wire_bytes(query) > _MAX_BATCH_BYTES:
+        raise _too_large()
+    rows: list[dict[str, Any]] = []
+    for start in range(0, total, _PROJECTED_PAGE_ROWS):
+        count = min(_PROJECTED_PAGE_ROWS, total - start)
+
+        def parse(payload: dict[str, Any], count: int = count) -> list[dict[str, Any]]:
+            return _projected_rows(payload["rows"], count)
+
+        rows.extend(_ask({**query, "start": start}, guard_home, {"rows": list}, parse))
+    extension_rows: list[dict[str, object]] = [
+        {
+            "extension_id": extension.extension_id,
+            "effective_state": row["effective_state"],
+            "local_state": row["local_state"],
+            "managed_state": row["managed_state"],
+            "required": extension.required,
+            "reason_codes": row["reason_codes"],
+        }
+        for extension, row in zip(extensions, rows, strict=False)
+    ]
+    permission_rows: list[dict[str, object]] = [
+        {
+            "permission_id": permission.permission_id,
+            "extension_id": permission.extension_id,
+            "effective_state": row["effective_state"],
+            "local_state": row["local_state"],
+            "managed_state": row["managed_state"],
+            "configurable": permission.configurable,
+            "fixed_reason": permission.fixed_reason,
+            "reason_codes": row["reason_codes"],
+        }
+        for permission, row in zip(permissions, rows[len(extensions) :], strict=True)
+    ]
+    return extension_rows, permission_rows
+
+
 def preview_control_mutation(
     registry: CommandSafetyExtensionRegistry,
     current_layers: Sequence[ExtensionControlLayer],

@@ -21,6 +21,7 @@
 //! - `{"op": "payloads", "payloads": [...], ...}` with the same three rule
 //!   flags answers `{"results": [...]}`, one `payload` or `refused` answer per
 //!   payload in order, so the signer checks every claim of an item at once.
+//! - `build` and `sign_plan` spell the payloads themselves; see [`plan`].
 
 use guard_command::attestation_payload::{validate_attestation_payload, AttestationPayloadRules};
 use guard_command::trust_claim::{trust_claim_hash, validated_local_trust_claim};
@@ -36,6 +37,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some("claim_hash") => claim_hash(args),
         Some("payload") => payload(args),
         Some("payloads") => payloads(args),
+        Some("build") => plan::build(args),
+        Some("sign_plan") => plan::sign_plan(args),
         _ => Err(ERR_INVALID),
     }
 }
@@ -110,6 +113,9 @@ fn payloads(args: &Map<String, Value>) -> KindResult {
         .collect::<Result<Vec<Value>, _>>()?;
     Ok(json!({ "results": results }))
 }
+
+#[path = "trust_attestation_plan.rs"]
+mod plan;
 
 #[cfg(test)]
 #[path = "trust_attestation_shape_tests.rs"]

@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.daemon.hook_native_exact_action import review_ev
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_signed_approval_fixtures import short_signed_link
 from tests.native_pretool_edge_fixtures import _edge, _sync_receipt
 from tests.native_review_evidence_support import with_review_evidence
 
@@ -195,7 +196,7 @@ def test_native_review_queues_approval_without_escaping_to_cli(
     assert str(response.get("approval_url", "")).startswith("http://127.0.0.1:4781/requests/")
     assert "guard-token=" not in str(response.get("approval_url"))
     assert str(response.get("approval_url")) in str(response.get("reason"))
-    assert "guard-token=" in str(response.get("reason"))
+    assert short_signed_link(str(response.get("approval_url"))).search(str(response.get("reason")))
     assert "secret-daemon-token" not in str(response.get("reason"))
     assert response.get("approval_center_url") == "http://127.0.0.1:4781"
     pending = store.list_approval_requests(status="pending")

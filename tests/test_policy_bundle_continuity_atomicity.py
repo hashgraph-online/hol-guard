@@ -108,10 +108,7 @@ def test_activation_rejection_after_continuity_preflight_writes_neither_authorit
     assert store.read_local_cli_grant(identity.cli_id) is None
 
 
-def test_policy_and_continuity_roll_back_together_on_continuity_commit_fault(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_policy_and_continuity_roll_back_together_on_continuity_commit_fault(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     identity, mutation = _continuity_mutation(store)
     bundle = _signed_bundle(
@@ -120,12 +117,15 @@ def test_policy_and_continuity_roll_back_together_on_continuity_commit_fault(
         issued_at="2026-08-27T12:00:00Z",
     )
 
-    def fail_after_continuity(stage: str) -> None:
-        if stage == "after_event":
-            raise ValueError("injected continuity failure")
-
-    monkeypatch.setattr(store, "_custom_extension_continuity_transaction_boundary", fail_after_continuity)
-    assert _activate_with_continuity(store, bundle, mutation, now="2026-08-27T12:00:00Z") is None
+    # The resident writes the continuity receipt last; failing it must undo
+    # the grant, the continuity state and the whole activation.
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
+        connection.execute(
+            "create trigger fail_continuity_receipt before insert on guard_events "
+            "begin select raise(abort, 'simulated process failure'); end"
+        )
+    with pytest.raises(RuntimeError):
+        _activate_with_continuity(store, bundle, mutation, now="2026-08-27T12:00:00Z")
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_ack") is None
     assert store.get_sync_payload("custom_extension_continuity") is None

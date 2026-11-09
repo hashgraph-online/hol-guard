@@ -14,6 +14,22 @@ generated descriptor. Contributions remain **External, opt-in, and off until
 enabled**. Names, help descriptions, and MCP annotations do not establish
 safety.
 
+## Install the CLI
+
+The `hol-guard extensions` commands below ship in the released package, so generating and
+validating a kit needs no Rust toolchain:
+
+```sh
+pipx install hol-guard
+hol-guard --version
+```
+
+Connect the agent you author with, for example `hol-guard install claude-code`, so you can compare
+the current catalog with `hol-guard command explain` before you start and exercise the extension
+in that agent after it ships. See
+[Test with an installed Guard](../extensions/contributing.md#test-with-an-installed-guard).
+Repository checks that use `uv run --no-sync` still run from a source checkout.
+
 ## Canonical files
 
 For a command contribution, edit or review these files:
@@ -68,7 +84,7 @@ dependencies and build the compiler with the pinned Rust toolchain:
 
 ```sh
 uv sync --frozen --extra dev
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
 ```
 
 The shell examples below use Bash and `jq`. On Windows, use Git Bash and add
@@ -126,7 +142,7 @@ For the Extension Builder CLI in an editable checkout, explicitly select a
 fresh compiler after generating the program:
 
 ```sh
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
 export HOL_GUARD_NATIVE_SOURCE_COMPILER="$PWD/rust/target/release/guard-command-source"
 ```
 
@@ -174,7 +190,7 @@ temporary envelope; they are not part of the fixture contract.
 The focused Rust integration test exercises the checked-in source and fixture:
 
 ```sh
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 ```
 
 ## Generate a review kit from exported metadata
@@ -346,7 +362,7 @@ satisfy a test:
 ```sh
 uv run --no-sync python scripts/build_native_command_program.py
 uv run --no-sync python scripts/build_native_command_program.py --check
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py
 uv run --no-sync python scripts/export_extension_directory.py
 uv run --no-sync python scripts/render_command_extension_directory.py

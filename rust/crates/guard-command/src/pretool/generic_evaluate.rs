@@ -258,7 +258,7 @@ pub(super) fn evaluate_signals(
             action,
             "allow",
             super::omp::host_reference_reason(&signals.path_values[0]).unwrap_or_default(),
-            "This Oh My Pi artifact or skill reference names host-held content, not a filesystem path.",
+            "This Oh My Pi artifact, skill, job or session-local reference names host-held content, not a filesystem path.",
         );
     }
     if action_type == PreToolActionTypeV1::FileRead

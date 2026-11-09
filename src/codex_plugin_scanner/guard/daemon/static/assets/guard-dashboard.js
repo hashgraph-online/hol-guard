@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-CxLbCgje.js","assets/chunks/home-protection-module-BTPjmztc.js","assets/chunks/supply-chain-protection-stats-0sjO1XtL.js","assets/chunks/workspace-model-7c8X0j_V.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-D5qD7XwN.js","assets/chunks/harness-version-label-t_KH0-Nr.js","assets/chunks/connect-guard-cloud-button-CjWFL3B3.js","assets/chunks/settings-save-proof-modal-_qdPvIXI.js","assets/chunks/settings-workspace-DEkPYtV5.js","assets/chunks/confirm-dialog-bAWZ8zmO.js","assets/chunks/extensions-workspace-Di_f8kqI.js","assets/chunks/app-detail-workspace-Dw3CHM-w.js","assets/chunks/policy-workspace-page-D0sFDLZR.js","assets/chunks/about-workspace-Sfg7s-Lz.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Dan7_c2E.js","assets/chunks/home-protection-module-DIttScQc.js","assets/chunks/supply-chain-protection-stats-Ba1xsVTU.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BSRlTmJa.js","assets/chunks/harness-version-label-CX70iimu.js","assets/chunks/connect-guard-cloud-button-BJqRCi0R.js","assets/chunks/settings-save-proof-modal-5oF57AlU.js","assets/chunks/settings-workspace-BZwiFWD9.js","assets/chunks/confirm-dialog-CFbrhi6J.js","assets/chunks/extensions-workspace-CRj85C7n.js","assets/chunks/app-detail-workspace-raaFYZV-.js","assets/chunks/policy-workspace-page-BlNqkYe-.js","assets/chunks/about-workspace-DOeU384A.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12813,6 +12813,9 @@ function HiMiniQuestionMarkCircle(props) {
 function HiMiniPuzzlePiece(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M12 4.467c0-.405.262-.75.559-1.027.276-.257.441-.584.441-.94 0-.828-.895-1.5-2-1.5s-2 .672-2 1.5c0 .362.171.694.456.953.29.265.544.6.544.994a.968.968 0 0 1-1.024.974 39.655 39.655 0 0 1-3.014-.306.75.75 0 0 0-.847.847c.14.993.242 1.999.306 3.014A.968.968 0 0 1 4.447 10c-.393 0-.729-.253-.994-.544C3.194 9.17 2.862 9 2.5 9 1.672 9 1 9.895 1 11s.672 2 1.5 2c.356 0 .683-.165.94-.441.276-.297.622-.559 1.027-.559a.997.997 0 0 1 1.004 1.03 39.747 39.747 0 0 1-.319 3.734.75.75 0 0 0 .64.842c1.05.146 2.111.252 3.184.318A.97.97 0 0 0 10 16.948c0-.394-.254-.73-.545-.995C9.171 15.693 9 15.362 9 15c0-.828.895-1.5 2-1.5s2 .672 2 1.5c0 .356-.165.683-.441.94-.297.276-.559.622-.559 1.027a.998.998 0 0 0 1.03 1.005c1.337-.05 2.659-.162 3.961-.337a.75.75 0 0 0 .644-.644c.175-1.302.288-2.624.337-3.961A.998.998 0 0 0 16.967 12c-.405 0-.75.262-1.027.559-.257.276-.584.441-.94.441-.828 0-1.5-.895-1.5-2s.672-2 1.5-2c.362 0 .694.17.953.455.265.291.601.545.995.545a.97.97 0 0 0 .976-1.024 41.159 41.159 0 0 0-.318-3.184.75.75 0 0 0-.842-.64c-1.228.164-2.473.271-3.734.319A.997.997 0 0 1 12 4.467Z" }, "child": [] }] })(props);
 }
+function HiMiniPower(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 2a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5A.75.75 0 0 1 10 2ZM5.404 4.343a.75.75 0 0 1 0 1.06 6.5 6.5 0 1 0 9.192 0 .75.75 0 1 1 1.06-1.06 8 8 0 1 1-11.313 0 .75.75 0 0 1 1.06 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniPlus(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" }, "child": [] }] })(props);
 }
@@ -12969,6 +12972,12 @@ function HiMiniCheckCircle(props) {
 function HiMiniCheckBadge(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M16.403 12.652a3 3 0 0 0 0-5.304 3 3 0 0 0-3.75-3.751 3 3 0 0 0-5.305 0 3 3 0 0 0-3.751 3.75 3 3 0 0 0 0 5.305 3 3 0 0 0 3.75 3.751 3 3 0 0 0 5.305 0 3 3 0 0 0 3.751-3.75Zm-2.546-4.46a.75.75 0 0 0-1.214-.883l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniChatBubbleLeftRight(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M3.505 2.365A41.369 41.369 0 0 1 9 2c1.863 0 3.697.124 5.495.365 1.247.167 2.18 1.108 2.435 2.268a4.45 4.45 0 0 0-.577-.069 43.141 43.141 0 0 0-4.706 0C9.229 4.696 7.5 6.727 7.5 8.998v2.24c0 1.413.67 2.735 1.76 3.562l-2.98 2.98A.75.75 0 0 1 5 17.25v-3.443c-.501-.048-1-.106-1.495-.172C2.033 13.438 1 12.162 1 10.72V5.28c0-1.441 1.033-2.717 2.505-2.914Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M14 6c-.762 0-1.52.02-2.271.062C10.157 6.148 9 7.472 9 8.998v2.24c0 1.519 1.147 2.839 2.71 2.935.214.013.428.024.642.034.2.009.385.09.518.224l2.35 2.35a.75.75 0 0 0 1.28-.531v-2.07c1.453-.195 2.5-1.463 2.5-2.915V8.998c0-1.526-1.157-2.85-2.729-2.936A41.645 41.645 0 0 0 14 6Z" }, "child": [] }] })(props);
+}
+function HiMiniChatBubbleLeftEllipsis(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 2c-2.236 0-4.43.18-6.57.524C1.993 2.755 1 4.014 1 5.426v5.148c0 1.413.993 2.67 2.43 2.902.848.137 1.705.248 2.57.331v3.443a.75.75 0 0 0 1.28.53l3.58-3.579a.78.78 0 0 1 .527-.224 41.202 41.202 0 0 0 5.183-.5c1.437-.232 2.43-1.49 2.43-2.903V5.426c0-1.413-.993-2.67-2.43-2.902A41.289 41.289 0 0 0 10 2Zm0 7a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM8 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm5 1a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniChartBar(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 1.5 1.5h1a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-1ZM9.5 6A1.5 1.5 0 0 0 8 7.5v9A1.5 1.5 0 0 0 9.5 18h1a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 10.5 6h-1ZM3.5 10A1.5 1.5 0 0 0 2 11.5v5A1.5 1.5 0 0 0 3.5 18h1A1.5 1.5 0 0 0 6 16.5v-5A1.5 1.5 0 0 0 4.5 10h-1Z" }, "child": [] }] })(props);
 }
@@ -13022,6 +13031,9 @@ function HiMiniArchiveBox(props) {
 }
 function HiMiniAdjustmentsHorizontal(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 3.75a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM17.25 4.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM5 3.75a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5a.75.75 0 0 1 .75.75ZM4.25 17a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM17.25 17a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM9 10a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1 0-1.5h5.5A.75.75 0 0 1 9 10ZM17.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM14 10a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM10 16.25a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" }, "child": [] }] })(props);
+}
+function HiMiniAcademicCap(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.664 1.319a.75.75 0 0 1 .672 0 41.059 41.059 0 0 1 8.198 5.424.75.75 0 0 1-.254 1.285 31.372 31.372 0 0 0-7.86 3.83.75.75 0 0 1-.84 0 31.508 31.508 0 0 0-2.08-1.287V9.394c0-.244.116-.463.302-.592a35.504 35.504 0 0 1 3.305-2.033.75.75 0 0 0-.714-1.319 37 37 0 0 0-3.446 2.12A2.216 2.216 0 0 0 6 9.393v.38a31.293 31.293 0 0 0-4.28-1.746.75.75 0 0 1-.254-1.285 41.059 41.059 0 0 1 8.198-5.424ZM6 11.459a29.848 29.848 0 0 0-2.455-1.158 41.029 41.029 0 0 0-.39 3.114.75.75 0 0 0 .419.74c.528.256 1.046.53 1.554.82-.21.324-.455.63-.739.914a.75.75 0 1 0 1.06 1.06c.37-.369.69-.77.96-1.193a26.61 26.61 0 0 1 3.095 2.348.75.75 0 0 0 .992 0 26.547 26.547 0 0 1 5.93-3.95.75.75 0 0 0 .42-.739 41.053 41.053 0 0 0-.39-3.114 29.925 29.925 0 0 0-5.199 2.801 2.25 2.25 0 0 1-2.514 0c-.41-.275-.826-.541-1.25-.797a6.985 6.985 0 0 1-1.084 3.45 26.503 26.503 0 0 0-1.281-.78A5.487 5.487 0 0 0 6 12v-.54Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 const CATEGORIES = [
   {
@@ -16300,13 +16312,27 @@ function normalizeExtension(raw) {
   if (raw.focus_rule_id !== null && raw.focus_rule_id !== void 0 && focus === null) return null;
   return { extension_id: extensionId, name, focus_rule_id: focus };
 }
+const MAX_RULE_TEXT = 240;
+const MAX_SAFER_ALTERNATIVES = 2;
 function normalizeRule(raw) {
   if (!isRecord$7(raw)) return null;
   const ruleId = catalogId$1(raw.rule_id);
-  const title = boundedText$1(raw.title, 120);
+  const title = raw.title === null || raw.title === void 0 ? null : boundedText$1(raw.title, 120);
   const severity = boundedText$1(raw.severity, 32);
-  if (ruleId === null || title === null || severity === null) return null;
-  return { rule_id: ruleId, title, severity };
+  if (ruleId === null || severity === null) return null;
+  if (raw.title !== null && raw.title !== void 0 && title === null) return null;
+  const rule2 = { rule_id: ruleId, title, severity };
+  if (raw.description !== void 0) {
+    if (raw.description !== null && typeof raw.description !== "string") return null;
+    rule2.description = boundedText$1(raw.description, MAX_RULE_TEXT);
+  }
+  if (raw.safer_alternatives !== void 0) {
+    if (!Array.isArray(raw.safer_alternatives)) return null;
+    const safer = raw.safer_alternatives.map((item) => boundedText$1(item, MAX_RULE_TEXT));
+    if (safer.some((item) => item === null)) return null;
+    rule2.safer_alternatives = safer.slice(0, MAX_SAFER_ALTERNATIVES);
+  }
+  return rule2;
 }
 function normalizePermission$1(raw) {
   if (!isRecord$7(raw)) return null;
@@ -16356,7 +16382,7 @@ function coverageStepLabel(segment) {
   return segment.executable === null ? step : `${step} · ${segment.executable}`;
 }
 function segmentDetail(segment) {
-  const titles = segment.rules.map((rule2) => rule2.title);
+  const titles = segment.rules.flatMap((rule2) => rule2.title === null ? [] : [rule2.title]);
   const labels = segment.permissions.filter((permission2) => permission2.configurable).map((item) => item.label);
   const linked = new Set(segment.extensions.map((extension2) => extension2.name));
   const parts = (titles.length > 0 ? titles : labels).filter((part) => !linked.has(part));
@@ -16787,6 +16813,7 @@ const GUARD_DAEMON_PORT_RANGE = 1e3;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+const GUARD_DAEMON_CANDIDATE_TIMEOUT_MS = 1e4;
 const GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION = 1;
 const GUARD_DAEMON_RECONNECT_NONCE_BYTES = 32;
 const RUNTIME_HEARTBEAT_MAX_AGE_MS = 3e4;
@@ -16981,9 +17008,11 @@ async function probeGuardDaemonHealth(origin) {
     return false;
   }
   try {
-    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/healthz`, {
-      redirect: "error"
-    });
+    const { response, payload } = await fetchGuardDaemonCandidateJson(
+      `${candidateOrigin}/healthz`,
+      { redirect: "error" },
+      GUARD_DAEMON_PROBE_TIMEOUT_MS
+    );
     if (!response.ok) {
       return false;
     }
@@ -16995,9 +17024,9 @@ async function probeGuardDaemonHealth(origin) {
     return false;
   }
 }
-async function fetchGuardDaemonCandidateJson(input, init) {
+async function fetchGuardDaemonCandidateJson(input, init, timeoutMs = GUARD_DAEMON_CANDIDATE_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload = await response.json();
@@ -17431,9 +17460,47 @@ function guardApiInput(input) {
 function withGuardAuth(init) {
   return withGuardAuthForToken(init, readGuardToken());
 }
+const BUSY_RETRY_DELAYS_MS = [300, 900, 2e3];
+async function isBusyRefusal(response) {
+  if (response.status !== 503) {
+    return false;
+  }
+  try {
+    const payload = await response.clone().json();
+    return isRecord$4(payload) && payload["error"] === "native_route_policy_unavailable" && payload["reason_code"] === void 0;
+  } catch {
+    return false;
+  }
+}
+function waitForRetry(delayMs, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 async function daemonFetch(input, init) {
-  const response = await fetch(input, init);
+  let response = await fetch(input, init);
   observeDashboardBuild(response);
+  const resendable = !(input instanceof Request) && (init?.body == null || typeof init.body === "string");
+  for (const delayMs of resendable ? BUSY_RETRY_DELAYS_MS : []) {
+    if (!await isBusyRefusal(response)) {
+      break;
+    }
+    await waitForRetry(delayMs, init?.signal);
+    response = await fetch(input, init);
+    observeDashboardBuild(response);
+  }
   return response;
 }
 function withGuardAuthForToken(init, guardToken) {
@@ -17555,6 +17622,9 @@ async function refreshGuardDashboardSession(guardToken, signal) {
   }
 }
 function guardAwareHref(href) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href) && !/^https?:/i.test(href)) {
+    return href;
+  }
   const guardToken = readGuardToken();
   if (!guardToken) {
     return href;
@@ -23800,6 +23870,61 @@ function SelectMenu(props) {
     )
   ] });
 }
+const KEY = "hol-guard.cigar.turn-on-requested";
+const JOB_KEY = "hol-guard.cigar.turn-on-job";
+const RESUME_WINDOW_MS = 30 * 6e4;
+function store() {
+  try {
+    return typeof window === "undefined" ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+function rememberTurnOn(now2, storage = store()) {
+  try {
+    storage?.setItem(KEY, String(now2));
+  } catch {
+  }
+}
+function rememberTurnOnJob(jobId, storage = store()) {
+  try {
+    storage?.setItem(JOB_KEY, jobId);
+  } catch {
+  }
+}
+function forgetTurnOnClick(storage = store()) {
+  try {
+    storage?.removeItem(KEY);
+  } catch {
+  }
+}
+function forgetTurnOn(storage = store()) {
+  try {
+    storage?.removeItem(KEY);
+    storage?.removeItem(JOB_KEY);
+  } catch {
+  }
+}
+function turnOnJob(storage = store()) {
+  try {
+    return storage?.getItem(JOB_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+function turnOnRequestedAt(storage = store()) {
+  try {
+    const value = Number(storage?.getItem(KEY) ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function shouldResumeTurnOn(requestedAt, now2, status, plan, approvalRequired) {
+  if (requestedAt === null || now2 - requestedAt > RESUME_WINDOW_MS || now2 < requestedAt) return false;
+  if (!status || status.effective_enabled || plan?.kind !== "run") return false;
+  return !(approvalRequired && plan.approval);
+}
 const record$6 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const digest$7 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const timestamp = (value) => value === null || typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -23940,6 +24065,7 @@ function controlContextAssistance(action, signal) {
   if (!["recheck", "activate", "stop"].includes(action)) {
     return Promise.reject(new ContextAssistanceApiError("action_invalid", "Invalid context assistance action."));
   }
+  if (action === "stop") forgetTurnOn();
   return request$1(`/v1/context-assistance/${action}`, action, signal);
 }
 function ContextBriefView({ brief, scope }) {
@@ -23979,7 +24105,7 @@ const text$2 = (value) => typeof value === "string";
 const digest$4 = (value) => text$2(value) && /^[a-f0-9]{64}$/.test(value);
 const count$1 = (value) => Number.isSafeInteger(value) && value >= 0;
 function invalid$3() {
-  throw new ContextAssistanceApiError("workspace_payload_invalid", "Guard returned incompatible context data. Refresh its status.");
+  throw new ContextAssistanceApiError("workspace_payload_invalid", "CIGAR sent back something this page does not understand. Refresh and try again.");
 }
 function validContextBrokerRevision(value) {
   return object$2(value) && digest$4(value.epoch) && text$2(value.version) && /^(0|[1-9][0-9]{0,19})$/.test(value.version) && (value.version.length < 20 || value.version <= "18446744073709551615");
@@ -23998,6 +24124,20 @@ function parseContextBrief(value) {
   if (!object$2(value) || value.schema !== "guard-cigar-context-brief.v1" || value.data_role !== true || !digest$4(value.snapshot_id) || !text$2(value.policy_revision) || !count$1(value.graph_revision) || !text$2(value.rendered) || value.rendered.length > 262144 || !count$1(value.rendered_tokens) || !Array.isArray(value.excerpts) || value.excerpts.length > 16 || !value.excerpts.every((excerpt) => object$2(excerpt) && text$2(excerpt.text) && Array.isArray(excerpt.citations)) || !Array.isArray(value.citations) || value.citations.length > 1024 || !value.citations.every((citation) => object$2(citation) && text$2(citation.source) && text$2(citation.node_id) && count$1(citation.start_line) && citation.start_line > 0 && count$1(citation.end_line) && citation.end_line >= citation.start_line && digest$4(citation.document_digest))) invalid$3();
   return value;
 }
+function refusal(code, action, status) {
+  if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
+  if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
+  if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
+    return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
+  }
+  if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
+  if (code.endsWith("context_scope_denied") && action === "grant") {
+    return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key, a file your settings block, or a folder Guard keeps private. Take that file out, or pick another folder, and try again.";
+  }
+  if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
+  if (status === 403 || status === 401) return "Guard needs your approval password for this.";
+  return "CIGAR could not finish that. Refresh and try again.";
+}
 async function ask(route, input, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
   const timeout = AbortSignal.timeout(12e3);
@@ -24015,7 +24155,7 @@ async function ask(route, input, proof, signal) {
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const code = object$2(body) && text$2(body.code) && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_request_refused";
-    const message = code.endsWith("context_storage_repair_required") ? "Saved evidence needs repair. Use Data & repair to remove saved evidence, then check the runtime and grant sources again." : code.endsWith("context_storage_outcome_unknown") ? "Saved data may have changed before the operation ended. Inspect Data & repair before retrying." : code.endsWith("context_resource_limit") && input.action === "authorize_agent" ? "Context client capacity is full. Revoke an unused connection or workspace, then restart this app's Guard MCP connection and pair its new code." : code.endsWith("context_busy") || code.endsWith("_busy") ? "Context work or cleanup is still running. Refresh status after it finishes." : code.endsWith("context_stale") || code.endsWith("context_scope_denied") ? "Sources or access changed. Refresh sources or grant access again before using this context." : response.status === 403 || response.status === 401 ? "Guard needs your approval proof before granting source access." : "Context did not return a verified result. Refresh its status before trying again.";
+    const message = refusal(code, String(input.action), response.status);
     throw new ContextAssistanceApiError(code, message);
   }
   if (!object$2(body) || body.schema !== "guard-cigar-workspace-result.v1" || body.data_role !== true || !object$2(body.result)) invalid$3();
@@ -24311,9 +24451,6 @@ function ContextHistoryPanel({ decisionId, harness }) {
           index + 1,
           " · ",
           preparedAt(entry.prepared_at_ms),
-          " · ",
-          entry.rendered_tokens,
-          " tokens",
           entry.association ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "block break-all text-xs", children: [
             "Native decision ",
             entry.association.decision_id
@@ -31435,9 +31572,16 @@ function nonPortableReason(value) {
       return "Guard could not verify every package execution input";
   }
 }
+const UNREUSABLE_LAUNCH_MESSAGE = "Guard can't reuse this approval, not even for one retry, because it can't confirm how the package manager starts. A NODE_OPTIONS value that loads code (such as --require or --import), PYTHONINSPECT, or a shell startup file such as BASH_ENV usually causes this. Remove it and run the install again, then approve it.";
+function nonPortableMessage(value) {
+  if (value === "package_manager_launch_identity_unavailable") {
+    return UNREUSABLE_LAUNCH_MESSAGE;
+  }
+  return `This approval is limited to one retry because ${nonPortableReason(value)}.`;
+}
 function packageExecutionContextMessages(context) {
   const messages = [
-    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : `This approval is limited to one retry because ${nonPortableReason(context.non_portable_reason)}.`
+    context.portable ? "A project approval is reused only in linked Git worktrees when the repository, package manager executable, dependency files, settings, hooks, overrides, patches, and registry/proxy environment all match." : nonPortableMessage(context.non_portable_reason)
   ];
   const changedComponents = context.changed_components ?? [];
   if (changedComponents.length > 0) {
@@ -31488,6 +31632,49 @@ function DecodedLayerCard(props) {
     }
   );
 }
+const MAX_LINES = 4;
+function ruleMatchLines(coverage) {
+  if (!coverage) {
+    return [];
+  }
+  const showStep = coverage.compound || coverage.segments.length > 1;
+  const lines = [];
+  for (const segment of coverage.segments) {
+    for (const rule2 of segment.rules) {
+      const line = ruleLine(segment, rule2, showStep);
+      if (line !== null) {
+        lines.push(line);
+      }
+    }
+  }
+  return lines.slice(0, MAX_LINES);
+}
+function ruleLine(segment, rule2, showStep) {
+  const title = rule2.title;
+  const description = rule2.description ?? null;
+  if (title === null && description === null) {
+    return null;
+  }
+  const key = `${segment.index}:${rule2.rule_id}`;
+  const step = showStep ? coverageStepLabel(segment) : segment.executable;
+  const named = title !== null ? `Matched the rule “${title}”.` : "Matched a Guard rule.";
+  const text2 = description !== null ? `${named} ${description}` : named;
+  const safer = rule2.safer_alternatives?.[0] ?? null;
+  return { key, step, text: text2, safer };
+}
+function RuleMatchExplanation({ lines }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: "What Guard's command rules found:" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: lines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-sm leading-relaxed text-brand-dark", children: [
+      line.step !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mr-1.5 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-brand-dark/80", children: line.step }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: line.text }),
+      line.safer !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: [
+        "Safer: ",
+        line.safer
+      ] })
+    ] }, line.key)) })
+  ] });
+}
 function ScannerEvidenceBadge(props) {
   const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
   if (!isScannerCategory) return null;
@@ -31521,7 +31708,9 @@ function ScannerEvidenceSection(props) {
 function buildTopAlertItems(item) {
   const items = [];
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const pauseReason = isWatchOnlyObservation(item) ? null : whyPaused(item);
+  const watchOnly = isWatchOnlyObservation(item);
+  const ruleLines = watchOnly ? [] : ruleMatchLines(item.extension_coverage);
+  const pauseReason = watchOnly || ruleLines.length > 0 ? null : whyPaused(item);
   if (secondaryRiskSummary) {
     items.push({
       id: "secondary-risk",
@@ -31531,7 +31720,15 @@ function buildTopAlertItems(item) {
       content: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
     });
   }
-  if (pauseReason) {
+  if (ruleLines.length > 0) {
+    items.push({
+      id: "why-paused",
+      title: "Why paused",
+      tone: "blue",
+      icon: HiMiniInformationCircle,
+      content: /* @__PURE__ */ jsxRuntimeExports.jsx(RuleMatchExplanation, { lines: ruleLines })
+    });
+  } else if (pauseReason) {
     items.push({
       id: "why-paused",
       title: "Why paused",
@@ -31748,6 +31945,93 @@ function blockButtonLabel(scope) {
   }
   return "Block matching actions";
 }
+const INTENT_FIELDS = ["description", "justification"];
+const MAX_INTENT_CHARS = 300;
+const SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
+  "bash",
+  "shell",
+  "sh",
+  "zsh",
+  "terminal",
+  "run_command",
+  "run_terminal_command",
+  "run_shell_command",
+  "exec_command"
+]);
+const CODEX_TOOL_NAMESPACE = "functions.";
+const TOOL_INPUT_KEYS = ["tool_input", "toolInput", "toolArgs", "arguments"];
+const UNSAFE_CHARACTERS = new RegExp(
+  "[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]",
+  "g"
+);
+function resolveAgentStatedIntent(item) {
+  const envelope = item.action_envelope_json;
+  if (!envelope) {
+    return null;
+  }
+  if (envelope.action_type !== "shell_command" && envelope.action_type !== "package_script") {
+    return null;
+  }
+  if (envelope.mcp_server) {
+    return null;
+  }
+  const raw = recordValue(envelope.raw_payload_redacted);
+  const toolName = envelope.tool_name ?? (typeof raw?.tool_name === "string" ? raw.tool_name : null);
+  if (toolName === null || !SHELL_TOOL_NAMES.has(shellToolName(toolName))) {
+    return null;
+  }
+  const toolInput = firstToolInput(raw);
+  if (toolInput === null) {
+    return null;
+  }
+  for (const field of INTENT_FIELDS) {
+    const value = toolInput[field];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const text2 = value.replace(UNSAFE_CHARACTERS, " ").replace(/\s+/g, " ").trim();
+    if (text2.length === 0) {
+      continue;
+    }
+    return {
+      text: text2.length > MAX_INTENT_CHARS ? `${text2.slice(0, MAX_INTENT_CHARS)}…` : text2,
+      field
+    };
+  }
+  return null;
+}
+function firstToolInput(raw) {
+  if (raw === null) {
+    return null;
+  }
+  for (const key of TOOL_INPUT_KEYS) {
+    const value = raw[key];
+    const input = recordValue(value);
+    if (input !== null) {
+      return input;
+    }
+    if (typeof value !== "string" || value.trim().length === 0) {
+      continue;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+    if (recordValue(parsed) !== null) {
+      return null;
+    }
+  }
+  return null;
+}
+function shellToolName(toolName) {
+  const name = toolName.trim().toLowerCase();
+  return name.startsWith(CODEX_TOOL_NAMESPACE) ? name.slice(CODEX_TOOL_NAMESPACE.length) : name;
+}
+function recordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
 const PROTECTION_APPEARANCE = {
   protected: {
     Icon: HiMiniShieldCheck,
@@ -31857,6 +32141,7 @@ function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, o
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
+  const agentIntent = resolveAgentStatedIntent(item);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
   const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
@@ -31884,6 +32169,15 @@ function PrimaryActionCard({ item }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 font-medium text-brand-dark/70", children: "Working directory" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 break-all font-mono text-brand-dark", title: workingDirectory, children: workingDirectory })
+      ] }),
+      agentIntent !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("figcaption", { className: "text-xs font-medium text-brand-dark/70", children: "What the agent said it is doing" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("blockquote", { className: "mt-1 break-words text-sm text-brand-dark", children: [
+          "“",
+          agentIntent.text,
+          "”"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[11px] leading-snug text-muted-foreground", children: "In the agent's own words. Guard has not checked this, so decide from the command above." })
       ] })
     ] })
   ] });
@@ -33952,7 +34246,7 @@ function ContextReviewPanel({ item }) {
           setPrevious(null);
           setBusy(false);
           setWatching(false);
-          setError("Context access changed. Check Projects & AI apps in CIGAR before preparing more context.");
+          setError("What CIGAR may read changed. Check Projects in CIGAR, then try again.");
         }
       }).catch(() => {
         if (!controller.signal.aborted) {
@@ -33990,7 +34284,7 @@ function ContextReviewPanel({ item }) {
       generation.current = status.generation;
       const scopes = await listContextWorkspaces(controller.signal);
       const scope = scopes.find((scope2) => scope2.app === "dashboard" && scope2.workspace === item.workspace && !scope2.revoked && scope2.native_policy_facts);
-      if (!scope) throw new Error("Grant this workspace dashboard access with native Guard policy facts in CIGAR → Projects & AI apps.");
+      if (!scope) throw new Error("Add this project in CIGAR → Projects first, then try again.");
       const value = await prepareNativeDecisionContext(
         scope,
         decisionId,
@@ -34027,11 +34321,7 @@ function ContextReviewPanel({ item }) {
       " You can still use the approval controls."
     ] }) : null,
     context ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Native decision context", className: "space-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
-        "Verified when prepared · ",
-        context.brief.rendered_tokens,
-        " tokens. Refresh after sources or access change."
-      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Checked when prepared. Refresh after files or projects change." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ContextBriefView, { brief: context.brief, scope: context.scope }),
       context.explanation ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "The retained selection and its sources were verified again." }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
@@ -35592,6 +35882,8 @@ function stageFailure(code) {
       return new DiscoveryFailure("mcp_transport_failed", "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept.");
     case "mcp_initialize_failed":
       return new DiscoveryFailure("mcp_initialize_failed", "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.");
+    case "mcp_server_exited":
+      return new DiscoveryFailure("mcp_server_exited", "The MCP server stopped before it answered. Check that it starts in the host app. If it does, it probably reads a login or settings from your home folder: Guard lists tools in a separate run with a temporary home folder and only the environment from the host config, so it cannot list this server. Its tools still appear here as your host app uses them. Known tools and choices were kept.");
     case "mcp_protocol_unsupported":
       return new DiscoveryFailure("mcp_protocol_unsupported", "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.");
     case "mcp_capability_rejected":
@@ -37196,6 +37488,14 @@ const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then re
 const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
 const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
 const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
+const REQUEST_ID = /^[0-9a-f]{32}$/;
+function desktopRequestUrl(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard-desktop://requests/${requestId}` : null;
+}
+function approvalsOpenCommand(requestId) {
+  return requestId !== null && REQUEST_ID.test(requestId) ? `hol-guard approvals open ${requestId}` : null;
+}
 function queueErrorIsUnauthorizedSession(message) {
   const lower = message.trim().toLowerCase();
   if (!lower) {
@@ -37209,6 +37509,8 @@ function queueErrorIsUnauthorizedSession(message) {
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
+  const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
+  const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
@@ -37230,16 +37532,25 @@ function QueueConnectionError(props) {
   const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
   const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
   const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  let sessionRetryVariant;
+  if (desktopUrl !== null) {
+    sessionRetryVariant = "outline";
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", role: "alert", children: headline }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: instruction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-      sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
+      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+      sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, variant: sessionRetryVariant, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
       sessionMissing ? null : props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
       sessionMissing ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
       sessionMissing ? null : props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
       sessionMissing ? null : props.approvalUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.approvalUrl, variant: "outline", children: "Open dashboard" })
+    ] }),
+    openCommand !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple/70", children: QUEUE_SESSION_COMMAND_INSTRUCTION }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block overflow-x-auto rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: openCommand })
     ] })
   ] }) });
 }
@@ -37815,7 +38126,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BK4IFWxM.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-D8rqbHkl.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -37842,6 +38153,7 @@ function renderInboxContent(props) {
       {
         message: props.requests.message,
         approvalUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null,
+        requestId: props.activeRequestId,
         onRetry: props.onRetry,
         onRepair: props.onRepair
       }
@@ -38475,34 +38787,34 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-CxLbCgje.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-D5qD7XwN.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DEkPYtV5.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-Dan7_c2E.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BSRlTmJa.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BZwiFWD9.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-Di_f8kqI.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-CRj85C7n.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-Dw3CHM-w.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-raaFYZV-.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-a48S1S1l.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BbrrNFAc.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CQ_jp6kS.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-D0sFDLZR.js"), true ? __vite__mapDeps([15,9]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-BlNqkYe-.js"), true ? __vite__mapDeps([15,9]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-Sfg7s-Lz.js"), true ? __vite__mapDeps([16,4,5,17]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-DOeU384A.js"), true ? __vite__mapDeps([16,4,5,17]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-BzrDiO8m.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-C-0iTXNv.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-DX0puWMk.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-C4eB0mkW.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -39528,277 +39840,290 @@ export {
   resetRepairOutcomeTracker as ay,
   HiMiniWrenchScrewdriver as az,
   formatRelativeTime as b,
-  navigateFromAnchor as b$,
+  withHarnessPosturePatch as b$,
   isApprovalProofSubmitDisabled as b0,
   buildApprovalProofCredentials as b1,
   changeCloudReviewSettings as b2,
-  shellHref as b3,
-  HiMiniPauseCircle as b4,
-  listContextAgentSessions as b5,
-  HiMiniLink as b6,
-  revokeContextAgentSession as b7,
-  authorizeContextAgentSession as b8,
-  ContextAssistanceApiError as b9,
-  HiMiniCloudArrowDown as bA,
-  HiMiniArrowDownTray as bB,
-  downloadBlob as bC,
-  savedEvidenceCopy as bD,
-  guardAwareHref as bE,
-  fetchContextData as bF,
-  forgetContextHistory as bG,
-  forgetSavedEvidence as bH,
-  resolveProtectionLevelCopy as bI,
-  fetchRuntimeSnapshot as bJ,
-  clearHarnessWatchOverrides as bK,
-  withHarnessPosturePatch as bL,
-  clearPolicy as bM,
-  clearReviewQueue as bN,
-  revokeApprovalGateCooldown as bO,
-  disableApprovalGateTotp as bP,
-  importSettings as bQ,
-  resetSettings as bR,
-  enrollApprovalGateTotp as bS,
-  verifyApprovalGateTotp as bT,
-  clearEvidence as bU,
-  exportDiagnostics as bV,
-  repairApprovalCenter as bW,
-  exportSettings as bX,
-  setupDesktopNotifications as bY,
-  settingsWatchBannerModel as bZ,
-  WorkspacePageHeader as b_,
-  ask as ba,
-  parseContextScope as bb,
-  validContextBrokerRevision as bc,
-  isGuardDemoMode as bd,
-  fetchWithGuardAuth as be,
-  HiMiniArrowUturnLeft as bf,
-  HiMiniCodeBracketSquare as bg,
-  HiMiniFolder as bh,
-  HiMiniComputerDesktop as bi,
-  HiMiniHome as bj,
-  HiMiniFolderPlus as bk,
-  HiMiniClock as bl,
-  commitDashboardLocation as bm,
-  listContextWorkspaces as bn,
-  HiMiniFolderOpen as bo,
-  grantContextWorkspace as bp,
-  manageContextWorkspace as bq,
-  compileWorkspaceContext as br,
-  HiMiniArrowLeft as bs,
-  isCigarProducerVersion as bt,
-  isCigarCoreLabel as bu,
-  subscribeDashboardLocation as bv,
-  HiMiniArrowUpCircle as bw,
-  parseContextAssistanceStatus as bx,
-  isCigarBuildIdentity as by,
-  fetchContextInstallations as bz,
+  fetchWithGuardAuth as b3,
+  isRecord$5 as b4,
+  HiMiniArrowTopRightOnSquare as b5,
+  shellHref as b6,
+  HiMiniPauseCircle as b7,
+  listContextAgentSessions as b8,
+  HiMiniLink as b9,
+  isCigarProducerVersion as bA,
+  isCigarCoreLabel as bB,
+  subscribeDashboardLocation as bC,
+  HiMiniChatBubbleLeftRight as bD,
+  HiMiniArrowUpCircle as bE,
+  parseContextAssistanceStatus as bF,
+  isCigarBuildIdentity as bG,
+  fetchContextInstallations as bH,
+  HiMiniCloudArrowDown as bI,
+  turnOnJob as bJ,
+  shouldResumeTurnOn as bK,
+  turnOnRequestedAt as bL,
+  forgetTurnOn as bM,
+  rememberTurnOn as bN,
+  forgetTurnOnClick as bO,
+  rememberTurnOnJob as bP,
+  commitDashboardLocation as bQ,
+  HiMiniArrowDownTray as bR,
+  downloadBlob as bS,
+  savedEvidenceCopy as bT,
+  guardAwareHref as bU,
+  fetchContextData as bV,
+  forgetContextHistory as bW,
+  forgetSavedEvidence as bX,
+  resolveProtectionLevelCopy as bY,
+  fetchRuntimeSnapshot as bZ,
+  clearHarnessWatchOverrides as b_,
+  revokeContextAgentSession as ba,
+  grantContextWorkspace as bb,
+  authorizeContextAgentSession as bc,
+  ContextAssistanceApiError as bd,
+  ask as be,
+  parseContextScope as bf,
+  validContextBrokerRevision as bg,
+  isGuardDemoMode as bh,
+  HiMiniArrowUturnLeft as bi,
+  HiMiniCodeBracketSquare as bj,
+  HiMiniFolder as bk,
+  HiMiniComputerDesktop as bl,
+  HiMiniHome as bm,
+  HiMiniFolderPlus as bn,
+  HiMiniClock as bo,
+  listContextWorkspaces as bp,
+  HiMiniFolderOpen as bq,
+  manageContextWorkspace as br,
+  compileWorkspaceContext as bs,
+  HiMiniChatBubbleLeftEllipsis as bt,
+  HiMiniDocumentMagnifyingGlass as bu,
+  HiMiniPower as bv,
+  HiMiniEyeSlash as bw,
+  HiMiniCpuChip as bx,
+  HiMiniAcademicCap as by,
+  HiMiniArrowLeft as bz,
   controlContextAssistance as c,
-  suggestedPackageScriptExtensions as c$,
-  humanizeList as c0,
-  isProtectionPosture as c1,
-  deriveProtectionPosture as c2,
-  normalizeHarnessPostures as c3,
-  approvalGateCooldownLabel as c4,
-  isRecord$5 as c5,
-  overrideRows as c6,
-  harnessPostureSummary as c7,
-  joinNames as c8,
-  sortHarnessRows as c9,
-  treatmentLabel as cA,
-  useResolvedApprovalGate as cB,
-  groupPermissionsByFamily as cC,
-  HiMiniInformationCircle as cD,
-  LocalCliApiError as cE,
-  hasSuggestedRules as cF,
-  approvalProofRecentlySatisfied as cG,
-  StyledSelect as cH,
-  bulkCommandState as cI,
-  fetchLocalCliApi as cJ,
-  ExtensionBrandMark as cK,
-  fetchMcpProviderActions as cL,
-  connectorSetupReady as cM,
-  shortIdentity as cN,
-  customExtensionDisplayName as cO,
-  previewLocalCliMutation as cP,
-  applyLocalCliMutation as cQ,
-  LOCAL_CLI_CAPABILITIES as cR,
-  loadLocalCliCommands as cS,
-  DiscoveryFailure as cT,
-  readJson as cU,
-  enrollablePackageScriptCommands as cV,
-  seenSuggestionMeta as cW,
-  HiMiniPlus as cX,
-  looksLikeProjectRelocatePaste as cY,
-  packageScriptFilterNeedle as cZ,
-  initialAddCommand as c_,
-  restartHarnessWatch as ca,
-  harnessWatchPrompt as cb,
-  canRestartHarnessWatch as cc,
-  HiMiniKey as cd,
-  fetchExtensionCatalog as ce,
-  ExtensionControlApiError as cf,
-  normalizeExtensionCatalogSummary as cg,
-  normalizeExtensionPermission as ch,
-  ExtensionControlProtocolError as ci,
-  normalizeExtensionCatalogItem as cj,
-  guardApiCacheScope as ck,
-  fetchExtensionCatalogV2Api as cl,
-  localPermissionDraftState as cm,
-  setLocalPermissionDraftState as cn,
-  extensionPolicyAuthorityUnchanged as co,
-  newExtensionPolicyDraftIdentity as cp,
-  extensionPolicyDraftIsDirty as cq,
-  setLocalPermissionDraftStates as cr,
-  buildExtensionPolicyDraftMutation as cs,
-  fetchEffectiveExtensionControls as ct,
-  previewExtensionMutation as cu,
-  isCurrentExtensionPolicyDraft as cv,
-  applyExtensionMutation as cw,
-  fetchExtensionControlHistory as cx,
-  managedPermissionState as cy,
-  controlProvenance as cz,
+  connectorSetupReady as c$,
+  clearPolicy as c0,
+  clearReviewQueue as c1,
+  revokeApprovalGateCooldown as c2,
+  disableApprovalGateTotp as c3,
+  importSettings as c4,
+  resetSettings as c5,
+  enrollApprovalGateTotp as c6,
+  verifyApprovalGateTotp as c7,
+  clearEvidence as c8,
+  exportDiagnostics as c9,
+  fetchExtensionCatalogV2Api as cA,
+  localPermissionDraftState as cB,
+  setLocalPermissionDraftState as cC,
+  extensionPolicyAuthorityUnchanged as cD,
+  newExtensionPolicyDraftIdentity as cE,
+  extensionPolicyDraftIsDirty as cF,
+  setLocalPermissionDraftStates as cG,
+  buildExtensionPolicyDraftMutation as cH,
+  fetchEffectiveExtensionControls as cI,
+  previewExtensionMutation as cJ,
+  isCurrentExtensionPolicyDraft as cK,
+  applyExtensionMutation as cL,
+  fetchExtensionControlHistory as cM,
+  managedPermissionState as cN,
+  controlProvenance as cO,
+  treatmentLabel as cP,
+  useResolvedApprovalGate as cQ,
+  groupPermissionsByFamily as cR,
+  HiMiniInformationCircle as cS,
+  LocalCliApiError as cT,
+  hasSuggestedRules as cU,
+  approvalProofRecentlySatisfied as cV,
+  StyledSelect as cW,
+  bulkCommandState as cX,
+  fetchLocalCliApi as cY,
+  ExtensionBrandMark as cZ,
+  fetchMcpProviderActions as c_,
+  repairApprovalCenter as ca,
+  exportSettings as cb,
+  setupDesktopNotifications as cc,
+  settingsWatchBannerModel as cd,
+  WorkspacePageHeader as ce,
+  navigateFromAnchor as cf,
+  humanizeList as cg,
+  isProtectionPosture as ch,
+  deriveProtectionPosture as ci,
+  normalizeHarnessPostures as cj,
+  approvalGateCooldownLabel as ck,
+  overrideRows as cl,
+  harnessPostureSummary as cm,
+  joinNames as cn,
+  sortHarnessRows as co,
+  restartHarnessWatch as cp,
+  harnessWatchPrompt as cq,
+  canRestartHarnessWatch as cr,
+  HiMiniKey as cs,
+  fetchExtensionCatalog as ct,
+  ExtensionControlApiError as cu,
+  normalizeExtensionCatalogSummary as cv,
+  normalizeExtensionPermission as cw,
+  ExtensionControlProtocolError as cx,
+  normalizeExtensionCatalogItem as cy,
+  guardApiCacheScope as cz,
   formatNumber as d,
-  fetchApprovalPage as d$,
-  filterExtensionSuggestions as d0,
-  suggestedHarnessExtensions as d1,
-  suggestedSeenExtensions as d2,
-  keepsPackageScriptCatalog as d3,
-  prefillSuggestedStates as d4,
-  recognizeLocalCli as d5,
-  preferredPackageScriptExtension as d6,
-  looksLikePackageScriptPaste as d7,
-  enrollmentCommandStates as d8,
-  isBulkApproveGateReady as d9,
-  extensionDisplayName as dA,
-  catalogRowSecondLine as dB,
-  extensionStateLabel as dC,
-  HiMiniGlobeAlt as dD,
-  HiMiniFunnel as dE,
-  discoveryFailureMessage as dF,
-  refreshCodexHostInventory as dG,
-  CODEX_HOST_FALLBACK as dH,
-  CONFIGURED_CONNECTIONS_FALLBACK as dI,
-  loadCurrentDashboardBuild as dJ,
-  canonicalExtensionId as dK,
-  extensionDetailHref as dL,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as dM,
-  addCustomExtensionPrefillHref as dN,
-  acknowledgeDegradedExtensionControlAuthority as dO,
-  recoverExtensionControlAuthority as dP,
-  connectorSetupLinkFromSearch as dQ,
-  readExtensionDetailUrlState as dR,
-  parseProtectionRoute as dS,
-  addCustomExtensionHref as dT,
-  GuardModalLayer as dU,
-  runHarnessAction as dV,
-  GuardHarnessActionError as dW,
-  HiMiniRocketLaunch as dX,
-  HiMiniTrash as dY,
-  fetchGuardApi as dZ,
-  formatHarnessCommand as d_,
-  fetchLocalCliList as da,
-  normalizeLocalCliList as db,
-  unreviewedToolChangeCount as dc,
-  connectorSetupMatch as dd,
-  refreshMcpInventory as de,
-  connectorGroupOutcome as df,
-  allowedEarlierVersion as dg,
-  startGuardCloudConnect as dh,
-  extensionEffectiveState as di,
-  permissionEffectiveState as dj,
-  HiMiniArrowTopRightOnSquare as dk,
-  fetchExtensionControlApi as dl,
-  permissionForRule as dm,
-  refreshEffectiveExtensionControls as dn,
-  fetchExtensionDiscoveryApi as dp,
-  startCancelableDiscoveryJob as dq,
-  waitForMcpDiscoveryJob as dr,
-  isLocalCliId as ds,
-  localCliHref as dt,
-  fetchPluginUpdatesApi as du,
-  filterCodexHostApps as dv,
-  connectorWorkspaceItems as dw,
-  customExtensionNeedsReview as dx,
-  profileSetupCommand as dy,
-  customExtensionBadge as dz,
+  addCustomExtensionPrefillHref as d$,
+  shortIdentity as d0,
+  customExtensionDisplayName as d1,
+  previewLocalCliMutation as d2,
+  applyLocalCliMutation as d3,
+  LOCAL_CLI_CAPABILITIES as d4,
+  loadLocalCliCommands as d5,
+  DiscoveryFailure as d6,
+  readJson as d7,
+  enrollablePackageScriptCommands as d8,
+  seenSuggestionMeta as d9,
+  fetchExtensionControlApi as dA,
+  permissionForRule as dB,
+  refreshEffectiveExtensionControls as dC,
+  fetchExtensionDiscoveryApi as dD,
+  startCancelableDiscoveryJob as dE,
+  waitForMcpDiscoveryJob as dF,
+  isLocalCliId as dG,
+  localCliHref as dH,
+  fetchPluginUpdatesApi as dI,
+  filterCodexHostApps as dJ,
+  connectorWorkspaceItems as dK,
+  customExtensionNeedsReview as dL,
+  profileSetupCommand as dM,
+  customExtensionBadge as dN,
+  extensionDisplayName as dO,
+  catalogRowSecondLine as dP,
+  extensionStateLabel as dQ,
+  HiMiniGlobeAlt as dR,
+  HiMiniFunnel as dS,
+  discoveryFailureMessage as dT,
+  refreshCodexHostInventory as dU,
+  CODEX_HOST_FALLBACK as dV,
+  CONFIGURED_CONNECTIONS_FALLBACK as dW,
+  loadCurrentDashboardBuild as dX,
+  canonicalExtensionId as dY,
+  extensionDetailHref as dZ,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as d_,
+  HiMiniPlus as da,
+  looksLikeProjectRelocatePaste as db,
+  packageScriptFilterNeedle as dc,
+  initialAddCommand as dd,
+  suggestedPackageScriptExtensions as de,
+  filterExtensionSuggestions as df,
+  suggestedHarnessExtensions as dg,
+  suggestedSeenExtensions as dh,
+  keepsPackageScriptCatalog as di,
+  prefillSuggestedStates as dj,
+  recognizeLocalCli as dk,
+  preferredPackageScriptExtension as dl,
+  looksLikePackageScriptPaste as dm,
+  enrollmentCommandStates as dn,
+  isBulkApproveGateReady as dp,
+  fetchLocalCliList as dq,
+  normalizeLocalCliList as dr,
+  unreviewedToolChangeCount as ds,
+  connectorSetupMatch as dt,
+  refreshMcpInventory as du,
+  connectorGroupOutcome as dv,
+  allowedEarlierVersion as dw,
+  startGuardCloudConnect as dx,
+  extensionEffectiveState as dy,
+  permissionEffectiveState as dz,
   HiMiniChevronUp as e,
-  HiMiniArrowLongRight as e$,
-  fetchPolicy as e0,
-  appSetupTarget as e1,
-  guardActionPresentation as e2,
-  DEFAULT_FILTER_STATE as e3,
-  filterEvidence as e4,
-  sortEvidence as e5,
-  computeMetrics as e6,
-  CommandActivityWorkspace as e7,
-  EvidenceFilterBar as e8,
-  EvidenceInsightStrip as e9,
-  repairSupplyChainProtection as eA,
-  runPackageFirewallAction as eB,
-  parseInterceptProofSnapshot as eC,
-  activatePackageFirewallRuntime as eD,
-  EntitlementNotice as eE,
-  chooseSupplyChainAuditFolder as eF,
-  fetchReceipts as eG,
-  lazyWorkspace as eH,
-  __vitePreload as eI,
-  scopeLabel as eJ,
-  HiMiniCloudArrowUp as eK,
-  HiMiniCodeBracket as eL,
-  HiMiniUsers as eM,
-  HiMiniIdentification as eN,
-  policyActionLabel as eO,
-  createCloudExceptionRequest as eP,
-  HiMiniPuzzlePiece as eQ,
-  fetchCloudExceptions as eR,
-  fetchCloudExceptionRequests as eS,
-  PaginationControls as eT,
-  PolicyStatField as eU,
-  HiMiniInbox as eV,
-  HiMiniQueueList as eW,
-  Surface as eX,
-  HiMiniEllipsisHorizontal as eY,
-  HiMiniMinus as eZ,
-  HiMiniWrench as e_,
-  EvidenceActionList as ea,
-  EvidenceActionDetail as eb,
-  policyIdentityKey as ec,
-  clearLabelForScope as ed,
-  HiMiniChartBar as ee,
-  HiMiniCheckBadge as ef,
-  isSupplyChainAuditIncomplete as eg,
-  isSupplyChainAuditEvidence as eh,
-  readString$1 as ei,
-  IconActionButton as ej,
-  HiMiniBeaker as ek,
-  HiMiniBugAnt as el,
-  ActivationSummary as em,
-  ActionResultPanel as en,
-  fetchSupplyChainBundle as eo,
-  closeOnEscape as ep,
-  ConnectFlowCard as eq,
-  ApprovalProofInline as er,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as es,
-  fetchPackageFirewallStatus as et,
-  runPackageAudit as eu,
-  resolveSupplyChainAuditFailure as ev,
-  runPackageSync as ew,
-  GuardOperationTimeoutError as ex,
-  startPackageFirewallConnect as ey,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as ez,
+  HiMiniIdentification as e$,
+  acknowledgeDegradedExtensionControlAuthority as e0,
+  recoverExtensionControlAuthority as e1,
+  connectorSetupLinkFromSearch as e2,
+  readExtensionDetailUrlState as e3,
+  parseProtectionRoute as e4,
+  addCustomExtensionHref as e5,
+  GuardModalLayer as e6,
+  runHarnessAction as e7,
+  GuardHarnessActionError as e8,
+  HiMiniRocketLaunch as e9,
+  ActivationSummary as eA,
+  ActionResultPanel as eB,
+  fetchSupplyChainBundle as eC,
+  closeOnEscape as eD,
+  ConnectFlowCard as eE,
+  ApprovalProofInline as eF,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eG,
+  fetchPackageFirewallStatus as eH,
+  runPackageAudit as eI,
+  resolveSupplyChainAuditFailure as eJ,
+  runPackageSync as eK,
+  GuardOperationTimeoutError as eL,
+  startPackageFirewallConnect as eM,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as eN,
+  repairSupplyChainProtection as eO,
+  runPackageFirewallAction as eP,
+  parseInterceptProofSnapshot as eQ,
+  activatePackageFirewallRuntime as eR,
+  EntitlementNotice as eS,
+  chooseSupplyChainAuditFolder as eT,
+  fetchReceipts as eU,
+  lazyWorkspace as eV,
+  __vitePreload as eW,
+  scopeLabel as eX,
+  HiMiniCloudArrowUp as eY,
+  HiMiniCodeBracket as eZ,
+  HiMiniUsers as e_,
+  HiMiniTrash as ea,
+  fetchGuardApi as eb,
+  formatHarnessCommand as ec,
+  fetchApprovalPage as ed,
+  fetchPolicy as ee,
+  appSetupTarget as ef,
+  guardActionPresentation as eg,
+  DEFAULT_FILTER_STATE as eh,
+  filterEvidence as ei,
+  sortEvidence as ej,
+  computeMetrics as ek,
+  CommandActivityWorkspace as el,
+  EvidenceFilterBar as em,
+  EvidenceInsightStrip as en,
+  EvidenceActionList as eo,
+  EvidenceActionDetail as ep,
+  policyIdentityKey as eq,
+  clearLabelForScope as er,
+  HiMiniChartBar as es,
+  HiMiniCheckBadge as et,
+  isSupplyChainAuditIncomplete as eu,
+  isSupplyChainAuditEvidence as ev,
+  readString$1 as ew,
+  IconActionButton as ex,
+  HiMiniBeaker as ey,
+  HiMiniBugAnt as ez,
   fetchContextAssistance as f,
-  fetchReleaseFeedApi as f0,
-  fetchMcpPolicyRequest as f1,
-  resolveMcpPolicyRequest as f2,
-  HiMiniDocumentPlus as f3,
-  HiMiniDocumentMagnifyingGlass as f4,
-  HiMiniChevronLeft as f5,
-  HiMiniArrowDown as f6,
-  HiMiniArrowUp as f7,
-  runAuditRemediation as f8,
-  isBlockedGuardAction as f9,
-  isSupplyChainScannerEvidence as fa,
-  HiMiniSignal as fb,
+  policyActionLabel as f0,
+  createCloudExceptionRequest as f1,
+  HiMiniPuzzlePiece as f2,
+  fetchCloudExceptions as f3,
+  fetchCloudExceptionRequests as f4,
+  PaginationControls as f5,
+  PolicyStatField as f6,
+  HiMiniInbox as f7,
+  HiMiniQueueList as f8,
+  Surface as f9,
+  HiMiniEllipsisHorizontal as fa,
+  HiMiniMinus as fb,
+  HiMiniWrench as fc,
+  HiMiniArrowLongRight as fd,
+  fetchReleaseFeedApi as fe,
+  fetchMcpPolicyRequest as ff,
+  resolveMcpPolicyRequest as fg,
+  HiMiniDocumentPlus as fh,
+  HiMiniChevronLeft as fi,
+  HiMiniArrowDown as fj,
+  HiMiniArrowUp as fk,
+  runAuditRemediation as fl,
+  isBlockedGuardAction as fm,
+  isSupplyChainScannerEvidence as fn,
+  HiMiniSignal as fo,
   HiMiniChevronDown as g,
   harnessDisplayName as h,
   HiMiniArrowPath as i,

@@ -182,6 +182,29 @@ class StoreApprovalQueriesMixin:
             ).fetchone()
         return dict(row) if row is not None else None
 
+    def get_approval_request_status(self, request_id: str) -> str | None:
+        """The stored status of one request, without building its review payload."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                "select status from approval_requests where request_id = ?",
+                (request_id,),
+            ).fetchone()
+        return None if row is None else str(row[0])
+
+    def get_approval_request_statuses(self, request_ids: list[str]) -> dict[str, str]:
+        """The stored status of each listed request that exists, in one read."""
+
+        if not request_ids:
+            return {}
+        placeholders = ",".join("?" * len(request_ids))
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"select request_id, status from approval_requests where request_id in ({placeholders})",
+                tuple(request_ids),
+            ).fetchall()
+        return {str(row[0]): str(row[1]) for row in rows}
+
     def approval_desktop_notified_at(self, request_id: str) -> str | None:
         return self._native_approval_read("approval_desktop_notified_at", {"request_id": request_id})
 

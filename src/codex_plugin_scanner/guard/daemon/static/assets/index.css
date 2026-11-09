@@ -2167,6 +2167,10 @@
     margin-block-end: calc(calc(var(--spacing) * 16) * calc(1 - var(--tw-space-y-reverse)));
   }
 
+  .gap-x-1\.5 {
+    column-gap: calc(var(--spacing) * 1.5);
+  }
+
   .gap-x-2 {
     column-gap: calc(var(--spacing) * 2);
   }
@@ -2940,6 +2944,10 @@
 
   .border-cyan-200 {
     border-color: var(--color-cyan-200);
+  }
+
+  .border-emerald-100 {
+    border-color: var(--color-emerald-100);
   }
 
   .border-emerald-200 {
@@ -5877,7 +5885,7 @@
     text-decoration-line: underline;
   }
 
-  .decoration-brand-blue\/30 {
+  .decoration-brand-blue, .decoration-brand-blue\/30 {
     -webkit-text-decoration-color: var(--brand-blue);
     -webkit-text-decoration-color: var(--brand-blue);
     text-decoration-color: var(--brand-blue);
@@ -5902,6 +5910,20 @@
       -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 35%, transparent);
       -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 35%, transparent);
       text-decoration-color: color-mix(in oklab, var(--brand-blue) 35%, transparent);
+    }
+  }
+
+  .decoration-brand-dark\/25 {
+    -webkit-text-decoration-color: var(--brand-dark);
+    -webkit-text-decoration-color: var(--brand-dark);
+    text-decoration-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .decoration-brand-dark\/25 {
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-dark) 25%, transparent);
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-dark) 25%, transparent);
+      text-decoration-color: color-mix(in oklab, var(--brand-dark) 25%, transparent);
     }
   }
 
@@ -7088,10 +7110,22 @@
       text-decoration-line: underline;
     }
 
-    .hover\:decoration-brand-blue:hover {
+    .hover\:decoration-brand-blue:hover, .hover\:decoration-brand-blue\/50:hover {
       -webkit-text-decoration-color: var(--brand-blue);
       -webkit-text-decoration-color: var(--brand-blue);
       text-decoration-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:decoration-brand-blue\/50:hover {
+        -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
+        -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
+        text-decoration-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
+      }
+    }
+
+    .hover\:decoration-2:hover {
+      text-decoration-thickness: 2px;
     }
 
     .hover\:opacity-80:hover {
@@ -7394,6 +7428,10 @@
     }
   }
 
+  .focus-visible\:ring-brand-dark:focus-visible {
+    --tw-ring-color: var(--brand-dark);
+  }
+
   .focus-visible\:ring-red-400\/40:focus-visible {
     --tw-ring-color: #ff656866;
   }
@@ -7559,26 +7597,6 @@
   @media (hover: hover) {
     .disabled\:hover\:bg-transparent:disabled:hover {
       background-color: #0000;
-    }
-  }
-
-  .has-\[\:checked\]\:border-brand-blue\/50:has(:checked) {
-    border-color: var(--brand-blue);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .has-\[\:checked\]\:border-brand-blue\/50:has(:checked) {
-      border-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
-    }
-  }
-
-  .has-\[\:checked\]\:bg-brand-blue\/\[0\.04\]:has(:checked) {
-    background-color: var(--brand-blue);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .has-\[\:checked\]\:bg-brand-blue\/\[0\.04\]:has(:checked) {
-      background-color: color-mix(in oklab, var(--brand-blue) 4%, transparent);
     }
   }
 
@@ -7847,6 +7865,10 @@
 
     .sm\:min-h-9 {
       min-height: calc(var(--spacing) * 9);
+    }
+
+    .sm\:min-h-10 {
+      min-height: calc(var(--spacing) * 10);
     }
 
     .sm\:w-48 {
@@ -12222,12 +12244,31 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-button-solid { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .cigar-button-solid:hover { background: #1e40af; }
 .cigar-workspace button:focus-visible, .cigar-workspace summary:focus-visible, .cigar-workspace a:focus-visible { outline: 2px solid #3972c8; outline-offset: 4px; }
-.cigar-home { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.75rem 3rem; border: 1px solid #e3e7f0; border-radius: 1.25rem; padding: clamp(1.5rem, 3vw, 2.5rem); background: #fff; }
+.cigar-home { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.75rem 3rem; border-radius: 1.25rem; padding: clamp(1.5rem, 3vw, 2.5rem); background: radial-gradient(ellipse at 15% 0%, #53538c 0%, transparent 65%), linear-gradient(120deg, #34345d, #303955); color: #fff; overflow: hidden; }
 .cigar-home-main { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
 .cigar-home-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; align-self: stretch; margin: -.35rem -.5rem .5rem 0; }
-.cigar-home h2 { margin-top: .25rem; font-size: clamp(1.6rem, 2.6vw, 2.15rem); font-weight: 600; line-height: 1.2; letter-spacing: -.035em; }
-.cigar-home-detail { max-width: 34rem; margin-top: .75rem; font-size: 1rem; line-height: 1.65; color: #475569; }
-.cigar-home .cigar-text-button { margin-top: .25rem; }
+.cigar-home h2 { margin-top: .25rem; font-size: clamp(1.7rem, 2.7vw, 2.45rem); font-weight: 600; line-height: 1.18; letter-spacing: -.04em; text-wrap: balance; }
+.cigar-home-detail { max-width: 34rem; margin-top: .75rem; font-size: 1rem; line-height: 1.65; color: #d4daf1; }
+.cigar-home .cigar-text-button { margin-top: .25rem; color: #bfdbfe; }
+.cigar-home .cigar-text-button:hover { color: #fff; }
+.cigar-home .cigar-icon-button { color: #c8d1ec; }
+.cigar-home .cigar-icon-button:hover { background: #ffffff1a; color: #fff; }
+.cigar-home .cigar-status { border-color: #ffffff33; background: #ffffff14; color: #e0e7ff; }
+.cigar-home .cigar-status[data-ready="true"] { border-color: #6ee7b766; background: #34d39926; color: #a7f3d0; }
+.cigar-home .cigar-button { border-color: #ffffff4d; background: transparent; color: #fff; }
+.cigar-home .cigar-button:not(:disabled):hover { background: #ffffff1a; }
+.cigar-home .cigar-button-solid { border-color: #fff; background: #fff; color: #303955; }
+.cigar-home .cigar-button-solid:not(:disabled):hover { background: #eef2ff; }
+.cigar-home .cigar-setup-caption { color: #c8d1ec; }
+.cigar-home .cigar-setup-block { border-top-color: #ffffff26; color: #d4daf1; }
+.cigar-home .cigar-setup-block strong { color: #fff; }
+.cigar-home .cigar-setup-body { color: #d4daf1; }
+.cigar-home .cigar-setup-track > li { background: #ffffff26; }
+.cigar-home .cigar-setup-track > li[data-state="done"] { background: #34d399; }
+.cigar-home .cigar-setup-track > li[data-state="failed"] { background: #f87171; }
+.cigar-home .cigar-setup-track > li[data-state="active"] { background: #ffffff33; }
+.cigar-home .cigar-setup-track > li[data-state="active"]::after { background: #93c5fd; }
+.cigar-workspace .cigar-home :is(button, a):focus-visible { outline-color: #bfdbfe; }
 .cigar-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: .65rem; color: #64748b; cursor: pointer; }
 .cigar-icon-button:hover { background: #f4f7fc; color: var(--brand-dark); }
 .cigar-icon-button:disabled { opacity: .5; cursor: not-allowed; }
@@ -12235,9 +12276,29 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-status { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #dce2ed; border-radius: 2rem; padding: .25rem .65rem; background: #f8fafc; color: #475569; font-size: .72rem; font-weight: 600; }
 .cigar-status > span { height: .4rem; width: .4rem; border-radius: 50%; background: currentColor; }
 .cigar-status[data-ready="true"] { color: #187543; border-color: #c9ebd7; background: #ecfdf3; }
-.cigar-facts { display: grid; align-content: center; gap: 1rem; border-left: 1px solid #e8edf3; padding-left: 3rem; }
-.cigar-facts li { display: flex; align-items: flex-start; gap: .65rem; font-size: .875rem; line-height: 1.6; color: #475569; }
-.cigar-facts svg { width: 1.15rem; height: 1.15rem; flex-shrink: 0; margin-top: .15rem; color: #4d77bb; }
+.cigar-demo { align-self: center; min-width: 0; border: 1px solid #ffffff24; border-radius: 1rem; padding: 1.1rem; background: #1f2440b3; box-shadow: 0 24px 48px -24px #0b0f2680, inset 0 1px 0 #ffffff14; }
+.cigar-demo-prompt { display: flex; align-items: center; gap: .6rem; border-radius: .7rem; padding: .6rem .75rem; background: #ffffff12; }
+.cigar-demo-you { border-radius: 999px; padding: .1rem .5rem; background: #5599fe; color: #fff; font-size: .68rem; font-weight: 700; }
+.cigar-demo-ask { font-size: .9rem; font-weight: 500; color: #fff; }
+.cigar-demo-files { display: grid; gap: .2rem; margin-top: .85rem; }
+.cigar-demo-files li { display: flex; align-items: center; gap: .55rem; min-width: 0; border: 1px solid transparent; border-radius: .55rem; padding: .4rem .6rem; color: #b7c0df; font-size: .78rem; }
+.cigar-demo-files svg { width: .95rem; height: .95rem; flex-shrink: 0; color: #8f9bc4; }
+.cigar-demo-files code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.cigar-demo-tag { margin-left: auto; flex-shrink: 0; border-radius: 999px; padding: .05rem .5rem; font-size: .68rem; font-weight: 600; }
+.cigar-demo-files li[data-match] { border-color: #5599fe73; background: #5599fe2e; color: #fff; animation: cigar-demo-match .9s cubic-bezier(.16, 1, .3, 1) calc(.3s + var(--cigar-demo-row) * 110ms) both; }
+.cigar-demo-files li[data-match] svg { color: #93c5fd; }
+.cigar-demo-files li[data-match] .cigar-demo-tag { background: #5599fe; color: #fff; }
+.cigar-demo-files li[data-locked] { color: #a3acc9; }
+.cigar-demo-files li[data-locked] code { text-decoration: line-through; text-decoration-color: #ffffff59; }
+.cigar-demo-files li[data-locked] svg { color: #fca5a5; }
+.cigar-demo-files li[data-locked] .cigar-demo-tag { border: 1px solid #fca5a566; color: #fecaca; }
+.cigar-demo-result { display: flex; align-items: flex-start; gap: .55rem; margin-top: .85rem; border-top: 1px solid #ffffff1f; padding-top: .85rem; font-size: .8rem; line-height: 1.55; color: #d4daf1; }
+.cigar-demo-result svg { width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .15rem; color: #93c5fd; }
+@keyframes cigar-demo-match { from { border-color: transparent; background: transparent; color: #b7c0df; } }
+.cigar-allow-files { display: grid; justify-items: start; gap: .5rem; }
+.cigar-allow-hero { margin-top: 1.5rem; min-height: 3rem; padding: .75rem 1.4rem; font-size: .875rem; }
+.cigar-allow-error { font-size: .78rem; line-height: 1.6; color: #b91c1c; }
+.cigar-home .cigar-allow-error { color: #fecaca; }
 .cigar-setup-action { display: grid; justify-items: start; gap: .65rem; margin-top: 1.5rem; max-width: 32rem; }
 .cigar-setup-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
 .cigar-setup-action .cigar-button-primary { min-height: 3rem; padding: .75rem 1.4rem; font-size: .875rem; }
@@ -12256,13 +12317,38 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-setup-track > li[data-state="active"]::after { content: ""; position: absolute; inset: 0; width: 45%; border-radius: inherit; background: #3972c8; animation: cigar-setup-sweep 1.4s cubic-bezier(.65, 0, .35, 1) infinite; }
 @keyframes cigar-setup-sweep { from { transform: translateX(-100%); } to { transform: translateX(225%); } }
 @media (prefers-reduced-motion: reduce) { .cigar-setup-track > li[data-state="active"]::after { animation: none; width: 100%; opacity: .7; } }
-.cigar-advanced-toggle { display: flex; align-items: center; gap: .85rem; width: 100%; min-height: 3.5rem; border: 1px solid #e3e7f0; border-radius: 1rem; padding: .75rem 1.25rem; background: #fff; text-align: left; cursor: pointer; }
-.cigar-advanced-toggle:hover { background: #f8fafc; }
-.cigar-advanced-toggle svg { width: 1rem; height: 1rem; flex-shrink: 0; color: #64748b; transition: transform .15s ease-out; }
-.cigar-advanced-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
-.cigar-advanced-toggle strong { display: block; font-size: .9rem; font-weight: 600; color: var(--brand-dark); }
-.cigar-advanced-toggle small { display: block; margin-top: .1rem; font-size: .75rem; color: #64748b; }
-.cigar-advanced-body { display: grid; gap: 1.25rem; margin-top: 1rem; min-width: 0; }
+.cigar-sections { display: grid; gap: 1.5rem; min-width: 0; }
+.cigar-story { display: grid; gap: 2.5rem; }
+.cigar-story h2 { font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; }
+.cigar-story section > p { margin-top: .5rem; max-width: 40rem; font-size: .875rem; line-height: 1.65; color: #64748b; }
+.cigar-steps { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin-top: 1.25rem; counter-reset: cigar-step; }
+.cigar-steps::before { content: ""; position: absolute; top: 1.375rem; left: 1.375rem; right: calc(33.333% - 1.375rem); height: 2px; background: linear-gradient(90deg, #5599fe, #c7d7f5); }
+.cigar-steps > li { position: relative; min-width: 0; counter-increment: cigar-step; }
+.cigar-step-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 999px; background: #3f4174; color: #fff; box-shadow: 0 0 0 6px #f5f7fc; }
+.cigar-steps > li:first-child .cigar-step-icon { background: #1d4ed8; }
+.cigar-step-icon svg { width: 1.2rem; height: 1.2rem; }
+.cigar-steps h3 { margin-top: .9rem; font-size: .95rem; font-weight: 600; letter-spacing: -.015em; }
+.cigar-steps h3::before { content: counter(cigar-step) ". "; color: #477ed1; }
+.cigar-steps p { margin-top: .35rem; font-size: .82rem; line-height: 1.65; color: #64748b; }
+.cigar-story-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2.5rem; border-block: 1px solid #e2e8f0; padding-block: 2rem; }
+.cigar-apps { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.cigar-apps li { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #cbdcf5; border-radius: 999px; padding: .4rem .85rem; background: #f4f8ff; color: #3f4174; font-size: .8rem; font-weight: 600; }
+.cigar-apps svg { width: .9rem; height: .9rem; color: #187543; }
+.cigar-story .cigar-story-aside { margin-top: 1rem; font-size: .78rem; }
+.cigar-promises { display: grid; gap: .85rem; margin-top: 1rem; }
+.cigar-promises li { display: flex; align-items: flex-start; gap: .7rem; font-size: .85rem; line-height: 1.6; color: #475569; }
+.cigar-promises svg { width: 1.1rem; height: 1.1rem; flex-shrink: 0; margin-top: .15rem; color: #477ed1; }
+.cigar-explore ul { display: grid; margin-top: .75rem; }
+.cigar-explore li + li { border-top: 1px solid #e8edf3; }
+.cigar-explore-row { display: flex; align-items: center; gap: 1rem; width: 100%; min-height: 4rem; border-radius: .75rem; padding: .8rem .75rem; text-align: left; cursor: pointer; transition: background-color .2s cubic-bezier(.16, 1, .3, 1); }
+.cigar-explore-row:hover { background: #f4f8ff; }
+.cigar-explore-icon { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; flex-shrink: 0; border-radius: .7rem; background: #5599fe1f; color: #1d4ed8; }
+.cigar-explore-icon svg { width: 1.15rem; height: 1.15rem; }
+.cigar-explore-text { display: grid; gap: .1rem; min-width: 0; flex: 1; }
+.cigar-explore-text strong { font-size: .9rem; font-weight: 600; color: #3f4174; }
+.cigar-explore-text span { font-size: .8rem; line-height: 1.5; color: #64748b; }
+.cigar-explore-arrow { width: 1rem; height: 1rem; flex-shrink: 0; color: #477ed1; transition: transform .2s cubic-bezier(.16, 1, .3, 1); }
+.cigar-explore-row:hover .cigar-explore-arrow { transform: translateX(3px); }
 .cigar-tabs { display: flex; gap: .25rem; border-bottom: 1px solid #e2e8f0; overflow-x: auto; scrollbar-width: thin; }
 .cigar-tabs [role="tab"] { flex-shrink: 0; min-height: 3rem; margin-bottom: -1px; border-bottom: 2px solid transparent; padding: .5rem .8rem .8rem; color: #64748b; font-size: .875rem; font-weight: 500; cursor: pointer; transition: color .15s ease-out, border-color .15s ease-out; }
 .cigar-tabs [role="tab"]:hover { color: #3f4174; border-bottom-color: #cbd5e1; }
@@ -12296,29 +12382,60 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-footer a { color: #416aa7; font-weight: 600; text-underline-offset: 3px; }
 .cigar-footer strong { margin-left: auto; flex-shrink: 0; font-weight: 600; color: #684eb0; }
 .cigar-note .cigar-setup-action { margin-top: .9rem; }
+.cigar-note button { margin-top: .9rem; }
+.cigar-usage { display: grid; gap: 1rem; }
+.cigar-usage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+.cigar-usage-card h3 { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; font-size: 1rem; }
+.cigar-usage-card h3 span { font-size: .75rem; font-weight: 500; color: #64748b; }
+.cigar-usage-table { width: 100%; margin-top: .9rem; border-collapse: collapse; font-size: .8rem; }
+.cigar-usage-table th, .cigar-usage-table td { padding: .5rem 0; border-top: 1px solid #eef1f6; }
+.cigar-usage-table thead th { border-top: 0; padding-top: 0; font-size: .7rem; font-weight: 600; color: #64748b; text-align: right; }
+.cigar-usage-table tbody th { font-weight: 500; color: #475569; text-align: left; padding-right: .75rem; }
+.cigar-usage-table td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--brand-dark); padding-left: .75rem; white-space: nowrap; }
+.cigar-usage-recent { margin-top: .9rem; border-top: 1px solid #eef1f6; }
+.cigar-usage-recent summary { cursor: pointer; min-height: 2.75rem; padding: .7rem 0; font-size: .8rem; font-weight: 600; }
+.cigar-usage-recent ul { display: grid; gap: .7rem; font-size: .75rem; color: #64748b; }
+.cigar-usage-recent li { display: grid; gap: .1rem; min-width: 0; }
+.cigar-usage-recent li strong { color: var(--brand-dark); font-weight: 600; overflow-wrap: anywhere; }
+.cigar-usage-foot { max-width: 52rem; font-size: .75rem; line-height: 1.75; color: #64748b; }
 @media (max-width: 64rem) {
   .cigar-home { grid-template-columns: minmax(0, 1fr); }
-  .cigar-facts { border-left: 0; border-top: 1px solid #e8edf3; padding: 1.5rem 0 0; }
+  .cigar-usage-grid { grid-template-columns: minmax(0, 1fr); }
   .cigar-benefits { grid-template-columns: minmax(0, 1fr); }
+  .cigar-story-pair { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
 }
 @media (max-width: 42rem) {
   .cigar-home { padding: 1.35rem; }
-  .cigar-setup-action, .cigar-setup-buttons, .cigar-setup-action .cigar-button { width: 100%; }
+  .cigar-setup-action, .cigar-setup-buttons, .cigar-setup-action .cigar-button, .cigar-allow-files, .cigar-allow-hero { width: 100%; }
+  .cigar-steps { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  .cigar-steps::before { top: 1.375rem; bottom: 1.375rem; left: calc(1.375rem - 1px); right: auto; width: 2px; height: auto; background: linear-gradient(180deg, #5599fe, #c7d7f5); }
+  .cigar-steps > li { padding-left: 3.75rem; }
+  .cigar-step-icon { position: absolute; left: 0; top: 0; }
+  .cigar-steps h3 { margin-top: .6rem; }
+  .cigar-demo { padding: .85rem; }
   .cigar-card { padding: 1.15rem; }
   .cigar-tabs [role="tab"] { padding-inline: .6rem; }
   .cigar-footer { flex-wrap: wrap; }
   .cigar-footer > span { flex: 1; }
   .cigar-footer strong { margin-left: 1.6rem; }
 }
-@media (prefers-reduced-motion: reduce) { .cigar-tabs [role="tab"], .cigar-advanced-toggle svg { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .cigar-tabs [role="tab"], .cigar-explore-row, .cigar-explore-arrow { transition: none; } .cigar-demo-files li[data-match] { animation: none; } }
 @media (forced-colors: active) {
-  .cigar-home, .cigar-advanced-toggle, .cigar-card, .cigar-note { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
-  .cigar-facts { border-color: CanvasText; }
+  .cigar-usage-table th, .cigar-usage-table td { border-color: CanvasText; }
+  .cigar-home, .cigar-card, .cigar-note, .cigar-demo { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+  .cigar-home :is(h2, p, li, span, button, svg, code) { color: CanvasText; }
+  .cigar-demo-files li { animation: none; }
+  .cigar-demo-files li[data-match] { border-color: Highlight; background: Canvas; }
+  .cigar-demo-tag, .cigar-demo-you, .cigar-apps li { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+  .cigar-step-icon, .cigar-explore-icon { border: 1px solid CanvasText; background: Canvas; color: CanvasText; box-shadow: none; }
+  .cigar-steps::before { background: CanvasText; }
   .cigar-tabs [aria-selected="true"] { border-bottom-color: Highlight; color: Highlight; }
   .cigar-setup-block { border-color: CanvasText; color: CanvasText; background: Canvas; }
-  .cigar-setup-track > li { border: 1px solid CanvasText; background: Canvas; }
-  .cigar-setup-track > li[data-state="done"], .cigar-setup-track > li[data-state="active"]::after { background: Highlight; }
-  .cigar-button-solid, .cigar-button-primary { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
+  /* Listed with .cigar-home too so these beat the hero's own fills. */
+  .cigar-setup-track > li, .cigar-home .cigar-setup-track > li[data-state] { border: 1px solid CanvasText; background: Canvas; }
+  .cigar-setup-track > li[data-state="done"], .cigar-setup-track > li[data-state="active"]::after,
+  .cigar-home .cigar-setup-track > li[data-state="done"], .cigar-home .cigar-setup-track > li[data-state="active"]::after { background: Highlight; }
+  .cigar-button-solid, .cigar-button-primary, .cigar-home .cigar-button, .cigar-home .cigar-button-solid { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
 }
 .cigar-picker { animation: cigar-picker-in .32s cubic-bezier(.16, 1, .3, 1); }
 .cigar-picker-list { animation: cigar-list-jump .22s cubic-bezier(.16, 1, .3, 1); }

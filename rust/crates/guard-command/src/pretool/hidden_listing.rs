@@ -8,8 +8,8 @@ use std::path::{Component, Path};
 #[path = "home_hidden_listing.rs"]
 mod home;
 pub(in crate::pretool) use home::{
-    home_hidden_content_read, home_hidden_directory, home_hidden_tool_directory,
-    home_hidden_walk_clears_stores, resolved_home_hidden_content_read,
+    absent_home_hidden_tool_path, home_hidden_content_read, home_hidden_directory,
+    home_hidden_tool_directory, home_hidden_walk_clears_stores, resolved_home_hidden_content_read,
     resolved_home_hidden_listing,
 };
 
@@ -91,6 +91,9 @@ pub(in crate::pretool) fn repository_hidden_source_document(
 
 #[path = "hidden_listing_marker.rs"]
 mod marker;
+
+#[path = "hidden_listing_secret_leaf.rs"]
+mod secret_leaf;
 
 /// Whether `canonical` is such a marker file inside the repository's own
 /// hidden tree, such as the pid inside a lock directory the checkout holds.
@@ -326,8 +329,10 @@ fn repository_location_allowed(
 /// A directory spelled like an ordinary config file opens no tree, which is
 /// the rule `BENIGN_PROJECT_DOTFILES` already states; a directory spelled
 /// exactly as a tool's name is that tool's own tree rather than the
-/// repository's content; and the leaf keeps the secret screen, plus as much
-/// of the login screen as a file in the checkout's own content can carry. `credential_named_path` stands
+/// repository's content; and the leaf keeps the secret screen, read against
+/// the document where the name alone cannot tell a store from a setting, plus
+/// as much of the login screen as a file in the checkout's own content can
+/// carry. `credential_named_path` stands
 /// aside for source-code extensions, so the directory half of that screen is
 /// applied here in its own right.
 fn content_names_allowed(canonical: &Path, leaf: &str, parents: &[String]) -> bool {
@@ -335,9 +340,7 @@ fn content_names_allowed(canonical: &Path, leaf: &str, parents: &[String]) -> bo
         guard_secure_fs::project_config_file_name(parent)
             || guard_secure_fs::tool_login_name(parent)
     }) && !leaf_names_a_tools_login(leaf)
-        && !guard_secure_fs::credential_store_names::secret_bearing_file_name(
-            leaf.trim_start_matches('.'),
-        )
+        && !secret_leaf::leaf_names_a_secret_store(canonical, leaf)
         && !guard_secure_fs::credential_directory_path(canonical)
 }
 

@@ -28,6 +28,21 @@ fn a_filter_need_not_open_with_a_projection() {
     }
 }
 
+/// A program that renders what it read into text is a read: the agent
+/// formats the value it already has, and reaches nothing else.
+#[test]
+fn a_filter_that_renders_the_value_read_into_text_is_admitted() {
+    for filter in [
+        "\"\\(.type)\"",
+        ".[] | \"\\(.type)\\t\\(.name)\"",
+        "[.[] | \"\\(.id) \\(.name)\"] | join(\"\\n\")",
+    ] {
+        let args = arguments(&["-r", filter]);
+        assert!(safe_jq_stdin_arguments(&args), "{filter}");
+        assert_eq!(jq_filter_position(&args, true), Some(1), "{filter}");
+    }
+}
+
 /// The grammar, not the leading character, is the gate: a program that
 /// reaches the environment, another file or a module is refused however
 /// it opens.

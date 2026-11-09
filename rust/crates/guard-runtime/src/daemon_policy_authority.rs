@@ -347,13 +347,15 @@ pub(crate) fn load_authenticated_daemon_state(guard_home: &Path) -> Option<Map<S
     Some(payload.clone())
 }
 
-/// `load_daemon_discovery_key` (discovery.py:24-:34).
-fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
+/// `load_daemon_discovery_key` (discovery.py:24-:34), stripped as
+/// `read_private_regular_text` strips it there.
+pub(crate) fn load_daemon_discovery_key(guard_home: &Path) -> Option<String> {
     let encoded = read_private_regular_text(&guard_home.join("daemon-discovery-key"), 256, false)?;
+    let encoded = encoded.trim();
     if encoded.len() != DAEMON_DISCOVERY_KEY_BYTES * 2 {
         return None;
     }
-    hex::decode(&encoded).ok()?;
+    hex::decode(encoded).ok()?;
     Some(encoded.to_lowercase())
 }
 
@@ -612,7 +614,7 @@ fn paths_equal_resolved(left: &Path, right: &Path) -> bool {
 // bounded.
 // ---------------------------------------------------------------------------
 
-fn read_private_regular_text(
+pub(crate) fn read_private_regular_text(
     path: &Path,
     max_bytes: u64,
     require_private_parent: bool,

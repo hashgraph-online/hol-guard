@@ -25,6 +25,7 @@ from .codex_hook_windows_job import (
     close_windows_hook_job,
     spawn_windows_hook_process,
 )
+from .native_process_stop_scope import scoped_native_stop_event
 
 _HOOK_SUBPROCESS_OUTPUT_LIMIT = 1_000_000
 _HOOK_ENVIRONMENT_KEYS = frozenset(
@@ -109,11 +110,21 @@ _HOOK_PROCESS_QUARANTINE_LOCK = threading.Lock()
 _HOOK_PROCESS_QUARANTINE: list[_QuarantinedHookProcess] = []
 
 
-def _retry_quarantined_hook_processes() -> bool:
-    with _HOOK_PROCESS_QUARANTINE_LOCK:
-        retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+def _retry_quarantined_hook_processes(*, deadline_monotonic: float | None = None) -> bool:
+    if deadline_monotonic is None:
+        _ = _HOOK_PROCESS_QUARANTINE_LOCK.acquire()
+    elif not _HOOK_PROCESS_QUARANTINE_LOCK.acquire(timeout=max(0.0, deadline_monotonic - time.monotonic())):
+        return False
+    retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+    if deadline_monotonic is not None:
+        retry_deadline = min(retry_deadline, deadline_monotonic)
+    try:
         survivors: list[_QuarantinedHookProcess] = []
-        for quarantined in _HOOK_PROCESS_QUARANTINE:
+        for index, quarantined in enumerate(_HOOK_PROCESS_QUARANTINE):
+            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+                # Leave unvisited helpers quarantined for the next retry.
+                survivors.extend(_HOOK_PROCESS_QUARANTINE[index:])
+                break
             contained = _kill_hook_process(quarantined.process, quarantined.windows_job)
             remaining = max(0.0, retry_deadline - time.monotonic())
             try:
@@ -146,6 +157,17 @@ def _retry_quarantined_hook_processes() -> bool:
             return False
         _HOOK_PROCESS_CONTAINMENT_FAILED.clear()
         return True
+    finally:
+        _HOOK_PROCESS_QUARANTINE_LOCK.release()
+
+
+def hook_processes_contained(*, deadline_monotonic: float | None = None) -> bool:
+    """Confirm no quarantined hook process survives, retrying the quarantine once."""
+    if not _HOOK_PROCESS_CONTAINMENT_FAILED.is_set():
+        return True
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        return False
+    return _retry_quarantined_hook_processes(deadline_monotonic=deadline_monotonic)
 
 
 def _quarantine_hook_process(
@@ -341,12 +363,18 @@ def run_isolated_hook_process(
 
     ``stop_event`` lets a long-lived reviewed helper terminate through the same
     process-group / Windows Job containment path used for deadlines. Existing
-    one-shot callers do not need to supply it.
+    one-shot callers do not need to supply it. Without one, the stop event
+    bound by ``native_process_stop_scope`` applies, and once it is set no
+    child starts.
 
     When ``deadline_monotonic`` is supplied it is authoritative. The deadline
     is captured before process creation so startup and stream cleanup consume
     the caller's existing budget instead of receiving a new minimum timeout.
     """
+    if stop_event is None:
+        stop_event = scoped_native_stop_event()
+    if stop_event is not None and stop_event.is_set():
+        return BoundedHookProcessResult(None, "", False, False)
     if deadline_monotonic is None:
         if timeout_seconds is None:
             return BoundedHookProcessResult(None, "", False, False)

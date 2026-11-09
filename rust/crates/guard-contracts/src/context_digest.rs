@@ -375,6 +375,11 @@ pub enum ContextDigestKindV1 {
         home_dir: Option<String>,
         #[serde(default)]
         launch_env: Option<BTreeMap<String, String>>,
+        /// The caller is launching a package manager, so the identity also
+        /// carries `binding_argv_sha256`: the digest the approval binds, taken
+        /// over the argv with the manager's presentation-only options removed.
+        #[serde(default)]
+        package_manager_binding: bool,
     },
     /// `runtime_launch_identity_matches` — rebuild the current identity and
     /// compare verification digests.
@@ -442,6 +447,13 @@ pub enum ContextDigestKindV1 {
     /// The generic fallback hook's saved-approval context and token.
     GenericHookApprovalContext {
         inputs: Value,
+    },
+    /// Compose a consumer artifact's saved-approval context (identity and
+    /// launch, content, capabilities, sandbox) for a detected or removed
+    /// artifact and return its token. The caller supplies the normalized
+    /// paths, the policy component and the detector telemetry.
+    ConsumerApprovalContextToken {
+        request: Value,
     },
     /// The bin a package-runner command launches (`npx wrangler` names
     /// `wrangler`). `None` for anything that is not a runner launch, and for

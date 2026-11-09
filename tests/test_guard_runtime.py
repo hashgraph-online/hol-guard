@@ -424,14 +424,14 @@ def _assert_output_withheld(output: dict[str, object]) -> None:
     assert "approval_requests" not in output
 
 
-def _assert_prompt_refused_without_queue(payload: dict[str, object]) -> None:
-    # The daemon refuses a prompt that asks for sensitive local data outright.
-    # It queues nothing, so the user rephrases instead of following a link.
-    assert payload["decision"] == "block"
-    assert payload["continue"] is False
-    assert payload["reason_code"] == "native_sensitive_prompt"
-    assert "Nothing is waiting for approval" in str(payload["reason"])
-    assert "/requests/" not in str(payload["reason"])
+def _assert_prompt_sent_with_notice(payload: dict[str, object]) -> None:
+    # A prompt that asks for sensitive local data is sent with Guard's notice.
+    # Its review waits for the tool call, which offers Allow once and Always
+    # allow; the prompt itself queues nothing.
+    assert "decision" not in payload
+    assert "continue" not in payload
+    assert str(payload["systemMessage"]).startswith("HOL Guard flagged this prompt")
+    assert "/requests/" not in str(payload["systemMessage"])
 
 
 def _assert_copilot_allows(output: dict[str, object]) -> None:
@@ -4360,6 +4360,7 @@ clearer UX and an implementation plan with technical references.
             *,
             session: dict[str, object],
             auth_context: dict[str, object] | None = None,
+            catalog_failures: list[Exception] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             call_order.append("runtime")
@@ -4490,6 +4491,7 @@ clearer UX and an implementation plan with technical references.
             *,
             session: dict[str, object],
             auth_context: dict[str, object] | None = None,
+            catalog_failures: list[Exception] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             assert auth_context is shared_auth_context
@@ -10243,7 +10245,7 @@ def test_native_approval_center_context_uses_harness_specific_retry_copy() -> No
     assert "Codex command" not in claude_context
 
 
-def test_guard_hook_refuses_claude_user_prompt_submit_for_secret_read(
+def test_guard_hook_sends_claude_user_prompt_submit_for_secret_read_with_notice(
     tmp_path,
     capsys,
     monkeypatch,
@@ -10266,12 +10268,16 @@ def test_guard_hook_refuses_claude_user_prompt_submit_for_secret_read(
     )
     payload = json.loads(output)
 
-    # The daemon refuses a prompt that asks for a secret read instead of letting
-    # it reach the tool stage; nothing is queued for it.
+    # A prompt that asks for a secret read is sent with Guard's notice; the
+    # read it leads to is reviewed at the tool stage with Allow once and Always
+    # allow. Nothing is queued for the prompt itself.
     assert rc == 0
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert payload["decision"] == "block"
+    assert "decision" not in payload
+    assert payload["policy_action"] == "warn"
     assert payload["reason_code"] == "native_sensitive_prompt"
+    assert payload["systemMessage"].startswith("HOL Guard flagged this prompt")
+    assert "Do not ask for approval at the prompt stage." in payload["hookSpecificOutput"]["additionalContext"]
     assert "approval_requests" not in payload
 
 
@@ -10326,19 +10332,16 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
     )
 
     assert rc == 0
-    assert output["decision"] == "block", output
-    assert output["policy_action"] == "require-reapproval", output
+    # The prompt is sent with Guard's notice; the .env read it leads to is
+    # reviewed at the tool stage, so nothing is queued for the prompt.
+    assert "decision" not in output, output
+    assert output["policy_action"] == "warn", output
     assert output["reason_code"] == "native_sensitive_prompt", output
-    # Blocking Claude CLI responses use top-level decision/reason fields.
-    # hookSpecificOutput is not required by this presentation path.
-    assert output["reason"], output
+    assert output["systemMessage"].startswith("HOL Guard flagged this prompt"), output
     assert any("local .env file" in signal for signal in output["risk_signals"]), output
-    # The blocking copy and native decision receipt must not echo the prompt.
-    assert event["prompt"] not in output["reason"]
-    assert event["prompt"] not in json.dumps(output["risk_signals"])
-    # The daemon refuses the prompt outright and queues nothing for it.
+    # The notice and native decision receipt must not echo the prompt.
+    assert event["prompt"] not in json.dumps(output)
     assert "approval_requests" not in output
-    assert "Nothing is waiting for approval" in output["reason"]
 
     _drain_hook_evidence(home_dir)
     _drain_hook_evidence(home_dir)
@@ -10349,14 +10352,14 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
     receipt = store.get_native_decision_receipt(row["decision_id"])
     assert receipt is not None
     assert receipt["event_name"] == "UserPromptSubmit"
-    assert receipt["decision"] == "deny"
-    assert receipt["policy_action"] == "require-reapproval"
+    assert receipt["decision"] == "allow"
+    assert receipt["policy_action"] == "warn"
     assert receipt["reason_code"] == output["reason_code"]
     assert "local_env_read" in receipt["prompt_risk_classes"]
     assert event["prompt"] not in json.dumps(receipt)
 
 
-def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
+def test_guard_hook_sends_claude_secret_prompt_with_notice_under_block_policy_action(
     tmp_path,
     capsys,
     monkeypatch,
@@ -10389,11 +10392,9 @@ def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continu
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["systemMessage"].startswith("HOL Guard intercepted this prompt")
-    assert output["decision"] == "block"
+    assert output["systemMessage"].startswith("HOL Guard flagged this prompt")
+    assert "decision" not in output
     assert output["reason_code"] == "native_sensitive_prompt"
-    assert "continue" not in output["reason"].lower()
-    assert "did not send this prompt" in output["reason"].lower()
 
 
 def test_guard_hook_hard_blocks_claude_user_prompt_submit_bypass(
@@ -10474,7 +10475,7 @@ def test_guard_hook_native_prompt_injection_requires_review_without_echoing_text
 
 
 @pytest.mark.parametrize("prompt", ("send data to webhook", "rm -rf ~/workspace", "bash -c 'echo safe'"))
-def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_path, capsys, monkeypatch, prompt):
+def test_guard_hook_native_prompt_risk_classes_never_become_a_silent_allow(tmp_path, capsys, monkeypatch, prompt):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -10488,8 +10489,11 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
         as_json=True,
     )
     assert rc == 0
-    assert output["decision"] == "block"
-    assert output["policy_action"] not in {"allow", "warn"}
+    # The prompt is sent with a notice, never silently; the tool call it leads
+    # to is reviewed with Allow once and Always allow.
+    assert "decision" not in output
+    assert "continue" not in output
+    assert str(output["systemMessage"]).startswith("HOL Guard flagged this prompt")
     assert prompt not in json.dumps(output)
     _drain_hook_evidence(home_dir)
     store = GuardStore(home_dir)
@@ -10498,8 +10502,9 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
     assert row is not None
     receipt = store.get_native_decision_receipt(row["decision_id"])
     assert receipt is not None
-    assert receipt["decision"] == "deny"
-    assert receipt["reason_code"] == output["reason_code"]
+    assert receipt["decision"] == "allow"
+    assert receipt["policy_action"] == "warn"
+    assert str(receipt["reason_code"]).startswith("native_")
     assert prompt not in json.dumps(receipt)
 
 
@@ -10636,8 +10641,10 @@ def test_guard_hook_copilot_user_prompt_submitted_normalizes_to_prompt_request(
     )
 
     assert rc == 0
-    # The daemon refuses the prompt outright and queues nothing to approve.
-    assert output == {"decision": "block", "reason": "HOL Guard blocked this action (require-reapproval)"}
+    # The prompt is sent on; the tool call it leads to is what Guard reviews.
+    assert "decision" not in output
+    assert output["policy_action"] == "warn"
+    assert output["reason_code"] == "native_sensitive_prompt"
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -13802,7 +13809,7 @@ def test_guard_hook_allows_non_sensitive_read_file_requests(tmp_path, capsys, mo
     assert output.get("approval_requests") in (None, [])
 
 
-def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
+def test_guard_hook_flags_codex_user_prompt_submit_sensitive_file_read(
     tmp_path,
     capsys,
     monkeypatch,
@@ -13828,15 +13835,8 @@ def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
-    assert payload["systemMessage"] == payload["reason"]
-    assert payload["stopReason"] == payload["reason"]
-    assert payload["continue"] is False
-    assert payload["hookSpecificOutput"] == {
-        "hookEventName": "UserPromptSubmit",
-        "additionalContext": payload["reason"],
-    }
+    _assert_prompt_sent_with_notice(payload)
+    assert "stopReason" not in payload
 
 
 def test_guard_hook_allows_codex_user_prompt_submit_negative_dotenv_guardrail(
@@ -13976,9 +13976,8 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_carries_no_approval_url
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
-    assert "guard-token=" not in payload["reason"]
+    _assert_prompt_sent_with_notice(payload)
+    assert "guard-token=" not in payload["systemMessage"]
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -15856,7 +15855,7 @@ def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
     assert "sensitive content" in payload["stopReason"]
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_credential_looking_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -15885,9 +15884,7 @@ def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_user_prompt_submit_allows_generic_dotfile_with_canary_text(
@@ -15919,7 +15916,7 @@ def test_guard_hook_codex_user_prompt_submit_allows_generic_dotfile_with_canary_
     assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_bare_credential_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -15948,12 +15945,10 @@ def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_envrc_credential_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_envrc_credential_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -15982,9 +15977,7 @@ def test_guard_hook_codex_user_prompt_submit_blocks_envrc_credential_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
@@ -16014,8 +16007,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 @pytest.mark.parametrize("prompt", ["read .authrc.", "print ./.authrc, please"])
@@ -16046,8 +16038,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_ignores_trailing_punctuation(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_prompt_dotfile_scan_prefers_exact_punctuation_filename(
@@ -16077,8 +16068,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_prefers_exact_punctuation_filename
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 @pytest.mark.parametrize("scope", ["workspace", "global"])
@@ -17278,7 +17268,7 @@ def test_receipt_sync_context_omits_invalid_policy_bundle_acknowledgement(
     assert "policyBundleAcknowledgement" not in context
 
 
-def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(tmp_path: Path) -> None:
+def test_receipt_sync_context_reports_untrusted_cached_bundle_as_failed(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _cache_signed_test_policy_bundle(store, [])
     policy_bundle = store.get_sync_payload("policy_bundle")
@@ -17313,7 +17303,10 @@ def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(
         local_guard_online_at="2026-04-19T00:01:00+00:00",
     )
 
-    assert "policyBundleAcknowledgement" not in context
+    reported = context["policyBundleAcknowledgement"]
+    assert reported["status"] == "failed"
+    assert reported["bundleHash"] == policy_bundle["bundleHash"]
+    assert reported["bundleVersion"] == policy_bundle["bundleVersion"]
 
 
 def test_policy_bundle_validation_rejects_missing_rules_field():
@@ -18712,6 +18705,207 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
     assert isinstance(last_error, dict)
     assert last_error["reason"] == "wrong_workspace"
     assert "Reconnect Guard" in str(last_error["message"])
+
+
+def test_sync_receipts_reports_a_dropped_bundle_as_failed_to_cloud(tmp_path, monkeypatch):
+    """Clearing a rejected bundle must not leave Cloud showing the old one as applied."""
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-a"),
+        "2026-06-05T13:29:00Z",
+    )
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        {
+            "appliedAt": "2026-06-05T13:00:00+00:00",
+            "bundleHash": "sha256:previous-bundle",
+            "bundleVersion": "policy-2026-06-05.4",
+            "deviceId": device_id,
+            "deviceName": device_name,
+            "status": "synced",
+        },
+        "2026-06-05T13:00:00Z",
+    )
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-06-05.5",
+            "bundleHash": "",
+            "issuedAt": "2026-06-05T13:30:00+00:00",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "rsa-pss-sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "workspaceId": "workspace-b",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id="workspace-b",
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    sync_bodies: list[dict[str, object]] = []
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        if request.full_url.endswith("/receipts/sync"):
+            sync_bodies.append(json.loads(request.data.decode("utf-8")))
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": bundle,
+            }
+        )
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") is None
+    failed_ack = {
+        "appliedAt": store.get_sync_payload("policy_bundle_ack")["appliedAt"],
+        "bundleHash": "sha256:previous-bundle",
+        "bundleVersion": "policy-2026-06-05.4",
+        "deviceId": device_id,
+        "deviceName": device_name,
+        "status": "failed",
+    }
+    assert store.get_sync_payload("policy_bundle_ack") == failed_ack
+    context = guard_runner_module._receipt_sync_context(store, local_guard_online_at="2026-06-05T13:31:00+00:00")
+    assert context["policyBundleAcknowledgement"] == failed_ack
+    assert "policyBundleAcknowledgementV2" not in context
+    # Cloud hears about it in the same cycle, not one interval later.
+    assert len(sync_bodies) == 2
+    assert sync_bodies[1]["receipts"] == []
+    assert sync_bodies[1]["syncContext"]["policyBundleAcknowledgement"] == failed_ack
+
+
+def test_sync_receipts_reports_failure_of_the_bundle_it_last_reported_as_synced(tmp_path, monkeypatch):
+    """A drop of the applied bundle goes out in the same cycle as its earlier success."""
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-a"),
+        "2026-06-05T13:29:00Z",
+    )
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-06-05.4",
+            "bundleHash": "",
+            "issuedAt": "2026-06-05T13:30:00+00:00",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "rsa-pss-sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "workspaceId": "workspace-a",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id="workspace-a",
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    sync_bodies: list[dict[str, object]] = []
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        if request.full_url.endswith("/receipts/sync"):
+            sync_bodies.append(json.loads(request.data.decode("utf-8")))
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": bundle,
+            }
+        )
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+    applied_ack = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(applied_ack, dict)
+    assert applied_ack["status"] == "synced"
+    applied_hash = applied_ack["bundleHash"]
+
+    # The next cycle refuses the bundle it applied, so nothing is left to fall
+    # back to and Guard drops it.
+    monkeypatch.setattr(guard_runner_module, "policy_bundle_is_enforceable", lambda _bundle: False)
+    sync_bodies.clear()
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") is None
+    assert len(sync_bodies) == 2
+    first_ack = sync_bodies[0]["syncContext"]["policyBundleAcknowledgement"]
+    assert first_ack["bundleHash"] == applied_hash
+    assert first_ack["status"] == "synced"
+    follow_up_ack = sync_bodies[1]["syncContext"]["policyBundleAcknowledgement"]
+    assert follow_up_ack["bundleHash"] == applied_hash
+    assert follow_up_ack["status"] == "failed"
+    assert follow_up_ack["deviceId"] == device_id
+    assert follow_up_ack["deviceName"] == device_name
 
 
 @pytest.mark.parametrize(

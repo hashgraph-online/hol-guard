@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,35 @@ def fixture_path_aliases(replacements: dict[str, str]) -> dict[str, str]:
 
 
 Redaction = str | re.Pattern[str]
+
+
+OPERATOR_HOME_PLACEHOLDER = "{{operator_home}}"
+
+
+def operator_home_replacements() -> dict[Redaction, str]:
+    """Hide the operator's own home directory from exported evidence.
+
+    Fixture replacements name only the directories a run created under its
+    temporary root. A failure raised outside that tree names the real home
+    instead - a login file the credential seed cannot read, a tool reporting
+    where its configuration lives - and that path carries the operator's
+    account name into a bundle published alongside a release.
+    """
+    try:
+        home = Path.home()
+    except (OSError, RuntimeError):
+        return {}
+    spellings = {str(home)}
+    with contextlib.suppress(OSError):
+        spellings.add(str(home.resolve(strict=False)))
+    result: dict[Redaction, str] = {}
+    for spelling in spellings:
+        # A home of ``/`` or a bare drive root would redact every absolute path.
+        if len(Path(spelling).parts) < 2:
+            continue
+        for form in (spelling, spelling.replace("\\", "/"), shlex.quote(spelling)):
+            result[form] = OPERATOR_HOME_PLACEHOLDER
+    return result
 
 
 def _redaction_order(item: tuple[Redaction, str]) -> tuple[int, int]:

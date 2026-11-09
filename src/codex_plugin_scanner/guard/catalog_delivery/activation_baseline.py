@@ -29,29 +29,22 @@ def verify(row, key):
     )["value"]
 
 
-def reserve_legacy_baseline(store, connection, metadata, *, key, recorded_at):
-    from ..native_command_control_authority_io import require_exclusive_command_control_mutation_lease
-    from ..store_extension_control_authority_schema import ensure_extension_control_authority_schema
+def baseline_request(connection, metadata, *, recorded_at):
+    """The legacy baseline the resident retains with a first activation.
 
-    require_exclusive_command_control_mutation_lease(store.guard_home)
+    A store whose schema already activated packs keeps the baseline or
+    activation it holds, and the resident authenticates that row when it
+    reserves the draft. Otherwise the resident upgrades the schema and seals
+    the baseline into the empty slot in the transaction that reserves the
+    draft. A slot still empty after an upgraded schema means an earlier
+    first activation was refused, so the baseline is sent again.
+    """
     marker = connection.execute("select version from extension_control_schema_migration where singleton=1").fetchone()
     if marker is not None and marker["version"] in {5, 6}:
-        row = connection.execute("select * from extension_command_pack_activation where singleton=1").fetchone()
-        if row is None:
-            raise ValueError("retained pack activation is missing")
-        if is_baseline(row["record_json"]):
-            verify(row, key)
-        return
-    ensure_extension_control_authority_schema(connection, activate_packs=True)
-    if connection.execute("select 1 from extension_command_pack_activation where singleton=1").fetchone():
-        return
-    payload: dict[str, object] = {
-        "schema": SCHEMA,
-        "revision": 0,
+        slot = connection.execute("select 1 from extension_command_pack_activation where singleton=1").fetchone()
+        if slot is not None:
+            return None
+    return {
         **{name: getattr(metadata, name) for name in ("program_digest", "catalog_digest", "trust_digest")},
+        "recorded_at": recorded_at,
     }
-    sealed = lifecycle.record("seal", "baseline", key=key, payload=payload)
-    connection.execute(
-        "insert into extension_command_pack_activation values (1,0,?,?,?,?)",
-        (sealed["record"], sealed["digest"], sealed["mac"], recorded_at),
-    )

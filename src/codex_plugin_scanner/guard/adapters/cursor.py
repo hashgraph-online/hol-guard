@@ -590,20 +590,6 @@ class CursorHarnessAdapter(HarnessAdapter):
         payload["reported_artifacts"] = reported_artifacts
         return payload
 
-    def diagnostic_warnings(
-        self,
-        detection: HarnessDetection,
-        runtime_probe: dict[str, object] | None,
-    ) -> list[str]:
-        warnings = super().diagnostic_warnings(detection, runtime_probe)
-        reported_artifacts = runtime_probe.get("reported_artifacts") if runtime_probe is not None else None
-        if any(artifact.artifact_type == "mcp_server" for artifact in detection.artifacts) and reported_artifacts == 0:
-            warnings.append(
-                "Cursor CLI reported no MCP servers, but Guard found local definitions. "
-                "Cursor may be using a different config root than Guard."
-            )
-        return warnings
-
     def _proxy_server_entry(self, context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
         entry = proxy_launcher_entry(proxy_command="cursor-mcp-proxy", context=context, server=server)
         env = entry.pop("env", None)

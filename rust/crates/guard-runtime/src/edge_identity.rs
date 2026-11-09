@@ -39,8 +39,8 @@ pub(super) fn request_payload_identity(
     let Some(record) = payload.as_object() else {
         return Err("native_hook_payload_invalid".to_owned());
     };
-    // Event aliases and adapter timestamps are transport metadata, not request
-    // semantics. Event aliases are validated for agreement by
+    // Event aliases, adapter timestamps and the HTTP deadline hint are
+    // transport metadata, not request semantics. Event aliases are validated by
     // `authoritative_event`, then omitted here so a harness spelling change
     // cannot change an otherwise identical request. Timestamps are removed
     // only at the envelope root: a nested timestamp may be an actual tool
@@ -60,16 +60,25 @@ pub(super) fn request_payload_identity(
         "createdAt",
         "received_at",
         "receivedAt",
+        "guard_remaining_ms",
     ] {
         identity.remove(key);
+    }
+    // Each Codex hook bridge stamps its own process and wait budget. A retry
+    // starts another bridge, and live-decision revalidates the prepared input
+    // without the HTTP hint. None of these fields changes the reviewed action.
+    // Keep nested tool arguments and other harnesses' fields committed.
+    if harness == "codex" && event == "PreToolUse" {
+        identity.remove(crate::codex_hook_bridge::BROWSER_WAIT_PROCESS_KEY);
+        identity.remove(crate::codex_hook_bridge::BROWSER_WAIT_TIMEOUT_KEY);
     }
     // A retry of an unchanged action mints a new transport call ID: Pi's
     // `tool_call_id`, and the `tool_use_id` Claude Code, Codex and Cursor stamp
     // on each tool-use block the model emits. Claude Code also stamps the user
-    // turn as `prompt_id`, and Cursor stamps every attempt with a fresh
-    // `generation_id`, the request id its own adapter documents, while ZCode
-    // moves `tool_use_id`, `toolCallId` and `turnId` together; the retry an
-    // approval unblocks comes in the turn after the user answers. Dropping them
+    // turn as `prompt_id` and Codex as `turn_id`, Cursor stamps every attempt
+    // with a fresh `generation_id`, the request id its own adapter documents,
+    // and ZCode moves `tool_use_id`, `toolCallId` and `turnId` together; the
+    // retry an approval unblocks comes in the turn after the user answers. Dropping them
     // lets an Allow once approval reach the agent's own retry. Nested tool
     // arguments and session identity stay in the commitment, and a request
     // without a session keeps the IDs.
@@ -107,7 +116,10 @@ fn transport_call_id_keys(harness: &str) -> &'static [&'static str] {
     match harness {
         "pi" | "omp" => &["tool_call_id"],
         "claude-code" => &["tool_use_id", "prompt_id"],
-        "codex" => &["tool_use_id"],
+        // Codex names the turn `turn_id`. A request whose hook stopped
+        // waiting is retried in a later turn, after the user answers, so
+        // keeping it stranded every Allow once given after the agent moved on.
+        "codex" => &["tool_use_id", "turn_id"],
         // Cursor's own request id, the field `PROVEN_REQUEST_ID_FIELDS` pairs
         // its pre- and post-execution evidence by. It moves on every attempt,
         // so an identical retry never reached the approval the user gave.

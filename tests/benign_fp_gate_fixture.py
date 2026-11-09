@@ -65,6 +65,7 @@ from tests.benign_fp_gate_projects import (
     _INSTALLED_PACKAGES,
     _NODE_PACKAGES,
     COMMITTED_SOURCE,
+    MAINTENANCE_AUTH_SOURCE,
     _application_database,
     _build_toolchain,
     _bun_lockfile,
@@ -286,6 +287,21 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(home / "Code" / "acme-platform", "commit", "--quiet", "-m", "platform base", home=home)
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
     _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
+    # A project directory beside the checkout that was never `git init`-ed:
+    # a handed-over tree, an unpacked archive, a scaffold still being set up.
+    # Its hidden files are the ordinary project configuration an agent reads
+    # to match the workspace it is working in.
+    _write(home / "acme-plain" / ".gitattributes", "* text=auto eol=lf\n")
+    _write(home / "acme-plain" / ".npmignore", "src/\ntests/\n")
+    _write(home / "acme-plain" / ".node-version", "22.11.0\n")
+    _write(home / "acme-plain" / ".tool-versions", "nodejs 22.11.0\npython 3.12.7\n")
+    _write(home / "acme-plain" / ".browserslistrc", "defaults\nnot IE 11\n")
+    _write(home / "acme-plain" / ".prettierrc", '{\n  "semi": false\n}\n')
+    _write(home / "acme-plain" / ".eslintrc.json", '{\n  "root": true\n}\n')
+    _write(home / "acme-plain" / ".mocharc.json", '{\n  "spec": "tests/**/*.spec.js"\n}\n')
+    # Negative control for the same directory: a registry file keeps its
+    # review wherever it sits, because that is where a publish token lands.
+    _write(home / "acme-plain" / ".npmrc", "registry=https://registry.npmjs.org/\n")
     _write(home / "kubeconfig.yaml", KUBECONFIG)
     # Connectors Guard has no decision for: a local CLI with its state directory, and harness MCP servers.
     write_connectors(home)
@@ -305,11 +321,18 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(parent / "src" / "one.ts", "export const one = 1;\n")
     # The one committed file long enough for a range-limited read of its history.
     _write(parent / "src" / "report-window.ts", COMMITTED_SOURCE)
-    _write(parent / "src" / "password-reset-email.tsx", "export const Email = () => null;\n")
+    _write(parent / "src" / "password-reset-email.tsx", "export const Email = ({ password }) => <Field password={password} />;\n")
+    _write(parent / "src" / "maintenance-auth.ts", MAINTENANCE_AUTH_SOURCE)
     _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.
     _write(parent / "docs" / "large-guide.md", "# Guide\n" + "Plain guide paragraph text.\n" * 1600)
+    # A committed handbook page named for what it documents. Listing `docs`
+    # prints the name, so a pattern that prints the same names must too.
+    _write(
+        parent / "docs" / "credential-rotation-runbook.md",
+        "# Rotating credentials\n\nOpen the provider console and issue a new value.\n",
+    )
     _write(parent / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic skill body.\n")
     _write(parent / "integrations" / "app" / ".claude-plugin" / "plugin.json", '{"author": "Example"}\n')
     # Git treats a link as a file: `node_modules/` alone leaves the `dashboard/node_modules` link unignored.
@@ -454,6 +477,30 @@ def build_fixture(root: Path) -> BenignFixture:
         _write(repository / ".codex-plugin" / "runtime.node", "\x00binary\n")
         # A tool's own tree, a config file spelled as a directory and a
         # credential store holding a file named as source.
+        # Tooling settings the checkout keeps under its own hidden
+        # directories. Their stems name a credential store as often as they
+        # name an ordinary project document, so the file is read rather than
+        # refused on its name alone.
+        _write(repository / ".circleci" / "config.yml", "version: 2.1\njobs: {}\n")
+        _write(repository / ".changeset" / "config.json", '{"changelog": "@changesets/cli/changelog"}\n')
+        _write(repository / ".storybook" / "settings.json", '{"framework": "react"}\n')
+        # A credential written across several lines, and one quoted word that
+        # a document writes bare when it means "nothing here".
+        _write(
+            repository / ".storybook" / "config.toml",
+            '[registry]\ntoken = """\nhunter2\n"""\n',
+        )
+        _write(repository / ".changeset" / "settings.json", '{"npmAuthToken": "null"}\n')
+        # A mapping that leaves its value for the next line, indented deeper.
+        _write(
+            repository / ".storybook" / "config.yml",
+            "database:\n  password:\n    hunter2\n",
+        )
+        # The same stem over a registry credential, for the negative beside it.
+        _write(
+            repository / ".cargo" / "config.toml",
+            '[registries.internal]\ntoken = "' + "AKIA" + "QYLPT3K7" + "R4FXM2WD" + '"\n',
+        )
         _write(repository / ".cursor" / "mcp.json", '{"mcpServers": {}}\n')
         _write(repository / ".dockerignore" / "notes.md", "# fixture\n")
         _write(repository / ".secrets" / "read.py", "TOKEN = 'fixture'\n")
@@ -470,11 +517,27 @@ def build_fixture(root: Path) -> BenignFixture:
             _write(repository / ".gitignore", "node_modules/\n")
             _node_toolchain(repository / "dashboard")
             _sibling_test_runner(repository)
+        if name == "app-portal":
+            # Installed with pnpm, so the package store and the build cache sit
+            # beside `node_modules/.bin`. The tree itself is written after the
+            # commit below, untracked the way a real install is.
+            _write(repository / ".gitignore", "node_modules/\n")
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
         if name == "service-api":
             _git(repository, "remote", "add", "origin", "https://github.com/example-org/service-api.git", home=home)
             _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
+    # The package store and build cache a pnpm install leaves in `app-portal`.
+    # Agents list them to see which manager ran and whether a cache is warm.
+    # The tree itself is installed with the checkout, so only the store entry
+    # and the cache are written here.
+    portal = org / "app-portal"
+    store_entry = f"vitest@{_NODE_PACKAGES['vitest']}"
+    _write(
+        portal / "node_modules" / ".pnpm" / store_entry / "node_modules" / "vitest" / "package.json",
+        '{"name": "vitest"}\n',
+    )
+    _write(portal / "node_modules" / ".cache" / "vite" / "deps" / "_metadata.json", "{}\n")
     # A sibling checkout that keeps no workflows, where a probe finds nothing.
     docs_site = org / "docs-site"
     _write(docs_site / "README.md", "# docs-site\n")

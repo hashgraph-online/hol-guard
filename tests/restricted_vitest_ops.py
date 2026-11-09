@@ -25,11 +25,15 @@ def bun_vitest_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str
     return result[0], tuple(result[1])
 
 
-def tsx_test_invocation(command: Sequence[str]) -> tuple[str, tuple[str, ...]] | None:
+def tsx_test_invocation(command: Sequence[str]) -> tuple[str | None, tuple[str, ...]] | None:
     result = restricted_native("tsx_test_invocation", {"command": list(command)}, (list, type(None)))
     if result is None:
         return None
-    if len(result) != 2 or not isinstance(result[0], str) or not isinstance(result[1], list):
+    if (
+        len(result) != 2
+        or (result[0] is not None and not isinstance(result[0], str))
+        or not isinstance(result[1], list)
+    ):
         raise ValueError("Invalid native tsx invocation")
     return result[0], tuple(result[1])
 

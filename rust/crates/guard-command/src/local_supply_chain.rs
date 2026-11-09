@@ -1966,9 +1966,6 @@ pub fn build_local_supply_chain_posture(
         .synced_policy_payload(store)
         .and_then(|p| dict_payload(Some(&p)))
         .unwrap_or_default();
-    // Legacy team-policy siblings are not signed policy-bundle content and
-    // therefore cannot contribute enforcement or managed-policy status.
-    let team_policy_pack: Map<String, Value> = Map::new();
     let cached_bundle = workspace_id
         .as_deref()
         .and_then(|id| store.get_cached_supply_chain_bundle(id));
@@ -2001,16 +1998,9 @@ pub fn build_local_supply_chain_posture(
         .or_else(|| string_value(remote_policy.get("package_script_action")));
     let remote_cloud_advisory_action = string_value(remote_policy.get("cloudAdvisoryAction"))
         .or_else(|| string_value(remote_policy.get("cloud_advisory_action")));
-    let managed_by_cloud = !remote_policy.is_empty() || !team_policy_pack.is_empty();
-    let managed_label = string_value(team_policy_pack.get("name")).or_else(|| {
-        if managed_by_cloud {
-            Some("Guard Cloud sync".to_string())
-        } else {
-            None
-        }
-    });
-    let managed_updated_at = string_value(team_policy_pack.get("updatedAt"))
-        .or_else(|| string_value(remote_policy.get("updatedAt")));
+    let managed_by_cloud = !remote_policy.is_empty();
+    let managed_label = managed_by_cloud.then(|| "Guard Cloud sync".to_string());
+    let managed_updated_at = string_value(remote_policy.get("updatedAt"));
 
     let mut posture = Map::new();
     posture.insert("generated_at".into(), json!(now_text));
@@ -2055,7 +2045,6 @@ pub fn build_local_supply_chain_posture(
                 .or_else(|| resolve_risk_action(config, Some("package_script"), None)),
             "managed_by_cloud": managed_by_cloud,
             "remote_policy_active": !remote_policy.is_empty(),
-            "team_policy_active": !team_policy_pack.is_empty(),
             "managed_label": managed_label,
             "managed_updated_at": managed_updated_at,
         }),
@@ -5528,6 +5517,48 @@ fn compose_current_package_policy_action(
 // resolve_stored_package_policy_override + apply_stored_package_policy_override
 // ---------------------------------------------------------------------------
 
+/// How many times one package request reads its saved allow's authority.
+///
+/// Guard settles up to eight Cloud Review jobs at once. Each sibling moves the
+/// revision twice, once when its allow is stored and once when its own install
+/// claims it, so a request can need two reads per job. Keep this in step with
+/// the Python resolver's `_AUTHORITY_READS`.
+const PACKAGE_AUTHORITY_READS: u32 = 16;
+
+/// Whether a fresh read offers the refused saved allow at a newer revision.
+///
+/// Every allow stored or spent moves the shared approval authority revision,
+/// and a claim refuses a row read at an older one. When a reviewer approves
+/// several requests at once, another request's allow can land between this
+/// request reading its saved allow and claiming it. Only then is the claim
+/// tried again, with the row read at the new revision. The fresh read repeats
+/// the ordinary lookup, so a block saved in between still wins, and a row
+/// already spent reads as nothing.
+fn package_authority_moved(refused: &Value, fresh: &Value) -> bool {
+    let revision = |decision: &Value| {
+        decision
+            .get("_approval_authority_revision")
+            .and_then(Value::as_i64)
+    };
+    let Some(fresh_revision) = revision(fresh) else {
+        return false;
+    };
+    if revision(refused) == Some(fresh_revision) {
+        return false;
+    }
+    match refused
+        .get("approval_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+    {
+        Some(id) => fresh.get("approval_id").and_then(Value::as_str) == Some(id),
+        None => {
+            let id = refused.get("decision_id").and_then(Value::as_i64);
+            id.is_some() && fresh.get("decision_id").and_then(Value::as_i64) == id
+        }
+    }
+}
+
 /// Result of `_resolve_stored_package_policy_override`.
 #[allow(dead_code)]
 struct StoredPackagePolicyResolution {
@@ -5571,90 +5602,106 @@ fn resolve_stored_package_policy_override(
         execution_context,
         paths_api,
     );
-    let mut saved_decision: Option<Value> = None;
-    for workspace in &workspaces {
-        let lookup = store.resolve_policy_decision_lookup(
-            &artifact.harness,
-            artifact.artifact_id.as_str(),
-            Some(artifact_hash),
-            workspace,
-            artifact.publisher.as_deref(),
-            now,
-            false,
-        );
-        if let Some(code) = lookup.error.as_deref() {
-            // A store failure is not an empty lookup. The review verdict
-            // stands. The event is written when the store can take it; the
-            // code is also returned, because this same store may be unable
-            // to record the event.
-            store.add_event(
-                "package_policy_lookup_failed",
-                &json!({ "code": code }),
+    let mut refused: Option<Value> = None;
+    let mut reads = 0;
+    let (did, disposition) = loop {
+        reads += 1;
+        let mut saved_decision: Option<Value> = None;
+        for workspace in &workspaces {
+            let lookup = store.resolve_policy_decision_lookup(
+                &artifact.harness,
+                artifact.artifact_id.as_str(),
+                Some(artifact_hash),
+                workspace,
+                artifact.publisher.as_deref(),
                 now,
+                false,
             );
-            return StoredPackagePolicyResolution {
-                evaluation: evaluation.clone(),
-                claim_disposition: None,
-                lookup_error: Some(code.to_string()),
-            };
+            if let Some(code) = lookup.error.as_deref() {
+                // A store failure is not an empty lookup. The review verdict
+                // stands. The event is written when the store can take it; the
+                // code is also returned, because this same store may be unable
+                // to record the event.
+                store.add_event(
+                    "package_policy_lookup_failed",
+                    &json!({ "code": code }),
+                    now,
+                );
+                return StoredPackagePolicyResolution {
+                    evaluation: evaluation.clone(),
+                    claim_disposition: None,
+                    lookup_error: Some(code.to_string()),
+                };
+            }
+            // A row whose local integrity did not verify stops the probe: Python
+            // hands that case to the daemon authority, which this lane has no seam
+            // for, so the review verdict stands rather than a row being reused on
+            // unverified integrity.
+            if lookup.ignored_local_integrity.is_some() {
+                return unchanged();
+            }
+            if lookup.decision.is_some() {
+                saved_decision = lookup.decision;
+                break;
+            }
         }
-        // A row whose local integrity did not verify stops the probe: Python
-        // hands that case to the daemon authority, which this lane has no seam
-        // for, so the review verdict stands rather than a row being reused on
-        // unverified integrity.
-        if lookup.ignored_local_integrity.is_some() {
+        let Some(saved) = saved_decision else {
+            return unchanged();
+        };
+        // A refused claim reads the facts again only when the same row is still
+        // offered at a newer authority revision; see `package_authority_moved`.
+        if let Some(previous) = refused.as_ref() {
+            if !package_authority_moved(previous, &saved) {
+                return unchanged();
+            }
+        }
+        if !claim_saved_approval {
             return unchanged();
         }
-        if lookup.decision.is_some() {
-            saved_decision = lookup.decision;
-            break;
+        // Attempt to claim the saved approval — verify artifact-hash match and
+        // freshness via the approval_context seam.
+        let decision_id = saved.get("decision_id").and_then(Value::as_i64);
+        let Some(did) = decision_id else {
+            return unchanged();
+        };
+        // Only a saved allow is reused. A row recording any other action is read
+        // by the saved-policy lanes that own it, never claimed as an approval.
+        if saved.get("action").and_then(Value::as_str) != Some("allow") {
+            return unchanged();
         }
-    }
-    let Some(saved) = saved_decision else {
-        return unchanged();
+        let saved_hash = saved.get("artifact_hash").and_then(Value::as_str);
+        if saved_hash != Some(artifact_hash) {
+            return unchanged();
+        }
+        // Check freshness — expiry, approval-context token, etc.
+        if approval_context_api
+            .approval_context_tokens_validation_reason(
+                saved.get("artifact_hash").unwrap_or(&Value::Null),
+                &Value::String(artifact_hash.to_string()),
+            )
+            .is_some()
+        {
+            return unchanged();
+        }
+        // The disposition the row reports is the store's, and only the two values
+        // the caller's vocabulary carries: a single-use row reads as `consumed`,
+        // a durable one as `retained`.
+        let disposition = match store.approval_reuse_claim_disposition(&saved).as_deref() {
+            Some(value @ ("consumed" | "retained")) => Some(value.to_owned()),
+            _ => None,
+        };
+        // The store claims the row before the evaluation reports the approval
+        // (`_run_claim`, kind `store`). A refused claim — another caller took the
+        // single-use row, or the row no longer stands — leaves the review verdict
+        // the package lane settled, so an unclaimed row is never read as approved.
+        if store.claim_approval_reuse_decision(&saved, now) {
+            break (did, disposition);
+        }
+        if reads >= PACKAGE_AUTHORITY_READS {
+            return unchanged();
+        }
+        refused = Some(saved);
     };
-    if !claim_saved_approval {
-        return unchanged();
-    }
-    // Attempt to claim the saved approval — verify artifact-hash match and
-    // freshness via the approval_context seam.
-    let decision_id = saved.get("decision_id").and_then(Value::as_i64);
-    let Some(did) = decision_id else {
-        return unchanged();
-    };
-    // Only a saved allow is reused. A row recording any other action is read
-    // by the saved-policy lanes that own it, never claimed as an approval.
-    if saved.get("action").and_then(Value::as_str) != Some("allow") {
-        return unchanged();
-    }
-    let saved_hash = saved.get("artifact_hash").and_then(Value::as_str);
-    if saved_hash != Some(artifact_hash) {
-        return unchanged();
-    }
-    // Check freshness — expiry, approval-context token, etc.
-    if approval_context_api
-        .approval_context_tokens_validation_reason(
-            saved.get("artifact_hash").unwrap_or(&Value::Null),
-            &Value::String(artifact_hash.to_string()),
-        )
-        .is_some()
-    {
-        return unchanged();
-    }
-    // The disposition the row reports is the store's, and only the two values
-    // the caller's vocabulary carries: a single-use row reads as `consumed`,
-    // a durable one as `retained`.
-    let disposition = match store.approval_reuse_claim_disposition(&saved).as_deref() {
-        Some(value @ ("consumed" | "retained")) => Some(value.to_owned()),
-        _ => None,
-    };
-    // The store claims the row before the evaluation reports the approval
-    // (`_run_claim`, kind `store`). A refused claim — another caller took the
-    // single-use row, or the row no longer stands — leaves the review verdict
-    // the package lane settled, so an unclaimed row is never read as approved.
-    if !store.claim_approval_reuse_decision(&saved, now) {
-        return unchanged();
-    }
     // Apply the saved approval — rewrite decision fields.
     let claimed = evaluation.with_fields(&[
         ("decision", json!("allow")),
@@ -6265,35 +6312,11 @@ fn package_request_artifact_hash(
         "package_manager_executable".into(),
         digest_or_null("package_manager_executable"),
     );
-    #[cfg(unix)]
+    // `crate::launch_identity` is the Unix module or its stub, and both
+    // re-export the same projection, so every platform binds the approval
+    // through one code path.
     let package_launch_identity_material =
         crate::launch_identity::package_request_launch_identity_material(launch_identity);
-    #[cfg(not(unix))]
-    let package_launch_identity_material = {
-        let mut material = Map::new();
-        if let Some(launch_identity) = launch_identity {
-            let wrapper_resolution = launch_identity
-                .get("wrapper_resolution")
-                .filter(|value| value.is_object())
-                .cloned()
-                .unwrap_or_else(|| {
-                    let mut direct = Map::new();
-                    direct.insert("status".into(), json!("direct"));
-                    Value::Object(direct)
-                });
-            material.insert(
-                "argv_sha256".into(),
-                launch_identity
-                    .get("argv_sha256")
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            );
-            material.insert("wrapper_resolution".into(), wrapper_resolution);
-        } else {
-            material.insert("available".into(), json!(false));
-        }
-        material
-    };
     identity.insert(
         "package_launch_identity".into(),
         Value::Object(package_launch_identity_material),

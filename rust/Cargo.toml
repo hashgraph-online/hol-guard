@@ -28,6 +28,7 @@ members = [
     "crates/guard-runtime",
     "crates/guard-runtime-pyjson",
     "crates/guard-runtime-windows-process",
+    "crates/guard-yanez-pulse",
 ]
 resolver = "2"
 
@@ -112,7 +113,7 @@ opt-level = "z"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.88"
+rust-version = "1.89"
 
 [workspace.dependencies]
 base64 = "=0.22.1"
@@ -128,7 +129,7 @@ nix = { version = "0.31.3", features = ["dir", "fs", "poll", "process", "signal"
 rustix = { version = "1.1.5", features = ["fs"] }
 regex = "1.11.2"
 fancy-regex = "0.19"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
 idna = "1.0"
 percent-encoding = "2.3"

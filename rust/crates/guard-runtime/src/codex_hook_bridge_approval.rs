@@ -27,6 +27,9 @@ const APPROVAL_REQUEST_ID_KEY: &str = "guardApprovalRequestId";
 const APPROVAL_URL_KEY: &str = "guardApprovalUrl";
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const GET_TIMEOUT_CAP: Duration = Duration::from_millis(1500);
+/// How long the daemon may hold one resolution read open. It stays below
+/// `GET_TIMEOUT_CAP`, so a held read is answered before the bridge gives up.
+const RESOLUTION_WAIT: Duration = Duration::from_millis(1000);
 const FINALIZE_TIMEOUT_CAP: Duration = Duration::from_secs(5);
 const FINALIZE_MAX_ATTEMPTS: usize = 3;
 /// `/requests/`, the fixed segment of `_REQUEST_URL_RE`.
@@ -239,12 +242,25 @@ fn guard_home(state_path: &Path) -> &Path {
 }
 
 /// `_open_pending_approval(approval_url, state_path=...)`. A link this port
-/// cannot sign byte for byte is reported as unavailable, never opened.
+/// cannot sign byte for byte is reported as unavailable, never opened. A user
+/// whose HOL Guard Desktop opens request links gets the request there, in a
+/// window that is already signed in, and the browser link when it does not.
 fn open_pending(approval_url: Option<&str>, state_path: &Path) {
     let Some(url) = approval_url else {
         return;
     };
     let home = guard_home(state_path);
+    // A marker can outlive the scheme registration; when no app takes the
+    // Desktop link, the signed browser link below still opens.
+    if let Some(desktop_url) = crate::desktop_review_link::desktop_review_url(home, url) {
+        if crate::browser_open::open_app_url(&desktop_url) {
+            notify(
+                &mut std::io::stderr(),
+                &format!("HOL Guard is waiting for approval in HOL Guard Desktop: {desktop_url}"),
+            );
+            return;
+        }
+    }
     let browser_url = now_micros().and_then(|now| {
         crate::native_review_link::approval_browser_url(
             url,
@@ -306,19 +322,31 @@ fn pause(deadline: Instant) {
 
 /// `_poll_resolution(request_id=..., state_path=..., deadline=...)`. The
 /// id is `[A-Za-z0-9_-]`, which `quote(request_id, safe='')` keeps as is.
+///
+/// Each read asks the daemon to hold it open until the request is decided,
+/// for at most `RESOLUTION_WAIT`, so a decision reaches the hook as soon as it
+/// is committed rather than on the next poll. A read the daemon held open has
+/// already waited, and the next one is sent at once; a daemon that ignores
+/// `wait_ms` answers immediately and is polled as before.
 fn poll_resolution(state_path: &Path, request_id: &str, deadline: Instant) -> Option<Action> {
-    let path = format!("/v1/requests/{request_id}");
+    let path = format!(
+        "/v1/requests/{request_id}?wait_ms={}",
+        RESOLUTION_WAIT.as_millis()
+    );
     loop {
         if remaining(deadline) < POLL_INTERVAL {
             return None;
         }
+        let asked = Instant::now();
         let payload = approval_request(state_path, &path, None, capped(deadline, GET_TIMEOUT_CAP));
         if let Ok(Some(payload)) = payload {
             if let Some(action) = resolution_action(&payload) {
                 return Some(action);
             }
         }
-        pause(deadline);
+        if asked.elapsed() < POLL_INTERVAL {
+            pause(deadline);
+        }
     }
 }
 

@@ -34,37 +34,13 @@ from .native_supply_chain_egress import offline_egress
 from .native_workspace_inventory import AuditDeadlineError, audit_deadline
 from .native_workspace_snapshot import WorkspaceSnapshot, WorkspaceSnapshotError, workspace_snapshot
 from .store_workspace_assessment_schema import FINDINGS_BYTE_BUDGET, MAX_FINDINGS
-from .workspace_ci_workflow_findings import (
-    CI_WORKFLOW_DETECTOR,
-    project_ci_workflow_findings,
-    with_ci_workflow_coverage,
-)
-from .workspace_editor_task_findings import (
-    EDITOR_TASK_DETECTOR,
-    project_editor_task_findings,
-    with_editor_task_coverage,
-)
-from .workspace_hook_config_findings import (
-    HOOK_CONFIG_DETECTOR,
-    project_hook_config_findings,
-    with_hook_config_coverage,
-)
-from .workspace_instruction_findings import (
-    INSTRUCTION_DETECTOR,
-    project_instruction_findings,
-    with_instruction_coverage,
-)
-from .workspace_mcp_config_findings import (
-    MCP_CONFIG_DETECTOR,
-    assess_workspace_mcp_configs,
-    project_mcp_config_findings,
-    with_mcp_config_coverage,
-)
-from .workspace_plugin_manifest_findings import (
-    PLUGIN_MANIFEST_DETECTOR,
-    project_plugin_manifest_findings,
-    with_plugin_manifest_coverage,
-)
+from .workspace_ci_workflow_findings import CI_WORKFLOW_DETECTOR
+from .workspace_editor_task_findings import EDITOR_TASK_DETECTOR
+from .workspace_hook_config_findings import HOOK_CONFIG_DETECTOR
+from .workspace_instruction_findings import INSTRUCTION_DETECTOR
+from .workspace_mcp_config_findings import MCP_CONFIG_DETECTOR, assess_workspace_mcp_configs
+from .workspace_plugin_manifest_findings import PLUGIN_MANIFEST_DETECTOR
+from .workspace_rule_findings import rule_findings
 from .workspace_runtime_findings import (
     RUNTIME_DETECTOR,
     WorkspaceRuntimeFindingsError,
@@ -76,7 +52,7 @@ from .workspace_runtime_findings import (
     with_runtime_coverage,
 )
 from .workspace_secret_findings import SECRET_DETECTOR, load_fingerprint_key, project_secret_findings, secret_coverage
-from .workspace_skill_findings import SKILL_DETECTOR, project_skill_findings, with_skill_coverage
+from .workspace_skill_findings import SKILL_DETECTOR
 from .workspace_supply_chain_findings import SUPPLY_CHAIN_DETECTOR
 
 DETECTOR_SET: Final = (
@@ -212,33 +188,31 @@ def execute(
     runtime_findings, runtime_truncated = (
         project_runtime_findings(run.keys.worktree_key, posture) if posture is not None else ([], False)
     )
-    findings, merge_truncated = merge_findings(
-        supply.findings,
-        project_secret_findings(before.secrets),
-        runtime_findings,
-        project_skill_findings(before.skills),
-        project_mcp_config_findings(mcp_configs),
-        project_hook_config_findings(before.hooks),
-        project_plugin_manifest_findings(before.plugins),
-        project_ci_workflow_findings(before.workflows),
-        project_editor_task_findings(before.editor_tasks),
-        project_instruction_findings(before.instructions),
-    )
-    truncated = supply_truncated or runtime_truncated or merge_truncated
+    truncated = supply_truncated or runtime_truncated
     refused = offline.refused if offline is not None else 0
     coverage = with_runtime_coverage(
         coverage_summary(before, payload, supply, findings_truncated=truncated, egress_refused=refused), posture
     )
-    for add_coverage, result in (
-        (with_skill_coverage, before.skills),
-        (with_mcp_config_coverage, mcp_configs),
-        (with_hook_config_coverage, before.hooks),
-        (with_plugin_manifest_coverage, before.plugins),
-        (with_ci_workflow_coverage, before.workflows),
-        (with_editor_task_coverage, before.editor_tasks),
-        (with_instruction_coverage, before.instructions),
-    ):
-        coverage = add_coverage(coverage, result)
+    rule, coverage = rule_findings(
+        coverage,
+        [
+            (SKILL_DETECTOR, before.skills),
+            (MCP_CONFIG_DETECTOR, mcp_configs),
+            (HOOK_CONFIG_DETECTOR, before.hooks),
+            (PLUGIN_MANIFEST_DETECTOR, before.plugins),
+            (CI_WORKFLOW_DETECTOR, before.workflows),
+            (EDITOR_TASK_DETECTOR, before.editor_tasks),
+            (INSTRUCTION_DETECTOR, before.instructions),
+        ],
+    )
+    findings, merge_truncated = merge_findings(
+        supply.findings, project_secret_findings(before.secrets), runtime_findings, rule
+    )
+    # The merge bounds are known only once every detector's findings are in,
+    # so a list the merge cut adds its cap after the detectors.
+    reasons = _strings(coverage.get("reasons"))
+    if merge_truncated and "finding_cap" not in reasons:
+        coverage = {**coverage, "status": "partial", "reasons": [*reasons, "finding_cap"]}
     return assessments.RunOutcome(
         state="completed" if coverage["status"] == "complete" else "partial",
         snapshot_digest=before.snapshot_digest,

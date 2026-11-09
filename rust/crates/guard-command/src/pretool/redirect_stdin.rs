@@ -13,9 +13,21 @@
 //! and `kubectl apply -f -` deploys it. None of them looks like an
 //! interpreter, so naming the programs that only read is the only test that
 //! stays correct as programs are added.
+//!
+//! `git commit -F -` reads those bytes as the message it records. It runs
+//! nothing from them and saves them nowhere else, so it belongs beside the
+//! filters. No other `git` subcommand does: `apply` and `am` apply a patch,
+//! `hash-object --stdin` writes an object and `fast-import` rewrites history,
+//! so the subcommand is named rather than the program. The commit itself is
+//! still the write it is, and keeps the proof every other spelling of it gets.
+//!
+//! Which segment of a chain the operator belongs to is not in the projected
+//! text, so every segment answers for it. A chain whose segments all only
+//! read leaves nothing that could run the bytes, whichever one the shell
+//! hands them to.
 
 use super::Quote;
-use crate::CanonicalCommandV1;
+use crate::{CanonicalCommandV1, CommandSegmentV1};
 
 /// Programs that read standard input as data. Each prints, counts, filters or
 /// reshapes what it reads; none runs, applies or installs it.
@@ -24,21 +36,58 @@ const FILTERS: &[&str] = &[
     "tail", "tee", "tr", "uniq", "wc", "yq",
 ];
 
-/// Whether the command is one plain filter spelled by name, with no wrapper,
-/// environment assignment or path override, so the bytes it reads on standard
-/// input are data and nothing else. The caller still proves every file the
-/// command writes on its own.
-pub(super) fn reads_data(model: &CanonicalCommandV1) -> bool {
-    model.wrapper_chain.is_empty()
-        && !model.path_overridden
-        && model.segments.len() == 1
-        && model.segments[0].wrapper_chain.is_empty()
-        && model.segments[0].environment_names.is_empty()
-        && !model.segments[0].path_overridden
-        && model.segments[0]
-            .executable
-            .as_deref()
-            .is_some_and(|executable| FILTERS.contains(&executable))
+/// Whether the command the bytes reach only reads them, so what arrives on
+/// standard input is data and nothing else. The caller still proves every
+/// file that command writes on its own.
+///
+/// The operator belongs to the command the shell was reading when it met it.
+/// With nothing separating that command from the end of the text, it is the
+/// last segment, and that segment alone answers for the bytes. With a
+/// separator after it, which segment the shell hands them to is no longer in
+/// the projected text, so every segment answers for them.
+pub(super) fn reads_data(model: &CanonicalCommandV1, separated_after: bool) -> bool {
+    if !model.wrapper_chain.is_empty() || model.path_overridden || model.segments.is_empty() {
+        return false;
+    }
+    if separated_after {
+        model.segments.iter().all(segment_reads_data)
+    } else {
+        model.segments.last().is_some_and(segment_reads_data)
+    }
+}
+
+/// Whether one segment, spelled plainly by name with no wrapper, environment
+/// assignment or path override, only reads what reaches it on standard input.
+fn segment_reads_data(segment: &CommandSegmentV1) -> bool {
+    segment.wrapper_chain.is_empty()
+        && segment.environment_names.is_empty()
+        && !segment.path_overridden
+        && segment.executable.as_deref().is_some_and(|executable| {
+            FILTERS.contains(&executable) || records_a_commit_message(executable, segment)
+        })
+}
+
+/// Whether the segment is a `git commit` that takes its message from standard
+/// input, which is the only commit form that reads the bytes at all. A message
+/// on the command line, a message file and an amended message all leave them
+/// untouched, so dropping the body in front of one of those would project a
+/// command the shell never ran.
+///
+/// The subcommand is the first word, so a global option such as `-C` or `-c`
+/// in front of it leaves the segment unrecognised and the projection closed.
+/// That is deliberate: those options choose the repository and the
+/// configuration the commit runs under, and this test answers only for what
+/// the bytes on standard input become.
+fn records_a_commit_message(executable: &str, segment: &CommandSegmentV1) -> bool {
+    if executable != "git" {
+        return false;
+    }
+    let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+    matches!(
+        words.split_first(),
+        Some((&"commit", rest))
+            if crate::pretool::git_local_writes::forms::message_from_standard_input(rest)
+    )
 }
 
 /// The bare `cat` the caller may stand a no-op in for. Reading standard input

@@ -14,7 +14,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use super::adapter_inventory::{carried, json_payload, Inventory, Request, SkillNaming, ERR_VALUE};
+use super::adapter_inventory::{
+    carried, json_payload, skill_root_label, Inventory, Request, SkillNaming, ERR_VALUE,
+};
 use super::aibom_mcp_metadata::{enrich, McpMetadataInput, ERR_METADATA};
 use super::claude_guard_question::python_lower;
 use super::context_digest::python_strip;
@@ -324,20 +326,6 @@ fn claude_hooks_overlap(
     Ok(false)
 }
 
-/// `skill_root.relative_to(identity_root).as_posix()`, else the root itself.
-fn root_label(skill_root: &Path, identity_root: &Path) -> String {
-    let label = skill_root
-        .strip_prefix(identity_root)
-        .unwrap_or(skill_root)
-        .to_string_lossy()
-        .into_owned();
-    if cfg!(windows) {
-        label.replace('\\', "/")
-    } else {
-        label
-    }
-}
-
 pub(crate) fn detect(args: &Value) -> KindResult {
     let request = Request::parse(args, HARNESS)?;
     let config_dir = request.path(args, "config_dir")?;
@@ -402,7 +390,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         ));
     }
     for (skill_root, identity_root, scope) in skill_roots {
-        let label = root_label(&skill_root, &identity_root);
+        let label = skill_root_label(&skill_root, &identity_root);
         inventory.skills(
             scope,
             "Devin",

@@ -116,6 +116,13 @@ def test_a_drained_answer_that_waited_out_a_policy_update_leaves_a_window_event(
     assert host.activity_writer.receipts == [RECEIPT]
 
 
+def test_a_fence_wait_the_resident_recorded_leaves_no_second_window_event(tmp_path: Path) -> None:
+    host = _Host(tmp_path, store=_EventStore())
+    assert record_direct_hook_evidence(host, _record(fence_wait_ms=300, fence_wait_recorded=True))
+    assert host.store.events == []  # pyright: ignore[reportAttributeAccessIssue]
+    assert host.activity_writer.receipts == [RECEIPT]
+
+
 def test_a_drained_answer_without_a_wait_leaves_no_window_event(tmp_path: Path) -> None:
     host = _Host(tmp_path, store=_EventStore())
     assert record_direct_hook_evidence(host, _record())
@@ -155,6 +162,14 @@ def test_a_codex_receipt_reaches_the_binding_capture(tmp_path: Path, harness: st
     if captured:
         assert capture.captured[0]["guard_home"] == tmp_path
         assert capture.captured[0]["receipt"] == RECEIPT
+
+
+def test_a_codex_receipt_the_resident_captured_is_not_captured_again(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    capture = _Capture()
+    host.capture_writer = capture  # pyright: ignore[reportAttributeAccessIssue]
+    assert record_direct_hook_evidence(host, _record(capture_recorded=True))
+    assert capture.captured == []
 
 
 @pytest.mark.parametrize(
@@ -237,6 +252,33 @@ def test_drain_pulls_pages_until_the_queue_is_empty(tmp_path: Path) -> None:
     }
     assert json.loads(requests[1]["payload"])["request"]["ack_through"] == 2  # pyright: ignore[reportArgumentType]
     assert json.loads(requests[1]["payload"])["request"]["ack_epoch"] == "e1"  # pyright: ignore[reportArgumentType]
+
+
+def test_drain_pages_past_a_page_the_resident_fully_recorded(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    pages = [_page([], 1, through=256), _page([_record()], 0, through=257)]
+    requests: list[dict[str, object]] = []
+
+    def client(**values: object) -> bytes:
+        requests.append(values)
+        return pages.pop(0)
+
+    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, client))
+    assert drain.drain_once() is False
+    assert (drain.recorded, drain.failures) == (1, 0)
+    assert json.loads(requests[1]["payload"])["request"]["ack_through"] == 256  # pyright: ignore[reportArgumentType]
+
+
+def test_an_empty_page_without_a_cursor_ends_the_wake(tmp_path: Path) -> None:
+    requests: list[dict[str, object]] = []
+
+    def client(**values: object) -> bytes:
+        requests.append(values)
+        return _page([], 3)
+
+    drain = DirectHookEvidenceDrain(_host(tmp_path), transport=lambda: (tmp_path, client))
+    assert drain.drain_once() is False
+    assert len(requests) == 1
 
 
 @pytest.mark.parametrize("epoch", [None, "", 7])
@@ -352,3 +394,18 @@ def test_a_drained_prompt_records_only_its_receipt_and_capture(tmp_path: Path, h
     # The daemon records no command activity for a prompt.
     assert host.activity_writer.activity == []
     assert host.post_tool_activity == []
+
+
+def test_a_store_failure_on_the_page_reaches_the_writer_client(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    asked: list[str] = []
+    host.activity_writer.stats = lambda: asked.append("stats")  # pyright: ignore[reportAttributeAccessIssue]
+    body = json.loads(_page([_record(receipt_recorded=True)], 0, through=1))
+    body["store_fatal"] = {"id": "f1", "code": "native_guard_store_corrupt"}
+    output = json.dumps(body).encode()
+    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: output))
+
+    assert drain.drain_once() is False
+    assert asked == ["stats"]
+    assert drain.recorded == 1
+    assert host.activity_writer.receipts == []

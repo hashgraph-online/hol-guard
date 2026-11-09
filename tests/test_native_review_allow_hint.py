@@ -221,6 +221,26 @@ def test_an_answer_is_shape_checked_before_it_is_stored(monkeypatch, tmp_path: P
     assert module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=1) is None
 
 
+def test_an_unchecked_hint_is_dropped_without_failing_the_resident(monkeypatch, tmp_path: Path) -> None:
+    """A shape check that runs out of budget drops the hint; the reply still counts as answered."""
+
+    raised: list[BaseException] = []
+
+    def decide(_query, _guard_home, _fields, validate, **_kwargs: Any) -> None:
+        try:
+            validate({"hint": dict(_LIVE_ALLOW)})
+        except BaseException as error:
+            raised.append(error)
+            raise
+
+    monkeypatch.setattr(module, "_decide", decide)
+    monkeypatch.setattr(module, "validated_extension_allow_hint", lambda *_a, **_k: None)
+    monkeypatch.setattr(module, "validated_extension_coverage_hint", lambda *_a, **_k: None)
+
+    assert module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=1) is None
+    assert raised == []
+
+
 def test_a_resident_failure_never_reaches_the_review(monkeypatch, tmp_path: Path) -> None:
     def unavailable(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("native_extension_review_hint_unavailable")

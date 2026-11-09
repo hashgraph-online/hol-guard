@@ -18,6 +18,7 @@ from ..cli.connect_flow import (
 from ..cli.connect_sync_result import (
     failed_browser_connect_flow_state,
 )
+from ..native_resident_revival import native_route_unavailable_body
 from ..package_firewall_entitlement import (
     PACKAGE_FIREWALL_RUNTIME_UNAVAILABLE_REASON,
     package_firewall_entitlement_or_denied,
@@ -414,9 +415,11 @@ class _CloudConnectRoutes:
             self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_proof_context_mismatch")
             return
         daemon_server = self._daemon_server()
-        challenge_identity = dashboard_reconnect_challenge_identity(raw_challenge)
+        challenge_identity, identity_failure = dashboard_reconnect_challenge_identity(
+            daemon_server.store.guard_home, raw_challenge
+        )
         if challenge_identity is None:
-            self._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_malformed_proof")
+            self._write_dashboard_reconnect_candidate_failure(identity_failure)
             return
         now_ms = int(time.time() * 1000)
         with daemon_server.dashboard_reconnect_lock:
@@ -454,6 +457,11 @@ class _CloudConnectRoutes:
         )
 
     def _write_dashboard_reconnect_candidate_failure(self, reason_code: str) -> None:
+        # The origin check could not reach the resident: say "busy, try again"
+        # rather than "no such daemon", so the dashboard retries the reconnect.
+        if getattr(self, "_native_gate_unavailable", False):
+            self._write_json(native_route_unavailable_body(), status=503, extra_headers={"Cache-Control": "no-store"})
+            return
         self._write_json(
             {"error": "daemon_candidate_unavailable", "reason_code": reason_code},
             status=404,

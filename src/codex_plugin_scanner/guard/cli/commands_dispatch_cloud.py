@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     )
 
 
+from ..cloud_sync_busy import GUARD_SYNC_IN_PROGRESS_MESSAGE, GuardCloudSyncBusyError
 from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..mdm.user_health import (
     configure_user_health_leases,
@@ -196,6 +197,8 @@ def _run_guard_connect_command(
         machine_label=machine_label if headless else None,
         home_dir=context.home_dir if context is not None else None,
         workspace_dir=context.workspace_dir if context is not None else workspace,
+        cloud_workspace_id=getattr(args, "cloud_workspace", None),
+        cloud_actions_declined=bool(getattr(args, "no_cloud_actions", False)),
     )
     if payload is None:
         return exit_code
@@ -330,6 +333,14 @@ def _run_guard_sync_command(
             _emit("sync", {"synced": False, "error": message}, True)
         else:
             print(message, file=sys.stderr)
+        return 1
+    except GuardCloudSyncBusyError:
+        # The background service holds the sync lock while it syncs, so a busy
+        # lock is a sync already under way rather than a failure.
+        if getattr(args, "json", False):
+            _emit("sync", {"synced": False, "in_progress": True, "error": GUARD_SYNC_IN_PROGRESS_MESSAGE}, True)
+        else:
+            print(GUARD_SYNC_IN_PROGRESS_MESSAGE, file=sys.stderr)
         return 1
     except RuntimeError as error:
         if getattr(args, "json", False):

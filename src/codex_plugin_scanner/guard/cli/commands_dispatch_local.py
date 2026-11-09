@@ -534,6 +534,10 @@ def _run_guard_protect_command(
                         config=current_protect_config(),
                         current_config_provider=current_protect_config,
                         unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+                        # A Cloud resolution of these requests is honored
+                        # here, by the install that waited on them, and only
+                        # here.
+                        waited_request_ids=tuple(request_ids),
                     )
                 except NativeProtectRequestError as error:
                     return _emit_protect_resident_failure(error)

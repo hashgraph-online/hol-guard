@@ -2792,11 +2792,11 @@
   {
    "old_node": "tests/test_sonar_remaining_regexes.py::test_redundant_alternatives_keep_match_spans_and_groups",
    "replacement_nodes": [
-    "tests/test_sonar_remaining_regexes.py::test_retained_service_regex_alternatives_keep_match_spans_and_groups",
+    "rust/crates/guard-runtime/src/mcp_tool_inventory_tests.rs::tool_readings_match_the_python_classifiers",
     "rust/crates/guard-command/src/prompt_analysis.rs::prompt_regex_span_vectors_match_native_patterns"
    ],
    "status": "native_behavior_ported_requires_ci",
-   "rationale": "Split the mixed regex suite: retained Python service patterns keep their checks; deleted prompt patterns are verified by fixed language-neutral span vectors against the native owner."
+   "rationale": "Split the mixed regex suite: the MCP secret pattern moved with the MCP tool inventory classifier and is checked against recorded Python readings; deleted prompt patterns are verified by fixed language-neutral span vectors against the native owner."
   },
   {
    "old_node": "tests/test_guard_direct_vitest.py::test_verified_direct_typescript_count_is_explicitly_benign",

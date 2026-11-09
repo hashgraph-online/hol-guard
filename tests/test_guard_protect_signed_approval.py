@@ -10,6 +10,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands_dispatch_local, render
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_signed_approval_fixtures import short_signed_link
 from tests.test_guard_package_shims import WORKSPACE_ID
 from tests.test_guard_protect import _seed_guard_cloud
 
@@ -60,10 +61,10 @@ def test_guard_protect_human_output_signs_loopback_link_without_persisting_token
     pending = GuardStore(home_dir).list_approval_requests(status="pending", limit=5)
 
     assert rc == 2
-    assert "guard-token=gld1." in output
+    assert short_signed_link().search(output)
     assert "synthetic-daemon-token" not in output
     assert pending
-    assert f"{pending[0]['approval_url']}#guard-token=gld1." in raw_output
+    assert short_signed_link(pending[0]["approval_url"]).search(raw_output)
     assert "guard-token=" not in json.dumps(pending)
     assert "synthetic-daemon-token" not in json.dumps(pending)
 

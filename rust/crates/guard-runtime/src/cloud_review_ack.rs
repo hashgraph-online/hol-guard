@@ -22,7 +22,12 @@ const MAX_RETRY_AFTER_MS: i128 = 3_600_000;
 const MAX_SAFE_INTEGER: i128 = (1 << 53) - 1;
 const SUCCESS: [&str; 3] = ["accepted", "duplicate", "stale"];
 const KNOWN: [&str; 5] = ["accepted", "duplicate", "stale", "quarantined", "rejected"];
-const SEQUENCE_COLLISION: &str = "review_event_snapshot_sequence_collision";
+/// Rejections that name their event so the store can rebase it: a snapshot
+/// that collided, or any event whose sequence Cloud already holds.
+pub(crate) const SEQUENCE_COLLISIONS: [&str; 2] = [
+    "review_event_snapshot_sequence_collision",
+    "review_event_sequence_conflict",
+];
 
 const ERR_ACK: &str =
     "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying.";
@@ -137,7 +142,11 @@ fn normalize(
         {
             entry.insert("nativeContextCommitted".to_owned(), json!(true));
         }
-        if status == "rejected" && code.as_str() == Some(SEQUENCE_COLLISION) {
+        if status == "rejected"
+            && code
+                .as_str()
+                .is_some_and(|code| SEQUENCE_COLLISIONS.contains(&code))
+        {
             entry.insert("eventId".to_owned(), expected_event_id.clone());
         }
         accepted_count += usize::from(accepted);
@@ -180,7 +189,7 @@ fn normalize(
 
 /// A JSON integer, as Python's `type(value) is int` sees it: digits only, no
 /// fraction or exponent, and never a boolean. Integers past `i128` saturate.
-fn strict_int(value: &Value) -> Option<i128> {
+pub(crate) fn strict_int(value: &Value) -> Option<i128> {
     let Value::Number(number) = value else {
         return None;
     };
@@ -203,13 +212,13 @@ fn retry_after(value: &Value) -> Option<i128> {
         .map(|value| value.min(MAX_RETRY_AFTER_MS))
 }
 
-fn int_value(value: i128) -> Value {
+pub(crate) fn int_value(value: i128) -> Value {
     Value::Number(Number::from(value as i64))
 }
 
 /// Python's `value == expected` for an int `expected`: booleans count as 0
 /// and 1, and a float compares by value.
-fn py_equals_int(value: &Value, expected: i128) -> bool {
+pub(crate) fn py_equals_int(value: &Value, expected: i128) -> bool {
     match value {
         Value::Bool(flag) => i128::from(*flag) == expected,
         Value::Number(number) => match strict_int(value) {
@@ -228,7 +237,8 @@ fn py_str(value: &Value) -> String {
     }
 }
 
-fn py_repr(value: &Value) -> String {
+/// Python's `repr()` of a decoded JSON value, for refusal messages.
+pub(crate) fn py_repr(value: &Value) -> String {
     match value {
         Value::Null => "None".to_owned(),
         Value::Bool(true) => "True".to_owned(),

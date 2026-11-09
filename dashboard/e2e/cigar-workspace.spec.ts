@@ -112,8 +112,12 @@ function folderListing(body: { mode?: string; path?: string }) {
   return { ...base, mode: "folders", path, name: path.split("/").pop() || "/", parent, project: path.endsWith("my-app"), entries: children[path] ?? [] };
 }
 
+
+const PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
+const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+
 for (const width of [1440, 790, 390, 320]) {
-  test("CIGAR home, Advanced and guide at " + width + "px", async ({ page }, testInfo) => {
+  test("CIGAR home tells the story and every section is one tab away at " + width + "px", async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -121,38 +125,42 @@ for (const width of [1440, 790, 390, 320]) {
     await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175");
     const workspace = page.locator(".cigar-workspace");
     await expect(page.getByRole("heading", { name: "CIGAR", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "CIGAR is off", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Give your AI the right pages, not the whole book.", exact: true })).toBeVisible();
+    await expect(page.locator(".cigar-home-detail strong")).toHaveText("CIGAR is off.");
     await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toBeEnabled();
-    await expect(page.getByText("Finds your project from the folder your AI app runs in.", { exact: true })).toBeVisible();
-    // The default screen is one switch and one sentence: no tabs until Advanced is opened.
-    await expect(workspace.getByRole("tab")).toHaveCount(0);
-    const advanced = page.getByRole("button", { name: /^Advanced/ });
-    await expect(advanced).toHaveAttribute("aria-expanded", "false");
+    await expect(workspace.getByRole("tab")).toHaveCount(7);
+    await expect(page.getByRole("tab", { name: "Home", exact: true })).toHaveAttribute("aria-selected", "true");
+    for (const name of ["How it works", "Works in your apps", "You stay in charge", "Go further"])
+      await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(page.getByRole("figure", { name: /Make the header blue/ })).toBeVisible();
+    await expect(page.locator(".cigar-demo").getByText("never read", { exact: true })).toBeVisible();
     await expect(workspace.getByText(/token|faster|smarter/i).filter({ visible: true })).toHaveCount(0);
+    await expect(page.getByText("Which app can use it?")).toHaveCount(0);
     await expect(page.locator('[data-navigation-item="cigar"][aria-current="page"]:visible').first()).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect.poll(() => noHorizontalScroll(page)).toBe(true);
+    await page.waitForTimeout(1600);
     await page.screenshot({ path: testInfo.outputPath("cigar-home-" + width + ".png"), fullPage: true });
-    await advanced.click();
-    await expect(advanced).toHaveAttribute("aria-expanded", "true");
-    await expect(workspace.getByRole("tab")).toHaveCount(5);
-    const guideTab = page.getByRole("tab", { name: "Guides", exact: true });
+
+    const guideTab = page.getByRole("tab", { name: "Guide", exact: true });
     await guideTab.click();
-    await expect(page.getByRole("heading", { name: "How CIGAR works", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "CIGAR in one minute", exact: true })).toBeVisible();
     await page.getByText("Do I need to install anything?", { exact: true }).click();
-    await expect(page.getByText(/Guard gets its own copy of Python 3\.14/)).toBeVisible();
-    await page.getByText("Does CIGAR save me tokens or make my AI faster?", { exact: true }).click();
-    await expect(page.getByText(/CIGAR does not promise either/)).toBeVisible();
+    await expect(page.getByText(/Guard sets up its own copy of Python/)).toBeVisible();
+    await page.getByText("Does my AI read less?", { exact: true }).click();
+    await expect(page.getByText(/CIGAR makes no promise about it/)).toBeVisible();
+    await expect.poll(() => noHorizontalScroll(page)).toBe(true);
     await guideTab.focus();
     await page.keyboard.press("Home");
-    await expect(page.getByRole("tab", { name: "Settings", exact: true })).toBeFocused();
-    await expect(page.getByText("Selected runtime", { exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Home", exact: true })).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toBeFocused();
-    await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Projects", exact: true })).toBeFocused();
     await expect(page.getByText("Turn on CIGAR first", { exact: true })).toBeVisible();
-    await advanced.click();
-    await expect(workspace.getByRole("tab")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toBeEnabled();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Settings", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("CIGAR version", { exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Home", exact: true }).click();
+    await page.getByRole("button", { name: /Pick the exact files for a project/ }).click();
+    await expect(page.getByRole("tab", { name: "Projects", exact: true })).toHaveAttribute("aria-selected", "true");
     expect(writes(calls)).toEqual([]);
     expect(errors).toEqual([]);
   });
@@ -187,10 +195,10 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   await start.click();
   await expect(proof).toHaveCount(0);
   await expect(page.locator(".cigar-status")).toHaveText("Ready");
-  await page.getByRole("tab", { name: "Guides", exact: true }).click();
+  await page.getByRole("tab", { name: "Guide", exact: true }).click();
   await page.getByRole("button", { name: "Turn off CIGAR", exact: true }).click();
   await expect(page.locator(".cigar-status")).toHaveText("Off");
-  await expect(page.getByRole("tab", { name: "Guides", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Guide", exact: true })).toHaveAttribute("aria-selected", "true");
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
   expect(calls.filter((call) => call.path === "/v1/context-assistance/stop")).toHaveLength(1);
   const saves = calls.filter((call) => call.path === "/v1/settings" && call.method === "POST");
@@ -199,7 +207,45 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   expect(saves[0].body.settings.context_assistance.enabled).toBe(true);
 });
 
-test("a saved runtime turns on from the top of the page and picking a project stays optional in Advanced", async ({ page }) => {
+test("a Codex summary size Guard wrote shows a Remove button that takes it out after approval", async ({ page }) => {
+  await fixture(page, true, true);
+  const lean: Call[] = [];
+  let state = { state: "on", limit: 30000 };
+  // Registered after the fixture, so this handler wins for the Codex config route.
+  await page.route("**/v1/context-assistance/codex-lean", async (route) => {
+    const request = route.request();
+    lean.push({ path: new URL(request.url()).pathname, method: request.method(), body: request.postDataJSON() });
+    if (request.method() === "POST") {
+      const approved = typeof request.postDataJSON()?.approval_password === "string";
+      if (!approved) {
+        await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "approval_required" }) });
+        return;
+      }
+      state = { state: "off", limit: null };
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=runtime");
+  const section = page.getByText("Codex summary size", { exact: true });
+  await expect(section).toBeVisible();
+  await expect(page.getByText(/once they pass 30,000 tokens/)).toBeVisible();
+  await expect(page.getByText("can raise your bill", { exact: false })).toBeVisible();
+  // The page never offers to set a size, only to remove one.
+  await expect(page.getByRole("switch", { name: /summary|lean/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  const proof = page.getByRole("dialog");
+  await expect(proof).toBeVisible();
+  await expect(proof.getByText("Approve removing the Codex summary size")).toBeVisible();
+  await proof.getByLabel("Approval password").fill("lean-remove-proof");
+  await proof.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(proof).toHaveCount(0);
+  await expect(section).toHaveCount(0);
+  const posts = lean.filter((call) => call.method === "POST");
+  expect(posts).toHaveLength(1);
+  expect(posts[0].body).toEqual({ enabled: false, approval_password: "lean-remove-proof" });
+});
+
+test("a saved runtime turns on from the top of the page and adding a project stays optional", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const calls = await fixture(page, true, true);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
@@ -209,11 +255,13 @@ test("a saved runtime turns on from the top of the page and picking a project st
   expect(calls.some((call) => call.path === "/v1/context-assistance/activate")).toBe(false);
   await start.click();
   await expect(page.locator(".cigar-status")).toHaveText("Ready");
-  await expect(page.getByRole("tab", { name: "Guides", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByText("Do I have to pick a project folder?", { exact: true }).click();
-  await page.getByRole("button", { name: "Open Projects & AI apps", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Guide", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.getByText("Do I have to add my projects?", { exact: true }).click();
+  await page.getByRole("button", { name: "Open Projects", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Projects", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("No projects yet.", { exact: true })).toBeVisible();
+  // Nothing to remove yet, so no red button competes with adding the first project.
+  await expect(page.getByRole("button", { name: "Remove all projects", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Choose a project folder/ })).toBeEnabled();
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
   expect(calls.some((call) => call.path === "/v1/settings" && call.method === "POST")).toBe(false);
@@ -231,7 +279,41 @@ test("a CIGAR that went to rest comes back on its own when the page opens", asyn
 });
 
 for (const width of [1440, 390]) {
-  test("picking a project is browsing folders and ticking notes at " + width + "px", async ({ page }, testInfo) => {
+  test("reading project files turns on from Home without a trip to Settings at " + width + "px", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const calls = await fixture(page, true, true);
+    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175");
+    await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
+    await expect(page.locator(".cigar-status")).toHaveText("Ready");
+    await expect(page.locator(".cigar-home-detail strong")).toHaveText("CIGAR is on.");
+    const allow = page.getByRole("button", { name: "Let CIGAR read project files", exact: true });
+    await expect(allow).toBeEnabled();
+    await allow.click();
+    const proof = page.getByRole("dialog", { name: "Let CIGAR read project files" });
+    await expect(proof).toContainText("Secrets, keys, hidden files");
+    await proof.getByLabel("Approval password").fill("cigar-ui-test-proof");
+    await proof.getByRole("button", { name: "Turn on", exact: true }).click();
+    await expect(proof).toHaveCount(0);
+    await expect.poll(() => calls.filter((call) => call.path === "/v1/context-assistance/activate").length).toBe(2);
+    await expect(page.locator(".cigar-status")).toHaveText("Ready");
+    await expect(page.locator(".cigar-home-detail")).toContainText(PROMISE);
+    await expect(allow).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Home", exact: true })).toHaveAttribute("aria-selected", "true");
+    const saves = calls.filter((call) => call.path === "/v1/settings" && call.method === "POST");
+    expect(saves).toHaveLength(1);
+    expect(saves[0].body.approval_password).toBe("cigar-ui-test-proof");
+    expect(saves[0].body.settings.context_assistance.sources.workspace_documents).toBe(true);
+    expect(saves[0].body.settings.context_assistance.features.agent_context).toBe(true);
+    await expect.poll(() => noHorizontalScroll(page)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("cigar-on-" + width + ".png"), fullPage: true });
+    expect(errors).toEqual([]);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test("adding a project is browsing folders and ticking files, for every app at " + width + "px", async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -265,46 +347,49 @@ for (const width of [1440, 390]) {
     await page.getByRole("checkbox", { name: /design\.md/ }).check();
     await page.getByRole("checkbox", { name: /AGENTS\.md/ }).first().uncheck();
     await expect(page.getByText("2 picked · up to 32", { exact: true })).toBeVisible();
-    await expect(page.getByText("Context consumer")).toHaveCount(0);
+    // A project counts for every app, so there is no app to pick.
     await expect(page.getByText("Which app can use it?")).toHaveCount(0);
+    await expect(page.getByRole("radio")).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath("cigar-files-" + width + ".png"), fullPage: true });
-    await page.getByRole("button", { name: "Give CIGAR access", exact: true }).click();
-    const proof = page.getByRole("dialog", { name: "Confirm CIGAR access" });
+    await page.getByRole("button", { name: "Add project", exact: true }).click();
+    const proof = page.getByRole("dialog", { name: "Add this project" });
     await expect(proof).toContainText("CIGAR can read 2 files in my-app");
+    await expect(proof).toContainText("every AI app");
     await proof.getByLabel("Approval password").fill("cigar-ui-test-proof");
-    await proof.getByRole("button", { name: "Give access", exact: true }).click();
+    await proof.getByRole("button", { name: "Add project", exact: true }).click();
     await expect.poll(() => calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant").length).toBe(1);
     const grant = calls.find((call) => call.path === "/v1/context-assistance/workspace-grant")!;
     expect(grant.body.input).toMatchObject({ action: "grant", app: "dashboard", workspace: "/Users/you/Projects/my-app", sources: ["README.md", "docs/design.md"] });
     expect(calls.filter((call) => call.path === "/v1/context-assistance/folders").every((call) => call.method === "POST")).toBe(true);
 
-    await expect(page.getByRole("button", { name: "Revoke workspace access", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove project", exact: true })).toBeVisible();
     await expect(page.getByText("Recent projects", { exact: true })).toHaveCount(0);
-    // Guard restarts and forgets the grant; this browser offers it back in one click.
+    // Guard restarts and forgets the project; this browser offers it back in one click.
     await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=access");
-    await page.getByRole("button", { name: /my-app.*2 files · for this page/ }).click();
+    await page.getByRole("button", { name: /my-app.*2 files/ }).click();
     await expect(page.getByText("/Users/you/Projects/my-app", { exact: true })).toBeVisible();
     await expect(page.getByRole("checkbox", { name: /README\.md/ })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: /docs\/design\.md/ })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: /AGENTS\.md/ })).not.toBeChecked();
     await expect(page.getByText("2 picked · up to 32", { exact: true })).toBeVisible();
     expect(calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant")).toHaveLength(1);
-    // Access is still confirmed again, and the new grant carries last time's choice.
-    await page.getByRole("button", { name: "Give CIGAR access", exact: true }).click();
-    const again = page.getByRole("dialog", { name: "Confirm CIGAR access" });
+    // Adding it back is still confirmed, and carries last time's files.
+    await page.getByRole("button", { name: "Add project", exact: true }).click();
+    const again = page.getByRole("dialog", { name: "Add this project" });
     await expect(again).toContainText("CIGAR can read 2 files in my-app");
     await again.getByLabel("Approval password").fill("cigar-ui-test-proof");
-    await again.getByRole("button", { name: "Give access", exact: true }).click();
+    await again.getByRole("button", { name: "Add project", exact: true }).click();
     await expect.poll(() => calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant").length).toBe(2);
     const regrant = calls.filter((call) => call.path === "/v1/context-assistance/workspace-grant")[1];
     expect(regrant.body.input).toMatchObject({ action: "grant", app: "dashboard", workspace: "/Users/you/Projects/my-app", sources: ["README.md", "docs/design.md"] });
-    await expect(page.getByRole("button", { name: "Revoke workspace access", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove project", exact: true })).toBeVisible();
+    await expect.poll(() => noHorizontalScroll(page)).toBe(true);
     expect(errors).toEqual([]);
   });
 }
 
 for (const width of [1440, 390]) {
-  test("guided CIGAR lessons resume without changing runtime or access at " + width + "px", async ({ page }, testInfo) => {
+  test("guided CIGAR walkthroughs resume without changing runtime or access at " + width + "px", async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
@@ -315,30 +400,31 @@ for (const width of [1440, 390]) {
     page.on("pageerror", (error) => errors.push(error.message));
     const calls = await fixture(page);
     await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=tutorials");
-    await expect(page.locator(".cigar-heading p")).toHaveText("Gives your AI app the project files that match what you ask.");
+    await expect(page.locator(".cigar-heading p")).toHaveText("Hands your AI app the few project files that match what you ask.");
+    await expect(page.getByRole("tab", { name: "Guide", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("heading", { name: "Guided walkthroughs", exact: true })).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("cigar-tutorials-" + width + ".png"), fullPage: true });
-    await page.getByRole("button", { name: /Start walkthrough.*Prepare your first cited brief/ }).click();
-    const walkthrough = page.getByRole("complementary", { name: "Prepare your first cited brief", exact: true });
+    await page.getByRole("button", { name: /Start walkthrough.*Your first CIGAR prompt/ }).click();
+    const walkthrough = page.getByRole("complementary", { name: "Your first CIGAR prompt", exact: true });
     await expect(walkthrough).toBeVisible();
     await expect(walkthrough.getByText("Step 1 of 6 · learning progress", { exact: true })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Settings", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Home", exact: true })).toHaveAttribute("aria-selected", "true");
     for (let index = 0; index < 3; index++) await walkthrough.getByRole("button", { name: "Next step", exact: true }).click();
     await expect(walkthrough.getByText("Step 4 of 6 · learning progress", { exact: true })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Projects", exact: true })).toHaveAttribute("aria-selected", "true");
     await walkthrough.getByRole("button", { name: "Copy question", exact: true }).click();
     await expect(walkthrough.getByRole("status")).toContainText("Question copied");
-    expect(await page.evaluate(() => (window as any).__cigarCopiedQuestion)).toContain("native Guard policy");
+    expect(await page.evaluate(() => (window as any).__cigarCopiedQuestion)).toContain("header");
     const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem("hol-guard:cigar-tutorial:v1") ?? "null"));
     expect(saved).toEqual({ schema: 1, tutorial: "first-brief", step: 3 });
+    await page.screenshot({ path: testInfo.outputPath("cigar-walkthrough-" + width + ".png"), fullPage: true });
     await walkthrough.getByRole("button", { name: "Exit walkthrough", exact: true }).click();
     await expect(walkthrough).toHaveCount(0);
-    await page.getByRole("button", { name: /Resume walkthrough.*Prepare your first cited brief/ }).click();
+    await page.getByRole("tab", { name: "Guide", exact: true }).click();
+    await page.getByRole("button", { name: /Resume walkthrough.*Your first CIGAR prompt/ }).click();
     await expect(walkthrough.getByText("Step 4 of 6 · learning progress", { exact: true })).toBeVisible();
     await walkthrough.getByRole("button", { name: "Restart this walkthrough", exact: true }).click();
     await expect(walkthrough.getByText("Step 1 of 6 · learning progress", { exact: true })).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("cigar-walkthrough-" + width + ".png"), fullPage: true });
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect.poll(() => noHorizontalScroll(page)).toBe(true);
     await expect(page.locator(".cigar-status")).toHaveText("Off");
     expect(writes(calls)).toEqual([]);
     expect(errors).toEqual([]);
@@ -348,13 +434,88 @@ for (const width of [1440, 390]) {
 test("the guide explains CIGAR in plain words and links to the deeper sections", async ({ page }) => {
   const calls = await fixture(page);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
-  await expect(page.getByRole("heading", { name: "How CIGAR works", exact: true })).toBeVisible();
-  await expect(page.locator(".cigar-guide").getByText(/every prompt you send in Claude Code or Codex gets the few project files that match it/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "CIGAR in one minute", exact: true })).toBeVisible();
+  await expect(page.getByText(/each prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few parts of your project that match it/)).toBeVisible();
   await expect(page.getByText("CIGAR stands for Context Intelligence Graph Agentic Runtime.", { exact: true })).toBeVisible();
   await page.getByText("Why did a prompt get no files?", { exact: true }).click();
   await expect(page.getByText(/A vague prompt, or an empty or brand-new folder, matches nothing/)).toBeVisible();
   await page.getByText("Do I need to install anything?", { exact: true }).click();
   await page.getByRole("button", { name: "Choose a version in Updates", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
+  expect(writes(calls)).toEqual([]);
+});
+
+const usageTotals = (scale: number) => ({ uncached_input_tokens: 1200 * scale, cached_input_tokens: 2_500_000 * scale, cache_write_tokens: 0,
+  output_tokens: 300 * scale, requests: 4 * scale, compactions: scale > 1 ? 1 : 0 });
+const usageWeek = { harness: "codex", sessions: 2, totals: usageTotals(5), recent: [
+  { last_active: "2026-11-05T10:15:00-05:00", model: "gpt-test", folder: "my-app", totals: usageTotals(3) },
+  { last_active: "2026-11-04T09:00:00-05:00", model: null, folder: null, totals: usageTotals(2) }] };
+const emptyTool = (harness: string) => ({ harness, sessions: 0, totals: usageTotals(0), recent: [] });
+const usageReady = { schema: "guard-context-usage-meter.v1", state: "ready", window_days: 7,
+  today: [{ ...usageWeek, sessions: 1, totals: usageTotals(1), recent: [] }, emptyTool("claude-code")],
+  week: [usageWeek, emptyTool("claude-code")], unread: ["copilot", "cursor", "gemini", "opencode", "pi"] };
+
+for (const width of [1440, 390]) {
+  test("Usage shows each app's own numbers after counting, with no guesses, at " + width + "px", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const calls = await fixture(page);
+    let reads = 0;
+    await page.route("**/v1/context-assistance/usage", async (route) => {
+      reads += 1;
+      const body = reads === 1 ? { ...usageReady, state: "counting", today: [], week: [] } : usageReady;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    });
+    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+    await expect(page.getByRole("tab", { name: "Usage", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Counting your usage…", { exact: true })).toBeVisible();
+    const codex = page.getByRole("article", { name: "Codex usage" });
+    await expect(codex).toBeVisible({ timeout: 10_000 });
+    await expect(codex.getByRole("row", { name: /Input at full price/ })).toContainText("1,200");
+    await expect(codex.getByRole("row", { name: /Input at full price/ })).toContainText("6,000");
+    await expect(codex.getByRole("row", { name: /Input read from cache/ })).toContainText("12.5M");
+    await expect(codex.getByRole("row", { name: /Chat summaries/ })).toContainText("1");
+    await codex.getByText("Latest sessions", { exact: true }).click();
+    await expect(codex.getByText("my-app", { exact: true })).toBeVisible();
+    await expect(codex.getByText("Unknown folder", { exact: true })).toBeVisible();
+    await expect(page.getByText("No sessions in the last 7 days.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Guard does not read usage records from Copilot, Cursor, Gemini, OpenCode or Pi, so they are not shown here.", { exact: true })).toBeVisible();
+    await expect(page.locator(".cigar-usage")).not.toContainText("%");
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("cigar-usage-" + width + ".png"), fullPage: true });
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(writes(calls)).toEqual([]);
+  });
+}
+
+test("Usage says plainly when Guard cannot count, and tries again on request", async ({ page }) => {
+  await fixture(page);
+  let reads = 0;
+  await page.route("**/v1/context-assistance/usage", async (route) => {
+    reads += 1;
+    const body = reads === 1 ? { ...usageReady, state: "unavailable", today: [], week: [] } : usageReady;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByRole("article", { name: "Codex usage" })).toBeVisible();
+});
+
+test("Usage keeps the last totals on screen while Guard recounts, then shows the new ones", async ({ page }) => {
+  const calls = await fixture(page);
+  let reads = 0;
+  await page.route("**/v1/context-assistance/usage", async (route) => {
+    reads += 1;
+    const body = reads === 1 ? { ...usageReady, refreshing: true }
+      : { ...usageReady, refreshing: false, today: [{ ...usageWeek, sessions: 1, totals: usageTotals(2), recent: [] }, emptyTool("claude-code")] };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+  const fullPrice = page.getByRole("article", { name: "Codex usage" }).getByRole("row", { name: /Input at full price/ });
+  await expect(fullPrice).toContainText("1,200");
+  await expect(page.getByText("Counting your usage…", { exact: true })).toHaveCount(0);
+  await expect(fullPrice).toContainText("2,400", { timeout: 10_000 });
+  await page.waitForTimeout(3_500);
+  expect(reads).toBe(2);
   expect(writes(calls)).toEqual([]);
 });

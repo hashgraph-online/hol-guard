@@ -12,7 +12,8 @@
 //! extension-control mutation.
 //!
 //! A second query names which risk classes call for a caution, so the
-//! connector setup card and the extension card share one list.
+//! connector setup card and the extension card share one list. A third labels
+//! a stored coverage hint from the same catalog (`approval_extension_coverage`).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -50,7 +51,7 @@ const TOO_MANY_RISK_CLASSES: &str =
     "native_approval_extension_recommendation_too_many_risk_classes";
 
 /// Longest free-text label, description or example a recommendation carries.
-const MAX_TEXT_CHARS: usize = 240;
+pub(crate) const MAX_TEXT_CHARS: usize = 240;
 const MAX_LABEL_CHARS: usize = 120;
 const MAX_EXAMPLE_CHARS: usize = 160;
 
@@ -98,9 +99,11 @@ fn evaluate_with_snapshot(
     // Bound and digest the request before any catalog work; an oversized
     // request has no digest to bind.
     let request_sha256 = bounded_digest(request)?;
-    // Only a recommend query reads a catalog; the caution list is constant.
+    // Only recommend and coverage queries read a catalog; the caution list is
+    // constant.
     let catalog = match request.query {
-        ApprovalExtensionRecommendationQueryV1::Recommend { .. } => {
+        ApprovalExtensionRecommendationQueryV1::Recommend { .. }
+        | ApprovalExtensionRecommendationQueryV1::Coverage { .. } => {
             admitted_catalog(read_snapshot())
         }
         ApprovalExtensionRecommendationQueryV1::CautionRiskClasses { .. } => None,
@@ -180,6 +183,12 @@ fn decide(
             let catalog = catalog.ok_or_else(|| CATALOG_UNAVAILABLE.to_owned())?;
             Ok(ApprovalExtensionRecommendationPayloadV1::Recommend {
                 recommendation: recommend(hint, registry_catalog_digest, snapshot, catalog)?,
+            })
+        }
+        ApprovalExtensionRecommendationQueryV1::Coverage { hint } => {
+            let catalog = catalog.ok_or_else(|| CATALOG_UNAVAILABLE.to_owned())?;
+            Ok(ApprovalExtensionRecommendationPayloadV1::Coverage {
+                coverage: crate::approval_extension_coverage::coverage(hint, catalog),
             })
         }
         ApprovalExtensionRecommendationQueryV1::CautionRiskClasses { risk_classes } => {
@@ -391,7 +400,7 @@ fn caution_reason(permission: &CatalogPermission, rules: &[&CatalogRule]) -> Opt
 /// Display text with runs of whitespace collapsed (`" ".join(text.split())`,
 /// so the ASCII information separators count as whitespace) and cut to
 /// `limit` characters; `None` when nothing is left.
-fn bounded(text: &str, limit: usize) -> Option<String> {
+pub(crate) fn bounded(text: &str, limit: usize) -> Option<String> {
     let normalized = text
         .split(python_whitespace)
         .filter(|part| !part.is_empty())

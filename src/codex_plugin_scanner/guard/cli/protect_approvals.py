@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
-import shlex
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
-from ..action_lattice import is_guard_action, most_restrictive_guard_action, normalize_guard_action
+from ..action_lattice import is_guard_action
 from ..adapters.base import HarnessContext
+from ..approval_hook_copy import authenticated_approval_review_url
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..config import load_guard_config
 from ..models import GuardAction, GuardArtifact, HarnessDetection
@@ -23,8 +25,9 @@ from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
 
-# Guard Cloud could not give a package verdict; a review carrying one of these is not about the package.
-_CLOUD_FAILURE_REASON_CODES = ("cloud_auth_error", "cloud_validation_error", "cloud_http_error", "cloud_timeout")
+_LOGGER = logging.getLogger(__name__)
+# The response members the native runtime reads to plan the approval.
+_PLAN_KEYS = ("request", "receipt", "verdict", "supply_chain_evaluation")
 
 
 def _queue_local_protect_approvals(
@@ -37,7 +40,10 @@ def _queue_local_protect_approvals(
     approval_delivery_payload: Callable[[str], dict[str, object]],
     localize_pending_approval_copy: Callable[[dict[str, object], str], None],
 ) -> None:
-    if not _should_queue_local_protect_approval(response_payload):
+    if not _should_queue_local_protect_approval():
+        return
+    plan = _protect_approval_plan(response_payload, guard_home=guard_home)
+    if plan is None or plan.get("queue") is not True:
         return
     from ..blocked_request_mode import approval_wait_hint, asks_for_approval, safe_alternative_reason
 
@@ -47,9 +53,9 @@ def _queue_local_protect_approvals(
         config = None
     if config is None or not asks_for_approval(config):
         queued = []
-        artifact = _protect_request_artifact(response_payload, workspace=workspace)
+        artifact = _protect_request_artifact(response_payload, workspace=workspace, plan=plan)
         approval_item = (
-            _protect_approval_item(response_payload, workspace=workspace, artifact=artifact)
+            _protect_approval_item(response_payload, workspace=workspace, artifact=artifact, plan=plan)
             if artifact is not None
             else None
         )
@@ -76,11 +82,13 @@ def _queue_local_protect_approvals(
         verdict = response_payload.get("verdict")
         reason = verdict.get("reason") if isinstance(verdict, dict) else None
         guidance = safe_alternative_reason(str(reason or "HOL Guard blocked this package request."))
+        review_url: str | None = None
         if queued:
             request_id = str(queued[0]["request_id"])
+            review_url = _live_request_review_url(request_id, guard_home=guard_home)
             guidance = safe_alternative_reason(
                 str(reason or "HOL Guard blocked this package request."),
-                reason_code=_protect_review_reason_code(response_payload),
+                reason_code=str(plan["review_reason_code"]),
                 approval_queued=True,
             )
             guidance = f"{guidance} {approval_wait_hint(request_id, guard_home=guard_home)}".strip()
@@ -97,13 +105,13 @@ def _queue_local_protect_approvals(
                 **(user_copy if isinstance(user_copy, dict) else {}),
                 "harness_message": guidance,
                 "next_step": guidance,
-                "dashboard_url": None,
+                "dashboard_url": review_url,
             }
         return
-    artifact = _protect_request_artifact(response_payload, workspace=workspace)
+    artifact = _protect_request_artifact(response_payload, workspace=workspace, plan=plan)
     if artifact is None:
         return
-    approval_item = _protect_approval_item(response_payload, workspace=workspace, artifact=artifact)
+    approval_item = _protect_approval_item(response_payload, workspace=workspace, artifact=artifact, plan=plan)
     if approval_item is None:
         return
     _annotate_package_execution_context_change(approval_item, store=store, artifact_id=artifact.artifact_id)
@@ -144,7 +152,7 @@ def _queue_local_protect_approvals(
     ]
     response_payload["approval_center_url"] = approval_center_url
     harness = artifact.harness
-    display_harness = _protect_display_harness(response_payload)
+    display_harness = str(plan["display_harness"])
     attach_primary_approval_link(
         response_payload,
         harness=harness,
@@ -163,49 +171,62 @@ def _queue_local_protect_approvals(
     _bind_protect_receipt_approval(response_payload, store=store)
 
 
-def _should_queue_local_protect_approval(response_payload: dict[str, object]) -> bool:
+def _should_queue_local_protect_approval() -> bool:
     if os.environ.get(SHIM_PROBE_ENV_VAR) == SHIM_PROBE_ENV_VALUE:
-        return False
-    if _protect_policy_action(response_payload) not in {"review", "require-reapproval"}:
-        return False
-    if _protect_has_reason_code(response_payload, "saved_package_block"):
         return False
     return not (
         os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("HOL_GUARD_TEST_SKIP_LOCAL_APPROVAL_QUEUE") == "1"
     )
 
 
-def _protect_request_artifact(response_payload: dict[str, object], *, workspace: Path) -> GuardArtifact | None:
-    receipt = response_payload.get("receipt")
+def _protect_approval_plan(
+    response_payload: dict[str, object],
+    *,
+    guard_home: Path | None = None,
+) -> dict[str, Any] | None:
+    """Ask the native runtime what this protect response queues for approval.
+
+    Without the runtime nothing is queued, and the response keeps the verdict
+    the native protect request gave it.
+    """
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        plan = native_runner_authority(
+            "protect_approval_plan",
+            {key: response_payload.get(key) for key in _PLAN_KEYS},
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        _LOGGER.debug("protect approval plan unavailable: %s", error)
+        return None
+    return plan if isinstance(plan, dict) else None
+
+
+def _protect_request_artifact(
+    response_payload: dict[str, object],
+    *,
+    workspace: Path,
+    plan: dict[str, Any] | None = None,
+) -> GuardArtifact | None:
+    plan = plan if plan is not None else _protect_approval_plan(response_payload)
+    fields = plan.get("artifact") if plan is not None else None
     request = response_payload.get("request")
-    if not isinstance(receipt, dict) or not isinstance(request, dict):
+    if plan is None or not isinstance(fields, dict) or not isinstance(request, dict):
         return None
-    artifact_id = _optional_string(receipt.get("artifact_id"))
-    if artifact_id is None:
-        return None
-    artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
-    redacted_command = _optional_string(request.get("redacted_command"))
-    command_tokens = request.get("command")
-    if redacted_command is None and isinstance(command_tokens, list):
-        command_parts = [str(item) for item in command_tokens if isinstance(item, str)]
-        redacted_command = shlex.join(command_parts) if command_parts else None
-    source_scope = _optional_string(receipt.get("source_scope")) or "project"
-    package_manager = (
-        _optional_string(request.get("package_manager")) or _optional_string(request.get("executor")) or "package"
-    )
-    intent_kind = _optional_string(request.get("install_kind")) or "install"
-    config_path = str(workspace / "hol-guard.toml")
+    command = fields.get("redacted_command")
+    redacted_command = command if isinstance(command, str) else None
     return GuardArtifact(
-        artifact_id=artifact_id,
-        name=artifact_name,
-        harness=_protect_payload_harness(response_payload),
+        artifact_id=str(fields["artifact_id"]),
+        name=str(fields["name"]),
+        harness=str(plan["harness"]),
         artifact_type="package_request",
-        source_scope=source_scope,
-        config_path=config_path,
+        source_scope=str(fields["source_scope"]),
+        config_path=str(workspace / "hol-guard.toml"),
         command=redacted_command,
         metadata={
-            "package_manager": package_manager,
-            "intent_kind": intent_kind,
+            "package_manager": fields["package_manager"],
+            "intent_kind": fields["intent_kind"],
             "targets": request.get("targets") if isinstance(request.get("targets"), list) else [],
             "manifest_paths": request.get("manifest_paths") if isinstance(request.get("manifest_paths"), list) else [],
             "lockfile_paths": request.get("lockfile_paths") if isinstance(request.get("lockfile_paths"), list) else [],
@@ -219,22 +240,18 @@ def _protect_approval_item(
     *,
     workspace: Path,
     artifact: GuardArtifact,
+    plan: dict[str, Any] | None = None,
 ) -> dict[str, object] | None:
     del workspace
-    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
-    receipt = response_payload.get("receipt")
-    verdict = response_payload.get("verdict")
-    if not isinstance(supply_chain_evaluation, dict) or not isinstance(receipt, dict) or not isinstance(verdict, dict):
+    plan = plan if plan is not None else _protect_approval_plan(response_payload)
+    fields = plan.get("item") if plan is not None else None
+    policy_action = plan.get("policy_action") if plan is not None else None
+    if not isinstance(fields, dict) or not is_guard_action(policy_action):
         return None
-    policy_action = _protect_policy_action(response_payload)
-    if policy_action not in {"block", "review", "require-reapproval"}:
-        return None
-    user_copy = supply_chain_evaluation.get("user_copy")
-    user_copy_map = user_copy if isinstance(user_copy, dict) else {}
     request = response_payload.get("request")
     package_context = request.get("package_execution_context") if isinstance(request, dict) else None
     scanner_evidence = [dict(package_context)] if isinstance(package_context, dict) else []
-    if _protect_policy_actions_disagree(response_payload):
+    if fields["actions_disagree"] is True:
         scanner_evidence.append(
             {
                 "source": "decision_contract",
@@ -242,60 +259,44 @@ def _protect_approval_item(
                 "final_action": policy_action,
             }
         )
-    risk_summary = (
-        _optional_string(verdict.get("reason"))
-        or _optional_string(supply_chain_evaluation.get("risk_summary"))
-        or _optional_string(user_copy_map.get("summary"))
-    )
-    decision_reason = risk_summary or f"package_supply_chain_{policy_action.replace('-', '_')}"
-    decision_v2 = build_decision_v2(policy_action, reason=decision_reason)
-    decision_v2_payload = decision_v2.to_dict()
-    action_envelope = _protect_approval_action_envelope(
-        receipt.get("action_envelope_json"),
-        policy_action=policy_action,
-    )
-    reasons = supply_chain_evaluation.get("reasons")
-    reason_items = reasons if isinstance(reasons, list) else []
-    reason_codes = {str(reason.get("code") or "") for reason in reason_items if isinstance(reason, dict)}
-    for reason_code in _CLOUD_FAILURE_REASON_CODES:
-        if reason_code in reason_codes:
-            decision_v2_payload["package_review_cloud_reason_code"] = reason_code
-            break
+    decision_v2_payload = build_decision_v2(policy_action, reason=str(fields["decision_reason"])).to_dict()
+    if isinstance(fields["cloud_reason_code"], str):
+        decision_v2_payload["package_review_cloud_reason_code"] = fields["cloud_reason_code"]
     return {
         "artifact_id": artifact.artifact_id,
         "artifact_name": artifact.name,
-        "artifact_hash": _optional_string(receipt.get("artifact_hash")) or artifact.artifact_id,
+        "artifact_hash": fields["artifact_hash"] or artifact.artifact_id,
         "artifact_type": artifact.artifact_type,
         "source_scope": artifact.source_scope,
         "config_path": artifact.config_path,
         "policy_action": policy_action,
-        "changed_fields": _protect_target_labels(response_payload),
-        "risk_summary": risk_summary,
-        "risk_signals": _string_list(verdict.get("risk_signals")),
-        "action_envelope_json": action_envelope,
+        "changed_fields": fields["changed_fields"],
+        "risk_summary": fields["risk_summary"],
+        "risk_signals": fields["risk_signals"],
+        "action_envelope_json": _protect_approval_action_envelope(
+            response_payload, fields["envelope"], policy_action=policy_action
+        ),
         "decision_v2_json": decision_v2_payload,
         "scanner_evidence": scanner_evidence,
     }
 
 
 def _protect_approval_action_envelope(
-    value: object,
+    response_payload: dict[str, object],
+    edits: object,
     *,
     policy_action: GuardAction,
 ) -> dict[str, object] | None:
-    if not isinstance(value, dict):
+    """The receipt's action envelope with the native runtime's edits applied, in its own key order."""
+
+    receipt = response_payload.get("receipt")
+    value = receipt.get("action_envelope_json") if isinstance(receipt, dict) else None
+    if not isinstance(value, dict) or not isinstance(edits, dict):
         return None
     envelope = dict(value)
-    if envelope.get("observe_mode") is True:
-        observed_action = _normalize_protect_policy_action(envelope.get("observed_policy_action"))
-        if observed_action != policy_action:
-            return envelope
-        envelope.pop("observe_mode", None)
-        envelope.pop("observed_policy_action", None)
-    action_keys = ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult")
-    for key in action_keys:
-        if key not in envelope or envelope.get(key) is None:
-            continue
+    for key in edits["drop"]:
+        envelope.pop(key, None)
+    for key in edits["set"]:
         envelope[key] = policy_action
     return envelope
 
@@ -334,108 +335,6 @@ def _annotate_package_execution_context_change(
             break
 
 
-def _protect_target_labels(response_payload: dict[str, object]) -> list[str]:
-    request = response_payload.get("request")
-    if not isinstance(request, dict):
-        return []
-    targets = request.get("targets")
-    if not isinstance(targets, list):
-        return []
-    labels: list[str] = []
-    for item in targets:
-        if not isinstance(item, dict):
-            continue
-        candidate = _optional_string(item.get("package_name")) or _optional_string(item.get("raw_spec"))
-        if candidate is not None and candidate not in labels:
-            labels.append(candidate)
-    return labels
-
-
-def _protect_payload_harness(response_payload: dict[str, object]) -> str:
-    request = response_payload.get("request")
-    if isinstance(request, dict):
-        for key in ("harness", "package_manager", "executor"):
-            value = _optional_string(request.get(key))
-            if value is not None:
-                return value
-    receipt = response_payload.get("receipt")
-    if isinstance(receipt, dict):
-        value = _optional_string(receipt.get("harness"))
-        if value is not None:
-            return value
-    return "guard-cli"
-
-
-def _protect_display_harness(response_payload: dict[str, object]) -> str:
-    request = response_payload.get("request")
-    if isinstance(request, dict):
-        for key in ("package_manager", "harness", "executor"):
-            value = _optional_string(request.get(key))
-            if value is not None:
-                return value
-    return _protect_payload_harness(response_payload)
-
-
-def _protect_policy_action_candidates(
-    response_payload: dict[str, object],
-) -> tuple[GuardAction | None, GuardAction | None]:
-    verdict = response_payload.get("verdict")
-    verdict_action: GuardAction | None = None
-    if isinstance(verdict, dict):
-        verdict_action = _normalize_protect_policy_action(verdict.get("action"))
-    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
-    supply_action = (
-        _normalize_protect_policy_action(supply_chain_evaluation.get("policy_action"))
-        if isinstance(supply_chain_evaluation, dict)
-        else None
-    )
-    return verdict_action, supply_action
-
-
-def _protect_policy_action(response_payload: dict[str, object]) -> GuardAction | None:
-    verdict_action, supply_action = _protect_policy_action_candidates(response_payload)
-    candidates: list[GuardAction] = [action for action in (verdict_action, supply_action) if action is not None]
-    receipt = response_payload.get("receipt")
-    envelope = receipt.get("action_envelope_json") if isinstance(receipt, dict) else None
-    if isinstance(envelope, dict):
-        for key in ("policy_action", "policyAction", "pre_execution_result", "preExecutionResult"):
-            if key not in envelope or envelope.get(key) is None:
-                continue
-            candidates.append(normalize_guard_action(envelope.get(key), unknown_action="block"))
-    if not candidates:
-        return None
-    action = candidates[0]
-    for candidate in candidates[1:]:
-        action = most_restrictive_guard_action(action, candidate, unknown_action="block")
-    return action
-
-
-def _protect_policy_actions_disagree(response_payload: dict[str, object]) -> bool:
-    verdict_action, supply_action = _protect_policy_action_candidates(response_payload)
-    return verdict_action is not None and supply_action is not None and verdict_action != supply_action
-
-
-def _normalize_protect_policy_action(value: object) -> GuardAction | None:
-    action = _optional_string(value)
-    return action if is_guard_action(action) else None
-
-
-def _protect_review_reason_code(response_payload: dict[str, object]) -> str:
-    if any(_protect_has_reason_code(response_payload, code) for code in _CLOUD_FAILURE_REASON_CODES):
-        return "native_package_cloud_unavailable"
-    return "native_package_review"
-
-
-def _protect_has_reason_code(response_payload: dict[str, object], reason_code: str) -> bool:
-    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
-    if not isinstance(supply_chain_evaluation, dict):
-        return False
-    reasons = supply_chain_evaluation.get("reasons")
-    if not isinstance(reasons, list):
-        return False
-    return any(_optional_string(item.get("code")) == reason_code for item in reasons if isinstance(item, dict))
-
-
 def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store: GuardStore) -> None:
     receipt = response_payload.get("receipt")
     if not isinstance(receipt, dict):
@@ -464,6 +363,32 @@ def _suppress_package_shim_allow_output(args: argparse.Namespace, response_paylo
     verdict = response_payload.get("verdict")
     action = _optional_string(verdict.get("action")) if isinstance(verdict, dict) else None
     return action in {"allow", "warn"}
+
+
+def _live_request_review_url(request_id: str, *, guard_home: Path) -> str | None:
+    """Link to the queued request on the running daemon, or None.
+
+    The stored request URL uses the configured port, which is wrong when the
+    daemon fell back to another one, so the link comes from the verified live
+    daemon. This never starts a daemon. Human output signs the loopback link;
+    without a running daemon or its token there is nothing to open, and the
+    guidance keeps the wait command alone.
+    """
+
+    from ..daemon.manager import load_guard_daemon_url
+
+    try:
+        daemon_url = load_guard_daemon_url(guard_home)
+    except (OSError, RuntimeError, ValueError):
+        # The request is already queued; a failed optional lookup (including
+        # NativeDaemonLifecycleError) must not replace the denial and wait guidance.
+        return None
+    if daemon_url is None:
+        return None
+    review_url = f"{daemon_url.rstrip('/')}/requests/{request_id}"
+    if authenticated_approval_review_url(review_url, guard_home=guard_home) is None:
+        return None
+    return review_url
 
 
 def _optional_string(value: object | None) -> str | None:

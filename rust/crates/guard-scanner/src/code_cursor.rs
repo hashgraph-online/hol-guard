@@ -38,6 +38,8 @@ pub(crate) struct Cursor<'a> {
     pub(crate) bytes: &'a [u8],
     pub(crate) at: usize,
     pub(crate) literals: Literals,
+    /// Inside the arguments of a header read such as `req.header(...)`.
+    pub(crate) header_read: bool,
 }
 
 pub(crate) fn is_identifier_start(byte: u8) -> bool {
@@ -173,13 +175,17 @@ impl<'a> Cursor<'a> {
             bytes,
             at: 0,
             literals: Literals::Ordinary,
+            header_read: false,
         }
     }
 
     /// Whether one quoted literal is acceptable under the current mode.
     fn literal_allowed(&self, literal: &[u8]) -> bool {
         match self.literals {
-            Literals::Ordinary => literal_ok(literal),
+            Literals::Ordinary => {
+                literal_ok(literal)
+                    || (self.header_read && crate::code_shapes::extension_header_name(literal))
+            }
             Literals::Word => short_literal(literal),
             Literals::Empty => literal.is_empty(),
         }
@@ -375,7 +381,11 @@ impl<'a> Cursor<'a> {
                         _ => b'}',
                     };
                     self.at += 1;
+                    // Only a header name written directly in the read's own
+                    // argument list is a name; one nested deeper is a value.
+                    let outer = std::mem::replace(&mut self.header_read, false);
                     let scan = self.scan(Some(close), depth + 1);
+                    self.header_read = outer;
                     if scan != Scan::Done {
                         return scan;
                     }
@@ -513,11 +523,13 @@ impl<'a> Cursor<'a> {
         }
         let mut path_env = ENVIRONMENT_PATH.contains(&name);
         let mut dotted = false;
+        let mut receiver: &[u8] = b"";
         while !self.done() {
             let byte = self.bytes[self.at];
             if byte == b'.' && is_identifier_start(self.peek(1)) {
                 self.at += 1;
                 dotted = true;
+                receiver = name;
                 name = self.identifier()?;
                 if encoded_looking(name) {
                     return None;
@@ -527,6 +539,7 @@ impl<'a> Cursor<'a> {
                 self.at += 2;
                 if !self.done() && is_identifier_start(self.bytes[self.at]) {
                     dotted = true;
+                    receiver = name;
                     name = self.identifier()?;
                     if encoded_looking(name) {
                         return None;
@@ -540,17 +553,22 @@ impl<'a> Cursor<'a> {
                 structural = true;
             } else if byte == b':' && self.peek(1) == b':' && is_identifier_start(self.peek(2)) {
                 self.at += 2;
+                receiver = name;
                 name = self.identifier()?;
                 path_env = path_env || ENVIRONMENT_PATH.contains(&name);
             } else if byte == b'(' || byte == b'[' {
                 self.at += 1;
                 let close = if byte == b'(' { b')' } else { b']' };
+                let outer = self.header_read;
+                self.header_read =
+                    byte == b'(' && crate::code_shapes::header_accessor(receiver, name);
                 let scan = match (byte, environment_call(path_env, name)) {
                     (b'(', Some((defaults_from, defaults))) => {
                         self.environment_arguments(defaults_from, defaults)
                     }
                     _ => self.scan(Some(close), 1),
                 };
+                self.header_read = outer;
                 name = b"";
                 if scan == Scan::Fail {
                     return None;

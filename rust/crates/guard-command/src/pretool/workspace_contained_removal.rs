@@ -8,8 +8,8 @@
 //! sandbox keeps all of them off the network, credentials, the home directory
 //! and `.git`, so this module accepts that uncertainty for those programs
 //! only.
-//! A sed script cannot reach past the sandbox either, so it is not parsed. A
-//! recursive removal could still take uncommitted work with it, so each of its
+//! Sed file effects are bounded here; command_shape separately screens scripts
+//! so shell execution cannot hide behind containment. A recursive removal could still take uncommitted work with it, so each of its
 //! targets must be missing or ignored by Git, and it must run before any other
 //! command could create or move what it names.
 use super::super::git_session_probe::Probe;

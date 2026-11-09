@@ -237,6 +237,12 @@ pub(crate) fn is_common_tool_name(name: &str) -> bool {
     is_common_utility(&normalize_tool_name(name))
 }
 
+/// Operator copy refusing a common tool name, or `None` when it is not one.
+pub(crate) fn common_tool_reject_message(name: &str) -> Option<String> {
+    let normalized = normalize_tool_name(name);
+    is_common_utility(&normalized).then(|| reject_message(&normalized))
+}
+
 fn is_common_utility(normalized: &str) -> bool {
     SHELL_UTILITIES.contains(&normalized)
         || SEARCH_TOOLS.contains(&normalized)

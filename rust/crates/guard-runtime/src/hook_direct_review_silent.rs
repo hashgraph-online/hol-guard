@@ -4,7 +4,8 @@
 
 use super::super::{Context, HookDirectDefer, ENVELOPE_BYTES, ESCAPE_FACTOR};
 use super::{
-    connector, falsy_or_text, queued_request, run_lookup, write, Flags, SILENT_WRITE_METHOD,
+    connector, falsy_or_text, live_wait_facts, queued_request, run_lookup, write, Flags,
+    SILENT_WRITE_METHOD,
 };
 use crate::blocked_request_mode::{
     safe_alternative_block, safe_alternative_reason_with_retry, BLOCKED_REASON,
@@ -80,13 +81,16 @@ pub(super) fn silent(
         })
         .map(str::to_owned);
     let request = queued_request(context, result, request, setup.as_ref());
-    let stored_id = write(
-        context,
-        SILENT_WRITE_METHOD,
-        oauth_source,
-        request,
-        Map::new(),
-    )?;
+    // A block that links its approval holds the Codex bridge's wait, so the
+    // write links that wait too: approving the row then releases the waiting
+    // call instead of leaving it to time out into a manual retry.
+    let mut extra = Map::new();
+    if approval_url.is_some() {
+        if let Some(facts) = live_wait_facts(context) {
+            extra.insert(crate::codex_live_wait_build::FACTS_KEY.to_owned(), facts);
+        }
+    }
+    let stored_id = write(context, SILENT_WRITE_METHOD, oauth_source, request, extra)?;
     let notice = setup
         .as_ref()
         .map(|setup| setup.stored(context, oauth_source, &stored_id));
@@ -129,6 +133,11 @@ pub(super) fn silent(
             auth_token.as_deref(),
             now_micros()?,
         )?;
+        let reason = crate::desktop_review_link::with_desktop_link(
+            reason,
+            Path::new(context.guard_home),
+            &url,
+        );
         silent_block(context.harness, result, &reason)
     });
     let mut blocked = linked.unwrap_or(unlinked);

@@ -32,6 +32,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast, final
 
+from ..codex_hook_launch_runtime import hook_processes_contained
 from ..config import load_guard_config
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
@@ -257,14 +258,18 @@ class HookWorker(HookWorkerNativeMixin):
             return False
         if self._owns_policy_snapshot_publisher:
             close_contained = getattr(self.policy_snapshot_publisher, "close_contained", None)
-            if callable(close_contained):
-                if deadline_monotonic is None:
-                    return close_contained() is not False
-                return close_contained(deadline_monotonic=deadline_monotonic) is not False
-            if deadline_monotonic is None:
-                return self.policy_snapshot_publisher.close() is not False
-            return self.policy_snapshot_publisher.close(deadline_monotonic=deadline_monotonic) is not False
-        return True
+            if not callable(close_contained):
+                close_contained = self.policy_snapshot_publisher.close
+            closed = (
+                close_contained()
+                if deadline_monotonic is None
+                else close_contained(deadline_monotonic=deadline_monotonic)
+            )
+            if closed is False:
+                return False
+        # A helper the publisher cancelled may sit in quarantine after a failed
+        # kill or cleanup; keep ownership until every quarantined helper is reaped.
+        return hook_processes_contained(deadline_monotonic=deadline_monotonic)
 
     def prepare_workspace_policy(
         self, workspace: Path | None = None, *, deadline: float | None = None

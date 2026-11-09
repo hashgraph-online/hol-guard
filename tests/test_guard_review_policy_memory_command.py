@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as authority
+from codex_plugin_scanner.guard import store_extension_control_authority_reads as authority_reads
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.review_contracts import payload_hash_for_decision_memory_bundle
+from codex_plugin_scanner.guard.review_decision_memory import payload_hash_for_decision_memory_bundle
 from codex_plugin_scanner.guard.runtime.command_executors import execute_guard_command_job
+from codex_plugin_scanner.guard.runtime.extension_control_authority import ExtensionControlAuthorityError
 from codex_plugin_scanner.guard.runtime.review_policy_memory_executor import REVIEW_POLICY_MEMORY_OPERATION
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_policy import StorePolicyMixin
 from tests.guard_review_signing_helpers import REVIEW_SIGNING_KEY_ID, review_verification_keys, sign_review_payload
 
 
@@ -169,7 +172,7 @@ def test_rejected_memory_bundle_keeps_existing_policies_registry_version_and_rev
     assert store.list_policy_decisions() == before_policies
 
 
-def test_accepted_memory_bundle_rolls_back_rows_and_state_on_transaction_failure(
+def test_a_refused_memory_publish_leaves_rows_and_state_unchanged(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -179,20 +182,53 @@ def test_accepted_memory_bundle_rolls_back_rows_and_state_on_transaction_failure
     before_version = store.get_sync_payload("guard_review_memory_policy_version")
     before_ack = store.get_sync_payload("guard_review_memory_last_ack")
     before_policies = store.list_policy_decisions()
-    original = StorePolicyMixin._replace_remote_policy_rows_locked
+    original = authority_reads.extension_control_authority
 
-    def replace_then_fail(connection, rows) -> None:
-        original(connection, rows)
-        raise RuntimeError("injected policy-memory transaction failure")
+    def refuse_memory_publish(*, op: str, **request: Any) -> dict[str, object]:
+        if op == "apply_review_memory":
+            return {"fault": "tampered", "reason": "injected policy-memory refusal"}
+        return original(op=op, **request)
 
-    monkeypatch.setattr(StorePolicyMixin, "_replace_remote_policy_rows_locked", staticmethod(replace_then_fail))
+    monkeypatch.setattr(authority_reads, "extension_control_authority", refuse_memory_publish)
     next_bundle = _bundle(store)
     next_bundle["policyVersion"] = "policy-version-next"
 
-    with pytest.raises(RuntimeError, match="injected policy-memory transaction failure"):
+    with pytest.raises(ExtensionControlAuthorityError, match="injected policy-memory refusal"):
         _execute(store, {"decisionMemoryBundle": _resign_bundle(next_bundle)})
 
     assert store.get_sync_payload("guard_review_memory_registry") == before_registry
     assert store.get_sync_payload("guard_review_memory_policy_version") == before_version
     assert store.get_sync_payload("guard_review_memory_last_ack") == before_ack
     assert store.list_policy_decisions() == before_policies
+
+
+def test_a_native_outage_applies_nothing(tmp_path: Path, monkeypatch) -> None:
+    store = _store(tmp_path)
+    bundle = _bundle(store)
+
+    def unavailable(kind: str, request: dict[str, object]) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native runtime unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    result = _execute(store, {"decisionMemoryBundle": bundle})
+
+    assert result["failureCode"] == "review_policy_memory_unavailable"
+    assert store.get_sync_payload("guard_review_memory_registry") is None
+    assert store.list_policy_decisions() == []
+
+
+def test_a_malformed_native_plan_applies_nothing(tmp_path: Path, monkeypatch) -> None:
+    store = _store(tmp_path)
+    bundle = _bundle(store)
+    plans = (
+        {"rejected_rule_ids": [], "registry_rule_ids": []},
+        {"rejected_rule_ids": [], "registry_rule_ids": [], "decisions": ["not-a-decision"]},
+        {"rejected_rule_ids": [], "decisions": []},
+    )
+    for plan in plans:
+        monkeypatch.setattr(authority, "native_runner_authority", lambda kind, request, plan=plan: plan)
+        result = _execute(store, {"decisionMemoryBundle": bundle})
+
+        assert result["failureCode"] == "review_policy_memory_unavailable", plan
+        assert store.get_sync_payload("guard_review_memory_registry") is None
+        assert store.list_policy_decisions() == []

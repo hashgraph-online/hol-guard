@@ -390,9 +390,9 @@ def test_list_passes_a_valid_identity() -> None:
 # Every Python call site that writes a local-CLI grant. Connector setup adds
 # none: it reaches the grant only through the proof-bound local-CLI apply.
 _GRANT_WRITERS = {
-    "_write_local_cli_grant",
-    "apply_custom_extension_continuity_mutation_locked",
+    "_native_grant_write",
     "apply_custom_extension_continuity_transaction",
+    "mutation_wire",
     "record_local_custom_extension_mutation",
     "upsert_local_cli_grant",
 }
@@ -406,19 +406,11 @@ _KNOWN_WRITE_SITES = {
     (
         "store_custom_extension_continuity.py",
         "apply_custom_extension_continuity_transaction",
-        "apply_custom_extension_continuity_mutation_locked",
+        "_native_grant_write",
     ),
-    (
-        "store_custom_extension_continuity.py",
-        "apply_custom_extension_continuity_mutation_locked",
-        "_write_local_cli_grant",
-    ),
-    ("store_local_cli.py", "upsert_local_cli_grant", "_write_local_cli_grant"),
-    (
-        "store_policy_activation_preflight.py",
-        "apply_continuity_rejection",
-        "apply_custom_extension_continuity_mutation_locked",
-    ),
+    ("store_local_cli.py", "upsert_local_cli_grant", "_native_grant_write"),
+    # Signed policy activation hands its continuity to the resident's apply_policy.
+    ("store_policy.py", "_apply_policy_bundle_authority_attempt", "mutation_wire"),
 }
 
 

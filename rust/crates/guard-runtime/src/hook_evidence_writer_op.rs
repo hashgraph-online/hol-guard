@@ -390,6 +390,38 @@ pub(crate) fn record_direct<T>(
     with_live(guard_home, |resident| queue(resident.writer.as_ref()))
 }
 
+/// Run `record` with this Guard home's writer, started on first use as a
+/// submission starts it, and hand back the store failure the writer holds.
+///
+/// The direct evidence drain records what a direct answer left behind this
+/// way, with the source of the store the bound daemon publishes. `None`
+/// means the writer could not run, and the evidence stays with the drain.
+pub(crate) fn record_drained<T>(
+    guard_home: &Path,
+    source: &str,
+    record: impl FnOnce(&RuntimeHookEvidenceWriter) -> T,
+) -> Option<(T, Value)> {
+    with_writer(&canonical_home(guard_home), source, |resident| {
+        (record(resident.writer.as_ref()), resident.fatal.peek())
+    })
+    .ok()
+}
+
+/// The store failure the writer already running for `guard_home` holds, for
+/// a drain page that gave it nothing to record. It reports the failure until
+/// the client acknowledges it, so a recovery that failed is asked for again.
+/// A slot busy starting or draining a writer is not waited on, and no writer
+/// is started.
+pub(crate) fn drained_fatal(guard_home: &Path) -> Option<Value> {
+    let slot = slot(&canonical_home(guard_home));
+    let held = match slot.writer.try_lock() {
+        Ok(held) => held,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return None,
+    };
+    held.as_ref().map(|resident| resident.fatal.peek())
+}
+
 /// Run `act` while this Guard home's writer slot is held, as starting a
 /// writer or draining one holds it.
 #[cfg(test)]

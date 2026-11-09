@@ -29,6 +29,7 @@ pytest_plugins = [
     "tests.native_object_runtime",
     "tests.native_resident_teardown",
     "tests.optional_command_catalog_fixtures",
+    "tests.network_trust_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -120,6 +121,16 @@ def _fresh_verified_runtime_copy() -> Iterator[None]:
     native_executable_root.release_copies()
     yield
     native_executable_root.release_copies()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_command_queue_auth_context() -> Iterator[None]:
+    """Resolve the command queue's Cloud sign-in afresh in each test."""
+    from codex_plugin_scanner.guard.runtime import command_queue_auth
+
+    command_queue_auth.clear_command_queue_auth_context_cache()
+    yield
+    command_queue_auth.clear_command_queue_auth_context_cache()
 
 
 @pytest.fixture(autouse=True)
@@ -265,15 +276,6 @@ def _reset_last_bound_digest_home(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import native_context
 
     monkeypatch.setattr(native_context, "_last_bound_home", None)
-
-
-@pytest.fixture(autouse=True)
-def _reset_aibom_mcp_native_backoff() -> None:
-    """One outage's MCP-enrichment backoff must not leak into the next test."""
-
-    from codex_plugin_scanner.guard import aibom_detection
-
-    aibom_detection._mcp_native_backoff_until = 0.0
 
 
 @pytest.fixture(autouse=True)

@@ -212,6 +212,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-mod-mod-prefix-go-test",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # A tool setting whose value is a URL, a path or a file to load rather
+        # than the switch word the inert reading accepts: the command keeps its
+        # review, and a contained run has no network for the fetch and no home
+        # for the named program or configuration file.
+        "neg-cypress-install-binary-url-prefix-npm-test",
+        "neg-eslint-flat-config-file-prefix-npm-test",
+        "neg-puppeteer-executable-path-prefix-npm-test",
+        "neg-puppeteer-skip-download-longer-name-prefix-npm-test",
         # An npm configuration key the display reading does not accept: a shell
         # for the script body to run under, a cache directory outside the
         # workspace, or a key npm does not define. The command keeps its
@@ -232,6 +240,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # names nothing the home keeps there.
         "neg-ls-home-dot-glob",
         "neg-ls-home-missing-hidden-store",
+        # A bare dot glob in the worktree: `.*` stands for the parent entry as
+        # well, so the listing reaches above the workspace. A contained run has
+        # nothing above the workspace to reach, so the pattern names only what
+        # the sandbox already holds.
+        "neg-hidden-glob-stands-for-dot-directories",
         # A pattern that is a credential word and an unconstrained tail expands onto the
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
@@ -266,6 +279,13 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-rg-files-no-ignore-service-lane",
         "neg-rg-path-before-files-flag-credential-store",
         "neg-rg-replace-widens-home-search",
+        # Sed writes aimed outside the workspace remain contained. The exec
+        # flag is intentionally excluded: it can damage the writable worktree.
+        "neg-sed-substitute-chained-write-command",
+        "neg-sed-substitute-second-expression-writes-a-file",
+        # A `cat` that names a private key after a sibling run: the review stands,
+        # and a contained run in the sibling root reaches no key at all.
+        "neg-sibling-cd-jest-cat-reads-private-key",
         # A sibling checkout's workflows and test runner: a contained run reads only the
         # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.
         "neg-sibling-find-github-exec-cat",

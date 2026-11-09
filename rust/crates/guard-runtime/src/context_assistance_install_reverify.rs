@@ -33,8 +33,9 @@ pub(super) fn run(
     let mut selection = record.selection.clone();
     selection.work_dir = scratch.clone();
     selection.verified_python = verified_python;
-    let approval = guard_context_assistance::inspect_release_bundle(&selection, release)
-        .map_err(|e| error(e.code()))?;
+    let approval =
+        guard_context_assistance::inspect_release_bundle_cancellable(&selection, release, &cancel)
+            .map_err(|e| error(e.code()))?;
     if approval != record.approval {
         return Err(error("installation_conflict"));
     }

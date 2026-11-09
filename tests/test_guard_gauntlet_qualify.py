@@ -175,7 +175,7 @@ def test_attempt_command_and_environment(tmp_path: Path, native_route: str | Non
 
 
 def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    package = json.dumps({"dependencies": {"@oh-my-pi/pi-coding-agent": "18.11.3"}}).encode()
+    package = json.dumps({"dependencies": {"@oh-my-pi/pi-coding-agent": "18.16.0"}}).encode()
     lock = b'{"lockfileVersion": 3}'
     monkeypatch.setattr(
         qualify_setup, "git_show", lambda _r, _s, path: package if path.endswith("package.json") else lock
@@ -187,13 +187,13 @@ def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: py
         assert argv[0] == "npm" and log.name == "setup.log"
         package_dir = cwd / "node_modules" / "@oh-my-pi" / "pi-coding-agent"
         package_dir.mkdir(parents=True)
-        (package_dir / "package.json").write_text('{"version": "18.11.3"}')
+        (package_dir / "package.json").write_text('{"version": "18.16.0"}')
 
     monkeypatch.setattr(qualify_setup, "run_logged", fake_logged)
     setup_log = tmp_path / "run" / "logs" / "setup.log"
     first = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
     assert first["lock_sha256"] == hashlib.sha256(lock).hexdigest()
-    assert first["omp_version"] == "18.11.3"
+    assert first["omp_version"] == "18.16.0"
     assert len(calls) == 1
     # A second driver reuses the completed prefix without another npm install.
     second = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
@@ -231,7 +231,7 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
     """Stub caches, the candidate worktree and the runner; return the verify calls."""
     sdk = tmp_path / "sdk"
     (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent").mkdir(parents=True)
-    (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").write_text('{"version": "18.11.3"}')
+    (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").write_text('{"version": "18.16.0"}')
     monkeypatch.setattr(
         qualify_setup,
         "preflight",

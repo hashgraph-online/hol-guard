@@ -260,16 +260,6 @@
       "note": "Blocks a continuation it cannot settle."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/business_review_queue.py",
-      "func": "project_request",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "require-reapproval"
-      ],
-      "note": "A display-only queue row, as its docstring states."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
       "func": "cursor_shell_route_response",
       "root": "hook",
@@ -410,6 +400,16 @@
         "block"
       ],
       "note": "Decodes the stored resume resolution into the enforced vocabulary."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/local_supply_chain.py",
+      "func": "_block_unidentified_npm_package",
+      "root": "package",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Projects the unidentified-package block when package evaluation was stubbed. The only verdict it writes is block."
     },
     {
       "file": "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
@@ -620,16 +620,6 @@
         "allow"
       ],
       "note": "Renders the policy row the resident filed, and refuses any reply that is not a resident allow."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/workspace_rule_findings.py",
-      "func": "_finding",
-      "root": "none",
-      "reading": "labels-finding",
-      "actions": [
-        "warn"
-      ],
-      "note": "A scan finding's own decision field, next to its severity and lifecycle state."
     },
     {
       "file": "src/codex_plugin_scanner/guard/workspace_secret_findings.py",

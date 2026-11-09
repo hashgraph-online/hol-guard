@@ -83,6 +83,8 @@ mod command_tokens;
 pub mod contained_argv;
 #[path = "../../guard-command/src/contained_git.rs"]
 mod contained_git;
+#[path = "../../guard-command/src/contained_inline_target.rs"]
+mod contained_inline_target;
 #[path = "../../guard-command/src/contained_node_tool.rs"]
 mod contained_node_tool;
 #[path = "../../guard-command/src/contained_package_test.rs"]
@@ -126,6 +128,8 @@ pub mod egress_broker;
 mod egress_spool;
 #[path = "../../guard-command/src/env_wrapper.rs"]
 mod env_wrapper;
+#[path = "../../guard-command/src/environment_name_filters.rs"]
+pub(crate) mod environment_name_filters;
 #[path = "../../guard-command/src/environment_secret_dump.rs"]
 pub mod environment_secret_dump;
 #[path = "../../guard-command/src/executable_flag_contract.rs"]
@@ -178,6 +182,8 @@ mod launch_identity_common;
 #[cfg(windows)]
 #[path = "../../guard-command/src/launch_identity_windows.rs"]
 mod launch_identity_windows;
+#[path = "../../guard-command/src/lifecycle_scripts_flag.rs"]
+pub mod lifecycle_scripts_flag;
 #[path = "../../guard-command/src/local_supply_chain.rs"]
 pub mod local_supply_chain;
 #[path = "../../guard-command/src/native_command_catalog.rs"]
@@ -249,6 +255,8 @@ pub mod redacted_command_tokens;
 mod runtime_read_paths;
 #[path = "../../guard-command/src/secret_path_probe.rs"]
 pub mod secret_path_probe;
+#[path = "../../guard-command/src/sed_substitution.rs"]
+mod sed_substitution;
 #[path = "../../guard-command/src/sfrs_constants.rs"]
 mod sfrs_constants;
 #[path = "../../guard-command/src/sfrs_developer_graph.rs"]

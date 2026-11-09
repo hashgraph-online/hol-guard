@@ -340,7 +340,7 @@ def test_evidence_transport_leaves_a_cold_resident_to_callers_that_budget_a_spaw
     pooled = True
     assert publisher.direct_evidence_transport() == (
         tmp_path / "guard-runtime",
-        native_resident_client.native_resident_client_request,
+        native_resident_client.native_resident_client_request_if_idle,
     )
     assert ready == [(tmp_path / "guard-runtime", tmp_path)] * 2
 

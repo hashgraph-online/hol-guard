@@ -6,7 +6,8 @@
 //! time beside the sink: the names that stand transparently in front of a
 //! program live in [`crate::parser_wrappers::transparent_prefix`], and the
 //! settings a run may carry live in
-//! [`crate::command_compatibility::environment::inert_environment_name`].
+//! [`crate::command_compatibility::environment::inert_environment_name`] and
+//! [`crate::pretool::generic::inert_tool_settings::inert_tool_setting`].
 
 #[cfg(test)]
 #[path = "contained_prefix_tests.rs"]
@@ -37,35 +38,86 @@ const STEERING_NAMES: &[&str] = &[
 const PLAIN_VALUE_LIMIT: usize = 512;
 
 /// `NAME=value` whose name changes output or presentation and never which
-/// program runs or what it loads.
+/// program runs or what it loads, a tool switch whose value passed the
+/// closed screen the review read it against, or a `NODE_OPTIONS` holding only
+/// the heap, diagnostic and engine flags the review reads as inert
+/// (`NODE_OPTIONS=--max-old-space-size=4096`). A preload, loader or inspector
+/// is none of these and keeps the setting in the command.
+///
+/// The review lets a filtered profile keep a command whose settings are data
+/// only, on the reading that the profile means the same with or without them.
+/// That reading holds only if the run still receives them: a restricted launch
+/// forwards a short closed list (`forwarded_settings::forwarded_setting`), and
+/// none of the screened tool switches is on it. Carrying them here is what
+/// makes the run the command the review read, rather than the same command
+/// with its switches silently gone.
 fn inert_assignment(word: &str) -> Option<(&str, &str)> {
     let name = assignment_name(word)?;
-    crate::command_compatibility::environment::inert_environment_name(name)
-        .then(|| (name, &word[name.len() + 1..]))
+    let value = &word[name.len() + 1..];
+    let carried = crate::command_compatibility::environment::inert_environment_name(name)
+        || crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
+        || name == "NODE_OPTIONS" && guard_contracts::node_options_inert(value);
+    carried.then_some((name, value))
 }
 
-/// Whether the word is a setting whose whole effect is a value the command
-/// reads for itself, spelled plainly enough that a read-only profile's
-/// environment filter would drop it before the run ever saw it. A value that
-/// opens with `-` would be read as an option once the word is gone, and one
-/// carrying any other character is not a plain value.
-fn plain_data_setting(word: &str) -> bool {
-    let Some(name) = assignment_name(word) else {
-        return false;
-    };
+/// The name of a setting whose whole effect is a value the command reads for
+/// itself, spelled plainly enough that a read-only profile's environment
+/// filter would drop it before the run ever saw it. `None` for anything else:
+/// a value that opens with `-` would be read as an option once the word is
+/// gone, and one carrying any other character is not a plain value. The name
+/// is the answer rather than a yes, because dropping the word also forgets
+/// whatever the prefix carried under the same name.
+///
+/// The pathname and brace characters are plain here because a shell applies
+/// neither field splitting nor pathname expansion to an assignment's value:
+/// `REPORT_DIR=reports/*` is the eleven characters it is written as. The set
+/// is the one the review screens the same word against in
+/// `pretool::env_prefix_reviewed::data_character`; the two must agree, or a
+/// command the review granted a read-only profile arrives here with its
+/// setting still in front of the program and the planners refuse it.
+fn plain_data_setting(word: &str) -> Option<&str> {
+    let name = assignment_name(word)?;
     if STEERING_NAMES.contains(&name) {
-        return false;
+        return None;
     }
     let value = &word[name.len() + 1..];
-    value.len() <= PLAIN_VALUE_LIMIT
+    let plain = value.len() <= PLAIN_VALUE_LIMIT
         && !value.starts_with('-')
         && value.bytes().all(|byte| {
             byte.is_ascii_alphanumeric()
                 || matches!(
                     byte,
-                    b'/' | b'.' | b'_' | b'+' | b'@' | b':' | b',' | b'%' | b'-'
+                    b'/' | b'.'
+                        | b'_'
+                        | b'+'
+                        | b'@'
+                        | b':'
+                        | b','
+                        | b'%'
+                        | b'-'
+                        | b'*'
+                        | b'?'
+                        | b'['
+                        | b']'
+                        | b'{'
+                        | b'}'
                 )
-        })
+        });
+    plain.then_some(name)
+}
+
+/// Forget any setting already carried under `name`.
+///
+/// A command may write the same name twice, and the run reads the last one:
+/// `NODE_OPTIONS=--no-warnings NODE_OPTIONS= node --test` starts Node with no
+/// options at all. When that last word is dropped rather than carried, the
+/// one before it has to go with it, or the run is handed a value the command
+/// replaced. Only a name whose carrying depends on the value it holds can
+/// reach this -- `NODE_OPTIONS`, a screened tool switch, a `RUSTFLAGS` -- since
+/// a name that is inert whatever it holds is carried both times and the later
+/// word already wins.
+fn shadow(carried: &mut Vec<(String, String)>, name: &str) {
+    carried.retain(|(held, _)| held != name);
 }
 
 /// Peel one transparent prefix, carrying the settings it holds.
@@ -100,14 +152,19 @@ fn transparent_step(
     }
     let mut held = Vec::new();
     let mut held_drop = false;
+    let mut shadowed: Vec<&str> = Vec::new();
     for word in &rest[1..index] {
         if let Some((name, value)) = inert_assignment(word) {
             held.push((name.to_string(), value.to_string()));
-        } else if drop_data && plain_data_setting(word) {
-            held_drop = true;
-        } else {
-            return None;
+            continue;
         }
+        let name = drop_data.then(|| plain_data_setting(word)).flatten()?;
+        shadow(&mut held, name);
+        shadowed.push(name);
+        held_drop = true;
+    }
+    for name in shadowed {
+        shadow(carried, name);
     }
     carried.extend(held);
     *dropped |= held_drop;
@@ -132,6 +189,9 @@ fn transparent_step(
 /// is not: a dropped setting means the original must draw a contained receipt
 /// before the core runs. It is read here so the caller need not peel the same
 /// command twice to compare the two answers.
+///
+/// A dropped word also forgets any setting the prefix already carried under
+/// the same name, since the run would have read the dropped one.
 pub(crate) fn command_prefix_split(
     command: &[String],
     drop_data: bool,
@@ -144,7 +204,13 @@ pub(crate) fn command_prefix_split(
         if let Some((name, value)) = rest.first().and_then(|word| inert_assignment(word)) {
             assignments.push((name.to_string(), value.to_string()));
             start += 1;
-        } else if drop_data && rest.len() > 1 && plain_data_setting(&rest[0]) {
+        } else if let Some(name) = rest
+            .first()
+            .filter(|_| drop_data && rest.len() > 1)
+            .map(String::as_str)
+            .and_then(plain_data_setting)
+        {
+            shadow(&mut assignments, name);
             dropped = true;
             start += 1;
         } else if let Some(step) = transparent_step(rest, &mut assignments, drop_data, &mut dropped)

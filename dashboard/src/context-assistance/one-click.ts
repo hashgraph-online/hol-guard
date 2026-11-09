@@ -27,6 +27,8 @@ export type CigarSetupRun = {
   stages: CigarSetupStage[];
   /** False only when the saved preference already permits a start, which needs no proof. */
   approval: boolean;
+  /** A safety check this tab already prepared; setup commits it instead of starting another. */
+  commit?: { job_id: string; expected_generation: string; reconnect: boolean };
 };
 export type CigarSetupPlan = { kind: "ready" } | { kind: "blocked"; block: CigarSetupBlock } | CigarSetupRun;
 
@@ -37,16 +39,20 @@ const blocked = (title: string, detail: string, tab?: CigarTab, wait?: boolean):
  * Choose the shortest path from native metadata. Every input is something
  * Guard already reported; the plan never invents a build, a URL or a path.
  */
-export function planCigarSetup(data: CigarVersionsData, options: { locked: boolean; dirty: boolean }): CigarSetupPlan {
+export function planCigarSetup(data: CigarVersionsData, options: { locked: boolean; dirty: boolean; adopt?: string | null }): CigarSetupPlan {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
   if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  // Committing a held job needs the same clearance as any commit; a lock leaves it to the checks below.
+  const adopted = options.adopt && !cigarSetupHold(state, options)
+    ? planCigarAdopt(data.jobs.find((job) => job.job_id === options.adopt), state)
+    : null;
+  if (adopted) return adopted;
+  const busy = cigarBusyHold(state, data.jobs);
+  if (busy) return busy;
   if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
-    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
-  }
-  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
-  if (data.jobs.some((job) => job.phase === "recovery_required")) {
-    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+    // A managed computer can still start the selection its administrator already turned on.
+    return planCigarStart(state, false) ?? blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
   const selected = state.preferences.runtime_id;
   const installed = data.installations;
@@ -82,7 +88,47 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
     approval: true };
 }
 
+/** A safety check this tab prepared that Guard still holds open: finish it rather than wait for it to expire. */
+export function planCigarAdopt(job: CigarVersionJob | undefined, state: ContextAssistanceStatus): CigarSetupRun | null {
+  if (state.effective_enabled || state.job || job?.family !== "selection" || !canCommitCigarJob(job, state)) return null;
+  return { kind: "run", runtime_id: job.target_runtime_id, build_id: null, interpreter_id: null, python_build_id: null,
+    stages: ["check", "start"], approval: true,
+    commit: { job_id: job.job_id, expected_generation: job.expected_generation, reconnect: job.reconnect_required } };
+}
+
+/** A running or paused task owns the selection, so nothing else may start until it settles. */
+function cigarBusyHold(state: ContextAssistanceStatus, jobs: CigarVersionJob[]): CigarSetupPlan | null {
+  if (state.job || jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
+  if (jobs.some((job) => job.phase === "recovery_required")) {
+    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  return null;
+}
+
+/** Unsaved settings and an administrator's lock stop every path, including finishing a prepared check. */
+export function cigarSetupHold(state: ContextAssistanceStatus, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
+    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
+  }
+  return null;
+}
+
 /** A saved, selected preference can start without version metadata (for example on an older daemon). */
+// Without the version list: a lock or unsaved change stops adopting a held job, but a managed
+// computer can still start the selection its administrator already turned on.
+export function planCigarHeldJob(job: CigarVersionJob | undefined, state: ContextAssistanceStatus,
+  status: ContextAssistanceStatus | null, options: { locked: boolean; dirty: boolean }): CigarSetupPlan | null {
+  if (state.effective_enabled) return null;
+  if (options.dirty) return cigarSetupHold(state, options);
+  const busy = cigarBusyHold(state, job ? [job] : []);
+  if (busy) return busy;
+  const hold = cigarSetupHold(state, options);
+  if (!hold) return planCigarAdopt(job, state);
+  return planCigarStart(status, options.dirty) ? null : hold;
+}
+
 export function planCigarStart(status: ContextAssistanceStatus | null, dirty: boolean): CigarSetupRun | null {
   return status && canStartCigar(status, dirty) ? { kind: "run", runtime_id: status.preferences.runtime_id, build_id: null,
     interpreter_id: null, python_build_id: null, stages: ["start"], approval: false } : null;
@@ -113,7 +159,8 @@ export type CigarSetupDeps = {
   onSaved: (config: GuardContextAssistanceConfig, previous: GuardContextAssistanceConfig) => void;
 };
 
-const JOB_LIMIT_MS = 180_000, START_LIMIT_MS = 120_000, POLL_MS = 800;
+// A busy computer can leave Guard unable to answer for a while; the job keeps running meanwhile.
+const JOB_LIMIT_MS = 180_000, START_LIMIT_MS = 120_000, POLL_MS = 800, QUIET_LIMIT_MS = 30_000;
 const failedPhases = new Set(["failed", "cancelled", "recovery_required"]);
 export const isCigarProofError = (cause: unknown) => cause instanceof ContextAssistanceApiError
   && (cause.code.startsWith("approval_gate") || cause.code === "approval_required");
@@ -121,13 +168,34 @@ const transient = (cause: unknown) => !(cause instanceof ContextAssistanceApiErr
   || cause.code.endsWith("context_stale") || cause.code.endsWith("outcome_unknown") || cause.code === "context_assistance_unavailable";
 const missingJob = (cause: unknown) => cause instanceof ContextAssistanceApiError && cause.code.endsWith("job_missing");
 
+// The browser's own wording for a dropped or timed-out request ("Failed to fetch", "signal timed out") means nothing to people.
+const NO_ANSWER = "Guard did not answer. It may still be starting or busy. Try again in a minute.";
+export function cigarSetupReason(cause: unknown, fallback: string): string {
+  if (cause instanceof TypeError || cause instanceof DOMException) return NO_ANSWER;
+  return cause instanceof Error ? cause.message : fallback;
+}
+
 function guard(deps: CigarSetupDeps) {
   if (deps.stopped()) throw new CigarSetupStopped();
 }
 function failure(stage: CigarSetupStage, cause: unknown): never {
   if (cause instanceof CigarSetupStopped || cause instanceof CigarSetupError) throw cause;
   if (isCigarProofError(cause)) throw new CigarSetupError(stage, "Guard needs your approval password to continue.", true);
-  throw new CigarSetupError(stage, cause instanceof Error ? cause.message : "Guard did not confirm this step.");
+  throw new CigarSetupError(stage, cigarSetupReason(cause, "Guard did not confirm this step."));
+}
+
+function failedJobCopy(code: string): string {
+  if (code.endsWith("deadline_exceeded")) {
+    return "This computer took too long to finish this step, so Guard stopped it. Nothing was turned on. Try again when the computer is less busy.";
+  }
+  if (code.endsWith("fingerprint_mismatch")) {
+    return "The download did not match what Guard expected, so Guard threw it away. Nothing was turned on. Try again.";
+  }
+  if (code.endsWith("inputs_invalid")) {
+    return "Guard could not start this step with its current settings. Nothing was turned on. Update Guard, then try again.";
+  }
+  // The code stays in Updates > Job details for support; people get what happened and what to do.
+  return "Guard could not finish this step. Nothing was turned on. Try again, or open Updates to see what happened.";
 }
 
 /** Submit once, then follow the job by id. An unknown submit outcome is observed, never resent. */
@@ -139,6 +207,7 @@ async function follow(
   deps.onJob(input.job_id);
   // After an unknown submit outcome Guard may register the job late, so a missing job is not yet an answer.
   let uncertain = false;
+  let limit = JOB_LIMIT_MS;
   try {
     deps.onState((await deps.versions(input, proof)).state);
   } catch (cause) {
@@ -146,32 +215,35 @@ async function follow(
     uncertain = true;
   }
   const started = deps.now();
-  let misses = 0;
+  // Silence counts from Guard's last answer, so a slow failing poll cannot stretch it.
+  let heard = started;
   for (;;) {
     guard(deps);
     let reply: CigarVersionsReply | null = null;
     try {
       reply = await deps.versions({ action: "job", job_id: input.job_id });
-      misses = 0;
+      heard = deps.now();
       uncertain = false;
     } catch (cause) {
       const retry = transient(cause) || (uncertain && missingJob(cause));
       if (!retry) failure(stage, cause);
-      if (++misses > 5) {
+      if (deps.now() - heard > QUIET_LIMIT_MS) {
         throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
       }
     }
     if (reply) {
       deps.onState(reply.state);
       const job = parseCigarVersionJob(reply.result);
+      // Some steps, such as setting up Python, get a longer window than others; wait as long as Guard does.
+      limit = Math.max(limit, job.deadline_at_ms - job.created_at_ms + 60_000);
       if (done(job, reply.state)) { deps.onJob(null); return { job, state: reply.state }; }
       if (failedPhases.has(job.phase)) {
         throw new CigarSetupError(stage, job.phase === "recovery_required"
           ? "Guard paused this step so nothing breaks. Open Updates to finish or undo it."
-          : "This step did not finish (" + job.code.replace(/_/g, " ") + "). Nothing was turned on.");
+          : failedJobCopy(job.code));
       }
     }
-    if (deps.now() - started > JOB_LIMIT_MS) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
+    if (deps.now() - started > limit) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
     await deps.sleep(POLL_MS);
   }
 }
@@ -206,7 +278,11 @@ export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssista
     state = next;
   }
   if (!runtime) throw new CigarSetupError("download", "Guard did not report an installed CIGAR copy.");
-  if (state.preferences.runtime_id !== runtime) {
+  if (plan.commit) {
+    deps.onStage("check");
+    const committed = await follow(deps, "check", { action: "commit", ...plan.commit }, proof, (item) => item.phase === "completed");
+    state = committed.state;
+  } else if (state.preferences.runtime_id !== runtime) {
     deps.onStage("check");
     const id = cigarVersionJobId();
     const ready = await follow(deps, "check",

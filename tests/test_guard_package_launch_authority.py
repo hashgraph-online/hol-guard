@@ -78,7 +78,10 @@ def test_package_protect_revalidates_claim_time_execution_context_mutation_befor
             first_npm.write_text(f"#!/bin/sh\nprintf 'changed\\n' >> '{marker}'\n", encoding="utf-8")
             first_npm.chmod(0o755)
         elif mutation == "manifest":
-            manifest.write_text('{"name":"demo","version":"2.0.0"}\n', encoding="utf-8")
+            manifest.write_text(
+                '{"name":"demo","version":"1.0.0","dependencies":{"left-pad":"1.3.0"}}\n',
+                encoding="utf-8",
+            )
         else:
             monkeypatch.setenv("PATH", str(second_bin))
         return True

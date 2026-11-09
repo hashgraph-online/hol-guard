@@ -12,16 +12,12 @@ pub(crate) use tokens::{shell_tokens, shell_tokens_preserving_redirects};
 mod shapes;
 
 use shapes::{blank_top_level_groups, sole_command_group};
+pub(crate) use shapes::{blanked_top_level_group_list, command_has_top_level_group_list};
 
-/// A list of top-level groups the splitter can blank, rather than one group
-/// that is the whole command. The decision may read that list. A sandbox plan
-/// may not: a directory change inside one group does not move the next element.
-pub(crate) fn command_has_top_level_group_list(command: &str) -> bool {
-    let chars: Vec<char> = command.chars().collect();
-    sole_command_group(&chars).is_none() && blank_top_level_groups(&chars).is_some()
-}
-
-pub(super) use shapes::{is_stderr_to_null_redirect, is_stderr_to_stdout_redirect};
+pub(super) use shapes::{
+    is_stderr_to_null_redirect, is_stderr_to_stdout_redirect, null_sink_redirect_at,
+    null_sink_redirect_end,
+};
 // Only the redirect tests in `command_compatibility` read the sink directly.
 #[cfg(test)]
 pub(super) use shapes::stderr_null_sink_is_inert;
@@ -173,9 +169,7 @@ fn split_execution_segments_inner(
             }
             '<' | '>'
                 if is_stderr_to_stdout_redirect(&chars, index, preserve_unquoted_backslash) => {}
-            '>' if index.checked_sub(1).is_some_and(|start| {
-                is_stderr_to_null_redirect(&chars, start, preserve_unquoted_backslash)
-            }) => {}
+            '>' if null_sink_redirect_at(&chars, index, preserve_unquoted_backslash) => {}
             '<' | '>' => return Err("command_redirect_not_yet_supported"),
             '(' | ')' => return Err("compound_shell_not_yet_supported"),
             '{' | '}'
@@ -198,6 +192,11 @@ fn split_execution_segments_inner(
                 // work spelled `A &> f`, `A > f 2>&1` and `A & > f` deciding
                 // three different ways.
                 if chars.get(index + 1) == Some(&'>') {
+                    if null_sink_redirect_end(&chars, index, preserve_unquoted_backslash).is_some()
+                    {
+                        index += 1;
+                        continue;
+                    }
                     return Err("command_redirect_not_yet_supported");
                 }
                 if chars.get(index + 1) != Some(&'&') {

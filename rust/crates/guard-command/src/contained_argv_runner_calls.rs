@@ -14,7 +14,19 @@ pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
     matches!(arguments, [tool, rest @ ..]
         if (tool == "vitest" && vitest_runs_once(rest))
             || (tool == "jest" && jest_contained_call(rest))
-            || (tool == "mocha" && mocha_contained_call(rest)))
+            || (tool == "mocha" && mocha_contained_call(rest))
+            || (tool == "ava" && ava_contained_call(rest))
+            || (tool == "jasmine" && super::single_pass_runners::jasmine_contained_call(rest))
+            || (tool == "qunit" && super::single_pass_runners::qunit_contained_call(rest))
+            || (tool == "uvu" && super::single_pass_runners::uvu_contained_call(rest))
+            || (tool == "tape" && super::single_pass_runners::tape_contained_call(rest))
+            || (tool == "tsd" && super::single_pass_runners::tsd_contained_call(rest))
+            || (tool == "tap" && super::single_pass_runners::tap_contained_call(rest))
+            || (tool == "borp" && super::single_pass_runners::borp_contained_call(rest))
+            || (tool == "poku" && super::single_pass_runners::poku_contained_call(rest))
+            || (tool == "lab" && super::single_pass_runners::lab_contained_call(rest))
+            || (tool == "cucumber-js"
+                && super::single_pass_runners::cucumber_contained_call(rest)))
 }
 
 /// True when a Vitest call finishes on its own.
@@ -92,7 +104,7 @@ fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
 /// letter at a time, so `-uw` carries it too. A word attached to a short
 /// option that happens to hold a `w` is read as carrying it as well, which
 /// leaves that call at review rather than running it unwatched.
-fn short_options_carry_watch(argument: &str) -> bool {
+pub(super) fn short_options_carry_watch(argument: &str) -> bool {
     short_options_carry(argument, 'w')
 }
 
@@ -145,6 +157,45 @@ pub(crate) fn mocha_runs_once(arguments: &[String]) -> bool {
         })
 }
 
+/// True when an AVA call both finishes on its own and takes everything it
+/// loads from the workspace.
+pub(crate) fn ava_contained_call(arguments: &[String]) -> bool {
+    ava_runs_once(arguments) && reads_its_own_workspace(arguments)
+}
+
+/// AVA runs its suite once and exits, like Mocha and unlike Vitest, so the
+/// reading looks for the spelling that turns the watch on.
+///
+/// AVA reads yargs, so `--watch` is read with its separators removed and a
+/// declared boolean takes a following `true` or `false`; `--watch false` and
+/// `--watch=false` are both a run that finishes, and `--no-watch` reads as
+/// `nowatch` and is left alone. `-w` is AVA's short `--watch`.
+///
+/// `debug` starts AVA under an inspector and waits for it, and `reset-cache`
+/// clears the precompiler cache rather than running tests. AVA takes its
+/// command from the first operand, and the reading cannot tell an operand
+/// from the value of an option it does not model, so either word anywhere on
+/// the line keeps the call at review.
+///
+/// `--node-arguments` forwards its value to the worker's Node, so
+/// `--node-arguments="--inspect-brk"` leaves a run that never finishes. The
+/// value names Node options rather than a path, so the workspace screen does
+/// not answer for it, and the reading does not model which values are safe:
+/// a call that forwards anything to Node keeps its review. AVA declares no
+/// short alias for it, so the name alone answers for both spellings.
+pub(crate) fn ava_runs_once(arguments: &[String]) -> bool {
+    let arguments = before_terminator(arguments);
+    !arguments
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "debug" | "reset-cache"))
+        && !arguments.iter().enumerate().any(|(index, argument)| {
+            short_options_carry_watch(argument)
+                || option_name(argument) == "nodearguments"
+                || (matches!(option_name(argument).as_str(), "watch" | "w")
+                    && jest_boolean(argument, arguments.get(index + 1)) != Some(false))
+        })
+}
+
 /// Whether a Mocha call hands Node an option of its own.
 ///
 /// `--node-option` and its short `-n` are spelled without the leading dashes
@@ -184,7 +235,7 @@ pub(crate) fn jest_runs_once(arguments: &[String]) -> bool {
 
 /// The arguments a runner reads as options. Both parsers stop at `--` and
 /// hand the rest to the test filter.
-fn before_terminator(arguments: &[String]) -> &[String] {
+pub(super) fn before_terminator(arguments: &[String]) -> &[String] {
     match arguments.iter().position(|argument| argument == "--") {
         Some(terminator) => &arguments[..terminator],
         None => arguments,
@@ -220,7 +271,7 @@ fn literal_boolean(value: &str) -> Option<bool> {
 /// The option an argument names, lowercased and without its separators or its
 /// value, so `--watch-all=false` and `--watchAll` both read as `watchall`. An
 /// argument that is not a long option names nothing.
-fn option_name(argument: &str) -> String {
+pub(super) fn option_name(argument: &str) -> String {
     let Some(flag) = argument.strip_prefix("--") else {
         return String::new();
     };
@@ -377,8 +428,12 @@ pub(crate) fn tsx_runner_flag_count(arguments: &[String]) -> usize {
 ///
 /// There Node reads every remaining word as a test file it runs, not as the
 /// first script's own arguments, so a trailing word is another file to load.
+/// Only `--test` turns that mode on. `--test-only`, `--test-force-exit` and
+/// the two timing flags shape a run that is already a test run; on their own
+/// Node runs the named script the ordinary way, so a run carrying one of them
+/// alone stays an ordinary script run and keeps its review.
 pub(crate) fn tsx_runner_test_mode(flags: &[String]) -> bool {
-    flags.iter().any(|flag| flag.starts_with("--test"))
+    flags.iter().any(|flag| flag == "--test")
 }
 
 /// A test-named file the workspace holds: `math.test.ts`, `api.spec.mjs` or

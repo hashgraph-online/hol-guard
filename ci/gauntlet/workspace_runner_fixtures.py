@@ -11,6 +11,7 @@ recognised as local rather than as a package fetched for the occasion.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -31,6 +32,14 @@ WORKSPACE_NPM_EXEC_CASE = "omp-native-workspace-npm-exec-inert-option"
 # front of it. The setting only sizes the engine, so the run has to finish the
 # same way the unprefixed launch does.
 WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
+# The same install, launched with the flag an ESM suite needs in front of it.
+# The setting only turns on Node's module VM classes, so the run has to finish
+# the same way the unprefixed launch does.
+WORKSPACE_VM_MODULES_PREFIX_CASE = "omp-native-workspace-node-options-vm-modules-prefix"
+# The same install, launched with the debug namespaces a developer turns on in
+# front of it. The pattern only chooses which of the project's own loggers
+# print, so the run has to finish the same way the unprefixed launch does.
+WORKSPACE_DEBUG_PATTERN_PREFIX_CASE = "omp-native-workspace-debug-pattern-prefix-npx-jest"
 # The same install, launched with npm's own logging key written in front of
 # it. The setting only decides how much npm prints, so the run has to finish
 # the same way the unprefixed launch does.
@@ -38,6 +47,19 @@ WORKSPACE_NPM_CONFIG_PREFIX_CASE = "omp-native-workspace-npm-config-loglevel-pre
 # The other runner a Node project installs for itself. Mocha runs its suite once
 # and exits unless it is told to watch, so the plain launch is the routine one.
 WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
+# The runner a Node project reaches for when it wants its tests to run as
+# separate processes. AVA runs its suite once and exits unless it is asked to
+# watch, so the plain launch is the routine one.
+WORKSPACE_AVA_CASE = "omp-native-workspace-npx-ava"
+# The runners that take one pass and have nowhere else to go. Jasmine, uvu,
+# tape, tsd and cucumber-js have no watch mode at all and QUnit watches only
+# when it is asked to, so for each of them the plain launch is the routine one.
+WORKSPACE_JASMINE_CASE = "omp-native-workspace-npx-jasmine"
+WORKSPACE_QUNIT_CASE = "omp-native-workspace-npx-qunit"
+WORKSPACE_UVU_CASE = "omp-native-workspace-npx-uvu"
+WORKSPACE_TAPE_CASE = "omp-native-workspace-npx-tape"
+WORKSPACE_TSD_CASE = "omp-native-workspace-npx-tsd"
+WORKSPACE_CUCUMBER_CASE = "omp-native-workspace-npx-cucumber-js"
 # The same install, launched through the project's own name for one part of its
 # suite. A project with more than one kind of test names them `test:unit`,
 # `test:types` and so on, and npm runs whatever the entry holds, so the named
@@ -77,6 +99,12 @@ WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
 # A filter is not a Vitest command, so the run is the same single pass the bare
 # `run` verb names.
 WORKSPACE_VITEST_FILTER_CASE = "omp-native-workspace-vitest-filter"
+# The same installed Vitest launched by a file its install wrote: Node given the
+# link npm puts in `node_modules/.bin`, and Bun given the package's own launcher.
+# Both name the workspace's runner, so the run means something only when that
+# runner is installed.
+WORKSPACE_VITEST_BIN_LINK_CASE = "omp-native-workspace-node-bin-link-runner"
+WORKSPACE_VITEST_BUN_ENTRY_CASE = "omp-native-workspace-bun-runner-entry"
 # The commit hook a project runs over its staged files. It is declared,
 # installed and pinned exactly as the linter it drives is, and it is launched
 # through npx the same way, so the verdict has the same evidence to read.
@@ -89,14 +117,28 @@ WORKSPACE_TSX_NODE_TEST_CASE = "omp-native-workspace-npx-tsx-node-test"
 # at once. Its own name carries a manager's inside it, and it installs nothing:
 # every script it names is already in the project's manifest.
 WORKSPACE_RUN_ALL_CASE = "omp-native-workspace-npm-run-all-scripts"
+# The same install, launched with the switch that stops a browser dependency
+# fetching its own copy of Chrome. The setting carries one of two words and
+# names nothing to run, so the launch has to reach the runner the unprefixed
+# spelling reaches.
+WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE = "omp-native-workspace-puppeteer-skip-download-prefix"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
         WORKSPACE_NODE_ENTRY_CASE,
         WORKSPACE_NPM_EXEC_CASE,
         WORKSPACE_HEAP_PREFIX_CASE,
+        WORKSPACE_VM_MODULES_PREFIX_CASE,
+        WORKSPACE_DEBUG_PATTERN_PREFIX_CASE,
         WORKSPACE_NPM_CONFIG_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
+        WORKSPACE_AVA_CASE,
+        WORKSPACE_JASMINE_CASE,
+        WORKSPACE_QUNIT_CASE,
+        WORKSPACE_UVU_CASE,
+        WORKSPACE_TAPE_CASE,
+        WORKSPACE_TSD_CASE,
+        WORKSPACE_CUCUMBER_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
@@ -108,7 +150,10 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
+        WORKSPACE_VITEST_BIN_LINK_CASE,
+        WORKSPACE_VITEST_BUN_ENTRY_CASE,
         WORKSPACE_RUN_ALL_CASE,
+        WORKSPACE_SKIP_DOWNLOAD_PREFIX_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -195,6 +240,178 @@ _MOCHA_FILES = {
     "node_modules/mocha/bin/mocha.js": ("#!/usr/bin/env node\nrequire('./_mocha.js');\n"),
     "node_modules/mocha/bin/_mocha.js": (f"#!/usr/bin/env node\nconsole.log('{MOCHA_MARKER}');\n"),
 }
+
+
+_AVA_VERSION = "6.4.1"
+# The one line the workspace's own AVA prints, which only a real launch produces.
+AVA_MARKER = f"ava {_AVA_VERSION}"
+_AVA_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        f'  "devDependencies": {{\n    "ava": "{_AVA_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "ava": "{_AVA_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/ava": {\n'
+        f'      "version": "{_AVA_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "ava": "entrypoints/cli.js"\n      }\n    }\n  }\n}\n'
+    ),
+    # AVA's own configuration file. It can name the files to run and how to
+    # compile them; it has no setting that turns watch mode on.
+    "ava.config.js": "export default {\n  files: ['test/**/*.js'],\n};\n",
+    "test/sample.js": ("const test = require('ava');\n\ntest('reads its own defaults', (t) => {\n  t.pass();\n});\n"),
+    "node_modules/ava/package.json": (
+        f'{{"name": "ava", "version": "{_AVA_VERSION}", "bin": {{"ava": "entrypoints/cli.js"}}}}\n'
+    ),
+    # AVA's launcher hands the run to the module beside it, the way the real
+    # package does once it has read the configuration the run needs.
+    "node_modules/ava/entrypoints/cli.js": ("#!/usr/bin/env node\nrequire('./main.js');\n"),
+    "node_modules/ava/entrypoints/main.js": (f"#!/usr/bin/env node\nconsole.log('{AVA_MARKER}');\n"),
+}
+
+
+def _single_pass_project(
+    name: str,
+    version: str,
+    entry: str,
+    spec: str,
+    marker: str,
+    passed: tuple[str, ...] = (),
+    executable: str | None = None,
+) -> dict[str, str]:
+    """A workspace that installed one single-pass runner, and nothing else.
+
+    Jasmine, QUnit, uvu, tape, tsd and cucumber-js install the same way: a dev
+    dependency, a lockfile that records it, one spec file, and a package whose
+    declared `bin` is the executable npm links into `node_modules/.bin`. Only
+    the names and the entry path differ, so one builder plants them all and
+    each case keeps its own line to print.
+
+    `executable` names that link where it is not the dependency's own name.
+    A scoped package cannot be linked under its scope, so `@cucumber/cucumber`
+    installs under its scoped directory and links as `cucumber-js`.
+
+    `passed` names the words the scenario's own command spells after the
+    runner. A launch that lost them would still start this executable, so the
+    marker is printed only when they all arrive; otherwise the line says which
+    run actually happened, and the case fails on the effect rather than on a
+    missing file.
+    """
+    binary = executable or name
+    return {
+        "package.json": (
+            '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+            f'  "devDependencies": {{\n    "{name}": "{version}"\n  }}\n}}\n'
+        ),
+        "package-lock.json": (
+            '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+            '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+            '      "version": "0.0.0",\n      "devDependencies": {\n'
+            f'        "{name}": "{version}"\n      }}\n    }},\n'
+            f'    "node_modules/{name}": {{\n'
+            f'      "version": "{version}",\n      "dev": true,\n'
+            f'      "bin": {{\n        "{binary}": "{entry}"\n      }}\n    }}\n  }}\n}}\n'
+        ),
+        spec: f"// One spec for the workspace's own {name} to find.\n",
+        f"node_modules/{name}/package.json": (
+            f'{{"name": "{name}", "version": "{version}", "bin": {{"{binary}": "{entry}"}}}}\n'
+        ),
+        f"node_modules/{name}/{entry}": (
+            "#!/usr/bin/env node\n"
+            f"const passed = {json.dumps(list(passed))};\n"
+            "const seen = process.argv.slice(2);\n"
+            "const whole = passed.every((word) => seen.includes(word));\n"
+            f"console.log(whole ? '{marker}' : '{binary}: ' + JSON.stringify(seen));\n"
+        ),
+    }
+
+
+_JASMINE_VERSION = "5.12.0"
+# The one line the workspace's own Jasmine prints, which only a real launch produces.
+JASMINE_MARKER = f"jasmine {_JASMINE_VERSION}"
+# Jasmine reads this file for the specs to load; nothing in it can turn a watch on.
+_JASMINE_FILES = {
+    **_single_pass_project(
+        "jasmine",
+        _JASMINE_VERSION,
+        "bin/jasmine.js",
+        "spec/sample_spec.js",
+        JASMINE_MARKER,
+        passed=("--filter=auth",),
+    ),
+    "spec/support/jasmine.json": ('{\n  "spec_dir": "spec",\n  "spec_files": ["**/*[sS]pec.js"]\n}\n'),
+}
+
+_QUNIT_VERSION = "2.24.1"
+# The one line the workspace's own QUnit prints, which only a real launch produces.
+QUNIT_MARKER = f"qunit {_QUNIT_VERSION}"
+_QUNIT_FILES = _single_pass_project(
+    "qunit",
+    _QUNIT_VERSION,
+    "bin/qunit.js",
+    "test/sample.js",
+    QUNIT_MARKER,
+    passed=("test/",),
+)
+
+_UVU_VERSION = "0.5.6"
+# The one line the workspace's own uvu prints, which only a real launch produces.
+UVU_MARKER = f"uvu {_UVU_VERSION}"
+# uvu publishes its executable at the package root rather than under `bin`.
+_UVU_FILES = _single_pass_project(
+    "uvu",
+    _UVU_VERSION,
+    "bin.js",
+    "test/sample.js",
+    UVU_MARKER,
+    passed=("test",),
+)
+
+_TAPE_VERSION = "5.10.3"
+# The one line the workspace's own tape prints, which only a real launch produces.
+TAPE_MARKER = f"tape {_TAPE_VERSION}"
+# tape's declared `bin` is an extensionless file under `bin/`, so the install
+# below names it the way npm links it.
+_TAPE_FILES = _single_pass_project(
+    "tape",
+    _TAPE_VERSION,
+    "bin/tape",
+    "test/a.js",
+    TAPE_MARKER,
+    passed=("test/a.js",),
+)
+
+_TSD_VERSION = "0.33.0"
+# The one line the workspace's own tsd prints, which only a real launch produces.
+TSD_MARKER = f"tsd {_TSD_VERSION}"
+# tsd compiles its own CLI, so the executable npm links is the built file.
+_TSD_FILES = _single_pass_project(
+    "tsd",
+    _TSD_VERSION,
+    "dist/cli.js",
+    "test/types.test-d.ts",
+    TSD_MARKER,
+    passed=("--files", "test/types.test-d.ts", "--show-diff"),
+)
+
+_CUCUMBER_VERSION = "13.3.0"
+# The one line the workspace's own cucumber-js prints, which only a real launch
+# produces.
+CUCUMBER_MARKER = f"cucumber-js {_CUCUMBER_VERSION}"
+# cucumber-js is the one scoped package here: npm installs it under
+# `@cucumber/cucumber` and links its executable as `cucumber-js`.
+_CUCUMBER_FILES = _single_pass_project(
+    "@cucumber/cucumber",
+    _CUCUMBER_VERSION,
+    "bin/cucumber.js",
+    "features/login.feature",
+    CUCUMBER_MARKER,
+    passed=("features/login.feature",),
+    executable="cucumber-js",
+)
 
 
 _ESLINT_VERSION = "9.33.0"
@@ -371,6 +588,18 @@ _VITEST_FILES = {
     ),
 }
 
+# The one line the workspace's own Vitest prints for a bare `run`.
+VITEST_RUN_MARKER = f"vitest {_VITEST_VERSION} ran one pass"
+_VITEST_RUN_FILES = {
+    **_VITEST_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        f"console.log(argv[0] === 'run' ? '{VITEST_RUN_MARKER}'"
+        " : 'vitest: the one-pass run was not forwarded');\n"
+    ),
+}
+
 
 _LINT_STAGED_VERSION = "16.1.2"
 # The one line the workspace's own commit hook prints.
@@ -500,6 +729,19 @@ class _Install(NamedTuple):
 _JEST_INSTALL = _Install("jest", _FILES, RUNNER_MARKER)
 _INSTALLS = {
     WORKSPACE_MOCHA_CASE: _Install("mocha", _MOCHA_FILES, MOCHA_MARKER),
+    WORKSPACE_AVA_CASE: _Install("ava", _AVA_FILES, AVA_MARKER, entry="entrypoints/cli.js"),
+    WORKSPACE_JASMINE_CASE: _Install("jasmine", _JASMINE_FILES, JASMINE_MARKER),
+    WORKSPACE_QUNIT_CASE: _Install("qunit", _QUNIT_FILES, QUNIT_MARKER),
+    WORKSPACE_UVU_CASE: _Install("uvu", _UVU_FILES, UVU_MARKER, entry="bin.js"),
+    WORKSPACE_TAPE_CASE: _Install("tape", _TAPE_FILES, TAPE_MARKER, entry="bin/tape"),
+    WORKSPACE_TSD_CASE: _Install("tsd", _TSD_FILES, TSD_MARKER, entry="dist/cli.js"),
+    WORKSPACE_CUCUMBER_CASE: _Install(
+        "cucumber-js",
+        _CUCUMBER_FILES,
+        CUCUMBER_MARKER,
+        package="@cucumber/cucumber",
+        entry="bin/cucumber.js",
+    ),
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
     WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
     WORKSPACE_SCRIPT_RUN_ALIAS_CASE: _Install("eslint", _ALIAS_LINT_FILES, ALIAS_LINT_MARKER),
@@ -537,6 +779,18 @@ _INSTALLS = {
         "vitest",
         _VITEST_FILES,
         VITEST_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_BIN_LINK_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_BUN_ENTRY_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
         entry="vitest.mjs",
     ),
 }
@@ -579,9 +833,17 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     """Give the fixture home the nvm Node install the contained runner trusts.
 
     The read-only runner profile runs the workspace's entry point under Node,
-    and it accepts only a Node that the request's own home or a system prefix
-    owns. The host's Node is copied, not linked, so nothing the fixture does
-    can reach the file the host runs.
+    and it accepts only a Node a caller's home or a system prefix owns. The
+    host's Node is copied, not linked, so nothing the fixture does can reach
+    the file the host runs.
+
+    The release's own ``npm`` prefix is copied beside it. A real install keeps
+    ``lib/node_modules/npm`` next to ``bin/node``, and the wrappers an agent
+    reaches ``npx`` through read ``npx-cli.js`` out of that prefix, relative
+    to whichever Node they resolved. A fixture that plants the binary alone is
+    not the layout it claims to be, and an ``npx`` run inside containment
+    failed with "Unable to locate npx-cli.js" rather than running the
+    workspace's tool.
     """
     if scenario_id not in WORKSPACE_RUNNER_CASES:
         return
@@ -594,9 +856,46 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     ).stdout.strip()
     if not _NODE_VERSION.fullmatch(version):
         raise RuntimeError(f"Node reported an unexpected version for the fixture toolchain: {version}")
-    target = home / _NODE_VERSIONS / version / "bin" / "node"
+    prefix = home / _NODE_VERSIONS / version
+    target = prefix / "bin" / "node"
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)
+    _add_node_package_manager(source.parent.parent, prefix)
+
+
+def _add_node_package_manager(source_prefix: Path, prefix: Path) -> None:
+    """Copy the host release's own ``npm`` into the fixture's Node prefix.
+
+    The ``bin`` entries npm installs are links to a CLI file under the same
+    prefix. Both relative and absolute spellings are rewritten against the
+    fixture's own prefix, so a case never reaches back into the host's npm
+    tree. A host without a bundled npm leaves the prefix as it is: the cases
+    that need one fail on their own evidence rather than on a fixture that
+    quietly planted the host's.
+    """
+    package_manager = source_prefix / "lib/node_modules/npm"
+    if not package_manager.is_dir():
+        return
+    installed = prefix / "lib/node_modules/npm"
+    installed.parent.mkdir(parents=True, exist_ok=True)
+    if not installed.exists():
+        shutil.copytree(package_manager, installed, symlinks=True)
+    for name in ("npm", "npx"):
+        entry = source_prefix / "bin" / name
+        target = prefix / "bin" / name
+        if not entry.exists() or target.exists():
+            continue
+        if not entry.is_symlink():
+            shutil.copy2(entry, target)
+            continue
+        resolved = Path(os.readlink(entry))
+        if not resolved.is_absolute():
+            resolved = (source_prefix / "bin" / resolved).resolve()
+        try:
+            inside = resolved.relative_to(source_prefix.resolve())
+        except ValueError:
+            continue
+        target.symlink_to(os.path.relpath(prefix / inside, target.parent))
 
 
 def home_bun_bin(home: Path) -> Path | None:

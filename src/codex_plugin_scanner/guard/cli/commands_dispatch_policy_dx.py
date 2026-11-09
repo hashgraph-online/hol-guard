@@ -33,7 +33,7 @@ from ..policy_document import GuardPolicyDocument, policy_document_digest
 from ..policy_document_diagnostics import PolicyValidationReport, StructuredDiagnostic, validate_policy_file
 from ..policy_document_io import PolicyCompilationError, PolicyFileTrustError, write_private_policy_text
 from ..policy_document_yaml import PolicyDocumentError
-from ..policy_starters import DEFAULT_STARTER, POLICY_STARTERS, find_starter, render_starter_yaml
+from ..policy_starters import DEFAULT_STARTER, policy_starters, render_starter_yaml
 from ..policy_tests_runner import (
     BUSINESS_RULES_CODE,
     PolicyTestRun,
@@ -144,12 +144,13 @@ def _run_validate(args: Any, output_stream: TextIO | None) -> int:
 def _run_init(args: Any, output_stream: TextIO | None) -> int:
     as_json = wants_json(args)
     if bool(getattr(args, "list_starters", False)):
-        listing = [{"id": starter.id, "name": starter.name, "summary": starter.summary} for starter in POLICY_STARTERS]
+        listing = policy_starters()
         text = "\n".join(f"{item['id']:<17} {item['summary']}" for item in listing)
         _emit(output_stream, {"starters": listing, "message": text}, as_json=as_json, text=text)
         return 0
-    starter = find_starter(str(getattr(args, "starter", None) or DEFAULT_STARTER))
-    if starter is None:
+    starter = str(getattr(args, "starter", None) or DEFAULT_STARTER)
+    text = render_starter_yaml(starter)
+    if text is None:
         _emit(output_stream, {"error": "unknown_starter", "message": "Unknown starter."}, as_json=as_json)
         return 4
     target = Path(str(getattr(args, "output", None) or DEFAULT_POLICY_FILE))
@@ -157,16 +158,15 @@ def _run_init(args: Any, output_stream: TextIO | None) -> int:
         message = f"{target} already exists. Choose another --output, or pass --force to replace it."
         _emit(output_stream, {"error": "policy_file_exists", "message": message}, as_json=as_json)
         return 4
-    write_private_policy_text(target, render_starter_yaml(starter))
+    write_private_policy_text(target, text)
     written = _validated(target).document
     tests = len(stored_tests(written)) if written is not None else 0
     message = (
-        f"Wrote {target} from the {starter.id} starter with {tests} example tests.\n"
-        f"Next: hol-guard policy test {target}"
+        f"Wrote {target} from the {starter} starter with {tests} example tests.\nNext: hol-guard policy test {target}"
     )
     _emit(
         output_stream,
-        {"written": str(target), "starter": starter.id, "tests": tests, "message": message},
+        {"written": str(target), "starter": starter, "tests": tests, "message": message},
         as_json=as_json,
         text=message,
     )

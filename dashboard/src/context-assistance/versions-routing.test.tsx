@@ -16,18 +16,18 @@ const effect = () => { throw new Error("Rendering runtime metadata or lessons mu
 const controls = renderToStaticMarkup(<ContextSettingsControls value={state.preferences} status={state} installations={[target]} loading={false}
   busy={false} disabled={false} locked={false} dirty={false} error={null} onChange={effect} onRefresh={effect}
   onChooseRuntime={effect} onManageVersions={effect} onControl={effect} />);
-assert.match(controls, /Choose or switch runtime/);
+assert.match(controls, /Change version/);
 assert.doesNotMatch(controls, /<option value="cigar:other"/,
   "an installed SDK cannot be drafted into the general settings form");
 assert.doesNotMatch(controls, /label="Local runtime"/);
 const pending = renderToStaticMarkup(<CigarRuntimeSelection value={{ ...state.preferences, runtime_id: target.runtime_id }} status={state}
   installations={[target]} disabled={false} onManage={effect} onRefresh={effect} onRestore={effect} />);
-assert.match(pending, /pending runtime choice/);
-assert.match(pending, /Use current selection/);
+assert.match(pending, /different version picked/);
+assert.match(pending, /Keep current version/);
 const locked = renderToStaticMarkup(<CigarRuntimeSelection value={state.preferences} status={state} installations={[]}
   disabled={true} onManage={effect} onRefresh={effect} onRestore={effect} />);
-assert.match(locked, /disabled="">Choose or switch runtime/);
-assert.match(locked, /No registered CIGAR runtime is available/);
+assert.match(locked, /disabled="">Change version/);
+assert.match(locked, /CIGAR is not set up on this computer yet/);
 const previous = { schema: 1 as const, tutorial: "first-brief" as const, step: 5 };
 assert.deepEqual(parseTutorialProgress(previous), previous, "existing lesson IDs and step bounds remain valid");
 const tutorial = cigarTutorial("cigar-updates");

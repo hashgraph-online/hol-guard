@@ -345,7 +345,8 @@ pub(crate) fn extension_allow_hint(
     validated_hint(value).map_or(Value::Null, Value::Object)
 }
 
-fn validated_hint(value: &Value) -> Option<Map<String, Value>> {
+/// `validated_extension_allow_hint`.
+pub(crate) fn validated_hint(value: &Value) -> Option<Map<String, Value>> {
     let hint = value.as_object()?;
     if hint.get("schema").and_then(Value::as_str) != Some(EXTENSION_ALLOW_HINT_SCHEMA) {
         return None;

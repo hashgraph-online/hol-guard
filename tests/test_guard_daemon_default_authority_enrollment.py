@@ -87,17 +87,17 @@ def test_a_bootstrap_that_stops_before_its_anchor_leaves_the_home_unenrolled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = _store(tmp_path, MemorySecretStore(), enroll=False)
-    original = GuardStore._write_and_verify_anchor
+    original = GuardStore._mirror_resident_anchor
 
-    def unavailable(self: GuardStore, anchor: object, *, key: bytes) -> None:
+    def unavailable(self: GuardStore, sealed: str) -> None:
         raise RuntimeError("vault unavailable")
 
-    monkeypatch.setattr(GuardStore, "_write_and_verify_anchor", unavailable)
+    monkeypatch.setattr(GuardStore, "_mirror_resident_anchor", unavailable)
     with pytest.raises(RuntimeError):
         store.enroll_extension_control_authority_by_default(_DIGEST)
     assert store.read_extension_control_authority(catalog_digest=_DIGEST).health is AuthorityHealth.UNENROLLED
 
-    monkeypatch.setattr(GuardStore, "_write_and_verify_anchor", original)
+    monkeypatch.setattr(GuardStore, "_mirror_resident_anchor", original)
     retried = store.enroll_extension_control_authority_by_default(_DIGEST)
     assert retried.health is AuthorityHealth.PROTECTED
     assert retried.revision == 0

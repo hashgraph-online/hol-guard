@@ -1,6 +1,10 @@
 use super::sensitive_command;
-use regex::{Captures, Regex};
+use regex::Regex;
 use std::sync::OnceLock;
+
+#[path = "generic_prompt_masks.rs"]
+mod masks;
+use masks::{mask_credential_categories, mask_format_options};
 
 const BYPASS_PATTERNS: [&str; 10] = [
     "disable hol-guard",
@@ -49,7 +53,7 @@ fn referential_access_pattern() -> &'static Regex {
 fn prompt_requests_secret(value: &str) -> bool {
     static VALUE_REQUEST: OnceLock<Regex> = OnceLock::new();
     static CLAUSE_BREAK: OnceLock<Regex> = OnceLock::new();
-    let lowered = value.to_ascii_lowercase().replace('\\', "/");
+    let lowered = mask_credential_categories(&value.to_ascii_lowercase().replace('\\', "/"));
     let mut locations = lowered.clone();
     for word in CREDENTIAL_WORDS {
         locations = locations.replace(word, " ");
@@ -465,41 +469,5 @@ fn mask_transfer_encoding(value: &str) -> String {
             .expect("bounded transfer encoding")
         })
         .replace_all(value, "wire-encoding")
-        .into_owned()
-}
-
-/// `--format`, `-format`, the `format:` value of `--pretty=format:` and
-/// `format` applied to what a program prints all choose how output is shaped;
-/// the bare word, or an assignment such as `operation=format`, still asks to
-/// format a disk.
-///
-/// Two of the printed nouns also name storage once another word follows them:
-/// `format the time machine disk`, `format the logs volume`. The mask reads
-/// what comes after its own match and leaves such a phrase alone, so the verb
-/// stays in the text for the guarded reading below.
-fn mask_format_options(value: &str) -> String {
-    static OPTION: OnceLock<Regex> = OnceLock::new();
-    static STORAGE: OnceLock<Regex> = OnceLock::new();
-    let storage = STORAGE.get_or_init(|| {
-        Regex::new(
-            r"(?i)^\s*(?:machine\s+)?(?:disks?|drives?|volumes?|partitions?|usb|ssd|hdd|sd\s*cards?|media)\b",
-        )
-        .expect("bounded storage noun")
-    });
-    OPTION
-        .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report)\b")
-                .expect("bounded format option")
-        })
-        .replace_all(value, |captures: &Captures| {
-            let whole = captures.get(0).expect("whole match present");
-            if storage.is_match(&value[whole.end()..]) {
-                return whole.as_str().to_owned();
-            }
-            format!(
-                "{}output-layout",
-                captures.get(1).map_or("", |prefix| prefix.as_str())
-            )
-        })
         .into_owned()
 }

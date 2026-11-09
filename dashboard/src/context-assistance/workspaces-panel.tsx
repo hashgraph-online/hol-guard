@@ -5,6 +5,7 @@ import { ContextAgentsPanel } from "./agents-panel";
 import { ContextNotesPanel } from "./notes-panel";
 import type { SettingsSaveProofCredentials } from "../settings-save-proof-modal";
 import { AddProjectPanel, type AddProjectInput } from "./add-project-panel";
+import type { CigarAllowFiles } from "./allow-files";
 import { clearRecentProjects } from "./recent-projects";
 import { HiMiniArrowPath, HiMiniChevronRight, HiMiniDocumentText, HiMiniFolder, HiMiniFolderOpen } from "react-icons/hi2";
 import { Tag } from "../approval-center-primitives";
@@ -16,9 +17,9 @@ const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
 // `ready` means CIGAR is running and folders can change; `waking` lists saved folders read-only while it rests or starts.
-type Props = { ready: boolean; waking?: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; gate: GuardApprovalGatePublicConfig | null };
+type Props = { ready: boolean; waking?: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; gate: GuardApprovalGatePublicConfig | null; allowFiles?: CigarAllowFiles };
 
-export function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate }: Props) {
+export function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }: Props) {
   const [scopes, setScopes] = useState<ContextWorkspaceScope[]>([]);
   const [loaded, setLoaded] = useState(false);
   const listable = ready || waking;
@@ -48,7 +49,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
     }).catch((cause) => {
       if (revision.current !== generation || controller.signal.aborted) return;
       // While CIGAR starts the list is asked again once it runs; a failure then is final.
-      const reason = cause instanceof Error ? cause.message : "Context access is unavailable.";
+      const reason = cause instanceof Error ? cause.message : "CIGAR could not list your projects. Try again.";
       failed.current = true; setError(ready ? reason : "Your folders appear once CIGAR is running."); setLoaded(true);
     });
     return () => { revision.current += 1; controller.abort(); };
@@ -66,7 +67,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       if (revision.current === generation && !controller.signal.aborted) {
         if (brief) setPrevious(brief.value);
         setBrief(null);
-        setError(cause instanceof Error ? cause.message : "Context did not return a verified result.");
+        setError(cause instanceof Error ? cause.message : "CIGAR could not finish that. Try again.");
       }
     } finally {
       if (revision.current === generation) setBusy(false);
@@ -74,9 +75,15 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
   }
 
   async function grant(input: AddProjectInput, credentials?: SettingsSaveProofCredentials): Promise<boolean> {
+    // Guard keeps one pick per project, so a second one would only be refused.
+    if (scopes.some((scope) => scope.app === "dashboard" && scope.workspace === input.workspace)) {
+      setError("This project is already added. Remove it first to pick different files.");
+      return false;
+    }
     let granted = false;
     await perform(async (signal) => {
-      const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal, input.app, input.notes);
+      // One pick on this page counts for every app's prompts, so it is never tied to one app.
+      const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal);
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]); granted = true;
     });
@@ -102,41 +109,40 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
     <section className="space-y-4" aria-labelledby={`${id}-projects`} aria-busy={busy}>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div><h3 id={`${id}-projects`} className={versionHeading}>Your projects</h3>
-          <p className={versionLead}>Folders CIGAR may read. Access ends when you turn CIGAR off.</p></div>
+          <p className={versionLead}>Prompts about these folders use the files listed under each one, in every AI app.</p></div>
         {ready ? <div className="flex flex-wrap gap-2">
-          <button className={versionQuiet} type="button" disabled={locked} onClick={refreshScopes}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh context access</button>
-          <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked || scopes.length === 0} onClick={() => manage("clear")}>Clear all context data</button>
+          <button className={versionQuiet} type="button" disabled={locked} onClick={refreshScopes}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh list</button>
+          {scopes.length > 0 ? <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked} onClick={() => manage("clear")}>Remove all projects</button> : null}
         </div> : null}
       </div>
       {!listable ? <p className={empty}>Turn on CIGAR to pick project folders. Folders you already picked come back when it is on.</p> : <>
         {error ? <p role="alert" className="cigar-note">{error}</p> : null}
         {!ready ? <p role="status" className="text-sm text-brand-dark/70">CIGAR is starting. You can change folders once it is running.</p> : null}
-        {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? !error && <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/55">Choose a folder below to get started.</p></div> : <>
-          <div><label htmlFor={`${id}-query`} className={fieldLabel}>What would you like context about?</label>
-            <input id={`${id}-query`} className={versionField} maxLength={4096} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="For example: how releases are reviewed" /></div>
-          <ul className="space-y-3">{scopes.map((scope) => <li key={scope.scope_id}><section className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white")} aria-label={`Context access for ${scope.workspace}`}>
+        {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? !error && <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/60">Add one below only if you want to pick the exact files.</p></div> : <>
+          <div><label htmlFor={`${id}-query`} className={fieldLabel}>Try it: what would you ask your AI?</label>
+            <input id={`${id}-query`} className={versionField} maxLength={4096} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="For example: how do releases work?" /></div>
+          <ul className="space-y-3">{scopes.map((scope) => <li key={scope.scope_id}><section className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white")} aria-label={`Project ${scope.workspace}`}>
             <div className="flex flex-wrap items-start gap-3">
               <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue"><HiMiniFolder className="size-4" /></span>
               <div className="min-w-0 flex-1 space-y-1.5">
                 <p className="break-all font-mono text-sm font-semibold text-brand-dark">{scope.workspace}</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {scope.revoked ? <Tag tone="amber">Access revoked</Tag> : <Tag tone="blue">{scope.app === "dashboard" ? "Review context" : harnessDisplayName(scope.app)}</Tag>}
-                  {!scope.revoked ? <Tag tone="slate">local memory</Tag> : null}
-                  {scope.native_policy_facts ? <Tag tone="slate">Guard policy facts</Tag> : null}
-                  {scope.sharing?.mode === "shared_broker" ? <Tag tone="green">Shared context</Tag> : null}
+                  {scope.revoked ? <Tag tone="amber">Turned off by policy</Tag> : <Tag tone="blue">{scope.app === "dashboard" ? "Every app" : harnessDisplayName(scope.app)}</Tag>}
+                  {scope.native_policy_facts ? <Tag tone="slate">Guard safety facts</Tag> : null}
+                  {scope.sharing?.mode === "shared_broker" ? <Tag tone="green">Shared notes</Tag> : null}
                 </div>
               </div>
             </div>
             <div className="space-y-1 text-sm leading-6 text-brand-dark/70">
-              {scope.revoked ? <p>Access revoked by policy. Grant access again to continue.</p> : null}
-              {scope.sharing?.mode === "shared_broker" ? <p>Shared context · {scope.sharing.notes.read ? "reviewed notes allowed" : "shared notes not granted"}{scope.sharing.notes.propose ? " · connection proposals allowed" : ""}. Each paired connection has a five-minute lease.</p> : null}
-              {scope.receipt_window?.enabled ? <p>Recent native receipt facts: {scope.receipt_window.retained} of at most 16 retained. This window covers recorded decisions in this exact workspace, not execution confirmation or a complete activity history.</p> : null}
-              {scope.receipt_window?.enabled && scope.receipt_window.dropped !== "0" ? <p role="status" className="text-amber-800">Some optional receipt updates were missed. Earlier context was invalidated; durable Guard evidence is unchanged.</p> : null}
+              {scope.revoked ? <p>A policy on this computer turned this project off. Add it again once that policy allows it.</p> : null}
+              {scope.sharing?.mode === "shared_broker" ? <p>Shared notes · {scope.sharing.notes.read ? "it can read notes you approved" : "it cannot read shared notes"}{scope.sharing.notes.propose ? " and suggest new ones" : ""}. A connected app stays connected for five minutes at a time.</p> : null}
+              {scope.receipt_window?.enabled ? <p>Remembers Guard's last {scope.receipt_window.retained} of up to 16 decisions in this folder, so your AI can see them. It is not a full history.</p> : null}
+              {scope.receipt_window?.enabled && scope.receipt_window.dropped !== "0" ? <p role="status" className="text-amber-800">Some recent Guard decisions were missed, so CIGAR started these notes fresh. Guard's own records are unchanged.</p> : null}
             </div>
             {scope.sources.length ? <ul className="divide-y divide-brand-dark/[0.07] rounded-xl border border-brand-dark/[0.08]">
               {scope.sources.map((source) => <li key={source.source_id} className="flex flex-wrap items-center justify-between gap-2 py-1 pl-3 pr-1 text-sm">
                 <span className="flex min-w-0 items-center gap-2 break-all font-mono text-xs text-brand-dark/80"><HiMiniDocumentText aria-hidden="true" className="size-4 shrink-0 text-brand-dark/40" />{source.path}</span>
-                <button className={versionQuiet + " min-h-9 px-2.5 text-xs"} type="button" disabled={locked} onClick={() => manage("withdraw", scope.scope_id, source.source_id)}>Withdraw {source.path}</button>
+                <button className={versionQuiet + " min-h-9 px-2.5 text-xs"} type="button" disabled={locked} aria-label={`Stop reading ${source.path}`} onClick={() => manage("withdraw", scope.scope_id, source.source_id)}>Stop reading</button>
               </li>)}
             </ul> : null}
             <div className="flex flex-wrap gap-2">
@@ -148,28 +154,28 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
                   setBrief({ scope: current, value: value.brief });
                   setScopes((values) => values.map((item) => item.scope_id === current.scope_id ? current : item));
                 }
-              })}>Prepare cited context</button>
-              <button className={versionButton} type="button" disabled={locked || scope.revoked} onClick={() => manage("refresh", scope.scope_id)}>Refresh selected files</button>
-              <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked} onClick={() => manage("revoke", scope.scope_id)}>Revoke workspace access</button>
+              })}>Show what your AI would get</button>
+              <button className={versionButton} type="button" disabled={locked || scope.revoked} onClick={() => manage("refresh", scope.scope_id)}>Read files again</button>
+              <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked} onClick={() => manage("revoke", scope.scope_id)}>Remove project</button>
             </div>
             {!scope.revoked && scope.sharing?.mode === "shared_broker" && scope.sharing.notes.read ? <ContextNotesPanel scope={scope} disabled={locked || dirty} gate={gate}
               onChanged={() => { setBrief(null); setPrevious(null); refreshScopes(); }} /> : null}
           </section></li>)}</ul>
         </>}
-        {brief ? <section aria-label="Prepared context" className="guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5">
-          <div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-semibold text-brand-dark">Cited context</h4><Tag tone="slate">{brief.value.rendered_tokens} tokens</Tag></div>
-          <p className="text-sm text-brand-dark/70">Supporting data verified when prepared. Use a fresh context after files or access change.</p>
+        {brief ? <section aria-label="What your AI would get" className="guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5">
+          <h4 className="text-sm font-semibold text-brand-dark">What your AI would get</h4>
+          <p className="text-sm text-brand-dark/70">Checked just now. Try again after you change files or projects.</p>
           <div className="max-h-96 space-y-3 overflow-auto rounded-xl bg-white p-3 text-sm leading-6 text-slate-700">
             {brief.value.excerpts.map((excerpt, index) => <p key={index} className="whitespace-pre-wrap break-words">{excerpt.text}</p>)}
           </div>
-          <details className="group"><summary className={summary}><HiMiniChevronRight aria-hidden="true" className="size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" />Sources and revisions</summary>
+          <details className="group"><summary className={summary}><HiMiniChevronRight aria-hidden="true" className="size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" />Where each part came from</summary>
             <ul className="mt-2 space-y-2 pl-5 text-sm">{brief.value.citations.map((citation, index) => <li key={`${citation.node_id}-${index}`}>
-              {brief.scope.sources.find((source) => source.source_id === citation.source)?.path ?? (citation.source === "guard:notes" ? "Reviewed shared notes" : citation.source === "guard:receipts" ? "Native Guard receipt facts" : "Native Guard policy facts")}, lines {citation.start_line}–{citation.end_line}
+              {brief.scope.sources.find((source) => source.source_id === citation.source)?.path ?? (citation.source === "guard:notes" ? "Reviewed shared notes" : citation.source === "guard:receipts" ? "Guard's recent decisions" : "Guard's safety facts")}, lines {citation.start_line}–{citation.end_line}
               <span className="block break-all font-mono text-xs text-slate-500">{citation.document_digest}</span>
             </li>)}</ul>
           </details>
-          {previous ? <details className="group/prev"><summary className={summary}><HiMiniChevronRight aria-hidden="true" className="size-4 transition-transform group-open/prev:rotate-90 motion-reduce:transition-none" />Compare with earlier context</summary>
-            <p className="my-2 pl-5 text-sm text-slate-600">Earlier context is historical and may no longer apply.</p>
+          {previous ? <details className="group/prev"><summary className={summary}><HiMiniChevronRight aria-hidden="true" className="size-4 transition-transform group-open/prev:rotate-90 motion-reduce:transition-none" />Compare with the last try</summary>
+            <p className="my-2 pl-5 text-sm text-slate-600">From before your last change, so it may be out of date.</p>
             <div className="max-h-64 space-y-3 overflow-auto pl-5 text-sm">
               {previous.excerpts.map((excerpt, index) => <p key={index} className="whitespace-pre-wrap break-words">{excerpt.text}</p>)}
             </div>
@@ -177,9 +183,10 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
         </section> : null}
       </>}
     </section>
-    {ready ? <AddProjectPanel key={cleared} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} agentsAllowed={agentsAllowed} sharingAllowed={sharingAllowed}
+    {ready ? <AddProjectPanel key={cleared} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
       executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0}
       active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
-    <ContextAgentsPanel ready={ready} enabled={agentsAllowed} dirty={dirty} generation={generation} scopes={scopes} gate={gate} />
+    <ContextAgentsPanel ready={ready} enabled={agentsAllowed} dirty={dirty} generation={generation} scopes={scopes} gate={gate}
+      sharingAllowed={sharingAllowed} onGranted={(scope) => setScopes((values) => [...values, scope])} />
   </div>;
 }

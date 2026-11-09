@@ -159,6 +159,11 @@ pub(super) fn answer(
             auth_token.as_deref(),
             now_micros()?,
         )?;
+        let linked = crate::desktop_review_link::with_desktop_link(
+            linked,
+            Path::new(context.guard_home),
+            approval_url,
+        );
         respond(
             context.harness,
             &shown,
@@ -202,7 +207,7 @@ pub(super) fn answer(
 /// `hook_native_review_approval.py`). The queue write proves the bridge live
 /// and links its wait, so an approval releases the original call; a bridge
 /// that is gone leaves the request a manual retry.
-fn live_wait_facts(context: &Context<'_>) -> Option<Value> {
+pub(super) fn live_wait_facts(context: &Context<'_>) -> Option<Value> {
     if canonical_harness(context.harness) != CODEX {
         return None;
     }

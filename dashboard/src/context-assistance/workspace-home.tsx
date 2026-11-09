@@ -1,19 +1,15 @@
-import { useId } from "react";
-import { HiMiniArrowPath, HiMiniArrowRight, HiMiniCheckCircle } from "react-icons/hi2";
+import { useId, type CSSProperties } from "react";
+import { HiMiniArrowPath, HiMiniDocumentText, HiMiniLockClosed, HiMiniSparkles } from "react-icons/hi2";
+import { CigarAllowFilesButton, type CigarAllowFiles } from "./allow-files";
 import { CigarSetupAction, CigarSetupProgress, type CigarOneClick } from "./one-click-setup";
 import { contextStatusCopy } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 import { cigarHomeCopy, type CigarTab } from "./workspace-model";
 
-const FACTS = [
-  "Finds your project from the folder your AI app runs in.",
-  "Skips secrets, keys, hidden files and anything your .gitignore leaves out.",
-  "Adds nothing when nothing matches.",
-] as const;
-
 type Props = {
   status: ContextAssistanceStatus | null;
   setup: CigarOneClick;
+  allowFiles: CigarAllowFiles;
   loading: boolean;
   actionDisabled: boolean;
   canStop: boolean;
@@ -24,7 +20,7 @@ type Props = {
   onOpen: (tab: CigarTab) => void;
 };
 
-/** The whole default experience: is CIGAR on, one switch, one sentence. */
+/** The top of every CIGAR section: what it does, whether it is on, and the one button that matters. */
 export function CigarHome(props: Props) {
   const id = useId();
   const { status, setup } = props;
@@ -40,15 +36,46 @@ export function CigarHome(props: Props) {
         <button type="button" className="cigar-icon-button" aria-label="Refresh status" title="Refresh status"
           disabled={props.refreshDisabled} onClick={props.onRefresh}><HiMiniArrowPath aria-hidden="true" /></button>
       </div>
-      <h2 id={id + "-title"}>{copy.headline}</h2>
-      <p className="cigar-home-detail">{copy.detail}</p>
-      {copy.setupHint ? <button type="button" className="cigar-text-button" onClick={() => props.onOpen("runtime")}>Open Settings<HiMiniArrowRight aria-hidden="true" /></button> : null}
+      <h2 id={id + "-title"}>Give your AI the right pages, not the whole book.</h2>
+      <p className="cigar-home-detail"><strong>{copy.headline}.</strong> {copy.detail}</p>
+      {copy.setupHint ? <CigarAllowFilesButton allow={props.allowFiles} className="cigar-button cigar-button-solid cigar-allow-hero"
+        caption="Secrets, keys, hidden files and anything your .gitignore leaves out stay skipped." /> : null}
       <CigarSetupAction setup={setup} status={status} disabled={props.actionDisabled} canStop={props.canStop}
         stopDisabled={props.stopDisabled} onStop={props.onStop} onOpen={props.onOpen} />
       <CigarSetupProgress setup={setup} />
     </div>
-    <ul className="cigar-facts" aria-label="What CIGAR does">
-      {FACTS.map((fact) => <li key={fact}><HiMiniCheckCircle aria-hidden="true" />{fact}</li>)}
-    </ul>
+    <CigarPromptDemo />
   </section>;
+}
+
+const DEMO_FILES = [
+  { path: "src/components/Header.tsx", match: "lines 12–40" },
+  { path: "src/api/orders.ts" },
+  { path: "src/styles/header.css", match: "lines 1–18" },
+  { path: "README.md" },
+  { path: ".env", locked: true },
+  { path: "tests/checkout.test.ts" },
+] as const;
+
+/** A worked example of one prompt: two files match, a secret file is never read. */
+export function CigarPromptDemo() {
+  return <figure className="cigar-demo" aria-label="Example: for the prompt Make the header blue, CIGAR picks the header component and its styles, and never reads the .env file.">
+    <div className="cigar-demo-prompt" aria-hidden="true">
+      <span className="cigar-demo-you">You</span>
+      <span className="cigar-demo-ask">Make the header blue</span>
+    </div>
+    <ul className="cigar-demo-files" aria-hidden="true">
+      {DEMO_FILES.map((file, index) => <li key={file.path} style={{ "--cigar-demo-row": index } as CSSProperties}
+        data-match={"match" in file ? "true" : undefined} data-locked={"locked" in file ? "true" : undefined}>
+        {"locked" in file ? <HiMiniLockClosed aria-hidden="true" /> : <HiMiniDocumentText aria-hidden="true" />}
+        <code>{file.path}</code>
+        {"match" in file ? <span className="cigar-demo-tag">{file.match}</span> : null}
+        {"locked" in file ? <span className="cigar-demo-tag">never read</span> : null}
+      </li>)}
+    </ul>
+    <figcaption className="cigar-demo-result">
+      <HiMiniSparkles aria-hidden="true" />
+      <span>Your AI gets those two pieces, each with the file and lines it came from.</span>
+    </figcaption>
+  </figure>;
 }

@@ -26,6 +26,29 @@ def configure_context_parser(subparsers: argparse._SubParsersAction[argparse.Arg
         action.set_defaults(context_kind=kind)
         action.add_argument("--guard-home", default=argparse.SUPPRESS)
         action.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    from .context_usage_commands import configure as configure_usage
+
+    configure_usage(actions)
+
+    lean = actions.add_parser(
+        "lean",
+        help="Pick when Codex sums up older turns in a long session (on --limit N, off or status)",
+        description=(
+            "Sets Codex's model_auto_compact_token_limit to the size you pick. A smaller chat is not a "
+            "cheaper one: after each summary Codex reads again, at full price, the files it had already "
+            "read, so this can raise the bill. Guard sets no size of its own."
+        ),
+    )
+    lean.set_defaults(context_kind="lean")
+    lean.add_argument("lean_action", nargs="?", choices=("on", "off", "status"), default="status")
+    lean.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="with on: sum up once a session passes this many tokens (10,000 to 10,000,000)",
+    )
+    lean.add_argument("--guard-home", default=argparse.SUPPRESS)
+    lean.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
     from .context_assistance_versions_commands import configure
 
@@ -42,6 +65,12 @@ def run_context_command(
     from ..native_context_assistance import ContextAssistanceError, control
 
     output = output_stream if output_stream is not None else sys.stdout
+    if args.context_kind == "lean":
+        return _run_lean(args, output)
+    if args.context_kind == "usage":
+        from .context_usage_commands import run
+
+        return run(args, output)
     try:
         home = resolve_guard_home(args.guard_home)
         if args.context_kind == "versions":
@@ -106,3 +135,48 @@ def run_context_command(
         file=output,
     )
     return 0
+
+
+def _run_lean(args: argparse.Namespace, output: TextIO) -> int:
+    import os
+    from pathlib import Path
+
+    from ..codex_lean_sessions import LeanSessionsError, disable, enable, render, status
+    from ..config import resolve_guard_home
+
+    try:
+        home, guard_home = Path.home(), resolve_guard_home(args.guard_home)
+        if args.lean_action == "on":
+            state = enable(home, guard_home, os.environ, limit=args.limit)
+        else:
+            state = (disable if args.lean_action == "off" else status)(home, guard_home, os.environ)
+    except LeanSessionsError as error:
+        return _lean_failure(args, output, error.code)
+    except TimeoutError:
+        return _lean_failure(args, output, "codex_config_busy")
+    except (OSError, RuntimeError, ValueError):
+        return _lean_failure(args, output, "codex_config_unavailable")
+    if args.json:
+        print(json.dumps(state, sort_keys=True), file=output)
+    else:
+        render(state, output)
+    return 0
+
+
+_LEAN_FAILURES = {
+    "codex_lean_limit_required": (
+        "Pick a size: hol-guard context lean on --limit 100000. Guard sets no size of its own. Nothing was changed."
+    ),
+    "codex_lean_limit_invalid": "The limit must be a whole number from 10,000 to 10,000,000. Nothing was changed.",
+}
+
+
+def _lean_failure(args: argparse.Namespace, output: TextIO, code: str) -> int:
+    if args.json:
+        print(json.dumps({"schema": "guard-codex-lean-sessions.v1", "status": "error", "code": code}), file=output)
+    else:
+        print(
+            _LEAN_FAILURES.get(code, f"Guard could not change the Codex config ({code}). Nothing was changed."),
+            file=output,
+        )
+    return 1

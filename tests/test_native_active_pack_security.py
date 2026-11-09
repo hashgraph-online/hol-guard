@@ -20,7 +20,10 @@ from codex_plugin_scanner.guard.catalog_delivery import (
 )
 from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore
 from codex_plugin_scanner.guard.catalog_delivery.pack_store import PackReader
-from codex_plugin_scanner.guard.native_command_control_authority_io import hold_command_control_authority_lock
+from codex_plugin_scanner.guard.native_command_control_authority_io import (
+    hold_command_control_authority_lock,
+    write_private_state,
+)
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key
 from codex_plugin_scanner.guard.store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
@@ -34,9 +37,16 @@ revocation_key = script("extension_delivery_revocations").revocation_key
 
 
 @pytest.fixture
-def device(delivery):
+def device(delivery, monkeypatch):
     store = SimpleNamespace(guard_home=delivery.cache.parent / "device")
     store.guard_home.mkdir(mode=0o700)
+    # No resident serves this synthetic home; write the private file the way
+    # the resident's write_private_state op does.
+    monkeypatch.setattr(
+        active_security,
+        "write_native_private_state",
+        lambda current, name, data: write_private_state(current.guard_home, name, data, active_security.MAX_BYTES),
+    )
     seed(store)
     store._extension_control_authority_lock = lambda: hold_command_control_authority_lock(store.guard_home)
 

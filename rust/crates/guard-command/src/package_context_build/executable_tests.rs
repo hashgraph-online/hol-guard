@@ -85,3 +85,95 @@ fn shadowing_manager_earlier_in_path_changes_the_executable_digest() {
 
     assert_ne!(baseline, shadowed);
 }
+
+/// Write the manager once per test. `modified_time_ns` is part of the
+/// executable identity, so rewriting the binary between two calls would change
+/// the digest on its own and hide what the arguments did.
+fn write_uv(root: &Path) {
+    let manager_bin = root.join("uv-bin");
+    std::fs::create_dir_all(&manager_bin).unwrap();
+    let path = manager_bin.join("uv");
+    std::fs::write(&path, "#!/bin/sh\n# uv-v1\n").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+fn uv_digest(root: &Path, arguments: &[&str]) -> String {
+    let manager_bin = root.join("uv-bin");
+    let workspace = root.join("workspace");
+    std::fs::create_dir_all(&workspace).unwrap();
+    let home = root.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let joined = manager_bin.to_str().unwrap().to_owned();
+    let environment = BTreeMap::from([
+        ("HOME".to_owned(), home.to_str().unwrap().to_owned()),
+        ("PATH".to_owned(), joined.clone()),
+    ]);
+    let metadata: Map<String, Value> = serde_json::from_value(json!({
+        "package_manager": "uv",
+        "intent_kind": "sync",
+    }))
+    .unwrap();
+    let args: Vec<String> = arguments.iter().map(|item| (*item).to_owned()).collect();
+    let built = build_package_execution_context(&BuildInput {
+        workspace_dir: workspace.to_str().unwrap(),
+        metadata: &metadata,
+        executable: Some("uv"),
+        executable_args: &args,
+        environment: &environment,
+        process_cwd: workspace.to_str().unwrap(),
+        process_home: home.to_str().unwrap(),
+        process_home_env: home.to_str(),
+        process_path: Some(&joined),
+    })
+    .unwrap();
+    built
+        .components
+        .into_iter()
+        .find(|component| component.name == "package_manager_executable")
+        .unwrap()
+        .digest
+}
+
+#[test]
+fn a_quiet_spelling_keeps_the_executable_digest() {
+    let root = tempfile::tempdir().unwrap();
+    write_uv(root.path());
+    let loud = uv_digest(root.path(), &["sync", "--frozen", "--extra", "dev"]);
+    let quiet = uv_digest(root.path(), &["sync", "-q", "--frozen", "--extra", "dev"]);
+
+    assert_eq!(loud, quiet);
+}
+
+#[test]
+fn an_install_affecting_option_changes_the_executable_digest() {
+    let root = tempfile::tempdir().unwrap();
+    write_uv(root.path());
+    let plain = uv_digest(root.path(), &["sync", "--frozen"]);
+    let with_extra = uv_digest(root.path(), &["sync", "--frozen", "--extra", "dev"]);
+
+    assert_ne!(plain, with_extra);
+}
+
+/// Replacing the manager with a byte-identical copy gives it a new inode and
+/// fresh timestamps. The approval context must not notice: `sha256`, `size`
+/// and the resolved path already pin what will run, so a saved package
+/// approval has to survive a reinstall, a corepack refresh or any other atomic
+/// rewrite that leaves the bytes alone.
+#[test]
+fn replacing_the_manager_with_the_same_bytes_keeps_the_executable_digest() {
+    let root = tempfile::tempdir().unwrap();
+    let manager_bin = root.path().join("manager-bin");
+    write_manager(&manager_bin, "#!/bin/sh\n# bun-v1\n");
+
+    let baseline = executable_digest(root.path(), &[&manager_bin]);
+
+    let replacement = root.path().join("bun-replacement");
+    std::fs::write(&replacement, "#!/bin/sh\n# bun-v1\n").unwrap();
+    std::fs::set_permissions(&replacement, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::rename(&replacement, manager_bin.join("bun")).unwrap();
+
+    assert_eq!(baseline, executable_digest(root.path(), &[&manager_bin]));
+
+    write_manager(&manager_bin, "#!/bin/sh\n# bun-v2\n");
+    assert_ne!(baseline, executable_digest(root.path(), &[&manager_bin]));
+}

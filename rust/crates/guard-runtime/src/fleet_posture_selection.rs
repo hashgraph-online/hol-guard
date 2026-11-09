@@ -104,7 +104,7 @@ pub(super) fn sha256_hex(text: &str) -> String {
 
 /// `keyed_digest`: an HMAC under the per-install secret, so guessable paths
 /// cannot be reversed by a dictionary search.
-fn keyed_digest(key: &[u8], text: &str) -> Result<String, &'static str> {
+pub(super) fn keyed_digest(key: &[u8], text: &str) -> Result<String, &'static str> {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).map_err(|_| ERR_INVALID)?;
     mac.update(text.as_bytes());
     Ok(format!(

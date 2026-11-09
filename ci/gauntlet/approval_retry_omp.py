@@ -14,6 +14,16 @@ from .approval_retry_action import input_path, pinned_file_tool
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE, stage
 from .approval_retry_bash import assessment as bash_assessment
 from .approval_retry_bash import evidence as bash_evidence
+from .approval_retry_marker import CASE as APPROVAL_MARKER_CASE
+from .approval_retry_marker import assessment as marker_assessment
+from .approval_retry_marker import collect as collect_approval_marker
+from .approval_retry_marker import stage as stage_approval_marker
+from .approval_retry_persistent import CASE as APPROVAL_PERSISTENT_CASE
+from .approval_retry_persistent import PACKAGE_CASES as APPROVAL_PERSISTENT_PACKAGE_CASES
+from .approval_retry_persistent import assessment as persistent_assessment
+from .approval_retry_persistent import collect as collect_approval_persistent
+from .approval_retry_persistent import stage as stage_approval_persistent
+from .approval_retry_persistent import write_package_review_config
 from .approval_rows import approval_rows
 from .catalog import Scenario
 from .input_evidence import redact_value
@@ -37,9 +47,19 @@ class OmpReview:
         self.guard_home = fixture.root / "guard-home"
         self.known_ids: set[str] = set()
         stage(fixture.workspace, scenario.id)
+        stage_approval_marker(fixture.workspace, scenario.id, case)
+        stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
-        case["review_policy"] = write_review_config(self.guard_home, file_tool="bash" not in scenario.required_tools)
+        case["review_policy"] = (
+            write_package_review_config(self.guard_home)
+            if scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES
+            else write_review_config(
+                self.guard_home,
+                file_tool="bash" not in scenario.required_tools,
+                intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
+            )
+        )
 
     def approver(self, worker: Any) -> ReviewApprover:
         self.known_ids = {
@@ -65,6 +85,8 @@ class OmpReview:
         replacements: dict[str, str],
     ) -> None:
         case["approval_grants"] = redact_value(approver.report(), replacements)
+        collect_approval_marker(self.fixture.workspace, self.scenario.id, case)
+        collect_approval_persistent(self.fixture.workspace, self.scenario.id, case)
         case["approval_rows"] = approval_rows(worker.store, self.known_ids)
         if self.scenario.oracle == BASH_LIFECYCLE_ORACLE:
             case["bash_lifecycle"] = bash_evidence(
@@ -129,4 +151,4 @@ def assess(
         )
     ):
         return pinned
-    return outcome
+    return persistent_assessment(scenario.id, case, marker_assessment(scenario.id, case, outcome))

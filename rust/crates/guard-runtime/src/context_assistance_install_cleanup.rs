@@ -88,11 +88,34 @@ fn remove_file(path: &Path) -> std::io::Result<()> {
     {
         let mut permissions = fs::symlink_metadata(path)?.permissions();
         if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
             permissions.set_readonly(false);
             fs::set_permissions(path, permissions)?;
         }
     }
     fs::remove_file(path)
+}
+/// Windows briefly refuses to delete a file that an exiting process or a
+/// scanner still holds, and a directory whose deleted files are still pending.
+/// Retry those refusals until the cleanup deadline instead of failing at once.
+fn removed(
+    deadline: Instant,
+    mut remove: impl FnMut() -> std::io::Result<()>,
+) -> Result<(), String> {
+    let mut pause = Duration::from_millis(20);
+    loop {
+        let refused = match remove() {
+            Ok(()) => return Ok(()),
+            Err(e) => e.kind() != std::io::ErrorKind::NotFound,
+        };
+        let now = Instant::now();
+        if !refused || now >= deadline {
+            return Err(error("install_cleanup_failed"));
+        }
+        // The last pause ends at the deadline, so one more attempt runs there.
+        std::thread::sleep(pause.min(deadline - now));
+        pause = (pause * 2).min(Duration::from_millis(500));
+    }
 }
 pub(super) fn remove_collected(
     root: &Path,
@@ -107,20 +130,21 @@ pub(super) fn remove_collected(
         if Instant::now() >= deadline {
             return Err(error("install_cleanup_limit"));
         }
-        if directory {
-            fs::remove_dir(path)
-        } else {
-            remove_file(&path)
-        }
-        .map_err(|_| error("install_cleanup_failed"))?;
+        removed(deadline, || {
+            if directory {
+                fs::remove_dir(&path)
+            } else {
+                remove_file(&path)
+            }
+        })?;
     }
     if Instant::now() >= deadline {
         return Err(error("install_cleanup_limit"));
     }
     if marker.exists() {
-        remove_file(&marker).map_err(|_| error("install_cleanup_failed"))?;
+        removed(deadline, || remove_file(&marker))?;
     }
-    fs::remove_dir(root).map_err(|_| error("install_cleanup_failed"))
+    removed(deadline, || fs::remove_dir(root))
 }
 
 fn roots(home: &Path, job: &store::Job, paths: &[(&str, &str)]) -> Result<(), String> {
@@ -198,4 +222,47 @@ pub(super) fn cleanup(home: &Path, job: &store::Job) -> Result<(), String> {
             ("work", job.slot.as_str()),
         ],
     )
+}
+
+#[cfg(test)]
+mod removal_tests {
+    use super::*;
+
+    #[test]
+    fn a_briefly_held_file_is_removed_once_it_is_released() {
+        let mut refusals = 2;
+        let result = removed(Instant::now() + Duration::from_secs(5), || {
+            if refusals > 0 {
+                refusals -= 1;
+                return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+            }
+            Ok(())
+        });
+        assert_eq!(result, Ok(()));
+        assert_eq!(refusals, 0);
+    }
+
+    #[test]
+    fn a_file_released_just_before_the_deadline_is_removed() {
+        let started = Instant::now();
+        let result = removed(started + Duration::from_millis(500), || {
+            if started.elapsed() < Duration::from_millis(350) {
+                return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+            }
+            Ok(())
+        });
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn a_file_that_stays_held_fails_at_the_deadline() {
+        let started = Instant::now();
+        let result = removed(started + Duration::from_millis(200), || {
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        });
+        assert_eq!(result, Err(error("install_cleanup_failed")));
+        let elapsed = started.elapsed();
+        assert!(elapsed >= Duration::from_millis(200));
+        assert!(elapsed < Duration::from_secs(2));
+    }
 }

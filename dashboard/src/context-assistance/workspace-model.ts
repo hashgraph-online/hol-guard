@@ -1,17 +1,17 @@
 import type { ContextAssistanceStatus } from "./types";
 
-/** The calm home screen has no tabs. These sections live behind the Advanced disclosure. */
+/** Every CIGAR section, in the order people usually need them. Home explains; the rest change things. */
 export const CIGAR_TABS = [
+  { value: "overview", label: "Home" },
+  { value: "access", label: "Projects" },
   { value: "runtime", label: "Settings" },
-  { value: "access", label: "Projects & AI apps" },
   { value: "versions", label: "Updates" },
+  { value: "usage", label: "Usage" },
   { value: "data", label: "Privacy" },
-  { value: "guide", label: "Guides" },
+  { value: "guide", label: "Guide" },
 ] as const;
 
-export type CigarAdvancedTab = typeof CIGAR_TABS[number]["value"];
-/** "overview" is the home screen: Advanced stays closed. */
-export type CigarTab = CigarAdvancedTab | "overview";
+export type CigarTab = typeof CIGAR_TABS[number]["value"];
 
 /** A saved on preference permits a start attempt, not a claim of readiness. */
 export function canStartCigar(status: ContextAssistanceStatus | null, dirty: boolean): boolean {
@@ -46,14 +46,15 @@ export function cigarWillHelpPrompts(status: ContextAssistanceStatus | null): bo
   return !sources.workspace_documents && !sources.source_set_id;
 }
 
+/** `setupHint` asks for the two project-file switches, which the home screen turns on in place. */
 export type CigarHomeCopy = { headline: string; detail: string; setupHint: boolean };
 
 const PROMPT_PROMISE = "Every prompt you send in Claude Code, Codex, Pi or Oh My Pi gets the few project files that match it.";
-const NO_FILES_YET = "Prompts get no project files until Context for AI apps and workspace documents are on in Settings.";
+const NO_FILES_YET = "Prompts get no project files yet, because reading project files is off.";
 
 /** One headline and one sentence for the home screen. Only native state proves CIGAR is on. */
 export function cigarHomeCopy(status: ContextAssistanceStatus | null, loading: boolean, running: boolean): CigarHomeCopy {
-  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
+  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. If you leave this page, it finishes when you come back.", setupHint: false };
   if (!status) {
     if (loading) return { headline: "Checking CIGAR", detail: "One moment.", setupHint: false };
     return { headline: "CIGAR status unavailable", detail: "Guard did not answer. Try refreshing the status.", setupHint: false };

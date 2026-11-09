@@ -209,6 +209,17 @@ fn native_worktree_proof_admits_only_fresh_local_branch_creation() {
         vec![0]
     );
 
+    // Git's option parser permutes, so a branch named after the start point
+    // creates the same checkout as one named before the destination.
+    let trailing_destination = root.join("trailing-child");
+    let trailing_command = format!(
+        "git worktree add --quiet {} HEAD -b trailing-worktree",
+        trailing_destination.display()
+    );
+    let trailing = evaluate(&repository, &enabled, &trailing_command);
+    assert_eq!(trailing.minimum_action, "allow", "{trailing_command}");
+    assert_eq!(trailing.reason_code, "native_exact_safe_worktree_add");
+
     git(
         &repository,
         &[

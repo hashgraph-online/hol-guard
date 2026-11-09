@@ -438,6 +438,41 @@ def _package_manager_launch_environment(
     return {**environment, "PATH": launch_path}
 
 
+def _block_unidentified_npm_package(evaluation: Any) -> Any:
+    """Terminal block when npm would install a package Guard cannot name.
+
+    A review of the command's runner would approve a different package.
+    ``block`` is not an approval.
+    """
+
+    message = "npm configuration adds a package to this npx command, and Guard could not read that package's name."
+    copy = evaluation.user_copy
+    return replace(
+        evaluation,
+        decision="block",
+        policy_action="block",
+        reasons=(
+            {
+                "code": "npm_config_package_unidentified",
+                "message": message,
+                "severity": "high",
+                "source": "guard-local",
+            },
+        ),
+        packages=tuple({**dict(item), "decision": "block"} for item in getattr(evaluation, "packages", ())),
+        risk_summary=message,
+        user_copy=type(copy)(
+            title="Package request blocked",
+            summary=message,
+            next_step="Name the package with --package, or make the npm package setting readable, then retry.",
+            dashboard_url=None,
+            harness_message=message,
+        ),
+        review_settlement=("block", message),
+        record_monitor_evidence=False,
+    )
+
+
 @binds_store_guard_home
 def _build_package_protect_authority(
     *,
@@ -474,6 +509,9 @@ def _build_package_protect_authority(
     )
     if intent is None:
         return None
+    unidentified_npm_package = any(
+        target.source_invalid_reason == "npm_config_package_unidentified" for target in intent.targets
+    )
     if intent.routine_local_runner:
         # A runner the project already pins locally fetches nothing: the native
         # parser resolved the executable inside the installed package and read
@@ -500,6 +538,8 @@ def _build_package_protect_authority(
         external_archive_network_authorized=external_archive_network_authorized,
         retain_external_archive_blob=external_archive_network_authorized,
     )
+    if unidentified_npm_package:
+        evaluation = _block_unidentified_npm_package(evaluation)
     try:
         executable = sanitized_intent.command_tokens[0] if sanitized_intent.command_tokens else None
         executable_args = sanitized_intent.command_tokens[1:] if executable is not None else ()
@@ -520,6 +560,7 @@ def _build_package_protect_authority(
             direct_executable=True,
             cwd=launch_cwd,
             launch_env=launch_environment,
+            package_manager_binding=True,
         )
         if command and executable is not None and str(command[0]) != executable:
             launch_identity["wrapper_resolution"] = {
@@ -573,6 +614,7 @@ def _final_package_protect_authority(
     config: GuardConfig | None,
     current_config_provider: Callable[[], GuardConfig] | None,
     additional_authority_provider: Callable[[], tuple[object | None, dict[str, object] | None]] | None,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> tuple[_PackageProtectAuthority, Any]:
     """Refresh mode, claim required approval, then rebuild authority before spawn."""
 
@@ -605,6 +647,7 @@ def _final_package_protect_authority(
             execution_context=initial.execution_context,
             current_action=initial.current_action,
             claim_saved_approval=True,
+            waited_request_ids=waited_request_ids,
         )
         claimed_action = _protect_action_for_policy_action(claimed_resolution.evaluation.policy_action)
         if not is_execution_permitted(claimed_action):
@@ -711,6 +754,7 @@ def build_package_protect_payload(
     additional_policy_context: dict[str, object] | None = None,
     current_config_provider: Callable[[], GuardConfig] | None = None,
     additional_authority_provider: Callable[[], tuple[object | None, dict[str, object] | None]] | None = None,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> tuple[dict[str, object], int] | None:
     authority = _build_package_protect_authority(
         command=command,
@@ -733,6 +777,7 @@ def build_package_protect_payload(
         execution_context=authority.execution_context,
         current_action=authority.current_action,
         claim_saved_approval=False,
+        waited_request_ids=waited_request_ids,
     ).evaluation
     effective_dry_run = dry_run and not (
         allow_saved_approval_execution and _evaluation_uses_saved_package_approval(evaluation)
@@ -767,6 +812,7 @@ def build_package_protect_payload(
         config=config,
         current_config_provider=current_config_provider,
         additional_authority_provider=additional_authority_provider,
+        waited_request_ids=waited_request_ids,
     )
     try:
         final_projection = native_package_protect_projection(
@@ -881,6 +927,7 @@ def _resolve_stored_package_policy_override(
     current_action: object | None = None,
     claim_saved_approval: bool = True,
     policy_workspaces: tuple[str, ...] | None = None,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> _StoredPackagePolicyResolution:
     """Hydrate saved-policy facts and let the resident decide the override.
 
@@ -911,6 +958,7 @@ def _resolve_stored_package_policy_override(
         policy_workspaces=policy_workspaces,
         current_action=current_action,
         claim_saved_approval=claim_saved_approval,
+        waited_request_ids=waited_request_ids,
     )
     return _StoredPackagePolicyResolution(
         resolved,

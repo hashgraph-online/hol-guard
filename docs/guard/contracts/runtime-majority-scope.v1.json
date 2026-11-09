@@ -325,7 +325,7 @@
       {
         "id": "install-uninstall-doctor",
         "category": "install_config",
-        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` sign-in, sign-out and profile status (a browser OAuth flow for Guard Cloud actions). The commands_support facade imports the dispatcher, which hook_worker also loads, but the dispatcher imports cloud_actions_* only inside its sign-in handlers, so no hook run loads them.",
+        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle. codex_hook_recovery.py/codex_hook_rollback.py are the hook-publication journal, called only from CodexHarnessAdapter._write_authenticated_hook_config_owned, prepare_* migration/backup functions, prepare_install, the shim and cursor prepare functions and the excluded repair/inverse modules. commands_remove_hooks, hook_removal_presence, daemon_stop and commands_repair back the uninstall/repair CLI commands and are imported only by the commands_support facade and the excluded parser/dispatchers. cloud_actions_* and commands_dispatch_cloud_actions back `hol-guard cloud-actions` status, doctor, AI tool setup and the AI tool bridge, all of which use the `hol-guard connect` pairing, plus the one-time removal of sign-ins saved by alpha builds. The commands_support facade imports the dispatcher, which hook_worker also loads, but the dispatcher imports cloud_actions_* only inside its command handlers, so no hook run loads them.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/install_*.py",
           "src/codex_plugin_scanner/guard/cli/uninstall_commands.py",
@@ -334,6 +334,7 @@
           "src/codex_plugin_scanner/guard/cli/doctor_*.py",
           "src/codex_plugin_scanner/guard/cli/desktop_*.py",
           "src/codex_plugin_scanner/guard/cli/daemon_serve.py",
+          "src/codex_plugin_scanner/guard/cli/connect_cloud_actions.py",
           "src/codex_plugin_scanner/guard/cli/connect_flow.py",
           "src/codex_plugin_scanner/guard/cli/connect_sync_result.py",
           "src/codex_plugin_scanner/guard/cli/remote_pair_flow.py",
@@ -509,7 +510,8 @@
         "reason": "Cloud connect, OAuth refresh/DPoP, receipt, runtime-session, supply-chain-bundle and policy-bundle sync transport (runtime/runner.py). Every public entry point (sync_receipts, sync_runtime_session, sync_supply_chain_bundle, sync_local_guard_cloud_proof, prepare_guard_cloud_connect_authorization, repair_guard_cloud_connect_storage, the cloud-review and command-queue workers and the daemon's cloud policy-bundle and managed-controls delivery handlers that import its urlopen/auth/bundle helpers) runs from `guard connect`/`guard sync`, the cloud-review sync worker or the command-queue loop, never inside hook admission, decision or enforcement. The Rust runtime has no HTTP client, so the network, token refresh and retry loop stay in Python by design; the policy computation inside it (payload shaping, scrubbing, cursor/ack arithmetic, verdict digests, bundle verification) already runs in the resident through runner_native_sync/runner_native_authority. The only request-adjacent caller is the Hermes launch credential lookup (guard_run_launch._resolve_hermes_guard_access_token), which reads the cached token and, when it is absent or near expiry, runs the same OAuth refresh HTTP request as `guard sync` before the harness starts. That refresh is network transport the Rust runtime cannot perform; the lookup is best-effort, runs once at the execution boundary after the authority verdict, and never decides admission. Network protection bundle verification runs in the resident through native_network_protection_bundle.py and the network_protection_verify op; runtime/network_protection_bundle.py keeps only the sync state key the saved copy lives under and the status summary read off it, and the hook reads that saved copy in the Rust runtime. The run-side lookup wrapper stays in scope.",
         "path": [
           "src/codex_plugin_scanner/guard/runtime/runner.py",
-          "src/codex_plugin_scanner/guard/runtime/network_protection_bundle.py"
+          "src/codex_plugin_scanner/guard/runtime/network_protection_bundle.py",
+          "src/codex_plugin_scanner/guard/runtime/policy_bundle_failure_ack.py"
         ]
       },
       {
@@ -1060,7 +1062,6 @@
           "_MODE_ACRONYMS",
           "_SEVERITY_COLORS",
           "_KNOWN_MANAGED_INSTALL_MODES",
-          "_protect_guidance_lines",
           "_plain_text_protect",
           "_render_detect",
           "_render_start",
@@ -1207,21 +1208,19 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/claude_code.py",
         "symbols": [
-          "_guard_command_handler",
           "_handler_identity",
           "_is_guard_hook_command",
           "_is_guard_hook_url",
           "_manifest_notes",
           "ClaudeCodeHarnessAdapter._hook_command",
           "ClaudeCodeHarnessAdapter._hook_command_parts",
-          "ClaudeCodeHarnessAdapter._session_start_command_parts",
           "ClaudeCodeHarnessAdapter.prepare_install",
           "ClaudeCodeHarnessAdapter.install",
           "ClaudeCodeHarnessAdapter.uninstall"
         ],
         "entry_points": [],
         "reason": "Claude Code settings install and uninstall (shim notes, settings I/O) and the helpers only they use; the hook entry prune and merge, handler identity and Guard-handler checks run in the native claude_hook_config runner-authority kind.",
-        "evidence": "install, prepare_install and uninstall are invoked only from the excluded install, uninstall and repair dispatchers; the remaining helpers have no reference outside this excluded set. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall are invoked only from the excluded install, uninstall and repair dispatchers; the remaining helpers have no reference outside this excluded set. The SessionStart command builder and handler factory stay in scope because the retained runtime refresh rewrites the SessionStart entry after an upgrade. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "adapter-codex-setup",
@@ -1504,14 +1503,11 @@
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
         "symbols": [
-          "_SCRIPT_LAUNCHERS",
           "recognize_operator_cli",
-          "local_cli_recognition_candidates",
-          "_recognition_candidates",
-          "_first_executable_name"
+          "local_cli_recognition_candidates"
         ],
         "entry_points": [],
-        "evidence": "recognize_operator_cli and local_cli_recognition_candidates are called only from daemon/local_cli_api.py (dashboard-control-api); the excluded private helpers are reached only through them. identify_unlisted_cli, unlisted_cli_invocation_is_safe, is_local_cli_id and UnlistedCliIdentity stay counted. The report validates this reference closure on every run.",
+        "evidence": "recognize_operator_cli and local_cli_recognition_candidates are called only from daemon/local_cli_api.py (dashboard-control-api); both forward to the native local_cli_recognize kind. identify_unlisted_cli, unlisted_cli_invocation_is_safe, is_local_cli_id and UnlistedCliIdentity stay counted. The report validates this reference closure on every run.",
         "reason": "Recognition of operator-supplied CLI commands for the dashboard's local CLI registration flow."
       },
       {
@@ -1606,7 +1602,8 @@
           "_MISSING_HOOK_COMMAND",
           "_UNSAFE_ALLOWLIST",
           "hermes_hook_command_string",
-          "_legacy_guard_pretool_command",
+          "_pretool_plan",
+          "_allowlist_plan",
           "guard_pretool_hook_entry",
           "merge_guard_pretool_hook",
           "remove_guard_pretool_hooks",
@@ -1656,6 +1653,7 @@
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
         "symbols": [
           "_validate_policy_scope",
+          "_undo_unwanted_guard_connect_pairing",
           "_resolve_policy_expiry",
           "_guard_doctor_connect_health_payload",
           "_guard_doctor_oauth_storage_health_payload_from_health",
@@ -1863,10 +1861,11 @@
           "ClineHarnessAdapter.install",
           "ClineHarnessAdapter.uninstall",
           "ClineHarnessAdapter._install_transport",
-          "ClineHarnessAdapter._reconcile_transport"
+          "ClineHarnessAdapter._reconcile_transport",
+          "_install_plan"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall, including transport selection and inactive-transport cleanup used only by them.",
+        "reason": "Cline adapter install and uninstall and the native request helper used only by install; transport selection, inactive-transport cleanup, coverage and blind spots are decided by the native cline_install_plan runner-authority kind, and Python keeps the transport installs, probes and file I/O.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. Install-only imports live inside these methods so the retained module imports only state and detection helpers."
       },
       {
@@ -1910,12 +1909,12 @@
           "install_cline_mcp_proxies",
           "restore_cline_mcp_proxies",
           "_proxy_entry",
-          "_managed_server",
+          "_proxy_plan",
           "_backup_path",
           "_atomic_write_bytes"
         ],
         "entry_points": [],
-        "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall.",
+        "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall; _proxy_plan asks the native cline_install_plan kind which servers to proxy.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -2010,31 +2009,13 @@
         "root_function": true
       },
       {
-        "id": "edge-event-outbox-builders",
-        "category": "async_control_plane",
-        "path": "src/codex_plugin_scanner/guard/edge_events.py",
-        "symbols": [
-          "build_memory_decision_event_envelope",
-          "build_runtime_session_event",
-          "build_access_graph_snapshot_event"
-        ],
-        "entry_points": [],
-        "reason": "Building Cloud edge events for queued memory decisions, runtime session reports and access-graph snapshots. These are assembled by background delivery and the supervisor, after any hook decision has returned.",
-        "evidence": "build_memory_decision_event_envelope is called only from memory_decision_outbox.py, build_runtime_session_event only from runtime/runner.py and build_access_graph_snapshot_event only from access_graph_events.py; all three callers are outside runtime scope. The retained receipt, policy and harness-usage builders do not reference them, and the report validates this reference closure on every run."
-      },
-      {
         "id": "unlisted-cli-check-for-mcp-probe",
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
         "symbols": [
-          "_INTERPRETER_NAMES",
-          "_RESERVED_TOOL_NAMES",
           "catalog_owned_executables",
           "unlisted_cli_invocation_is_safe",
-          "is_reserved_tool_name",
-          "_safe_primary_segment",
-          "_is_interpreter_name",
-          "_normalize_tool_name"
+          "_safe_primary_segment"
         ],
         "entry_points": [],
         "reason": "unlisted_cli_invocation_is_safe decides whether local MCP probing may start an unlisted CLI to list its tools. It runs only during discovery probing, never on a hook or proxy request. The operator CLI recognition helpers in this module are already excluded by operator-cli-recognition-api.",
@@ -2113,11 +2094,12 @@
         "path": "src/codex_plugin_scanner/guard/policy_bundle_delivery.py",
         "symbols": [
           "validated_managed_policy_delivery",
-          "effective_policy_bundle_acknowledgement"
+          "effective_policy_bundle_acknowledgement",
+          "policy_bundle_failure_acknowledgement"
         ],
         "entry_points": [],
-        "reason": "Validating a managed policy delivery received from Cloud and building the acknowledgement the supervisor reports back. Both run in background sync, not when a hook or MCP proxy request is decided.",
-        "evidence": "validated_managed_policy_delivery is called only from runtime/managed_controls_sync.py and daemon/managed_policy_delivery.py, and effective_policy_bundle_acknowledgement only from runtime/runner.py; all three callers are outside runtime scope. The retained effective_projection_digest and policy_bundle_acknowledgement_payload do not reference them, and the report validates this reference closure on every run."
+        "reason": "Validating a managed policy delivery received from Cloud and building the acknowledgements the supervisor reports back, including the failed one for a bundle that no longer validates. Both run in background sync, not when a hook or MCP proxy request is decided.",
+        "evidence": "validated_managed_policy_delivery is called only from runtime/managed_controls_sync.py and daemon/managed_policy_delivery.py, effective_policy_bundle_acknowledgement only from runtime/runner.py, and policy_bundle_failure_acknowledgement only from runtime/policy_bundle_failure_ack.py; all four callers are outside runtime scope. The retained effective_projection_digest and policy_bundle_acknowledgement_payload do not reference them, and the report validates this reference closure on every run."
       },
       {
         "id": "aibom-inventory-instruction-roles",

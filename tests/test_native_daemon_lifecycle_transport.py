@@ -461,3 +461,24 @@ def test_a_stale_deadline_code_is_not_read_as_the_next_attempts_failure(monkeypa
     with pytest.raises(transport.NativeDaemonLifecycleError, match="runtime_unavailable:x"):
         transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
     assert len(calls) == 2
+
+
+def test_a_busy_client_lease_is_retried_inside_the_caller_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    timeouts: list[float] = []
+
+    def request(**kwargs):
+        if len(timeouts) < 1:
+            timeouts.append(kwargs["timeout_seconds"])
+            clock[0] += 1.0
+            return None
+        return _answer(kwargs, timeouts)
+
+    monkeypatch.setattr(transport, "_resident_request", request)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "native_resident_lease_busy")
+
+    payload = transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
+
+    assert payload == {"ephemeral": False}
+    assert timeouts == [pytest.approx(30.0), pytest.approx(29.0)]

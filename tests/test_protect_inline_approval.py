@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import io
 import os
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -195,10 +196,11 @@ def test_request_text_cannot_restyle_the_prompt(
     assert "pkg?[2Jcleared" in shown
 
 
-def test_retry_line_is_quoted_and_names_the_manager_the_shim_wraps() -> None:
+def test_retry_line_is_quoted_and_names_the_manager_the_shim_wraps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(inline, "approval_resolution_invoked_from_agent", lambda _env: False)
     payload = _paused_payload()
     payload["request"] = {"command": ["/opt/real/bin/bun", "add", "left-pad; rm -rf ~"]}
-    assert inline.protect_command_text(payload) == "bun add 'left-pad; rm -rf ~'"
+    assert "Then run it again: bun add 'left-pad; rm -rf ~'" in _plain_text_protect(payload)
 
 
 def test_approval_made_elsewhere_while_answering_still_runs_the_install(
@@ -293,9 +295,10 @@ def test_a_resident_that_still_pauses_the_install_is_not_talked_out_of_it(
 ) -> None:
     """Only the resident lifts a pause; an approval alone never rewrites its verdict."""
 
-    assert _run_shim_protect(
-        tmp_path, terminal, monkeypatch, timeout_seconds=120, resident_lifts_the_pause=False
-    ) == (1, 2)
+    assert _run_shim_protect(tmp_path, terminal, monkeypatch, timeout_seconds=120, resident_lifts_the_pause=False) == (
+        1,
+        2,
+    )
 
 
 def test_a_zero_approval_wait_never_holds_the_install_at_a_prompt(
@@ -307,3 +310,23 @@ def test_a_zero_approval_wait_never_holds_the_install_at_a_prompt(
     assert _run_shim_protect(tmp_path, terminal, monkeypatch, timeout_seconds=0) == (1, 1)
     assert approvals == []
     assert terminal.shown() == ""
+
+
+def test_gate_messages_reach_the_terminal_before_the_install_runs(
+    tmp_path: Path, terminal: _Terminal, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The approval gate tells the person on stderr that it is waiting for their
+    # authenticator code. The shim captures Guard's stderr and prints it after Guard
+    # exits, so the line has to reach the terminal while the approval is recorded,
+    # before "Allowed once", not after the install has started.
+    def approve(args: argparse.Namespace, **_kwargs: object) -> dict[str, object]:
+        print("HOL Guard is waiting for your authenticator code.", file=sys.stderr, flush=True)
+        return {"resolved": True, "request_id": args.request_id}
+
+    monkeypatch.setattr(approval_commands, "run_approval_command", approve)
+    terminal.type("y\n")
+    result = _ask(terminal, _Store(tmp_path))
+    assert result is not None and result["resolved"] is True
+    shown = terminal.shown()
+    assert shown.index("waiting for your authenticator code") < shown.index("Allowed once. Running the install.")
+    assert "waiting for your authenticator code" not in capsys.readouterr().err

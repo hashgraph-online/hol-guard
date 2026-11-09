@@ -15,7 +15,10 @@ mod tests;
 mod tsx_tests;
 
 use crate::contained_argv::{
-    contained_runner_call, jest_contained_call, mocha_contained_call, npm_exec_inert_option,
+    ava_contained_call, borp_contained_call, contained_runner_call, cucumber_contained_call,
+    jasmine_contained_call, jest_contained_call, lab_contained_call, mocha_contained_call,
+    npm_exec_inert_option, poku_contained_call, qunit_contained_call, tap_contained_call,
+    tape_contained_call, tsd_contained_call, uvu_contained_call,
 };
 use crate::contained_node_tool::{entry_tool, supported_tool_in, writes_or_chains, ToolMode};
 use crate::CanonicalCommandV1;
@@ -165,9 +168,15 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
     let (flags, rest) = rest.split_at(crate::contained_argv::tsx_runner_flag_count(rest));
     let named = |script: &String| crate::contained_argv::workspace_test_script(script);
     if crate::contained_argv::tsx_runner_test_mode(flags) {
-        // Node runs each remaining word as a test file of its own, so a word
-        // outside the workspace is code the run loads rather than inert argv.
-        return !rest.is_empty() && rest.iter().all(named);
+        // Node runs each remaining word as a test file of its own, walks a
+        // directory for the files inside it, or discovers them itself when the
+        // run names none. A word that leaves the workspace is code the run
+        // loads rather than inert argv, so the path still has to stay inside
+        // it -- but which leaf names count as tests is Node's own business,
+        // and `node --test` already takes the same paths without asking.
+        return rest
+            .iter()
+            .all(|value| crate::contained_argv::workspace_script_path(value));
     }
     matches!(rest, [script, ..] if named(script))
 }
@@ -517,6 +526,17 @@ fn local_runner_entry_call(arguments: &[String]) -> bool {
     matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_jest_entry(&entry.replace('\\', "/")) && jest_contained_call(rest))
         || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_ava_entry(&entry.replace('\\', "/")) && ava_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_jasmine_entry(&entry.replace('\\', "/")) && jasmine_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_qunit_entry(&entry.replace('\\', "/")) && qunit_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_uvu_entry(&entry.replace('\\', "/")) && uvu_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tape_entry(&entry.replace('\\', "/")) && tape_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tsd_entry(&entry.replace('\\', "/")) && tsd_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_tap_entry(&entry.replace('\\', "/")) && tap_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_borp_entry(&entry.replace('\\', "/")) && borp_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_poku_entry(&entry.replace('\\', "/")) && poku_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_lab_entry(&entry.replace('\\', "/")) && lab_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_cucumber_entry(&entry.replace('\\', "/")) && cucumber_contained_call(rest))
 }
 
 /// The mode the supported tool behind this command runs in, read through the
@@ -792,6 +812,17 @@ pub(super) fn readonly_test_reason(
         "vitest" => crate::contained_argv::vitest_runs_once(arguments),
         "jest" => jest_contained_call(arguments),
         "mocha" => mocha_contained_call(arguments),
+        "ava" => ava_contained_call(arguments),
+        "jasmine" => jasmine_contained_call(arguments),
+        "qunit" => qunit_contained_call(arguments),
+        "uvu" => uvu_contained_call(arguments),
+        "tape" => tape_contained_call(arguments),
+        "tsd" => tsd_contained_call(arguments),
+        "tap" => tap_contained_call(arguments),
+        "borp" => borp_contained_call(arguments),
+        "poku" => poku_contained_call(arguments),
+        "lab" => lab_contained_call(arguments),
+        "cucumber-js" => cucumber_contained_call(arguments),
         "node" | "nodejs" => local_runner_entry_call(arguments),
         _ => false,
     };

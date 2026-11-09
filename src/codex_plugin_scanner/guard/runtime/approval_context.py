@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
@@ -139,6 +140,32 @@ def build_approval_context_token(
     return cast(str, result["token"])
 
 
+def build_consumer_approval_context_token(request: Mapping[str, object]) -> str:
+    """Build a consumer artifact's approval-context token natively.
+
+    ``request`` carries the subject (a detected artifact or a removed one's
+    stored snapshot), the launch and normalized cwd, the workspace, the
+    detector telemetry, the policy component and the sandbox analysis. The
+    runtime composes the components, builds the launch identity from the
+    ambient environment and returns the token.
+    """
+
+    fields: dict[str, object] = {
+        **request,
+        "extension_control_digest": current_extension_control_binding_digest(),
+    }
+    try:
+        result = _context_digest_result(
+            "consumer_approval_context_token",
+            {"request": {**fields, "launch_env": dict(os.environ)}},
+        )
+    except NativeContextDigestUnavailableError:
+        # The launch environment carries credentials, so it stays out of the
+        # degraded material; the unbound prefix fails every validation path.
+        return _unbound_context_digest("approval-context-token", material=fields)
+    return cast(str, result["token"])
+
+
 def approval_context_token_is_well_formed(token: object, *, keep_prefixed_when_unavailable: bool = False) -> bool:
     """Whether a stored value is a well-formed v1 approval-context token.
 
@@ -184,6 +211,7 @@ def build_runtime_launch_identity(
     cwd: Path | None = None,
     home_dir: Path | None = None,
     launch_env: Mapping[str, str] | None = None,
+    package_manager_binding: bool = False,
 ) -> dict[str, object]:
     """Content-bind an executable and any local code-bearing entrypoint.
 
@@ -206,6 +234,7 @@ def build_runtime_launch_identity(
         cwd=cwd,
         home_dir=home_dir,
         launch_env=launch_env,
+        package_manager_binding=package_manager_binding,
     )
 
 

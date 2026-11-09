@@ -206,3 +206,48 @@ def test_compiled_lane_hands_a_stale_session_to_the_python_command(native_hook_f
 
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout == "fallback ['a b', '雪'] {\"hook_event_name\":\"SessionStart\"}\n"
+
+
+@posix_only
+def test_python_refresh_moves_an_upgraded_install_back_onto_the_native_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.adapters import claude_code
+
+    context = _own_home_context(tmp_path, monkeypatch)
+    runtime = tmp_path / "hol-guard-runtime"
+    _use_runtime(monkeypatch, runtime, _BOTH_FEATURES)
+    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:43123")
+    stale = list(claude_hook_argv.session_start_command_parts(context))
+    lane = json.loads(stale[4])
+    lane["runtime_build"] = "0.0.0+" + "b" * 40
+    stale[4] = json.dumps(lane)
+    user_hook = {"type": "command", "command": "echo mine"}
+    settings_path = context.home_dir / ".claude" / "settings.json"
+    settings_path.parent.mkdir()
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [
+                        {"matcher": "startup", "hooks": [user_hook]},
+                        {"hooks": [config.guard_command_handler(tuple(stale), timeout=10)]},
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    claude_code.ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(
+        home_dir=context.home_dir, workspace_dir=context.workspace_dir, guard_home=context.guard_home
+    )
+
+    entries = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
+    handlers = [handler for entry in entries for handler in entry["hooks"]]
+    assert user_hook in handlers
+    argvs = [config.command_handler_argv(handler) for handler in handlers if handler != user_hook]
+    lanes = [argv for argv in argvs if argv and argv[2:3] == (claude_hook_argv.NATIVE_CLAUDE_SESSION_START_MODE,)]
+    expected = claude_hook_argv.session_start_command_parts(context)
+    assert lanes == [expected] * len(config.CLAUDE_GUARD_SESSION_START_MATCHERS)
+    assert json.loads(lanes[0][4])["runtime_build"] == "9.9.9+" + "a" * 40

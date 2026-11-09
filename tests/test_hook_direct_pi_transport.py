@@ -49,7 +49,7 @@ def _worker(client: _Client | None, guard_home: Path, routes: list[str] | None =
     transport = None if client is None else (Path("/bin/resident"), client)
     return SimpleNamespace(
         guard_home=guard_home,
-        policy_snapshot_publisher=SimpleNamespace(direct_evidence_transport=lambda: transport),
+        policy_snapshot_publisher=SimpleNamespace(direct_hook_transport=lambda: transport),
         metrics=SimpleNamespace(record_route=(routes if routes is not None else []).append),
         prepare_workspace_policy=lambda workspace, *, deadline: None,
     )
@@ -212,6 +212,39 @@ def test_the_daemon_writes_an_answer_without_the_worker(tmp_path: Path) -> None:
     assert _handle(_worker(client, tmp_path), "omp") == [RESPONSE]
     request = json.loads(client.calls[0]["payload"])["request"]  # pyright: ignore[reportArgumentType]
     assert "hook_env" not in request["payload"]
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@pytest.mark.parametrize("state", ["missing_accessor", "mismatched_home", "home_oserror", "home_runtimeerror"])
+def test_ineligible_direct_home_skips_rpc_and_runs_daemon_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, state: str
+) -> None:
+    from tests.test_native_policy_snapshot_direct_lane import _publisher
+
+    client = _Client(ANSWER)
+    worker = _worker(client, tmp_path)
+    transport = (Path("/bin/resident"), client)
+    if state == "missing_accessor":
+        worker.policy_snapshot_publisher = SimpleNamespace(direct_evidence_transport=lambda: transport)
+    else:
+        publisher = _publisher(tmp_path)
+        publisher._last_runtime_status = SimpleNamespace(identity=SimpleNamespace(path=str(transport[0])))
+        publisher._client_request = client
+        monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "home"))
+        publisher.bind_direct_lane_daemon_home(tmp_path / "different-home")
+        if state.startswith("home_"):
+
+            def fail_home(_cls):
+                raise OSError() if state == "home_oserror" else RuntimeError()
+
+            monkeypatch.setattr(Path, "home", classmethod(fail_home))
+        worker.policy_snapshot_publisher = publisher
+        assert publisher.direct_evidence_transport() == transport
+    prepared = []
+    worker.prepare_workspace_policy = lambda workspace, *, deadline: prepared.append(workspace)
+    assert _handle(worker, harness) == [{"reason_code": "native_policy_not_ready"}]
+    assert prepared, "ordinary daemon policy preparation still runs"
+    assert client.calls == []
 
 
 @pytest.mark.parametrize(("harness", "output"), [("pi", DEFER), ("pi", None), ("codex", ANSWER)])

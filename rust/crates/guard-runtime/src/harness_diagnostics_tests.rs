@@ -30,12 +30,25 @@ fn detection(config_paths: &[&str], command_available: bool, artifacts: &[Value]
 }
 
 fn warnings_for(detection: Value, proves: bool, timed_out: bool) -> Vec<String> {
+    let probe = timed_out.then(|| probe(true, true, false));
+    probe_warnings("stubtool", detection, proves, probe.unwrap_or(Value::Null))
+}
+
+fn probe(timed_out: bool, failed: bool, reported_no_artifacts: bool) -> Value {
+    json!({
+        "timed_out": timed_out,
+        "failed": failed,
+        "reported_no_artifacts": reported_no_artifacts,
+    })
+}
+
+fn probe_warnings(harness: &str, detection: Value, proves: bool, probe: Value) -> Vec<String> {
     let answer = dispatch(&json!({
         "op": "warnings",
-        "harness": "stubtool",
+        "harness": harness,
         "executable": "stubcli",
         "command_absence_proves_uninstalled": proves,
-        "runtime_probe_timed_out": timed_out,
+        "runtime_probe": probe,
         "detection": detection,
     }))
     .expect("warnings");
@@ -109,6 +122,39 @@ fn an_unmanaged_config_without_its_command_gets_both_warnings() {
             "stubcli diagnostics timed out before Guard could confirm runtime state.",
         ]
     );
+}
+
+#[test]
+fn a_failed_copilot_probe_is_reported_unless_it_timed_out() {
+    let found = detection(&[], true, &[]);
+    let copilot = |probe: Value| probe_warnings("copilot", found.clone(), true, probe);
+    let failed =
+        "Copilot CLI was found on PATH, but `copilot --help` did not complete successfully.";
+    assert_eq!(copilot(probe(false, true, false)), [failed]);
+    assert_eq!(
+        copilot(probe(true, true, false)),
+        ["stubcli diagnostics timed out before Guard could confirm runtime state."]
+    );
+    assert!(copilot(probe(false, false, false)).is_empty());
+    assert!(copilot(Value::Null).is_empty());
+    assert!(probe_warnings("stubtool", found, true, probe(false, true, false)).is_empty());
+}
+
+#[test]
+fn cursor_listing_no_servers_beside_local_definitions_is_reported() {
+    let server = artifact("mcp_server", Some("x"), &[]);
+    let cursor = |artifacts: &[Value], probe: Value| {
+        probe_warnings("cursor", detection(&[], true, artifacts), true, probe)
+    };
+    let mismatch = "Cursor CLI reported no MCP servers, but Guard found local definitions. \
+                    Cursor may be using a different config root than Guard.";
+    assert_eq!(
+        cursor(std::slice::from_ref(&server), probe(false, false, true)),
+        [mismatch]
+    );
+    assert!(cursor(std::slice::from_ref(&server), probe(false, false, false)).is_empty());
+    assert!(cursor(&[server], Value::Null).is_empty());
+    assert!(cursor(&[guard_hook()], probe(false, false, true)).is_empty());
 }
 
 #[test]
@@ -282,7 +328,22 @@ fn malformed_requests_are_refused() {
             "harness": "stubtool",
             "executable": "stubcli",
             "command_absence_proves_uninstalled": "yes",
-            "runtime_probe_timed_out": false,
+            "runtime_probe": null,
+            "detection": found.clone(),
+        }),
+        json!({
+            "op": "warnings",
+            "harness": "stubtool",
+            "executable": "stubcli",
+            "command_absence_proves_uninstalled": true,
+            "runtime_probe": { "timed_out": false },
+            "detection": found.clone(),
+        }),
+        json!({
+            "op": "warnings",
+            "harness": "stubtool",
+            "executable": "stubcli",
+            "command_absence_proves_uninstalled": true,
             "detection": found,
         }),
     ] {

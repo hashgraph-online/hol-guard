@@ -95,12 +95,12 @@ they cannot be targeted as a normal matching category.
 
 ## Validation commands
 
-`cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-contracts`
+`cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-contracts`
 checks strict objects, duplicate keys, unsupported versions/actions, hidden
 recipients, ambiguous identities, count/service contradictions, and bounds.
 These are contract tests, not provider dispatch or interception evidence.
 
-`cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --lib business_input`
+`cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --lib business_input`
 checks owned bytes, changed content/attachment order/count, false byte counts,
 unknown facts, bounds, and preparation commitment stability. No target command
 or provider action is executed.

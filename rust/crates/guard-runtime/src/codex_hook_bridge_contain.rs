@@ -8,6 +8,8 @@
 //! `updatedInput` (0.131.0 or later). An older or unknown Codex keeps the
 //! denial with an update hint; anything this module cannot reproduce keeps
 //! the denial unchanged. Native authority is rechecked by the sink.
+//! A call that Codex's own macOS sandbox already confines runs as it is,
+//! since the sink cannot start inside that sandbox (`sandbox`).
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -137,6 +139,14 @@ fn contain(
     }
     if payload.mapped && payload.collision {
         return Contained::Unchanged;
+    }
+    if let Some(original) = routable(response, &payload.value) {
+        let profile = text(response, "required_execution_profile");
+        match sandbox::launching_turn(&payload.value) {
+            sandbox::Turn::Unknown => {}
+            turn if turn.confines(profile) => return sandbox::checked(original, &payload, profile),
+            _ => return Contained::Unchanged,
+        }
     }
     let target = Target {
         prefix: &config.fallback_command,
@@ -268,8 +278,9 @@ fn string(text: &str) -> PyVal {
     PyVal::Str(text.to_owned())
 }
 
-/// The contained-sink rewrite for the Codex harness.
-fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) -> Option<PyVal> {
+/// The shell call's input, when the answer names the contained profile it
+/// requires and the call is a `PreToolUse` shell command.
+fn routable<'a>(response: &PyVal, payload: &'a PyVal) -> Option<&'a PyVal> {
     let profile = text(response, "reason_code")
         .and_then(guard_command::hook_responses::contained_execution_profile)?;
     if response.get("observe_mode") == Some(&PyVal::Bool(true))
@@ -277,7 +288,6 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     {
         return None;
     }
-    let prefix = sink_prefix(target.prefix)?;
     let event = first(payload, &["hook_event_name", "hookEventName"])?.as_str()?;
     let tool = first(payload, &["tool_name", "toolName"])?.as_str()?;
     if !PRE_TOOL_EVENTS.contains(&event) || !SHELL_TOOLS.contains(&tool) {
@@ -286,6 +296,13 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     let original = first(payload, &["tool_input", "toolInput"])?;
     original.as_dict()?;
     original.get("command")?.as_str()?;
+    Some(original)
+}
+
+/// The contained-sink rewrite for the Codex harness.
+fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) -> Option<PyVal> {
+    let original = routable(response, payload)?;
+    let prefix = sink_prefix(target.prefix)?;
     let workspace = resolved_workspace(first(payload, &["cwd", "workspace"])?.as_str()?)?;
     let snapshot = PyVal::Dict(vec![
         ("schema".to_owned(), string(REQUEST_SCHEMA)),
@@ -364,7 +381,7 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
         discard(&request);
         return None;
     };
-    Some(routed_response(original, &joined))
+    Some(routed_response(original, &joined, ROUTED_REASON))
 }
 
 /// The sink's argv prefix as the shell will start it.
@@ -393,7 +410,7 @@ pub(crate) fn shell_join(command: &[String]) -> Option<String> {
 
 /// The allow that runs the `joined` command line in place of the original
 /// call.
-fn routed_response(original: &PyVal, joined: &str) -> PyVal {
+fn routed_response(original: &PyVal, joined: &str, reason: &str) -> PyVal {
     let mut updated = match original {
         PyVal::Dict(entries) => entries.clone(),
         _ => Vec::new(),
@@ -405,7 +422,7 @@ fn routed_response(original: &PyVal, joined: &str) -> PyVal {
     }
     PyVal::Dict(vec![
         ("policy_action".to_owned(), string("allow")),
-        ("reason_code".to_owned(), string(ROUTED_REASON)),
+        ("reason_code".to_owned(), string(reason)),
         (
             "hookSpecificOutput".to_owned(),
             PyVal::Dict(vec![
@@ -469,6 +486,8 @@ pub(crate) fn discard(request: &Path) {
 
 #[path = "codex_hook_bridge_contain_codex.rs"]
 mod codex;
+#[path = "codex_hook_bridge_contain_sandbox.rs"]
+mod sandbox;
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_contain_tests.rs"]
 mod tests;

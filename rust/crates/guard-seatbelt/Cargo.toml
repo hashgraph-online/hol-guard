@@ -10,5 +10,8 @@ publish = false
 name = "guard_seatbelt"
 path = "src/lib.rs"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+libc.workspace = true
+
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
