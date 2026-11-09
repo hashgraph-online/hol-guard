@@ -84,7 +84,7 @@ fn a_lookup_that_could_spend_or_bypass_authority_is_refused() {
     ] {
         assert!(
             matches!(
-                resolve_with(Some(lookup(&[change.clone()]))),
+                resolve_with(Some(lookup(std::slice::from_ref(&change)))),
                 Err(StoreError::Invalid("codex_live_authority_lookup_invalid"))
             ),
             "{}",
