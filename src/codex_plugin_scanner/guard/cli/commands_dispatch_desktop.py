@@ -617,7 +617,12 @@ def _run_guard_desktop_command(
         if resolved_home is None:
             print("Guard daemon replay requires --guard-home.", file=sys.stderr)
             return 2
-        return run_daemon_replay(_Path(resolved_home), int(args.port))
+        daemon_pid = getattr(args, "daemon_pid", None)
+        return run_daemon_replay(
+            _Path(resolved_home),
+            int(args.port),
+            daemon_pid if isinstance(daemon_pid, int) and daemon_pid > 1 else None,
+        )
     if getattr(args, "desktop_command", None) == "dashboard-update":
         from ..daemon.dashboard_update_runner import main as dashboard_update_main
 

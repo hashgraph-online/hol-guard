@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use super::super::http::{query_pairs, Request};
-use super::{authorize, NativeReads, ReadConfig, CORS_ALLOW_HEADERS};
+use super::{authorize, json_response, NativeReads, ReadConfig, CORS_ALLOW_HEADERS};
 
 const EVENTS_PATH: &str = "/v1/events/stream";
 const ACTIVITY_PATH: &str = "/v1/command-activity/events";
@@ -23,6 +23,10 @@ const PAGE_LIMIT: i64 = 100;
 const ACTIVITY_MAX_CLIENTS: usize = 8;
 /// `_COMMAND_ACTIVITY_STREAM_MAX_SECONDS`.
 const ACTIVITY_MAX_DURATION: Duration = Duration::from_secs(300);
+/// How long a stream may go without a write. An SSE comment then goes out,
+/// so a client that went away fails the write and frees its slot.
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
+const KEEPALIVE_FRAME: &[u8] = b":\n\n";
 
 static ACTIVITY_CLIENTS: AtomicUsize = AtomicUsize::new(0);
 
@@ -104,9 +108,8 @@ pub(super) fn stream_head(cors_origin: Option<&str>) -> Vec<u8> {
     head.into_bytes()
 }
 
-/// Streams until the client stops reading. Returns `false` without writing
-/// anything when the command-activity stream already has its full number of
-/// clients, so the daemon can answer 429.
+/// Streams until the client stops reading. When the command-activity stream
+/// already has its full number of clients, answers 429 as the daemon does.
 pub(super) fn serve(
     client: &TcpStream,
     stream: Stream,
@@ -114,27 +117,59 @@ pub(super) fn serve(
     config: &ReadConfig,
     reads: &NativeReads,
     stalled_write: Duration,
-) -> bool {
-    let _slot = match stream {
-        Stream::Activity { .. } => match ActivitySlot::claim() {
-            Some(slot) => Some(slot),
-            None => return false,
-        },
-        Stream::Events { .. } => None,
-    };
+) {
     let _ = client.set_write_timeout(Some(stalled_write));
     let mut writer = client;
-    if writer.write_all(&stream_head(cors_origin)).is_ok() {
-        match stream {
-            Stream::Events { cursor } => events(writer, cursor, config, reads),
-            Stream::Activity { cursor } => activity(writer, cursor, config, reads),
+    let slot = match stream {
+        Stream::Activity { .. } => ActivitySlot::claim().map(Some),
+        Stream::Events { .. } => Some(None),
+    };
+    match slot {
+        None => {
+            let _ = writer.write_all(&too_many_streams(config, cors_origin));
+        }
+        Some(_slot) => {
+            if writer.write_all(&stream_head(cors_origin)).is_ok() {
+                match stream {
+                    Stream::Events { cursor } => events(writer, cursor, config, reads),
+                    Stream::Activity { cursor } => activity(writer, cursor, config, reads),
+                }
+            }
         }
     }
     let _ = client.shutdown(Shutdown::Both);
+}
+
+/// `_write_json({"error": "too_many_streams"}, status=429)`.
+pub(super) fn too_many_streams(config: &ReadConfig, cors_origin: Option<&str>) -> Vec<u8> {
+    json_response(
+        429,
+        &json!({"error": "too_many_streams"}),
+        config.dashboard_build.as_deref(),
+        cors_origin,
+        false,
+    )
+}
+
+/// Writes `frames`, or a keepalive comment once the stream has been quiet
+/// for `KEEPALIVE_INTERVAL`. `false` once the client is gone.
+fn write_frames(mut writer: &TcpStream, frames: &[u8], last_write: &mut Instant) -> bool {
+    let bytes = if !frames.is_empty() {
+        frames
+    } else if last_write.elapsed() >= KEEPALIVE_INTERVAL {
+        KEEPALIVE_FRAME
+    } else {
+        return true;
+    };
+    if writer.write_all(bytes).is_err() {
+        return false;
+    }
+    *last_write = Instant::now();
     true
 }
 
-fn events(mut writer: &TcpStream, mut cursor: i64, config: &ReadConfig, reads: &NativeReads) {
+fn events(writer: &TcpStream, mut cursor: i64, config: &ReadConfig, reads: &NativeReads) {
+    let mut last_write = Instant::now();
     loop {
         reads.report_activity();
         let items = reads
@@ -147,7 +182,7 @@ fn events(mut writer: &TcpStream, mut cursor: i64, config: &ReadConfig, reads: &
             .unwrap_or_default();
         let (frames, next) = event_frames(&items, cursor);
         cursor = next;
-        if !frames.is_empty() && writer.write_all(&frames).is_err() {
+        if !write_frames(writer, &frames, &mut last_write) {
             return;
         }
         thread::sleep(POLL_INTERVAL);
@@ -170,8 +205,9 @@ pub(super) fn event_frames(items: &[Value], mut cursor: i64) -> (Vec<u8>, i64) {
     (frames, cursor)
 }
 
-fn activity(mut writer: &TcpStream, cursor: i64, config: &ReadConfig, reads: &NativeReads) {
+fn activity(writer: &TcpStream, cursor: i64, config: &ReadConfig, reads: &NativeReads) {
     let deadline = Instant::now() + ACTIVITY_MAX_DURATION;
+    let mut last_write = Instant::now();
     let mut cursor = cursor.max(0);
     while Instant::now() < deadline {
         reads.report_activity();
@@ -184,7 +220,7 @@ fn activity(mut writer: &TcpStream, cursor: i64, config: &ReadConfig, reads: &Na
             .unwrap_or(Value::Null);
         let (frames, next) = activity_frames(&page, cursor);
         cursor = next;
-        if !frames.is_empty() && writer.write_all(&frames).is_err() {
+        if !write_frames(writer, &frames, &mut last_write) {
             return;
         }
         thread::sleep(POLL_INTERVAL);

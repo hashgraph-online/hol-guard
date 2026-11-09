@@ -1354,6 +1354,11 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     def daemon_port(self) -> int:
         return int(self.server_address[1])
 
+    def daemon_pid(self) -> int:
+        """The process the published daemon state names."""
+
+        return os.getpid()
+
     def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
         # The store can report an integrity change while the hook worker starts,
         # before the listening socket is bound. `server_address` is assigned
@@ -2471,7 +2476,7 @@ class _GuardDaemonHandler(
             or state.get("guard_home") != expected_guard_home
             or state.get("host") != daemon_server.daemon_host()
             or state.get("port") != daemon_server.daemon_port()
-            or state.get("pid") != os.getpid()
+            or state.get("pid") != daemon_server.daemon_pid()
         ):
             self._write_json({"error": "daemon_identity_state_mismatch"}, status=409)
             return
@@ -2994,7 +2999,7 @@ class _GuardDaemonHandler(
             "onefile_extraction": daemon_server.onefile_extraction_status,
             "repair_self_check": daemon_server.repair_self_check_status,
             "uptime_seconds": uptime,
-            "pid": os.getpid(),
+            "pid": self._daemon_server().daemon_pid(),
             "tables": store.list_table_names(),
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,

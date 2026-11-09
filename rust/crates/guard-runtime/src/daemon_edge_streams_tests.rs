@@ -90,3 +90,37 @@ fn activity_slots_stop_at_the_limit() {
     drop(held);
     assert!(ActivitySlot::claim().is_some());
 }
+
+#[test]
+fn a_full_stream_answers_429_with_cors() {
+    let text = String::from_utf8(json_response(
+        429,
+        &json!({"error": "too_many_streams"}),
+        None,
+        Some("https://hol.org"),
+        false,
+    ))
+    .unwrap();
+    assert!(
+        text.starts_with("HTTP/1.0 429 Too Many Requests\r\n"),
+        "{text}"
+    );
+    assert!(text.contains("Access-Control-Allow-Origin: https://hol.org\r\n"));
+    assert!(text.ends_with("{\"error\":\"too_many_streams\"}"));
+}
+
+#[test]
+fn quiet_streams_send_a_keepalive_comment() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    let (mut server_side, _) = listener.accept().unwrap();
+    let mut last_write = Instant::now();
+    assert!(write_frames(&client, b"", &mut last_write));
+    last_write = Instant::now() - KEEPALIVE_INTERVAL;
+    assert!(write_frames(&client, b"", &mut last_write));
+    assert!(last_write.elapsed() < KEEPALIVE_INTERVAL);
+    drop(client);
+    let mut received = Vec::new();
+    std::io::Read::read_to_end(&mut server_side, &mut received).unwrap();
+    assert_eq!(received, KEEPALIVE_FRAME);
+}

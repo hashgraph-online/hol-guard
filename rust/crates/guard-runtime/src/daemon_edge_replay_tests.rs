@@ -20,14 +20,16 @@ fn content_length_needs_exactly_one_number() {
 #[test]
 fn replay_names_the_home_and_port() {
     assert_eq!(
-        replay_args("/h", 5474),
+        replay_args("/h", 5474, 42),
         [
             "desktop",
             "daemon-replay",
             "--guard-home",
             "/h",
             "--port",
-            "5474"
+            "5474",
+            "--daemon-pid",
+            "42"
         ]
     );
 }

@@ -134,7 +134,11 @@ fn run(config: &ReadConfig, port: u16, request: Vec<u8>) -> Option<Vec<u8>> {
     let mut command = Command::new(program);
     command
         .args(prefix)
-        .args(replay_args(guard_home, port))
+        .args(replay_args(
+            guard_home,
+            port,
+            std::os::unix::process::parent_id(),
+        ))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -175,7 +179,13 @@ fn run(config: &ReadConfig, port: u16, request: Vec<u8>) -> Option<Vec<u8>> {
     }
 }
 
-pub(in crate::daemon_edge) fn replay_args(guard_home: &str, port: u16) -> [String; 6] {
+/// The CLI arguments for one replay. `daemon_pid` is the daemon this edge
+/// serves (its parent), which the published daemon state names.
+pub(in crate::daemon_edge) fn replay_args(
+    guard_home: &str,
+    port: u16,
+    daemon_pid: u32,
+) -> [String; 8] {
     [
         "desktop".to_owned(),
         "daemon-replay".to_owned(),
@@ -183,6 +193,8 @@ pub(in crate::daemon_edge) fn replay_args(guard_home: &str, port: u16) -> [Strin
         guard_home.to_owned(),
         "--port".to_owned(),
         port.to_string(),
+        "--daemon-pid".to_owned(),
+        daemon_pid.to_string(),
     ]
 }
 

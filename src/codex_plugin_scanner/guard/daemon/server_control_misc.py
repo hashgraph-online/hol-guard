@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -293,7 +292,7 @@ class _ControlMiscRoutes:
         self._write_json(
             schedule_guard_dashboard_update(
                 guard_home,
-                daemon_pid=os.getpid(),
+                daemon_pid=self._daemon_server().daemon_pid(),
                 daemon_port=self._daemon_server().daemon_port(),
                 force_pypi_reinstall=force_pypi_reinstall,
                 include_alpha=status_payload.get("release_channel") == "alpha",

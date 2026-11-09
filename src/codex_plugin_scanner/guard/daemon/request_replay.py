@@ -7,9 +7,12 @@ handler keeps every check it applies today (origin, auth, body limits), so a
 route answered this way behaves as it did in the long-running daemon.
 
 State the long-running daemon kept in memory between requests (connect
-flows, discovery challenges, reconnect challenges, session nonces) lives in
-``daemon-replay-state.json`` under the Guard home instead, written atomically
-with owner-only permissions.
+flows, discovery challenges, reconnect challenges, session nonces, discovery
+job status) lives in ``daemon-replay-state.json`` under the Guard home
+instead, written atomically with owner-only permissions. Replay processes run
+side by side, so every read-check-write of that state holds an exclusive lock
+on ``daemon-replay-state.lock`` and rereads the file first: a nonce or
+challenge one process consumes is gone for the next.
 """
 
 from __future__ import annotations
@@ -19,107 +22,33 @@ import json
 import os
 import threading
 import time
-from contextlib import suppress
 from functools import cached_property
 from pathlib import Path
 from typing import Any
 
 from ..store import GuardStore
+from .request_replay_state import (
+    _STATE_LIMIT_BYTES,
+    _PersistedMapping,
+    _ReplayDiscoveryJobs,
+    _ReplayState,
+    _SyncedLock,
+)
 
-_STATE_FILENAME = "daemon-replay-state.json"
-_STATE_LIMIT_BYTES = 1024 * 1024
 # How long work a handler started after answering (a connect flow waiting on
 # the browser) may keep this process alive.
 _BACKGROUND_LIMIT_SECONDS = 15 * 60.0
-_PERSISTED_FIELDS = (
-    "guard_cloud_connect_state",
-    "package_firewall_connect_state",
-    "daemon_discovery_challenges",
-    "dashboard_reconnect_consumed_challenges",
-    "package_firewall_session_nonces",
+# Threads a handler starts that finish its work after the answer is written.
+# They are daemon threads in the long-running daemon, where the process
+# outlives them; here the process waits for them.
+_BACKGROUND_THREAD_NAMES = frozenset(
+    {
+        "guard-cloud-connect",
+        "guard-package-firewall-connect",
+        "guard-headless-app-cloud-sync",
+        "hol-guard-mcp-discovery",
+    }
 )
-
-
-class _ReplayState:
-    """The cross-request fields, read from and written back to one file."""
-
-    def __init__(self, guard_home: Path) -> None:
-        self._path = guard_home / _STATE_FILENAME
-        self._lock = threading.Lock()
-
-    def read(self) -> dict[str, Any]:
-        try:
-            if self._path.is_symlink():
-                return {}
-            with self._path.open("rb") as handle:
-                raw = handle.read(_STATE_LIMIT_BYTES + 1)
-        except OSError:
-            return {}
-        if len(raw) > _STATE_LIMIT_BYTES:
-            return {}
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return {}
-        return payload if isinstance(payload, dict) else {}
-
-    def get(self, field: str) -> Any:
-        with self._lock:
-            return self.read().get(field)
-
-    def set(self, field: str, value: Any) -> None:
-        with self._lock:
-            state = self.read()
-            if value is None:
-                state.pop(field, None)
-            else:
-                state[field] = value
-            encoded = json.dumps(state, separators=(",", ":"), default=str).encode("utf-8")
-            if len(encoded) > _STATE_LIMIT_BYTES:
-                return
-            temporary = self._path.with_name(f".{_STATE_FILENAME}.{os.getpid()}.{threading.get_ident()}")
-            try:
-                descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(encoded)
-                os.replace(temporary, self._path)
-            except OSError:
-                with suppress(OSError):
-                    temporary.unlink()
-
-
-class _PersistedMapping(dict[str, Any]):
-    """A dict whose every change is written back to the replay state."""
-
-    def __init__(self, state: _ReplayState, field: str) -> None:
-        stored = state.get(field)
-        super().__init__(stored if isinstance(stored, dict) else {})
-        self._state = state
-        self._field = field
-
-    def _save(self) -> None:
-        self._state.set(self._field, dict(self))
-
-    def __setitem__(self, key: Any, value: Any) -> None:
-        super().__setitem__(key, value)
-        self._save()
-
-    def __delitem__(self, key: Any) -> None:
-        super().__delitem__(key)
-        self._save()
-
-    def pop(self, key: Any, *default: Any) -> Any:
-        value = super().pop(key, *default)
-        self._save()
-        return value
-
-    def clear(self) -> None:
-        super().clear()
-        self._save()
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        super().update(*args, **kwargs)
-        self._save()
 
 
 class _ReplaySocket:
@@ -177,11 +106,18 @@ def _replay_server_class() -> type:
 
     class ReplayServer(base):  # type: ignore[misc, valid-type]
         def __init__(  # pyright: ignore[reportMissingSuperCall]
-            self, store: GuardStore, port: int, host: str, home_dir: Path, auth_key: str
+            self,
+            store: GuardStore,
+            port: int,
+            host: str,
+            home_dir: Path,
+            auth_key: str,
+            daemon_pid: int | None = None,
         ) -> None:
             # The listening socket, executors and workers belong to the native
             # daemon; only the fields handlers read are set here.
-            self._replay_state = _ReplayState(store.guard_home)
+            self._replay_state = state_file = _ReplayState(store.guard_home)
+            self._replay_daemon_pid = daemon_pid
             self.store = store
             self.runtime = GuardSurfaceRuntime(store)
             self.native_edge = None
@@ -211,22 +147,22 @@ def _replay_server_class() -> type:
                 attempt_timeout_seconds=daemon_server._AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS,
             )
             self.command_queue_lifecycle = None
-            self.package_firewall_connect_state_lock = threading.Lock()
+            self.package_firewall_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.onefile_extraction_status = None
             self.repair_self_check_status = None
-            self.guard_cloud_connect_state_lock = threading.Lock()
+            self.guard_cloud_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.guard_cloud_browser_session_lock = threading.Lock()
             self.package_firewall_mutation_lock = threading.Lock()
             self.package_firewall_session_nonces = _PersistedMapping(
                 self._replay_state, "package_firewall_session_nonces"
             )
-            self.package_firewall_session_nonces_lock = threading.Lock()
+            self.package_firewall_session_nonces_lock = _SyncedLock(state_file, self.package_firewall_session_nonces)  # pyright: ignore[reportAttributeAccessIssue]
             self.daemon_discovery_challenges = _PersistedMapping(self._replay_state, "daemon_discovery_challenges")
-            self.daemon_discovery_challenges_lock = threading.Lock()
-            self.dashboard_reconnect_lock = threading.Lock()
+            self.daemon_discovery_challenges_lock = _SyncedLock(state_file, self.daemon_discovery_challenges)  # pyright: ignore[reportAttributeAccessIssue]
             self.dashboard_reconnect_consumed_challenges = _PersistedMapping(
                 self._replay_state, "dashboard_reconnect_consumed_challenges"
             )
+            self.dashboard_reconnect_lock = _SyncedLock(state_file, self.dashboard_reconnect_consumed_challenges)  # pyright: ignore[reportAttributeAccessIssue]
             self.containment_health_cache = None
             self.containment_health_cache_monotonic = 0.0
             self.containment_health_cache_lock = threading.Lock()
@@ -260,6 +196,10 @@ def _replay_server_class() -> type:
             self.saturation_probes = {}
             self.unclassified_connections_lock = threading.Lock()
             self.unclassified_watchdog_thread = None
+
+        def daemon_pid(self) -> int:
+            # The edge names the daemon it serves; this process is short-lived.
+            return self._replay_daemon_pid or os.getpid()
 
         @property
         def guard_cloud_connect_state(self) -> dict[str, object] | None:  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -342,7 +282,9 @@ def _replay_server_class() -> type:
         def local_cli_api(self) -> Any:
             from .local_cli_api import LocalCliApiService
 
-            return LocalCliApiService(store=self.store, record_exception=self.diagnostics.record_exception)
+            service = LocalCliApiService(store=self.store, record_exception=self.diagnostics.record_exception)
+            service._discovery_jobs = _ReplayDiscoveryJobs(self._replay_state)
+            return service
 
         @cached_property
         def approval_attention(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -422,6 +364,7 @@ def replay_request(
     port: int,
     host: str = "127.0.0.1",
     home_dir: Path | None = None,
+    daemon_pid: int | None = None,
 ) -> bytes:
     """The raw response the daemon's handler writes for ``request``."""
 
@@ -430,7 +373,7 @@ def replay_request(
 
     auth_key = load_guard_daemon_auth_token(guard_home) or ""
     store = GuardStore(guard_home)
-    server = _replay_server_class()(store, port, host, home_dir or Path.home(), auth_key)
+    server = _replay_server_class()(store, port, host, home_dir or Path.home(), auth_key, daemon_pid)
     response = io.BytesIO()
     try:
         _GuardDaemonHandler(_ReplaySocket(request, response), ("127.0.0.1", 0), server)  # pyright: ignore[reportArgumentType]
@@ -445,7 +388,9 @@ def wait_for_background_work() -> None:
     deadline = time.monotonic() + _BACKGROUND_LIMIT_SECONDS
     current = threading.current_thread()
     for thread in threading.enumerate():
-        if thread is current or thread.daemon or not thread.is_alive():
+        if thread is current or not thread.is_alive():
+            continue
+        if thread.daemon and thread.name not in _BACKGROUND_THREAD_NAMES:
             continue
         thread.join(max(0.0, deadline - time.monotonic()))
 

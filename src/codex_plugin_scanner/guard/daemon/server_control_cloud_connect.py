@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import os
 import platform
 import threading
 import time
@@ -478,7 +477,7 @@ class _CloudConnectRoutes:
             state.get("guard_home") != expected_guard_home
             or state.get("host") != daemon_server.daemon_host()
             or state.get("port") != daemon_server.daemon_port()
-            or state.get("pid") != os.getpid()
+            or state.get("pid") != daemon_server.daemon_pid()
             or state.get("state_id") != daemon_server.runtime_session_id
         ):
             return None

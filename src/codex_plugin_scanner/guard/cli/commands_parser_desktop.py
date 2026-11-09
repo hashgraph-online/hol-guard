@@ -62,6 +62,7 @@ def _configure_guard_desktop_parser(
     daemon_replay_parser = desktop_subparsers.add_parser("daemon-replay", help=argparse.SUPPRESS)
     _add_guard_common_args(daemon_replay_parser, suppress_defaults=True)
     daemon_replay_parser.add_argument("--port", type=int, required=True)
+    daemon_replay_parser.add_argument("--daemon-pid", type=int, default=None)
 
 
 __all__ = ["_configure_guard_desktop_parser"]
