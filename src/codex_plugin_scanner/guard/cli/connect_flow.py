@@ -1047,6 +1047,10 @@ def run_guard_disconnect_command(
             "detail": "Guard Cloud grant was already expired. Cleared local sign-in on this machine.",
             "reconnect_command": CONNECT_COMMAND,
         }
+    stored_profile = credentials.get("cloud_user_profile")
+    cloud_user_profile = token_result.cloud_user_profile
+    if cloud_user_profile is None and isinstance(stored_profile, dict):
+        cloud_user_profile = stored_profile
     rotated_refresh_token = token_result.refresh_token
     if rotated_refresh_token and rotated_refresh_token != refresh_token:
         _persist_oauth_local_credentials(
@@ -1059,7 +1063,7 @@ def run_guard_disconnect_command(
             machine_id=_read_nested_string(credentials, "machine_id"),
             supply_chain_entitlement=token_result.supply_chain_entitlement,
             workspace_id=workspace_id,
-            cloud_user_profile=token_result.cloud_user_profile,
+            cloud_user_profile=cloud_user_profile,
             runtime_id=_read_nested_string(credentials, "runtime_id"),
             runtime_label=_read_nested_string(credentials, "runtime_label"),
             access_token=token_result.access_token,

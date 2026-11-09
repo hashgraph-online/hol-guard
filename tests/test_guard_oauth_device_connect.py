@@ -510,9 +510,13 @@ def test_disconnect_revokes_cloud_grant_with_runtime_access_token_and_clears_loc
     assert "refresh-123" not in str(requests[1]["body"])
 
 
+@pytest.mark.parametrize(
+    "refreshed_profile", [None, {"email": "new@example.com", "display_name": "New User", "avatar_url": ""}]
+)
 def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(
     tmp_path: Path,
     monkeypatch,
+    refreshed_profile,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _install_fake_system_keyring(monkeypatch)
@@ -528,6 +532,7 @@ def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
         grant_id="grant-123",
         machine_id="machine-123",
+        cloud_user_profile={"email": "old@example.com", "display_name": "Old User"},
         workspace_id="workspace-123",
         runtime_id="hol-guard",
         runtime_label="HOL Guard CLI",
@@ -549,6 +554,7 @@ def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(
                         machine_id="machine-123",
                         workspace_id="workspace-123",
                     ),
+                    "guard_local_entitlement": {"user_profile": refreshed_profile},
                     "refresh_token": "refresh-rotated",
                     "expires_in": 3600,
                     "scope": "guard:runtime.sync guard:offline_access",
@@ -590,6 +596,10 @@ def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(
     credentials = store.get_oauth_local_credentials()
     assert credentials is not None
     assert credentials["refresh_token"] == "refresh-rotated"
+
+    assert credentials["cloud_user_profile"] == (
+        refreshed_profile if refreshed_profile is not None else {"email": "old@example.com", "display_name": "Old User"}
+    )
 
 
 def test_disconnect_clears_local_oauth_credentials_when_refresh_grant_is_already_expired(
