@@ -76,10 +76,11 @@ pub(super) fn detail(
     if !hosted || request_id.contains('%') || query_value(query, "wait_ms").ok()?.is_some() {
         return None;
     }
+    let cwd = config.daemon_cwd.as_deref()?;
     let Value::Object(mut approval) = reads.store_call(
         config,
         "get_approval_request",
-        json!({"request_id": request_id, "derive_scope": true, "cwd": working_directory()}),
+        json!({"request_id": request_id, "derive_scope": true, "cwd": cwd}),
     )?
     else {
         return None;
@@ -136,8 +137,8 @@ fn store_page(
     reads: &NativeReads,
 ) -> Option<Map<String, Value>> {
     // The page op resolves a relative config path from the daemon's working
-    // directory, which the edge inherits.
-    let cwd = working_directory();
+    // directory, which the handshake names.
+    let cwd = config.daemon_cwd.clone()?;
     let mut args = json!({
         "status": fields.get("status")?,
         "limit": fields.get("limit")?,
@@ -176,12 +177,6 @@ fn store_page(
 
 /// The daemon's working directory, which the edge inherits; the store
 /// resolves a relative config path from it.
-fn working_directory() -> Option<String> {
-    std::env::current_dir()
-        .ok()
-        .and_then(|path| path.to_str().map(str::to_owned))
-}
-
 /// Whether the resident reports no native business rows: an empty queue, or
 /// no installed policy. `None` for rows, a failure, or an answer the daemon's
 /// reader would not accept, all of which the daemon reads itself.

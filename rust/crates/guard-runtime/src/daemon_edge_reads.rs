@@ -67,6 +67,8 @@ struct Handshake {
     user_home: Option<String>,
     #[serde(default)]
     session_signals: Option<Vec<String>>,
+    #[serde(default)]
+    cwd: Option<String>,
 }
 
 pub(super) struct ReadConfig {
@@ -81,6 +83,9 @@ pub(super) struct ReadConfig {
     /// The daemon's local OS-session facts, which approval-gate checks bind a
     /// recent TOTP proof to. The edge runs in a session of its own.
     session_signals: Option<Vec<String>>,
+    /// `os.getcwd()` in the daemon. The edge runs from its own directory, and
+    /// store reads resolve a relative config path from the daemon's.
+    daemon_cwd: Option<String>,
 }
 
 impl ReadConfig {
@@ -116,6 +121,7 @@ impl ReadConfig {
             dashboard_build,
             user_home: handshake.user_home,
             session_signals,
+            daemon_cwd: handshake.cwd.filter(|cwd| Path::new(cwd).is_absolute()),
         })
     }
 }
@@ -183,6 +189,16 @@ impl NativeReads {
         // write gives up after `ACTIVITY_WRITE_TIMEOUT`.
         let mut writer = activity;
         let _ = writer.write_all(b"a");
+    }
+
+    /// Tells the daemon an edge write changed Guard's policy inputs, so it
+    /// republishes the native policy snapshot as its own writes do. Never
+    /// throttled: a lost notice would leave the snapshot stale.
+    fn report_policy_mutation(&self) {
+        if let Some(activity) = &self.activity {
+            let mut writer = activity;
+            let _ = writer.write_all(b"p");
+        }
     }
 
     fn store_call(&self, config: &ReadConfig, method: &str, args: Value) -> Option<Value> {

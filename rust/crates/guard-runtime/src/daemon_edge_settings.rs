@@ -77,6 +77,12 @@ pub(super) fn settings(config: &ReadConfig) -> Option<(u16, Value)> {
     if loaded.watch_needs_write(now_micros()?)? {
         return None;
     }
+    response(config, &loaded)
+}
+
+/// `_settings_response_payload(guard_home, editable_guard_settings(config))`.
+pub(super) fn response(config: &ReadConfig, loaded: &Loaded) -> Option<(u16, Value)> {
+    let guard_home = Path::new(&config.guard_home);
     let settings = loaded.editable(guard_home)?;
     Some((
         200,
@@ -116,7 +122,7 @@ pub(super) fn export(config: &ReadConfig) -> Option<(u16, Value)> {
 
 /// One `load_guard_config(guard_home)`: the loaded fields and the managed
 /// policy facts the Python `GuardConfig` carries beside them.
-struct Loaded {
+pub(super) struct Loaded {
     config: Map<String, Value>,
     managed_status: &'static str,
     managed_hash: Option<String>,
@@ -125,7 +131,7 @@ struct Loaded {
 }
 
 impl Loaded {
-    fn read(guard_home: &Path) -> Option<Self> {
+    pub(super) fn read(guard_home: &Path) -> Option<Self> {
         let state = load_managed_policy(&ManagedPolicySource::native());
         let policy = effective_managed_policy(&state);
         let Value::Object(config) = load_under(guard_home, None, policy.as_ref()).ok()? else {
@@ -145,11 +151,11 @@ impl Loaded {
         })
     }
 
-    fn get(&self, key: &str) -> Value {
+    pub(super) fn get(&self, key: &str) -> Value {
         self.config.get(key).cloned().unwrap_or(Value::Null)
     }
 
-    fn map(&self, key: &str) -> Map<String, Value> {
+    pub(super) fn map(&self, key: &str) -> Map<String, Value> {
         match self.config.get(key) {
             Some(Value::Object(map)) => map.clone(),
             _ => Map::new(),

@@ -31,6 +31,7 @@ fn store(name: &str) -> Store {
         "store_path": home.join("guard.db").to_str().unwrap(),
         "source": vectors["source"],
         "busy_timeout_ms": 2000,
+        "cwd": "/",
     });
     Store {
         config: ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap(),
