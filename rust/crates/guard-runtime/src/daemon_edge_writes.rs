@@ -65,6 +65,18 @@ pub(super) fn respond(
             resolve::respond(request.path, &payload, local, resolve::call_library(config))?;
         return Some((status, body, caller.cors_origin, no_store));
     }
+    if request.method == "POST" && route_calls::EXTENSION_CONTROL_WRITES.contains(&request.path) {
+        if request.has_header("Transfer-Encoding") {
+            return None;
+        }
+        let caller = authorize_write(request, &config.token)?;
+        let payload = json_payload(request, body)?;
+        reads.report_activity();
+        let args = route_calls::extension_control_args("POST", request.path);
+        let (status, body, no_store) =
+            route_calls::respond(args, &payload, route_calls::extension_control(config))?;
+        return Some((status, body, caller.cors_origin, no_store));
+    }
     if let Some((name, args)) = (request.method == "POST")
         .then(|| route_calls::route(request.path))
         .flatten()

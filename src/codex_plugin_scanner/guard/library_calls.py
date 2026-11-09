@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .control_route_calls import ROUTE_CALLS
+from .extension_control_host import EXTENSION_CONTROL_CALLS
 from .routes.calls import HANDLER_CALLS
 from .routes.offline import DISPATCH_CALLS
 from .routes.reads import READ_CALLS
@@ -215,6 +216,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **DISPATCH_CALLS,
     **READ_CALLS,
     **WORKER_CALLS,
+    **EXTENSION_CONTROL_CALLS,
 }
 
 

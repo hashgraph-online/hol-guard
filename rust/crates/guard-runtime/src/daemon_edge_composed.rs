@@ -47,9 +47,18 @@ const HANDLER_READS: [&str; 11] = [
 /// `GET` on this path lists the workspace fix proposals.
 const FIX_PROPOSALS: &str = "/v1/supply-chain/workspace-fix-proposals";
 
+/// `GET` paths the extension-control service answers in the resident
+/// library process.
+const EXTENSION_CONTROL_READS: [&str; 3] = [
+    "/v1/extension-controls/catalog",
+    "/v1/extension-controls/effective",
+    "/v1/extension-controls/history",
+];
+
 /// Whether the daemon composes `path` itself.
 pub(super) fn routed(path: &str) -> bool {
     HANDLER_READS.contains(&path)
+        || EXTENSION_CONTROL_READS.contains(&path)
         || path == FIX_PROPOSALS
         || matches!(
             path,
@@ -111,6 +120,11 @@ pub(super) fn respond(
         path if HANDLER_READS.contains(&path) || path == FIX_PROPOSALS => whole_reply(call(
             "route.handler_get",
             json!({ "path": path, "query": request.query }),
+        )),
+        path if EXTENSION_CONTROL_READS.contains(&path) => whole_reply(library::call_resident(
+            config,
+            "route.extension_control",
+            json!({ "method": "GET", "path": path }),
         )),
         _ => None,
     }

@@ -7,9 +7,10 @@
 //! `{"error": {"kind": ..., ...}}` on standard output. The daemon writes the
 //! status and body from that answer.
 
-use std::io::{Read, Write};
-use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -123,6 +124,118 @@ fn run(config: &ReadConfig, request: Vec<u8>) -> Option<Vec<u8>> {
             None
         }
     }
+}
+
+/// The CLI arguments for the resident library process.
+pub(in crate::daemon_edge) fn serve_args(guard_home: &str) -> [String; 4] {
+    [
+        "desktop".to_owned(),
+        "library-serve".to_owned(),
+        "--guard-home".to_owned(),
+        guard_home.to_owned(),
+    ]
+}
+
+/// One `desktop library-serve` child: calls go in a line at a time and
+/// answers come back a line at a time, in order.
+struct Resident {
+    child: Child,
+    input: ChildStdin,
+    answers: mpsc::Receiver<Option<Vec<u8>>>,
+}
+
+/// The resident process for each Guard home this daemon has served.
+fn residents() -> &'static Mutex<HashMap<String, Resident>> {
+    static RESIDENTS: OnceLock<Mutex<HashMap<String, Resident>>> = OnceLock::new();
+    RESIDENTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Runs `call` with `args` in the resident library process, whose state
+/// outlives one request: an extension-control preview's proof waits there for
+/// its apply. Calls run one at a time. A process that does not answer in time
+/// is stopped and the next call starts another.
+pub(in crate::daemon_edge) fn call_resident(
+    config: &ReadConfig,
+    name: &str,
+    args: Value,
+) -> Result<Value, CallError> {
+    let mut request = serde_json::to_vec(&json!({"call": name, "args": args}))
+        .map_err(|_| CallError::Unavailable)?;
+    request.push(b'\n');
+    let (_, guard_home, _) = config.cli().ok_or(CallError::Unavailable)?;
+    let guard_home = guard_home.to_owned();
+    let mut residents = residents()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !residents.contains_key(&guard_home) {
+        let resident = start_resident(config).ok_or(CallError::Unavailable)?;
+        residents.insert(guard_home.clone(), resident);
+    }
+    let resident = residents
+        .get_mut(&guard_home)
+        .ok_or(CallError::Unavailable)?;
+    let answer = match resident
+        .input
+        .write_all(&request)
+        .and_then(|()| resident.input.flush())
+    {
+        Ok(()) => resident.answers.recv_timeout(CALL_TIMEOUT).ok().flatten(),
+        Err(_) => None,
+    };
+    match answer {
+        Some(answer) => decode(&answer),
+        None => {
+            if let Some(resident) = residents.remove(&guard_home) {
+                stop(resident.child);
+            }
+            Err(CallError::Unavailable)
+        }
+    }
+}
+
+fn start_resident(config: &ReadConfig) -> Option<Resident> {
+    let (argv, guard_home, cwd) = config.cli()?;
+    let (program, prefix) = argv.split_first()?;
+    let mut command = Command::new(program);
+    command
+        .args(prefix)
+        .args(serve_args(guard_home))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    isolate_group(&mut command);
+    let mut child = command.spawn().ok()?;
+    let (Some(input), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
+        stop(child);
+        return None;
+    };
+    let (sender, answers) = mpsc::channel();
+    thread::spawn(move || {
+        let mut lines = BufReader::new(stdout);
+        loop {
+            let mut line = Vec::new();
+            let read = (&mut lines)
+                .take(MAX_ANSWER_BYTES + 1)
+                .read_until(b'\n', &mut line);
+            let answer = match read {
+                Ok(0) | Err(_) => None,
+                Ok(_) if line.last() == Some(&b'\n') => Some(line),
+                Ok(_) => None,
+            };
+            let ended = answer.is_none();
+            if sender.send(answer).is_err() || ended {
+                return;
+            }
+        }
+    });
+    Some(Resident {
+        child,
+        input,
+        answers,
+    })
 }
 
 /// The CLI arguments for the worker host.

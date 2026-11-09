@@ -35,6 +35,36 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
     Some((name, Map::new()))
 }
 
+/// `POST` paths the extension-control service answers in the resident
+/// library process, where a preview's proof waits for its apply.
+pub(in crate::daemon_edge) const EXTENSION_CONTROL_WRITES: [&str; 7] = [
+    "/v1/extension-controls/preview",
+    "/v1/extension-controls/test",
+    "/v1/extension-controls/inspect",
+    "/v1/extension-controls/apply",
+    "/v1/extension-controls/refresh",
+    "/v1/extension-controls/recover-authority",
+    "/v1/extension-controls/acknowledge-degraded",
+];
+
+/// The resident call that answers an extension-control `method path`.
+pub(in crate::daemon_edge) fn extension_control<'a>(
+    config: &'a super::super::ReadConfig,
+) -> impl FnOnce(Value) -> Result<Value, CallError> + 'a {
+    move |args| library::call_resident(config, "route.extension_control", args)
+}
+
+/// The arguments naming `method path` for `route.extension_control`.
+pub(in crate::daemon_edge) fn extension_control_args(
+    method: &str,
+    path: &str,
+) -> Map<String, Value> {
+    let mut args = Map::new();
+    args.insert("method".to_owned(), Value::String(method.to_owned()));
+    args.insert("path".to_owned(), Value::String(path.to_owned()));
+    args
+}
+
 /// `/v1/context-assistance/...` writes, run before the daemon's route classes.
 const CONTEXT_ASSISTANCE_WRITES: [&str; 9] = [
     "/v1/context-assistance/versions",
