@@ -5,9 +5,10 @@ use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
-/// `format` applied to what a program prints all choose how output is shaped;
-/// the bare word, or an assignment such as `operation=format`, still asks to
-/// format a disk.
+/// `format` applied to what a program prints or to a piece of code (`format
+/// the value`, `format methods`) all choose how output is shaped; the bare
+/// word, or an assignment such as `operation=format`, still asks to format a
+/// disk.
 ///
 /// Two of the printed nouns also name storage once another word follows them:
 /// `format the time machine disk`, `format the logs volume`. The mask reads
@@ -24,7 +25,7 @@ pub(super) fn mask_format_options(value: &str) -> String {
     });
     OPTION
         .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report)\b")
+            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report|values?|methods?|functions?|helpers?|calls?|spec(?:ifier)?s?|strings|fields?|names?|sizes?|templates?|placeholders?|widths?|headers?|errors?|exceptions?|tracebacks?|lines?|columns?|rows?|entries|entry|records?|items?|labels?)\b")
                 .expect("bounded format option")
         })
         .replace_all(value, |captures: &Captures| {
