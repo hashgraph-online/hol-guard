@@ -57,6 +57,9 @@ const RELAY_THREAD_STACK: usize = 64 * 1024;
 // far more than a relay pump.
 const CONNECTION_THREAD_STACK: usize = 2 * 1024 * 1024;
 const STALLED_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a connection waits for the handshake when no daemon listens
+/// behind the edge.
+const HANDSHAKE_WAIT: Duration = Duration::from_secs(2);
 
 const EXIT_USAGE: i32 = 2;
 const EXIT_LISTENER: i32 = 3;
@@ -280,7 +283,16 @@ fn serve_connection(
     stalled_write: Duration,
     native_reads: &NativeReads,
 ) {
-    let config = native_reads.config();
+    let mut config = native_reads.config();
+    if upstream.is_none() {
+        // Nothing else can answer, so give the daemon's handshake a moment
+        // to arrive on a connection accepted just after the edge started.
+        let deadline = std::time::Instant::now() + HANDSHAKE_WAIT;
+        while config.is_none() && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+            config = native_reads.config();
+        }
+    }
     let read_ahead = match &config {
         Some(config) => match reads::answer(&client, config, native_reads, stalled_write) {
             Outcome::Answered => return,

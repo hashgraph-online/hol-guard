@@ -285,6 +285,23 @@ pub(super) fn answer(
     };
     let (head, body) = bytes.split_at(head_len);
     let request = parse_request(head);
+    if let Some((stream, cors_origin)) = request
+        .as_ref()
+        .and_then(|request| streams::opens(request, config))
+    {
+        if streams::serve(
+            client,
+            stream,
+            cors_origin.as_deref(),
+            config,
+            reads,
+            stalled_write,
+        ) {
+            reads.report_activity();
+            return Outcome::Answered;
+        }
+        return Outcome::Relay(bytes);
+    }
     if let Some(request) = request
         .as_ref()
         .filter(|request| request.method == "GET" && request.path == "/v1/evidence/export")
@@ -677,6 +694,8 @@ mod plugin_updates;
 #[path = "daemon_edge_update_status.rs"]
 mod update_status;
 
+#[path = "daemon_edge_streams.rs"]
+mod streams;
 #[path = "daemon_edge_writes.rs"]
 mod writes;
 
