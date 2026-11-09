@@ -74,7 +74,8 @@ src/pkg/trace.py, written as a doctest.";
 }
 
 /// A method left to be written gets the other members of its class, not the
-/// file's top-level functions.
+/// file's top-level functions, and the code of those the note does not
+/// already show.
 #[test]
 fn a_method_left_to_be_written_comes_with_its_classs_members() {
     let (home, _project, root) = project(ON, &[("src/pkg/bag.py", BAG)]);
@@ -83,9 +84,9 @@ implementation; the docstring and tests describe the expected behavior.";
     let text = prompt_map(home.path(), &root, prompt).unwrap();
     assert!(
         text.contains(
-            "\n\nOther members of Bag in src/pkg/bag.py:\n2-3 def __init__(self):\n```\n\
-    def __init__(self):\n        self._map = {}\n```\n5-6 def getlist(self, key):\n```\n\
-    def getlist(self, key):\n        return list(self._map[key])\n```"
+            "\n\nOther members of Bag in src/pkg/bag.py:\n2-3 def __init__(self):\n\
+5-6 def getlist(self, key):\n```\n    def getlist(self, key):\n        \
+return list(self._map[key])\n```"
         ),
         "{text}"
     );
