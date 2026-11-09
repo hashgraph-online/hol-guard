@@ -232,7 +232,7 @@ jobs:
           inputs.allow_cache_write &&
           (github.event_name == 'push' || inputs.fast_codegen == true) &&
           github.ref == 'refs/heads/main'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: prepared-native
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
