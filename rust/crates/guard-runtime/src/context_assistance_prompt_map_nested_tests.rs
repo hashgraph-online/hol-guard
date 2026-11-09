@@ -383,7 +383,8 @@ fn a_walk_that_leaves_a_file_unread_is_not_complete() {
 }
 
 /// Tests reach a special method such as `__exit__` through its class, so a
-/// prompt naming the method finds the tests that use the class.
+/// prompt naming the method finds the tests that use the class, and still
+/// finds a test that calls the method on an instance it gets from a fixture.
 #[test]
 fn a_named_special_method_finds_the_tests_of_its_class() {
     let source = "class callback_iter:\n    def __init__(self, seq, callback):\n        \
@@ -392,7 +393,8 @@ return iter(self.seq)\n\n    def __exit__(self, *args):\n        self.callback()
 return False\n";
     let tests = "from pkg.more import callback_iter\n\n\ndef test_callback_runs_when_done():\n    \
 calls = []\n    with callback_iter([1], lambda: calls.append(1)) as items:\n        \
-list(items)\n    assert calls == [1]\n\n\ndef test_other():\n    assert True\n";
+list(items)\n    assert calls == [1]\n\n\ndef test_exit_on_instance(instance):\n    \
+assert instance.__exit__(None, None, None) is False\n\n\ndef test_other():\n    assert True\n";
     let (home, _project, root) = super::project_tests::project(
         super::project_tests::ON,
         &[("pkg/more.py", source), ("tests/test_more.py", tests)],
@@ -402,7 +404,8 @@ list(items)\n    assert calls == [1]\n\n\ndef test_other():\n    assert True\n";
     assert!(text.contains("def __exit__"), "{text}");
     assert!(
         text.contains("Tests:\ntests/test_more.py")
-            && text.contains("test_callback_runs_when_done"),
+            && text.contains("test_callback_runs_when_done")
+            && text.contains("test_exit_on_instance"),
         "{text}"
     );
     assert!(!text.contains("test_other"), "{text}");

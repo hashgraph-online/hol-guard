@@ -157,12 +157,15 @@ impl File<'_> {
         }
     }
 
-    /// The name tests use to reach the section. A special method such as
-    /// `__exit__` runs through its class, so tests name the class.
-    fn tested_name(&self, at: usize) -> Option<String> {
+    /// The names tests use to reach the section. A special method such as
+    /// `__exit__` mostly runs through its class, so tests name the class, and
+    /// a test may still call it on an instance by its own name.
+    fn tested_names(&self, at: usize) -> Vec<String> {
         let special = written_name(self.opening(at)).is_some_and(|name| name.starts_with("__"));
-        let at = self.parent[at].filter(|_| special).unwrap_or(at);
-        self.sections[at].name.clone()
+        let class = self.parent[at].filter(|_| special);
+        (class.into_iter().chain([at]))
+            .filter_map(|at| self.sections[at].name.clone())
+            .collect()
     }
 }
 
@@ -266,7 +269,7 @@ pub(super) fn map(
     let mut mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)
         .take(2)
-        .filter_map(|pick| files[pick.file].tested_name(pick.at))
+        .flat_map(|pick| files[pick.file].tested_names(pick.at))
         .chain(used.iter().take(3).map(|word| (*word).to_owned()))
         .collect();
     if asked.everywhere {
