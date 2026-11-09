@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -36,6 +37,7 @@ def edge_handshake(
     user_home: str | None = None,
     session_signals: list[str] | None = None,
     daemon_fingerprint: str | None = None,
+    cli_command: list[str] | None = None,
 ) -> bytes:
     """The line that lets the edge answer token-authenticated store reads."""
 
@@ -62,6 +64,9 @@ def edge_handshake(
     if daemon_fingerprint is not None:
         # Containment health evidence is bound to the daemon's runtime identity.
         payload["daemon_fingerprint"] = daemon_fingerprint
+    if cli_command:
+        # Answers that depend on how Guard was installed come from this CLI.
+        payload["cli_command"] = cli_command
     return json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
@@ -80,6 +85,7 @@ def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], b
             user_home=_user_home(),
             session_signals=session_signals(),
             daemon_fingerprint=_daemon_fingerprint(),
+            cli_command=guard_cli_command(),
         )
 
     def on_activity(kinds: bytes = b"a") -> None:
@@ -93,6 +99,17 @@ def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], b
             notify_native_policy_mutation(server.store.guard_home)
 
     return handshake, on_activity
+
+
+def guard_cli_command() -> list[str]:
+    """The argv prefix that runs this Guard's own CLI."""
+
+    if getattr(sys, "frozen", False):
+        return [sys.executable]
+    from ..codex_hook_launch_runtime import isolated_guard_cli_command
+
+    package_root = Path(__file__).resolve().parents[3]
+    return list(isolated_guard_cli_command(sys.executable, package_root, ("guard",)))
 
 
 def _user_home() -> str | None:

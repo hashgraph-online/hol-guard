@@ -71,6 +71,8 @@ struct Handshake {
     cwd: Option<String>,
     #[serde(default)]
     daemon_fingerprint: Option<String>,
+    #[serde(default)]
+    cli_command: Option<Vec<String>>,
 }
 
 pub(super) struct ReadConfig {
@@ -91,6 +93,9 @@ pub(super) struct ReadConfig {
     /// `current_guard_daemon_runtime_fingerprint()`, which containment health
     /// evidence is bound to.
     daemon_fingerprint: Option<String>,
+    /// The argv prefix that runs the daemon's own Guard CLI, for the answers
+    /// that depend on how Guard was installed.
+    cli_command: Option<Vec<String>>,
 }
 
 impl ReadConfig {
@@ -132,6 +137,12 @@ impl ReadConfig {
                     && fingerprint
                         .bytes()
                         .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            }),
+            cli_command: handshake.cli_command.filter(|argv| {
+                argv.first()
+                    .is_some_and(|program| Path::new(program).is_absolute())
+                    && argv.len() <= 16
+                    && argv.iter().all(|arg| arg.len() <= 16 * 1024)
             }),
         })
     }
@@ -380,6 +391,10 @@ fn respond(
         return plugin_updates::read(config)
             .map(|(status, body)| (status, body, caller.cors_origin, true));
     }
+    if request.path == "/v1/update/status" {
+        return update_status::read(config)
+            .map(|(status, body)| (status, body, caller.cors_origin, true));
+    }
     if request.path == "/v1/network/status" {
         return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));
     }
@@ -608,10 +623,14 @@ mod requests;
 #[path = "daemon_edge_settings.rs"]
 mod settings;
 
-#[path = "daemon_edge_plugin_updates.rs"]
-mod plugin_updates;
+#[path = "daemon_edge_cli_query.rs"]
+mod cli_query;
 #[path = "daemon_edge_network.rs"]
 mod network;
+#[path = "daemon_edge_plugin_updates.rs"]
+mod plugin_updates;
+#[path = "daemon_edge_update_status.rs"]
+mod update_status;
 
 #[path = "daemon_edge_writes.rs"]
 mod writes;

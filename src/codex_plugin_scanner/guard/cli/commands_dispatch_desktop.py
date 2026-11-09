@@ -608,6 +608,16 @@ def _run_guard_desktop_command(
         if context is None or store is None:
             raise RuntimeError("Guard candidate qualification requires local Guard context")
         return run_desktop_qualification(args, context=context, store=store, output_stream=output_stream or sys.stdout)
+    if getattr(args, "desktop_command", None) == "daemon-query":
+        from pathlib import Path as _Path
+
+        from .desktop_daemon_query import run_daemon_query
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard daemon query requires --guard-home.", file=sys.stderr)
+            return 2
+        return run_daemon_query(str(args.query), _Path(resolved_home), output_stream or sys.stdout)
     if getattr(args, "desktop_command", None) == "dashboard-update":
         from ..daemon.dashboard_update_runner import main as dashboard_update_main
 

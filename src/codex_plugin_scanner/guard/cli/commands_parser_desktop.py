@@ -17,7 +17,7 @@ def _configure_guard_desktop_parser(
         dest="desktop_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{bootstrap,qualify,dashboard-update,converge}",
+        metavar="{bootstrap,qualify,dashboard-update,converge,daemon-query}",
     )
     bootstrap_parser = desktop_subparsers.add_parser("bootstrap", help=argparse.SUPPRESS)
     _add_guard_common_args(bootstrap_parser, suppress_defaults=True)
@@ -59,6 +59,10 @@ def _configure_guard_desktop_parser(
     dashboard_update_parser.add_argument("--update-token", required=True)
     dashboard_update_parser.add_argument("--force-pypi-reinstall", action="store_true")
     dashboard_update_parser.add_argument("--alpha", action="store_true")
+    daemon_query_parser = desktop_subparsers.add_parser("daemon-query", help=argparse.SUPPRESS)
+    _add_guard_common_args(daemon_query_parser, suppress_defaults=True)
+    daemon_query_parser.add_argument("--query", required=True)
+    daemon_query_parser.add_argument("--json", action="store_true", required=True)
 
 
 __all__ = ["_configure_guard_desktop_parser"]
