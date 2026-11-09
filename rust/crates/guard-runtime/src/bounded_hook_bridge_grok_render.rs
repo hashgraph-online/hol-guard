@@ -18,7 +18,7 @@ use crate::hook_env_stamp::{dumps, set_member};
 use crate::pyjson::{self, PyVal};
 
 const DEFAULT_EVENT: &str = "PreToolUse";
-const PROMPT_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard and send the prompt again.";
+const PROMPT_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard or run hol-guard daemon recovery restart, then send the prompt again.";
 const EVENT_NAME_KEYS: [&str; 6] = [
     "hook_event_name",
     "hookEventName",
