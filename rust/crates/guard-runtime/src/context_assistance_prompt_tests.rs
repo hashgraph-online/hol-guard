@@ -127,7 +127,9 @@ fn a_test_that_repeats_the_request_does_not_push_out_its_source() {
             "def test_invalid_choice_suggests():\n    convert(choice, value)",
         ),
     ];
-    let found = words(&["tests/test_types.py", "src/types.py"]);
+    // The search ranks a test only when the prompt names it or only tests
+    // hold its quote; this one is here from an earlier prompt.
+    let found = words(&["src/types.py"]);
     let asked = words(&["choice", "invalid", "value", "convert", "suggest"]);
     let rendered = render(&picked, &found, &asked).unwrap();
     assert!(rendered.contains("src/types.py (lines"), "{rendered}");
