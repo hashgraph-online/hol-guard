@@ -52,7 +52,7 @@ pub(super) mod home_exec;
 #[path = "workspace_git_keeps_work.rs"]
 mod keeps_work;
 #[path = "workspace_contained_kill.rs"]
-mod kill;
+pub(super) mod kill;
 #[path = "workspace_contained_launch.rs"]
 mod launch;
 #[path = "workspace_contained_links.rs"]
