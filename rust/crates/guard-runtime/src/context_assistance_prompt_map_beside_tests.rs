@@ -241,3 +241,26 @@ fn a_stub_comes_with_the_code_of_its_nearest_neighbors() {
     assert!(mapped.contains("\n19-89 def fill(self):"), "{mapped}");
     assert!(!mapped.contains("self._mapping[7] = 7"), "{mapped}");
 }
+
+/// A line calling the stub inside a neighbor's code is left out of the stub's
+/// list because the code beside it shows that line. When the map has no room
+/// left for that block, the list keeps the line, so it is not lost.
+#[test]
+fn a_line_left_to_the_code_beside_a_stub_is_listed_when_that_code_does_not_fit() {
+    let path = format!("src/{}cache.py", "deep/".repeat(359));
+    let text =
+        format!("{CACHE}\n    def ensure(self, key):\n        return self.setdefault(key, None)\n");
+    let mapped = map(
+        &files(&[(&path, &text)]),
+        &looking_for(&[("setdefault", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(!mapped.contains("Other members of Cache"), "{mapped}");
+    assert!(
+        mapped.contains("return self.setdefault(key, None)"),
+        "{mapped}"
+    );
+}
