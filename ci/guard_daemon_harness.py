@@ -115,11 +115,15 @@ def _server_class() -> type:
                 self.protocol_version = previous_protocol_version
 
         def _consume_codex_daemon_challenge(self, payload: dict[str, object]) -> bool:
+            server: Any = self.server
+            # A test that stands where the native daemon already checked the
+            # proof says so, as the daemon tells its replay.
+            if getattr(server, "daemon_proof_verified", False):
+                return True
             nonce = self.headers.get("X-Guard-Daemon-Nonce")
             proof = self.headers.get("X-Guard-Daemon-Proof")
             if not isinstance(nonce, str) or not isinstance(proof, str):
                 return False
-            server: Any = self.server
             with server.identity_challenges_lock:
                 challenge = server.identity_challenges.pop(nonce, None)
             if (

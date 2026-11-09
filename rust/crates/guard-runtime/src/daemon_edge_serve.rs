@@ -335,7 +335,7 @@ fn state_payload(
     let resolved = fs::canonicalize(home).unwrap_or_else(|_| home.to_path_buf());
     payload.insert(
         "guard_home".into(),
-        resolved.to_string_lossy().into_owned().into(),
+        plain_path_text(&resolved.to_string_lossy()).into(),
     );
     payload.insert("host".into(), config.host.clone().into());
     payload.insert("port".into(), port.into());
@@ -358,7 +358,21 @@ fn state_payload(
             payload.insert(field.into(), nonce.clone().into());
         }
     }
+    // The launcher binds a Windows handoff to the process's creation time too.
+    if let Some(created) = guard_runtime_windows_process::process_creation_time(pid) {
+        payload.insert("process_creation_time".into(), created.into());
+    }
     payload
+}
+
+/// The path as Python's `Path.resolve()` writes it: without the Windows
+/// verbatim prefix that `fs::canonicalize` adds.
+fn plain_path_text(path: &str) -> String {
+    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        path.strip_prefix(r"\\?\").unwrap_or(path).to_owned()
+    }
 }
 
 /// `authenticate_daemon_state`: binds the payload to the discovery key.

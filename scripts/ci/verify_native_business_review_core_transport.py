@@ -14,6 +14,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# The daemon test harness lives under the checkout root's ci package.
+sys.path.insert(1, str(Path(__file__).resolve().parents[2]))
+
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_request

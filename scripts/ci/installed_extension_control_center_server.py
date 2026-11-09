@@ -17,6 +17,9 @@ import sys
 import threading
 from pathlib import Path
 
+# The daemon test harness lives under the checkout root's ci package.
+sys.path.insert(1, str(Path(__file__).resolve().parents[2]))
+
 from installed_extension_authority_fixture import describe_authority, read_authority
 
 from ci.guard_daemon_harness import GuardDaemonServer

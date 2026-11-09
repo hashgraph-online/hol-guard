@@ -26,6 +26,8 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# The daemon test harness lives under the checkout root's ci package.
+sys.path.insert(1, str(Path(__file__).resolve().parents[2]))
 
 # Guard discovers apps and connectors under the user's home. Point HOME at an
 # empty directory inside the run root before Guard is imported, so a local run
