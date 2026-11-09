@@ -61,7 +61,7 @@ pub(super) fn whole(
     let short = short.join(" ");
     let diff = run_diff(git, against, &[], "-U1", until)?;
     if shown_files(&diff, texts) {
-        return fitting(git, against, &[], texts, &short, None, until);
+        return fitting(git, against, &[], texts, &short, None, Some(diff), until);
     }
     let changed: BTreeSet<String> = hunks(&diff).into_iter().map(|hunk| hunk.path).collect();
     let (paths, left): (Vec<String>, Vec<String>) =
@@ -80,12 +80,14 @@ pub(super) fn whole(
             let files = if others == 1 { "file" } else { "files" };
             format!("`git diff {short}` also shows {others} other changed {files}")
         };
-    fitting(git, against, &paths, texts, &short, Some(rest), until)
+    fitting(git, against, &paths, texts, &short, Some(rest), None, until)
 }
 
 /// The diff with git's usual three lines around each change when that is
 /// small, else with one. Reviewing changes, agents run `git diff -U3` again
-/// for the lines around them when the note shows one.
+/// for the lines around them when the note shows one. `narrow` is the `-U1`
+/// diff when it was already run; a `-U3` run that fails falls back to it.
+#[allow(clippy::too_many_arguments)]
 fn fitting(
     git: &Git,
     against: &[&str],
@@ -93,6 +95,7 @@ fn fitting(
     texts: &[(String, String)],
     short: &str,
     rest: Option<String>,
+    mut narrow: Option<String>,
     until: Instant,
 ) -> Option<Whole> {
     let limited = if paths.is_empty() {
@@ -101,7 +104,14 @@ fn fitting(
         format!(" -- {}", paths.join(" "))
     };
     for context in ["-U3", "-U1"] {
-        let diff = run_diff(git, against, paths, context, until)?;
+        let in_hand = if context == "-U1" {
+            narrow.take()
+        } else {
+            None
+        };
+        let Some(diff) = in_hand.or_else(|| run_diff(git, against, paths, context, until)) else {
+            continue;
+        };
         let command = format!("git diff {context} {short}{limited}");
         if let Some(whole) = small(diff, texts, command, rest.clone()) {
             return Some(whole);
