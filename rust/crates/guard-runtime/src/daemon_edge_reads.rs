@@ -376,6 +376,10 @@ fn respond(
         return network::containment_health(config)
             .map(|(status, body)| (status, body, caller.cors_origin, true));
     }
+    if request.path == "/v1/plugins/updates" {
+        return plugin_updates::read(config)
+            .map(|(status, body)| (status, body, caller.cors_origin, true));
+    }
     if request.path == "/v1/network/status" {
         return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));
     }
@@ -604,6 +608,8 @@ mod requests;
 #[path = "daemon_edge_settings.rs"]
 mod settings;
 
+#[path = "daemon_edge_plugin_updates.rs"]
+mod plugin_updates;
 #[path = "daemon_edge_network.rs"]
 mod network;
 
