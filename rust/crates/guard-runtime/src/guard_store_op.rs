@@ -405,6 +405,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "count_command_shadow_observations"
         | "get_guard_session"
         | "list_guard_sessions"
+        | "list_events_after"
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
@@ -900,6 +901,7 @@ fn dispatch(
         "set_device_label" => devices::set_label(connection, args),
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
+        "list_events_after" => cloud_events::list_after(connection, args),
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),
         "count_guard_events_v1" => cloud_events::count(connection, args),

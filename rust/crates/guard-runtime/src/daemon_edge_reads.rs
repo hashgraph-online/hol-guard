@@ -350,6 +350,18 @@ fn route(
                 (200, receipt)
             })
         }
+        "/v1/inventory" => inventory::list(config, reads),
+        "/v1/events" => {
+            let (_, _, _, fields) =
+                crate::daemon_handler_requests::events_cursor(query).into_parts();
+            let cursor = fields.get("cursor").and_then(Value::as_i64)?;
+            let items = reads.store_call(
+                config,
+                "list_events_after",
+                json!({"event_id": cursor, "limit": 200}),
+            )?;
+            items.is_array().then(|| (200, json!({"items": items})))
+        }
         "/v1/read-state" => read_state(config, reads).map(|ids| (200, json!({"ids": ids}))),
         "/v1/evidence" => evidence::list(query, config, reads),
         "/v1/sessions" => records::sessions(config, reads),
@@ -485,6 +497,9 @@ mod evidence;
 
 #[path = "daemon_edge_records.rs"]
 mod records;
+
+#[path = "daemon_edge_inventory.rs"]
+mod inventory;
 
 #[path = "daemon_edge_activity.rs"]
 mod activity;
