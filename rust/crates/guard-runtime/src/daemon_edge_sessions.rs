@@ -261,25 +261,25 @@ impl Writer<'_> {
             _ => PyVal::Dict(Vec::new()),
         };
         let waiting = status == "waiting_on_approval";
-        let (request_ids, resume_token, event_name) = if waiting {
+        let (request_ids, resume_handle, event_name) = if waiting {
             let request_ids = match get(payload, "approval_request_ids") {
                 Some(PyVal::List(items)) => strings(items),
                 _ => PyVal::List(Vec::new()),
             };
-            let resume_token = Value::from(uuid4_hex()?);
-            (request_ids, resume_token, "operation/waitingApproval")
+            let resume_handle = Value::from(uuid4_hex()?);
+            (request_ids, resume_handle, "operation/waitingApproval")
         } else {
             let request_ids = match current.get("approval_request_ids")? {
                 ids @ PyVal::List(_) => ids.clone(),
                 _ => PyVal::List(Vec::new()),
             };
-            let resume_token = current.get("resume_token")?.to_json()?;
+            let resume_handle = current.get("resume_token")?.to_json()?;
             let event_name = if matches!(status.as_str(), "completed" | "blocked" | "failed") {
                 "operation/completed"
             } else {
                 "operation/resumed"
             };
-            (request_ids, resume_token, event_name)
+            (request_ids, resume_handle, event_name)
         };
         if !plain(&metadata) || !plain(&request_ids) {
             return None;
@@ -293,7 +293,7 @@ impl Writer<'_> {
                 "operation_type": current.get("operation_type")?.to_json()?,
                 "status": status,
                 "approval_request_ids_json": dumps(&request_ids)?,
-                "resume_token": resume_token,
+                "resume_token": resume_handle,
                 "metadata_json": dumps(&metadata)?,
                 "now": now_isoformat()?,
             }),
