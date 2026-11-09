@@ -1,4 +1,4 @@
-use super::super::http::parse_get;
+use super::super::http::{parse_get, parse_request};
 use super::*;
 use serde_json::json;
 
@@ -163,4 +163,52 @@ fn leaves_every_other_session_to_the_daemon() {
         signed(scoped)
     );
     assert_eq!(allows(&repeated_nonce), None);
+}
+
+fn writes(head: &str) -> bool {
+    let head = format!("{head}\r\n\r\n");
+    let request = parse_request(head.as_bytes()).unwrap();
+    authorize_write(&request, TOKEN).is_some()
+}
+
+fn post_with(claims: &Value, path: &str) -> String {
+    let header = session(claims, TOKEN);
+    format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Guard-Dashboard-Session: {header}")
+}
+
+#[test]
+fn takes_a_dashboard_session_for_the_writes_it_opens() {
+    let path = "/v1/requests/req-1/approve";
+    assert!(session_path("POST", path));
+    assert!(writes(&post_with(&dashboard_claims(), path)));
+    let mut approval_center = dashboard_claims();
+    approval_center["surface"] = json!("approval-center");
+    assert!(writes(&post_with(&approval_center, path)));
+    // A path no session may write stays with the key alone.
+    assert!(!session_path("POST", "/v1/daemon/stop"));
+    assert!(!writes(&post_with(&dashboard_claims(), "/v1/daemon/stop")));
+}
+
+#[test]
+fn leaves_link_bound_repair_and_scoped_sessions_to_the_daemon() {
+    let path = "/v1/requests/req-1/approve";
+    for (key, value) in [
+        ("request_id", json!("req-1")),
+        ("request_id", json!("")),
+        ("surface", json!("protection-repair")),
+        ("surface", json!("package-firewall")),
+        ("aud", json!("someone-else")),
+        ("expires_at", json!("2000-01-01T00:00:00+00:00")),
+    ] {
+        let mut claims = dashboard_claims();
+        claims[key] = value;
+        assert!(!writes(&post_with(&claims, path)), "{key}");
+    }
+    let forged = session(&dashboard_claims(), b"another-daemon");
+    assert!(!writes(&format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Guard-Dashboard-Session: {forged}"
+    )));
+    let mut null_bound = dashboard_claims();
+    null_bound["request_id"] = Value::Null;
+    assert!(writes(&post_with(&null_bound, path)));
 }

@@ -2,18 +2,20 @@
 //! daemon.
 //!
 //! The edge takes a write only when the daemon's preamble would pass it with
-//! nothing left to decide: the auth token in its one `X-Guard-Token` header,
+//! nothing left to decide: the auth token in its one `X-Guard-Token` header
+//! (or, on the routes that take one, a session Guard's own dashboard holds),
 //! an allowed origin, one plain `Content-Length` and a JSON body the edge reads
 //! exactly as `json.loads` would. The daemon reads any other body itself, so a
-//! form body, a dashboard session, a chunked body or JSON that only Python
-//! accepts goes to it untouched, with every rejection it writes today.
+//! form body, a link-bound or nonce-spending session, a chunked body or JSON
+//! that only Python accepts goes to it untouched, with every rejection it
+//! writes today.
 
 use std::net::SocketAddr;
 
 use guard_contracts::DaemonFieldV1;
 use serde_json::{json, Map, Value};
 
-use super::super::auth::authorize_token;
+use super::super::auth::{authorize_token, authorize_write};
 use super::super::http::Request;
 use super::{read_state, NativeReads, ReadConfig};
 use crate::guard_store_json::py_strip;
@@ -52,16 +54,11 @@ pub(super) fn respond(
     reads: &NativeReads,
 ) -> Option<(u16, Value, Option<String>, bool)> {
     if request.method == "POST" && resolve::owns(request.path) {
-        // A dashboard session decides only what its link names, which only
-        // the daemon reads.
-        if request.has_header("Transfer-Encoding")
-            || request.has_header("X-Guard-Dashboard-Session")
-            || request.has_header("Authorization")
-        {
+        if request.has_header("Transfer-Encoding") {
             return None;
         }
         let local = local?;
-        let caller = authorize_token(request, &config.token)?;
+        let caller = authorize_write(request, &config.token)?;
         let payload = json_payload(request, body)?;
         reads.report_activity();
         let (status, body, no_store) =
@@ -72,14 +69,10 @@ pub(super) fn respond(
         .then(|| route_calls::route(request.path))
         .flatten()
     {
-        // A dashboard session is checked only by the daemon.
-        if request.has_header("Transfer-Encoding")
-            || request.has_header("X-Guard-Dashboard-Session")
-            || request.has_header("Authorization")
-        {
+        if request.has_header("Transfer-Encoding") {
             return None;
         }
-        let caller = authorize_token(request, &config.token)?;
+        let caller = authorize_write(request, &config.token)?;
         let payload = json_payload(request, body)?;
         reads.report_activity();
         let (status, body, no_store) =
@@ -118,27 +111,21 @@ pub(super) fn respond(
         return Some((status, body, caller.cors_origin, true));
     }
     if request.method == "POST" && request.path == "/v1/update/reconnect/prepare" {
-        if request.has_header("Transfer-Encoding")
-            || request.has_header("X-Guard-Dashboard-Session")
-            || request.has_header("Authorization")
-        {
+        if request.has_header("Transfer-Encoding") {
             return None;
         }
-        let caller = authorize_token(request, &config.token)?;
+        let caller = authorize_write(request, &config.token)?;
         json_payload(request, body)?;
         reads.report_activity();
         let (status, body) = reconnect_prepare(&config.guard_home);
         return Some((status, body, caller.cors_origin, true));
     }
     if request.method == "POST" && request.path == "/v1/notifications/setup" {
-        if request.has_header("Transfer-Encoding")
-            || request.has_header("X-Guard-Dashboard-Session")
-            || request.has_header("Authorization")
-        {
+        if request.has_header("Transfer-Encoding") {
             return None;
         }
         let local = local?;
-        let caller = authorize_token(request, &config.token)?;
+        let caller = authorize_write(request, &config.token)?;
         json_payload(request, body)?;
         reads.report_activity();
         let host = match local.ip() {
@@ -156,13 +143,10 @@ pub(super) fn respond(
         return Some((200, body, caller.cors_origin, false));
     }
     if request.method == "POST" && legacy_cloud_handoff(request.path) {
-        if request.has_header("Transfer-Encoding")
-            || request.has_header("X-Guard-Dashboard-Session")
-            || request.has_header("Authorization")
-        {
+        if request.has_header("Transfer-Encoding") {
             return None;
         }
-        let caller = authorize_token(request, &config.token)?;
+        let caller = authorize_write(request, &config.token)?;
         json_payload(request, body)?;
         reads.report_activity();
         let body = serde_json::json!({
@@ -172,13 +156,10 @@ pub(super) fn respond(
         return Some((410, body, caller.cors_origin, false));
     }
     if request.method == "POST" && super::dispatch::post_routed(request.path) {
-        if request.has_header("Transfer-Encoding")
-            || request.has_header("X-Guard-Dashboard-Session")
-            || request.has_header("Authorization")
-        {
+        if request.has_header("Transfer-Encoding") {
             return None;
         }
-        let caller = authorize_token(request, &config.token)?;
+        let caller = authorize_write(request, &config.token)?;
         let payload = json_payload(request, body)?;
         reads.report_activity();
         let (status, body, no_store) = super::dispatch::answer(

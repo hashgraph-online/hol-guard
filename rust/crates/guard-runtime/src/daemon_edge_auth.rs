@@ -26,6 +26,8 @@ use crate::resident_transport::constant_time_eq;
 
 const SESSION_PREFIX: &str = "gld1";
 const SESSION_AUDIENCE: &str = "guard-local-daemon";
+/// The surfaces whose sessions the daemon checks against the path alone.
+const DASHBOARD_SURFACES: [&str; 3] = ["approval-center", "dashboard", "cloud-dashboard"];
 /// A session this close to its expiry goes to the daemon, so the edge never
 /// honors one the daemon's own clock has already ended.
 const EXPIRY_MARGIN_MICROS: i128 = 1_000_000;
@@ -50,6 +52,37 @@ pub(super) fn authorize(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
 pub(super) fn authorize_token(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
     let caller = allowed_origin(request)?;
     token_matches(request, token)?.then_some(caller)
+}
+
+/// A caller the daemon would let write: an allowed origin and either its
+/// auth token or a session Guard's own dashboard holds. A session opened from
+/// an approval link or for protection repair changes what the daemon's
+/// handlers decide, and a supply-chain session spends a nonce, so either goes
+/// to the daemon.
+pub(super) fn authorize_write(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
+    let caller = allowed_origin(request)?;
+    if token_matches(request, token)? {
+        return Some(caller);
+    }
+    if request.method != "POST" || !session_path("POST", request.path) {
+        return None;
+    }
+    let candidates = session_candidates(request)?;
+    let now = now_micros();
+    candidates
+        .into_iter()
+        .any(|candidate| {
+            verified_payload(candidate, token, now).is_some_and(|claims| dashboard_session(&claims))
+        })
+        .then_some(caller)
+}
+
+/// A session from Guard's own dashboard: a local surface, and no request it
+/// is bound to (the daemon treats any `request_id` that is not `null` as one).
+fn dashboard_session(claims: &Map<String, Value>) -> bool {
+    let surface = claims.get("surface").and_then(Value::as_str);
+    surface.is_some_and(|surface| DASHBOARD_SURFACES.contains(&surface))
+        && claims.get("request_id").is_none_or(Value::is_null)
 }
 
 /// A caller on a route the daemon opens to any allowed origin.
@@ -214,7 +247,9 @@ fn session_candidates<'a>(request: &Request<'a>) -> Option<Vec<&'a str>> {
 
 /// The claims of a session token the daemon's auth token signed, whose
 /// audience is the local daemon and which has not expired.
-fn verified_claims(session: &str, token: &[u8], now: i128) -> Option<DaemonSessionClaimsV1> {
+/// The decoded claims of a session the auth token signed, for the local
+/// daemon, and not about to expire.
+fn verified_payload(session: &str, token: &[u8], now: i128) -> Option<Map<String, Value>> {
     let mut parts = session.split('.');
     let (prefix, payload, signature) = (parts.next()?, parts.next()?, parts.next()?);
     if parts.next().is_some() || prefix != SESSION_PREFIX || payload.is_empty() {
@@ -237,6 +272,11 @@ fn verified_claims(session: &str, token: &[u8], now: i128) -> Option<DaemonSessi
     if expires_at <= now + EXPIRY_MARGIN_MICROS {
         return None;
     }
+    Some(claims)
+}
+
+fn verified_claims(session: &str, token: &[u8], now: i128) -> Option<DaemonSessionClaimsV1> {
+    let claims = verified_payload(session, token, now)?;
     Some(DaemonSessionClaimsV1 {
         surface: text(&claims, "surface"),
         action_path: text(&claims, "action_path"),
