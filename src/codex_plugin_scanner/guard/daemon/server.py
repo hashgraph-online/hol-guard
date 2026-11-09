@@ -25,9 +25,7 @@ from ...version import __version__
 from ..adapters import get_adapter
 from ..approval_gate import (
     ApprovalGateError,
-    require_high_risk,
 )
-from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..json_transport import escape_json_for_html
@@ -77,9 +75,6 @@ from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..storage_retention import quarantined_store_summary
 from ..store import GuardStore
-from ..store_evidence import (
-    clear_evidence,
-)
 from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
 from .audit_persistence import WRITTEN as AUDIT_WRITTEN
 from .audit_persistence import AuditPersistence
@@ -853,56 +848,6 @@ class _GuardDaemonHandler(
             return
         self.send_response(404)
         self.end_headers()
-
-    def do_DELETE(self) -> None:
-        parsed = urlparse(self.path)
-        self._touch_runtime_heartbeat(parsed.path)
-        if not self._origin_is_allowed_for_request(parsed.path):
-            self._write_json({"error": "forbidden_origin"}, status=403)
-            return
-        if not self._header_token_is_valid():
-            self._write_json(
-                {"error": "unauthorized"},
-                status=401,
-                extra_headers=self._cors_headers_for_request(),
-            )
-            return
-        body = self._read_delete_body() if parsed.path == "/v1/command-activity" else None
-        store = self.server.store  # type: ignore[attr-defined]
-        if parsed.path == "/v1/command-activity":
-            if body is None:
-                self._write_json({"error": "invalid_request"}, status=400)
-                return
-            if body.get("confirm") != "clear-command-activity":
-                self._write_json(
-                    {"error": "confirmation_required", "confirm": "clear-command-activity"},
-                    status=400,
-                )
-                return
-            try:
-                require_high_risk(
-                    store.guard_home,
-                    purpose="evidence_clear",
-                    approval_gate_input=approval_gate_input_from_mapping(body),
-                )
-            except ApprovalGateError as error:
-                self._write_approval_gate_error(error)
-                return
-            self._write_json(store.clear_command_activity_evidence())
-            return
-        if parsed.path == "/v1/evidence":
-            self._write_json({"deleted": clear_evidence(store)})
-            return
-        if parsed.path == "/v1/read-state":
-            body = self._read_delete_body()
-            request_id = body.get("request_id") if body else None
-            if isinstance(request_id, str):
-                store.mark_request_unread(request_id)
-            elif body and body.get("clear_all"):
-                store.clear_read_state()
-            self._write_json({"ok": True})
-            return
-        self._write_json({"error": "not_found"}, status=404)
 
     @scoped_hook_post
     def do_POST(self) -> None:

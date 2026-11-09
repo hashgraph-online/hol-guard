@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -230,20 +229,6 @@ class _ControlMiscRoutes:
             self._write_json({"ok": True, "ids": store.get_read_state()})
             return
         self._write_json({"error": "invalid_action"}, status=400)
-
-    def _read_delete_body(self) -> dict[str, object] | None:
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            return None
-        if length <= 0 or length > self._MAX_BODY_BYTES:
-            return None
-        raw = self.rfile.read(length)
-        try:
-            parsed = json.loads(raw.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return None
-        return parsed if isinstance(parsed, dict) else None
 
     def _handle_dashboard_update(self, payload: dict[str, object]) -> None:
         force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))

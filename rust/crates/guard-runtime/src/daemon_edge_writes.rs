@@ -224,6 +224,9 @@ pub(super) fn respond(
         return answer.map(|(status, body)| (status, body, caller.cors_origin, false));
     }
     let route = (request.method, request.path);
+    if request.method == "DELETE" {
+        return delete(request, body, config, reads);
+    }
     if request.has_header("Transfer-Encoding")
         || !matches!(
             route,
@@ -233,7 +236,7 @@ pub(super) fn respond(
                     | "/v1/command-activity/feedback"
                     | "/v1/requests/clear"
                     | "/v1/plugins/updates/dismiss"
-            ) | ("DELETE", "/v1/read-state" | "/v1/evidence")
+            )
         )
     {
         return None;
@@ -256,23 +259,52 @@ pub(super) fn respond(
             reads.report_activity();
             requests_clear(&payload, config, reads)
         }
-        ("POST", _) => {
+        _ => {
             let payload = json_payload(request, body)?;
             reads.report_activity();
             command_activity_feedback(&payload, config, reads)
         }
-        (_, "/v1/read-state") => {
-            let payload = delete_payload(body)?;
-            reads.report_activity();
-            clear_read_state(payload.as_ref(), config, reads)
-        }
-        _ => {
-            reads.report_activity();
-            let deleted = reads.store_call(config, "clear_evidence", json!({}))?;
-            Some((200, json!({"deleted": deleted.as_i64()?})))
-        }
     };
     answer.map(|(status, body)| (status, body, caller.cors_origin, false))
+}
+
+/// Every `DELETE`, as `do_DELETE` answered it: the header token alone, then the
+/// three routes, then `404`. `None` only for a caller the edge refuses, which
+/// [`super::refusals::delete_refusal`] answers.
+fn delete(
+    request: &Request<'_>,
+    body: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value, Option<String>, bool)> {
+    let caller = authorize_token(request, &config.token)?;
+    // `do_DELETE` read only a `Content-Length` body, so a chunked one is none.
+    let body = if request.has_header("Transfer-Encoding") {
+        &[][..]
+    } else {
+        body
+    };
+    let answer = match request.path {
+        "/v1/command-activity" => {
+            reads.report_activity();
+            clear_command_activity(body, config, reads)
+        }
+        "/v1/read-state" => {
+            reads.report_activity();
+            clear_read_state(delete_payload(body).as_ref(), config, reads)
+        }
+        "/v1/evidence" => {
+            reads.report_activity();
+            reads
+                .store_call(config, "clear_evidence", json!({}))
+                .and_then(|deleted| deleted.as_i64())
+                .map(|deleted| (200, json!({"deleted": deleted})))
+        }
+        _ => return Some((404, json!({"error": "not_found"}), None, false)),
+    };
+    // The store could not answer once the route ran: the connection closes.
+    let (status, body) = answer.unwrap_or((DROPPED, Value::Null));
+    Some((status, body, caller.cors_origin, false))
 }
 
 /// `_handle_requests_clear`: the native option check, the approval gate, then
@@ -469,17 +501,54 @@ fn command_activity_feedback(
 }
 
 /// `_read_delete_body`: the JSON object a `DELETE` carries, whatever its
-/// `Content-Type`, or `Some(None)` for no body or one that is not an object.
-/// `None` for a body only `json.loads` may read.
-fn delete_payload(body: &[u8]) -> Option<Option<Map<String, Value>>> {
-    if body.is_empty() {
-        return Some(None);
-    }
-    match serde_json::from_slice(body).ok()? {
-        Value::Object(payload) => Some(Some(payload)),
-        _ => Some(None),
+/// `Content-Type`; `None` for no body or one that is not an object.
+fn delete_payload(body: &[u8]) -> Option<Map<String, Value>> {
+    match serde_json::from_slice(body) {
+        Ok(Value::Object(payload)) => Some(payload),
+        _ => None,
     }
 }
+
+/// `DELETE /v1/command-activity`: the typed confirmation, the approval gate,
+/// then one transaction that removes command evidence and what derives from it.
+fn clear_command_activity(
+    body: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value)> {
+    let payload = match serde_json::from_slice::<Value>(body) {
+        Ok(Value::Object(payload)) if !body.is_empty() => payload,
+        _ => return Some((400, json!({"error": "invalid_request"}))),
+    };
+    if payload.get("confirm").and_then(Value::as_str) != Some(CLEAR_COMMAND_ACTIVITY) {
+        return Some((
+            400,
+            json!({"error": "confirmation_required", "confirm": CLEAR_COMMAND_ACTIVITY}),
+        ));
+    }
+    match gate::require_high_risk("evidence_clear", &payload, config)? {
+        gate::Gate::Refused(status, refusal) => Some((status, Value::Object(refusal))),
+        gate::Gate::Passed(_) => {
+            // The gate has run, so a failed write closes the connection.
+            let Some(Value::Object(cleared)) =
+                reads.store_call(config, "clear_command_activity_evidence", json!({}))
+            else {
+                return Some((DROPPED, Value::Null));
+            };
+            let mut answer = Map::new();
+            answer.insert(
+                "schema_version".to_owned(),
+                Value::from(COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION),
+            );
+            answer.extend(cleared);
+            Some((200, Value::Object(answer)))
+        }
+    }
+}
+
+const CLEAR_COMMAND_ACTIVITY: &str = "clear-command-activity";
+/// `COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION`.
+const COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION: &str = "guard.command-activity-diagnostics.v1";
 
 /// `DELETE /v1/read-state`: mark one request unread, or clear every mark when
 /// `clear_all` is truthy. Any other body changes nothing.

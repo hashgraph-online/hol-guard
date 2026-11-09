@@ -441,19 +441,41 @@ fn clears_read_state_and_evidence_itself_as_the_daemon_does() {
 }
 
 #[test]
-fn relays_every_delete_it_does_not_read_as_the_daemon_does() {
+fn answers_every_delete_itself_as_the_daemon_did() {
     let edge = spawn_configured_edge();
-    for request in [
-        delete("/v1/read-state", "{}").replace(TOKEN, "wrong"),
-        delete("/v1/read-state", "NaN"),
-        delete("/v1/command-activity", "{}"),
-        format!("DELETE /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nTransfer-Encoding: chunked\r\n\r\n"),
-        format!("POST /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Length: 0\r\n\r\n"),
+    for (request, head, tail) in [
+        (
+            delete("/v1/read-state", "{}").replace(TOKEN, "wrong"),
+            "HTTP/1.0 401 ",
+            r#""unauthorized"}"#,
+        ),
+        (delete("/v1/read-state", "NaN"), "HTTP/1.0 200 ", r#"{"ok":true}"#),
+        (
+            delete("/v1/command-activity", "{}"),
+            "HTTP/1.0 400 ",
+            r#"{"confirm":"clear-command-activity","error":"confirmation_required"}"#,
+        ),
+        (
+            delete("/v1/command-activity", "[1]"),
+            "HTTP/1.0 400 ",
+            r#"{"error":"invalid_request"}"#,
+        ),
+        (
+            format!("DELETE /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nTransfer-Encoding: chunked\r\n\r\n"),
+            "HTTP/1.0 200 ",
+            "}",
+        ),
+        (delete("/v1/unknown", ""), "HTTP/1.0 404 ", r#"{"error":"not_found"}"#),
     ] {
-        assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
-        let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
-        assert!(request.as_bytes().starts_with(&relayed), "{request}");
+        let response = exchange(edge.address, &request);
+        assert!(response.starts_with(head), "{request}: {response}");
+        assert!(response.ends_with(tail), "{request}: {response}");
     }
+    assert!(edge.requests.try_recv().is_err());
+    let request = format!(
+        "POST /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Length: 0\r\n\r\n"
+    );
+    assert_eq!(exchange(edge.address, &request), "daemon");
 }
 
 #[test]

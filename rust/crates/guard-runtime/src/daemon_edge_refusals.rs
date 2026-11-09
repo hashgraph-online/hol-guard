@@ -142,6 +142,16 @@ pub(in crate::daemon_edge) fn refusal(request: &Request<'_>, secret: &[u8]) -> O
     (!header_secret_matches(request, secret)).then_some(Refusal::Unauthorized)
 }
 
+/// Why `do_DELETE`'s preamble refused a caller the edge did not authorize:
+/// the origin check, then the header token alone. A
+/// dashboard session or proof header does not open a `DELETE`.
+pub(in crate::daemon_edge) fn delete_refusal(request: &Request<'_>) -> Refusal {
+    if authorize_origin(request).is_none() {
+        return Refusal::ForbiddenOrigin;
+    }
+    Refusal::Unauthorized
+}
+
 /// The response for a refusal, after recording its audit event.
 pub(in crate::daemon_edge) fn respond(
     request: &Request<'_>,

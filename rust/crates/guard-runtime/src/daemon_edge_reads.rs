@@ -436,9 +436,16 @@ pub(super) fn answer(
         return write_answer(client, &response, reads, stalled_write);
     }
     let answer = request.as_ref().and_then(|request| match request.method {
-        "POST" | "DELETE" => {
-            writes::respond(request, body, client.local_addr().ok(), config, reads)
-        }
+        // The daemon has no `DELETE` handler behind the edge, so every one is
+        // answered here.
+        "DELETE" => writes::respond(request, body, client.local_addr().ok(), config, reads)
+            .or_else(|| {
+                let refusal = refusals::delete_refusal(request);
+                let (status, body, cors_origin) =
+                    refusals::respond(request, &refusal, client.local_addr().ok(), config, reads);
+                Some((status, body, cors_origin, false))
+            }),
+        "POST" => writes::respond(request, body, client.local_addr().ok(), config, reads),
         _ => respond(request, config, reads),
     });
     let answer = answer.or_else(|| {
