@@ -173,3 +173,46 @@ fn routes_record_paths_the_way_the_daemon_dispatches_them() {
         ))
     );
 }
+
+#[test]
+fn lists_events_past_the_cursor_as_the_daemon_does() {
+    let store = store("{}");
+    rusqlite::Connection::open(store._home.path().join("guard.db"))
+        .unwrap()
+        .execute_batch(
+            "create table guard_events (
+                 event_id integer primary key autoincrement, event_name text not null,
+                 payload_json text not null, occurred_at text not null);
+             insert into guard_events (event_name, payload_json, occurred_at) values
+                 ('a', '{\"k\": 1}', 't1'), ('b', '[1]', 't2'), ('c', '{}', 't3');",
+        )
+        .unwrap();
+    let route = |query: &str| super::super::route("/v1/events", query, &store.config, &store.reads);
+    assert_eq!(
+        route("cursor=1"),
+        Some((
+            200,
+            json!({"items": [
+                {"event_id": 2, "event_name": "b", "occurred_at": "t2", "payload": {}},
+                {"event_id": 3, "event_name": "c", "occurred_at": "t3", "payload": {}},
+            ]})
+        ))
+    );
+    assert_eq!(
+        route("cursor=x").unwrap().1["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(route("cursor=3"), Some((200, json!({"items": []}))));
+    rusqlite::Connection::open(store._home.path().join("guard.db"))
+        .unwrap()
+        .execute_batch(
+            "insert into guard_events (event_name, payload_json, occurred_at)
+             values ('d', 'not json', 't4');",
+        )
+        .unwrap();
+    // `json.loads` fails the daemon's read, so the daemon answers it.
+    assert_eq!(route("cursor=3"), None);
+}

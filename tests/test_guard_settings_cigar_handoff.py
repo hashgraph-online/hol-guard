@@ -26,6 +26,9 @@ def test_saving_cigar_settings_hands_them_to_the_native_service(
         return {}
 
     monkeypatch.setattr(native_context_assistance, "control", control)
+    # The daemon's own handlers must answer, so no native edge may serve the
+    # reset first.
+    monkeypatch.setenv("HOL_GUARD_DAEMON_NATIVE_EDGE", "0")
     _store, daemon = _with_daemon(guard_home)
     try:
         saved, _ = _json_request(

@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use guard_contracts::{
-    ApprovalGateInputWireV1, ApprovalGateMethodV1, ApprovalGateRequestV1,
+    ApprovalGateGrantWireV1, ApprovalGateInputWireV1, ApprovalGateMethodV1, ApprovalGateRequestV1,
     APPROVAL_GATE_REQUEST_SCHEMA, APPROVAL_GATE_RESULT_SCHEMA,
 };
 use serde_json::{json, Map, Value};
@@ -34,7 +34,9 @@ static REQUEST_IDS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, PartialEq)]
 pub(super) enum Gate {
-    Passed,
+    /// The check passed, with the grant the resident issued: `None` when the
+    /// home needs no gate.
+    Passed(Option<Box<ApprovalGateGrantWireV1>>),
     /// The status and `ApprovalGateError.to_payload()` body.
     Refused(u16, Map<String, Value>),
 }
@@ -46,6 +48,64 @@ pub(super) fn require_high_risk(
     payload: &Map<String, Value>,
     config: &ReadConfig,
 ) -> Option<Gate> {
+    let input = input_from_mapping(Some(&Value::Object(payload.clone()))).map(|input| {
+        ApprovalGateInputWireV1 {
+            password: input.password,
+            new_password: input.new_password,
+            confirm_password: input.confirm_password,
+            totp_code: input.totp_code,
+            use_cooldown: input.use_cooldown,
+            revoke_cooldown: input.revoke_cooldown,
+            require_fresh_totp: input.require_fresh_totp,
+        }
+    });
+    call(
+        ApprovalGateMethodV1::RequireHighRisk,
+        Some(json!({
+            "action": null,
+            "scope": null,
+            "subject": null,
+            "session_nonce": null,
+        })),
+        input,
+        None,
+        Some(purpose),
+        config,
+    )
+}
+
+/// `require_settings_write(guard_home, approval_gate_grant=grant)`, run
+/// after `require_high_risk` passed with that grant.
+pub(super) fn require_settings_write(
+    grant: Option<Box<ApprovalGateGrantWireV1>>,
+    config: &ReadConfig,
+) -> Option<Gate> {
+    let granted = grant.is_some();
+    let answer = call(
+        ApprovalGateMethodV1::RequireSettingsWrite,
+        None,
+        None,
+        grant.map(|grant| *grant),
+        None,
+        config,
+    );
+    // A grant means the gate is set up, so a check that went unanswered
+    // fails closed rather than letting the write through.
+    match answer {
+        None if granted => Some(unavailable()),
+        answer => answer,
+    }
+}
+
+fn call(
+    method: ApprovalGateMethodV1,
+    params: Option<Value>,
+    approval_gate_input: Option<ApprovalGateInputWireV1>,
+    approval_gate_grant: Option<ApprovalGateGrantWireV1>,
+    purpose: Option<&str>,
+    config: &ReadConfig,
+) -> Option<Gate> {
+    let grant_expected = method == ApprovalGateMethodV1::RequireHighRisk;
     let session_signals = config.session_signals.clone()?;
     // A state file that cannot be checked goes to the daemon, before the
     // resident has run anything.
@@ -60,27 +120,12 @@ pub(super) fn require_high_risk(
             REQUEST_IDS.fetch_add(1, Ordering::Relaxed)
         ),
         guard_home: config.guard_home.clone(),
-        method: ApprovalGateMethodV1::RequireHighRisk,
-        params: Some(json!({
-            "action": null,
-            "scope": null,
-            "subject": null,
-            "session_nonce": null,
-        })),
-        approval_gate_input: input_from_mapping(Some(&Value::Object(payload.clone()))).map(
-            |input| ApprovalGateInputWireV1 {
-                password: input.password,
-                new_password: input.new_password,
-                confirm_password: input.confirm_password,
-                totp_code: input.totp_code,
-                use_cooldown: input.use_cooldown,
-                revoke_cooldown: input.revoke_cooldown,
-                require_fresh_totp: input.require_fresh_totp,
-            },
-        ),
-        approval_gate_grant: None,
+        method,
+        params,
+        approval_gate_input,
+        approval_gate_grant,
         strict: false,
-        purpose: Some(purpose.to_owned()),
+        purpose: purpose.map(str::to_owned),
         now: None,
         duration_seconds: None,
         device_label: None,
@@ -100,7 +145,13 @@ pub(super) fn require_high_risk(
         })
         .and_then(|output| serde_json::from_slice::<Value>(&output).ok());
     match envelope {
-        Some(envelope) => answer(&envelope, &request.request_id, &digest, configured),
+        Some(envelope) => answer(
+            &envelope,
+            &request.request_id,
+            &digest,
+            configured,
+            grant_expected,
+        ),
         // Without an answer a home that never set the gate up goes to the
         // daemon, and a configured one fails closed as the daemon would.
         None if configured => Some(unavailable()),
@@ -109,7 +160,13 @@ pub(super) fn require_high_risk(
 }
 
 /// How the daemon's client reads the resident's answer.
-fn answer(envelope: &Value, request_id: &str, digest: &str, configured: bool) -> Option<Gate> {
+fn answer(
+    envelope: &Value,
+    request_id: &str,
+    digest: &str,
+    configured: bool,
+    grant_expected: bool,
+) -> Option<Gate> {
     let Some(envelope) = envelope.as_object() else {
         return Some(unavailable());
     };
@@ -120,7 +177,7 @@ fn answer(envelope: &Value, request_id: &str, digest: &str, configured: bool) ->
     {
         // No authority here: an unset gate passes, and a configured home goes
         // to the daemon, whose client may provision the verifier key first.
-        return (!configured).then_some(Gate::Passed);
+        return (!configured).then_some(Gate::Passed(None));
     }
     if envelope.get("schema").and_then(Value::as_str) != Some(APPROVAL_GATE_RESULT_SCHEMA)
         || envelope.get("request_id").and_then(Value::as_str) != Some(request_id)
@@ -130,11 +187,20 @@ fn answer(envelope: &Value, request_id: &str, digest: &str, configured: bool) ->
     }
     Some(match envelope.get("status").and_then(Value::as_str) {
         Some("error") => refused(envelope).unwrap_or_else(unavailable),
+        // A consumer check answers with no grant; the daemon ignores its
+        // payload.
+        Some("ok") if !grant_expected => Gate::Passed(None),
         Some("ok") => match envelope
             .get("payload")
             .and_then(|payload| payload.get("grant"))
         {
-            Some(Value::Null | Value::Object(_)) => Gate::Passed,
+            Some(Value::Null) => Gate::Passed(None),
+            Some(grant @ Value::Object(_)) => {
+                match serde_json::from_value::<ApprovalGateGrantWireV1>(grant.clone()) {
+                    Ok(grant) => Gate::Passed(Some(Box::new(grant))),
+                    Err(_) => unavailable(),
+                }
+            }
             _ => unavailable(),
         },
         _ => unavailable(),

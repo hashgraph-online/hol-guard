@@ -95,3 +95,30 @@ fn quoted_text_is_found_where_a_comment_wraps_it() {
     // A `*` that starts code, not a comment, stays.
     assert_eq!(quoted("x\n*args", &["x args".to_owned()]), [false]);
 }
+
+/// A quote too long to search whole, such as a docstring sentence, is
+/// searched by its first words, which the wrapped docstring still holds.
+#[test]
+fn a_long_quote_is_searched_by_its_first_words() {
+    let sentence =
+        "Yield all arguments passed to the function in the same order in which they were passed.";
+    let found = phrases(&format!(
+        "which function does this? \"{sentence}\" Reply with its path."
+    ));
+    assert_eq!(
+        found,
+        ["yield all arguments passed to the function in the same order in which they were"]
+    );
+    let docstring = "def value_chain(*args):\n    \"\"\"Yield all arguments passed to the function in the same\n    order in which they were passed. If an argument itself is iterable then\n";
+    assert_eq!(quoted(&docstring.to_lowercase(), &found), [true]);
+    let longest = format!("\"{}\"", "word ".repeat(30).trim_end());
+    assert_eq!(phrases(&longest), ["word ".repeat(16).trim_end()]);
+    let unbroken = format!("`{}`", "x".repeat(100));
+    assert_eq!(phrases(&unbroken), ["x".repeat(80)]);
+    // Pasted with other line breaks than the source's, still found.
+    let pasted = phrases(
+        "which function does this? \"Yield all arguments passed to the\n    function in the same order in which they were passed.\"",
+    );
+    assert_eq!(pasted, found);
+    assert_eq!(quoted(&docstring.to_lowercase(), &pasted), [true]);
+}

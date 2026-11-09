@@ -6,7 +6,10 @@ pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
 /// How far past an opening quote to look for its closing one, so a prompt
 /// full of unmatched quotes is still scanned in one pass.
-const MAX_PHRASE_SPAN: usize = 120;
+const MAX_PHRASE_SPAN: usize = 160;
+/// The most of a quote searched for. A longer one, such as a whole docstring
+/// sentence, is searched by its first words up to this length.
+const MAX_PHRASE_CHARS: usize = 80;
 /// Files the prompt names, such as `CHANGES.rst`, each standing for at most
 /// `MAX_NAMED_MATCHES` files with that name.
 pub(crate) const MAX_NAMED: usize = 4;
@@ -333,8 +336,15 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
             continue;
         };
         let phrase: String = chars[at + 1..at + 1 + end].iter().collect();
-        let phrase = phrase.trim().to_lowercase();
-        if (3..=80).contains(&phrase.chars().count())
+        // A quote pasted with its line breaks reads as the source does once
+        // unwrapped, however the source wraps it.
+        let phrase = if phrase.contains('\n') {
+            unwrapped(&phrase)
+        } else {
+            phrase
+        };
+        let phrase = first_words(phrase.trim().to_lowercase());
+        if phrase.chars().count() >= 3
             && phrase.chars().any(char::is_alphanumeric)
             && !found.contains(&phrase)
         {
@@ -343,6 +353,24 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
         at += end + 2;
     }
     found
+}
+
+/// `phrase` cut to its first words that fit in `MAX_PHRASE_CHARS`. Every
+/// file that holds the whole quote holds these words too, and a quote that
+/// ends differently from the source (a period added or left off) still
+/// matches.
+fn first_words(phrase: String) -> String {
+    let Some((cut, _)) = phrase.char_indices().nth(MAX_PHRASE_CHARS) else {
+        return phrase;
+    };
+    let head = &phrase[..cut];
+    let words = if phrase[cut..].starts_with(char::is_whitespace) {
+        head
+    } else {
+        head.rsplit_once(char::is_whitespace)
+            .map_or(head, |(words, _)| words)
+    };
+    words.trim_end().to_owned()
 }
 
 /// `text` with each line break, and the indent and comment mark after it,

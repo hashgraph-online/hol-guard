@@ -31,6 +31,7 @@ fn store(name: &str) -> Store {
         "store_path": home.join("guard.db").to_str().unwrap(),
         "source": vectors["source"],
         "busy_timeout_ms": 2000,
+        "cwd": "/",
     });
     Store {
         config: ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap(),
@@ -185,4 +186,49 @@ fn reads_a_recorded_resume_and_leaves_seeding_to_the_daemon() {
             json!({"request_id": request_id}),
         )
     );
+}
+
+#[test]
+fn hosted_details_drop_the_private_queue_hint() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    let (status, body) = detail(&request_id, "", true, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["request_id"], json!(request_id));
+    assert!(body.get("extension_allow_hint").is_none());
+}
+
+#[test]
+fn local_waiting_and_unknown_details_go_to_the_daemon() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        detail(&request_id, "", false, &store.config, &store.reads),
+        None
+    );
+    assert_eq!(
+        detail(&request_id, "wait_ms=10", true, &store.config, &store.reads),
+        None
+    );
+    assert_eq!(
+        detail("missing", "", true, &store.config, &store.reads),
+        None
+    );
+    assert_eq!(detail("a%2Fb", "", true, &store.config, &store.reads), None);
+}
+
+#[test]
+fn rows_the_daemon_may_offer_a_grant_on_go_to_the_daemon() {
+    let offer = |row: Value| may_carry_grant_offer(row.as_object().unwrap());
+    assert!(offer(json!({"browser_intent": {}})));
+    assert!(offer(
+        json!({"scanner_evidence": [1, {"source": "trusted_local_tool"}]})
+    ));
+    assert!(!offer(json!({"browser_intent": null})));
+    assert!(!offer(
+        json!({"browser_intent": "x", "scanner_evidence": {"source": "trusted_local_tool"}})
+    ));
+    assert!(!offer(json!({"scanner_evidence": [{"source": "other"}]})));
 }

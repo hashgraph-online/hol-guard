@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 import urllib.error
 from collections.abc import Iterator
@@ -36,6 +37,7 @@ from codex_plugin_scanner.guard.runtime import (
     command_queue,
     command_queue_authority,
 )
+from codex_plugin_scanner.guard.runtime import command_queue_loop as command_queue_loop_module
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_oauth_token_support import oauth_binding_access_token
@@ -1613,32 +1615,35 @@ def test_start_worker_respects_command_queue_opt_out(tmp_path: Path, monkeypatch
 
 def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) -> None:
     store = FakeStore(tmp_path / "guard-home")
-    waits: list[float] = []
+    clock = [0.0]
+    polls: list[float] = []
 
-    class StopAfterThreeWaits:
+    class StopAfterFourPolls:
         def is_set(self) -> bool:
-            return False
+            return len(polls) >= 4
 
         def wait(self, seconds: float) -> bool:
-            waits.append(seconds)
-            return len(waits) >= 3
+            clock[0] += seconds
+            return False
+
+    def failing_poll(current_store, context, **_options):
+        polls.append(clock[0])
+        raise OSError("network down")
 
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "1")
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
-    monkeypatch.setattr(
-        command_queue,
-        "poll_command_queue_once",
-        lambda current_store, context, **_options: (_ for _ in ()).throw(OSError("network down")),
-    )
+    monkeypatch.setattr(command_queue, "poll_command_queue_once", failing_poll)
+    monkeypatch.setattr(command_queue_loop_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(command_queue_loop_module, "review_wait_recent", lambda: False)
 
     command_queue.command_queue_loop(
         store,
         _context(tmp_path),
-        stop_event=StopAfterThreeWaits(),
+        stop_event=StopAfterFourPolls(),
     )
 
-    assert waits == [1, 2, 4]
+    assert [later - earlier for earlier, later in itertools.pairwise(polls)] == [1, 2, 4]
 
 
 def test_command_queue_loop_retries_revoked_oauth_auth_and_records_reconnect_state(
