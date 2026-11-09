@@ -493,3 +493,6 @@ assert convert('bad') == 'suggest a choice for an invalid value'\n";
     let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
     assert!(read.text.contains("src/types.py (lines"), "{}", read.text);
 }
+
+#[path = "context_assistance_prompt_quoted_tests.rs"]
+mod quoted;
