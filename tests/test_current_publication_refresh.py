@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import json
 import threading
-from types import SimpleNamespace
 
 import pytest
 
@@ -65,24 +64,13 @@ def workers():
 
 
 def periodic(state):
-    from ci.guard_daemon_harness import GuardDaemonServer
+    from codex_plugin_scanner.guard.workers import ticks
 
-    class Stop:
-        calls = 0
-
-        def wait(self, seconds):
-            self.calls += 1
-            return self.calls > 1
-
-    server = SimpleNamespace(
-        store=state.store,
-        refresh_extension_control_runtime=lambda: None,
-        extension_control_api=SimpleNamespace(expire_prepared_cache_leases=lambda: None),
-    )
-    daemon = SimpleNamespace(_shutdown_started=Stop(), _server=server, _extension_control_refresh_interval_seconds=0.1)
     discovery._refresh_after = 0
-    GuardDaemonServer._refresh_extension_control_loop(daemon)
-    workers()
+    try:
+        ticks.extension_catalog(state.store, {})
+    finally:
+        workers()
 
 
 def read(state, query=""):

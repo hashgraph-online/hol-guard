@@ -64,7 +64,7 @@ pub(super) fn authorize_write(request: &Request<'_>, token: &[u8]) -> Option<Cal
     if token_matches(request, token)? {
         return Some(caller);
     }
-    if request.method != "POST" || !session_path("POST", request.path) {
+    if !matches!(request.method, "POST" | "DELETE") || !session_path(request.method, request.path) {
         return None;
     }
     let candidates = session_candidates(request)?;

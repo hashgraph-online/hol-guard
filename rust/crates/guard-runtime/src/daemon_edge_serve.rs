@@ -267,6 +267,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
     }
     reads.accept_handshake(&config.handshake(&secret));
     drop(secret);
+    let session_id = random_hex(16);
     if config.workers {
         // Guard-owned hooks and launchers are brought in line with this
         // runtime before the daemon reports ready, as its start always did.
@@ -274,7 +275,8 @@ pub(crate) fn run(args: &[String]) -> i32 {
         workers::start(
             &reads,
             workers::Registration {
-                session_id: random_hex(16),
+                session_id: session_id.clone(),
+                guard_home: home.clone(),
                 host: config.host.clone(),
                 port,
                 started_at: now_iso(),
@@ -287,6 +289,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
     }
     println!("{}", json!({"port": port, "pid": pid}));
     let _ = io::stdout().flush();
+    super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
     match serve(
         &listener,
         None,

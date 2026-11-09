@@ -207,6 +207,18 @@ pub(super) fn take_request(client: &TcpStream) -> Option<(Vec<u8>, usize)> {
     Some((bytes, head_len))
 }
 
+/// The head waiting on `client` when its body has not all arrived: what a
+/// handler that refuses on the head alone reads before the body.
+pub(super) fn waiting_head(client: &TcpStream) -> Option<Vec<u8>> {
+    let mut buffer = vec![0u8; MAX_HEAD_BYTES];
+    let _ = client.set_nonblocking(true);
+    let peeked = client.peek(&mut buffer);
+    let _ = client.set_nonblocking(false);
+    let head_len = head_end(&buffer[..peeked.ok()?])?;
+    buffer.truncate(head_len);
+    Some(buffer)
+}
+
 /// A zeroed buffer as long as the complete request waiting on `client`, and
 /// the length of its head.
 fn peek_request(client: &TcpStream) -> Option<(Vec<u8>, usize)> {

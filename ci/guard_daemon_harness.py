@@ -12,6 +12,7 @@ from __future__ import annotations
 import socket
 import socketserver
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +97,29 @@ def _server_class() -> type:
     return HarnessServer
 
 
+def _start_policy_publication(store: GuardStore, home_dir: Path) -> Any:
+    """Admit the installed release, then publish the native policy as the daemon does.
+
+    The native daemon's startup enrolls the extension-control authority and
+    its worker host keeps the native policy snapshot published; handlers that
+    reach the resident read that snapshot.
+    """
+
+    from codex_plugin_scanner.guard.daemon.hook_evidence_dispatch import HookEvidenceDispatch
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.extension_control_host import host_for
+    from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
+
+    host_for(store)
+    return HookWorker(
+        store=store,
+        home_dir=home_dir,
+        activity_writer=NativeHookEvidenceWriter(store=store),
+        evidence_dispatch=HookEvidenceDispatch(),
+        capture_writer=None,
+    )
+
+
 class GuardDaemonServer:
     """Starts and stops the handlers on ``host:port`` (0 picks a free port)."""
 
@@ -125,6 +149,11 @@ class GuardDaemonServer:
         self.port = self._server.daemon_port()
         self._thread: threading.Thread | None = None
         self._stopped = False
+        try:
+            self._hook_worker = _start_policy_publication(store, self._server.home_dir)
+        except BaseException:
+            self._server.server_close()
+            raise
 
     @property
     def auth_token(self) -> str:
@@ -149,6 +178,10 @@ class GuardDaemonServer:
             thread.join(timeout=5)
             self._thread = None
         self._server.server_close()
+        hook_worker = self._hook_worker
+        self._hook_worker = None
+        if hook_worker is not None:
+            hook_worker.close(deadline_monotonic=time.monotonic() + 5.0)
 
     def _finish_service(self) -> bool:
         """Whether the handlers have stopped serving; probes confirm cleanup with it."""

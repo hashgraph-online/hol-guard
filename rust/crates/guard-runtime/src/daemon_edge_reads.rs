@@ -366,6 +366,9 @@ pub(super) fn answer(
     stalled_write: Duration,
 ) -> Outcome {
     let Some((bytes, head_len)) = take_request(client) else {
+        if let Some(response) = early_delete_refusal(client, config, reads) {
+            return write_answer(client, &response, reads, stalled_write);
+        }
         return Outcome::Relay(Vec::new());
     };
     let (head, body) = bytes.split_at(head_len);
@@ -499,6 +502,34 @@ fn is_public_health_probe(request: &Request<'_>) -> bool {
         && !request.has_header("Origin")
         && !request.has_header("Content-Length")
         && !request.has_header("Transfer-Encoding")
+}
+
+/// `do_DELETE` checked the caller before reading a body, so a `DELETE` whose
+/// body has not arrived is refused on its head when the caller is not
+/// authorized.
+fn early_delete_refusal(
+    client: &TcpStream,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    if !reads.is_standalone() {
+        return None;
+    }
+    let head = super::http::waiting_head(client)?;
+    let request = parse_request(&head).filter(|request| request.method == "DELETE")?;
+    if super::auth::authorize_write(&request, &config.token).is_some() {
+        return None;
+    }
+    let refusal = refusals::delete_refusal(&request);
+    let (status, body, cors_origin) =
+        refusals::respond(&request, &refusal, client.local_addr().ok(), config, reads);
+    Some(json_response(
+        status,
+        &body,
+        config.dashboard_build.as_deref(),
+        cors_origin.as_deref(),
+        false,
+    ))
 }
 
 fn write_answer(

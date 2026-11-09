@@ -250,7 +250,11 @@ pub(in crate::daemon_edge) fn host_args(guard_home: &str) -> [String; 4] {
 
 /// Runs the worker host until it exits and returns `None` when it could not
 /// be started. Its standard input stays open while this process lives.
-pub(in crate::daemon_edge) fn run_host(config: &ReadConfig) -> Option<()> {
+/// `ready` hears once the host has made its first policy publication.
+pub(in crate::daemon_edge) fn run_host(
+    config: &ReadConfig,
+    ready: Option<mpsc::Sender<()>>,
+) -> Option<()> {
     let (argv, guard_home, cwd) = config.cli()?;
     let (program, prefix) = argv.split_first()?;
     let mut command = Command::new(program);
@@ -258,7 +262,7 @@ pub(in crate::daemon_edge) fn run_host(config: &ReadConfig) -> Option<()> {
         .args(prefix)
         .args(host_args(guard_home))
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null());
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
@@ -267,6 +271,21 @@ pub(in crate::daemon_edge) fn run_host(config: &ReadConfig) -> Option<()> {
     let mut child = command.spawn().ok()?;
     // Held, never written: the host stops when this end closes.
     let _input = child.stdin.take();
+    if let Some(output) = child.stdout.take() {
+        let _ = thread::Builder::new()
+            .name("daemon-worker-host-output".into())
+            .spawn(move || {
+                let mut lines = BufReader::new(output);
+                let mut line = String::new();
+                if lines.read_line(&mut line).is_ok() && line.trim_end() == "ready" {
+                    if let Some(ready) = ready {
+                        let _ = ready.send(());
+                    }
+                }
+                // Anything later is drained so the host never blocks on it.
+                let _ = std::io::copy(&mut lines, &mut std::io::sink());
+            });
+    }
     let _ = child.wait();
     Some(())
 }

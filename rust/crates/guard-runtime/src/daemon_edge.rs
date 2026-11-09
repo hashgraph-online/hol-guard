@@ -44,6 +44,8 @@ mod auth;
 mod http;
 #[path = "daemon_edge_library.rs"]
 mod library;
+#[path = "daemon_edge_lifecycle.rs"]
+mod lifecycle;
 #[path = "daemon_edge_reads.rs"]
 mod reads;
 #[path = "daemon_edge_replay.rs"]

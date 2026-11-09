@@ -328,6 +328,7 @@ def test_enforcement_never_reads_version_compatibility() -> None:
         PROJECT_SRC / "daemon" / "server_control_misc.py",
         # The dashboard routes the native daemon answers through a library call.
         PROJECT_SRC / "routes" / "calls.py",
+        PROJECT_SRC / "routes" / "reads.py",
         PROJECT_SRC / "control_route_calls.py",
     }
     readers = {

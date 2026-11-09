@@ -220,6 +220,13 @@ def host_for(store: GuardStore) -> ExtensionControlHost:
         return host
 
 
+def existing_host(store: GuardStore) -> ExtensionControlHost | None:
+    """The host this process already keeps for ``store``'s Guard home, if any."""
+
+    with _HOSTS_LOCK:
+        return _HOSTS.get(Path(store.guard_home))
+
+
 def extension_control(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """``route.extension_control``: ``{method, path, payload?}`` to a whole reply."""
 
@@ -235,4 +242,4 @@ def extension_control(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
 
 EXTENSION_CONTROL_CALLS = {"route.extension_control": extension_control}
 
-__all__ = ["EXTENSION_CONTROL_CALLS", "ExtensionControlHost", "host_for"]
+__all__ = ["EXTENSION_CONTROL_CALLS", "ExtensionControlHost", "existing_host", "host_for"]

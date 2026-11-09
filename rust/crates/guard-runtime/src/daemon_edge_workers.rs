@@ -15,7 +15,7 @@
 //! child's standard input open, restarts it when it exits and, by exiting,
 //! closes that input, which stops it.
 
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
@@ -82,6 +82,11 @@ pub(super) const JOBS: [Job; 7] = [
     },
 ];
 
+/// The job that runs in the resident library process, so the refresh it
+/// starts outlives the pass and the extension-control service it serves is
+/// refreshed in place.
+const RESIDENT_JOB: &str = "worker.extension_catalog";
+
 const HEARTBEAT_INTERVAL: Duration = seconds(30);
 /// The first wait before a worker host that exited is started again, doubled
 /// on each exit up to `HOST_RESTART_MAX`.
@@ -93,6 +98,8 @@ const IDLE_POLL: Duration = seconds(1);
 /// How long a pending review or queued Cloud event holds an idle daemon
 /// before the next check.
 const IDLE_HOLD: Duration = seconds(5);
+/// The longest startup waits for the worker host's first policy publication.
+const HOST_READY_WAIT: Duration = seconds(15);
 
 /// What the heartbeat records for this daemon.
 pub(super) struct Registration {
@@ -100,6 +107,7 @@ pub(super) struct Registration {
     pub(super) host: String,
     pub(super) port: u16,
     pub(super) started_at: String,
+    pub(super) guard_home: std::path::PathBuf,
 }
 
 /// Starts every job, the heartbeat and, when `idle_timeout` is set, the idle
@@ -116,6 +124,11 @@ pub(super) fn start(
             .spawn(move || run_job(&reads, job, thread::sleep));
     }
     let heartbeat_reads = Arc::clone(reads);
+    let lifecycle = (
+        registration.guard_home.clone(),
+        registration.session_id.clone(),
+        registration.port,
+    );
     let args = json!({
         "session_id": registration.session_id,
         "host": registration.host,
@@ -129,15 +142,29 @@ pub(super) fn start(
             thread::sleep(HEARTBEAT_INTERVAL);
         });
     let host_reads = Arc::clone(reads);
-    let _ = thread::Builder::new()
+    let (ready, host_ready) = mpsc::channel();
+    let started = thread::Builder::new()
         .name("daemon-worker-host".into())
-        .spawn(move || supervise_host(&host_reads, thread::sleep));
+        .spawn(move || supervise_host(&host_reads, Some(ready), thread::sleep));
+    if started.is_ok() {
+        // The daemon reported ready only after its first policy publication;
+        // the worker host owns that publication now.
+        let _ = host_ready.recv_timeout(HOST_READY_WAIT);
+    }
     if let Some(timeout) = idle_timeout {
         let idle_reads = Arc::clone(reads);
         let _ = thread::Builder::new()
             .name("daemon-idle".into())
             .spawn(move || {
                 watch_idle(&idle_reads, timeout, thread::sleep);
+                let (home, session_id, port) = &lifecycle;
+                super::super::lifecycle::record(
+                    home,
+                    "shutdown_requested",
+                    Some("idle_timeout"),
+                    Some(session_id),
+                    Some(*port),
+                );
                 std::process::exit(0);
             });
     }
@@ -172,17 +199,24 @@ pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) 
 
 fn pass(reads: &NativeReads, call: &str, args: Value) -> Option<Value> {
     let config = reads.config()?;
+    if call == RESIDENT_JOB {
+        return library::call_resident(&config, call, args).ok();
+    }
     library::call(&config, call, args).ok()
 }
 
 /// Keeps one worker host running for the life of the daemon.
-fn supervise_host(reads: &NativeReads, mut sleep: impl FnMut(Duration)) -> ! {
+fn supervise_host(
+    reads: &NativeReads,
+    mut ready: Option<mpsc::Sender<()>>,
+    mut sleep: impl FnMut(Duration),
+) -> ! {
     let mut wait = HOST_RESTART_MIN;
     loop {
         let started = std::time::Instant::now();
         let ran = reads
             .config()
-            .and_then(|config| library::run_host(&config))
+            .and_then(|config| library::run_host(&config, ready.take()))
             .is_some();
         wait = next_host_wait(wait, ran.then(|| started.elapsed()));
         sleep(wait);

@@ -280,7 +280,8 @@ pub(super) fn respond(
     answer.map(|(status, body)| (status, body, caller.cors_origin, false))
 }
 
-/// Every `DELETE`, as `do_DELETE` answered it: the header token alone, then the
+/// Every `DELETE`, as `do_DELETE` answered it: the header token or, on a
+/// session path, a dashboard session, then the
 /// three routes, then `404`. `None` only for a caller the edge refuses, which
 /// [`super::refusals::delete_refusal`] answers.
 fn delete(
@@ -289,7 +290,7 @@ fn delete(
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value, Option<String>, bool)> {
-    let caller = authorize_token(request, &config.token)?;
+    let caller = authorize_write(request, &config.token)?;
     // `do_DELETE` read only a `Content-Length` body, so a chunked one is none.
     let body = if request.has_header("Transfer-Encoding") {
         &[][..]

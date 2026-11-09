@@ -116,8 +116,36 @@ def extension_catalog(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
             observe(store)
         finally:
             request_refresh(store.guard_home, store=store)
-        cleanup(store)
+        _refresh_extension_controls(store)
+    # A cleanup that fails while a discovery refresh is still publishing is
+    # retried on the next pass, as the daemon's refresh loop did.
+    try:
+        with lifecycle.session():
+            cleanup(store)
+    except Exception:
+        return {"ok": False}
     return {"ok": True}
+
+
+def _refresh_extension_controls(store: GuardStore) -> None:
+    """Refresh the extension-control service this process already serves.
+
+    The native daemon runs this tick in its resident library process, which
+    keeps that service between requests. A process that has not served one
+    builds none here.
+    """
+
+    from ..daemon.background_diagnostics import failure_detail, record_background_event
+    from ..extension_control_host import existing_host
+
+    host = existing_host(store)
+    if host is None:
+        return
+    try:
+        host.refresh()
+    except Exception as error:
+        record_background_event("extension_control_refresh_failed", failure_detail(error))
+    host.api.expire_prepared_cache_leases()
 
 
 def reconcile_artifacts(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:

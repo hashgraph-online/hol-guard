@@ -252,6 +252,20 @@ class WorkerHost:
             _LOGGER.exception("Guard worker host could not start native policy publication")
             self._hook_worker = None
 
+    def wait_for_policy_publication(self) -> None:
+        """Waits, bounded, for the first native policy publication."""
+
+        from ..daemon.hook_worker import _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS
+
+        hook_worker = getattr(self, "_hook_worker", None)
+        publisher = getattr(hook_worker, "policy_snapshot_publisher", None)
+        wait_until_ready = getattr(publisher, "wait_until_ready", None)
+        if callable(wait_until_ready):
+            try:
+                _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
+            except Exception:
+                _LOGGER.exception("Guard worker host could not wait for native policy publication")
+
     def _schedule_attention(self, attention: Any) -> None:
         from ..daemon.manager import ensure_guard_daemon_auth_token
         from ..local_dashboard_session import build_approval_browser_url
@@ -301,6 +315,12 @@ def run_worker_host(guard_home: Path) -> int:
     store = GuardStore(guard_home)
     host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
     host.start()
+    host.wait_for_policy_publication()
+    # The daemon announces itself only after this line, so its first hook
+    # finds a published policy, as it did when the daemon's own hook worker
+    # waited for one before the daemon reported ready.
+    sys.stdout.write("ready\n")
+    sys.stdout.flush()
     try:
         # The daemon holds the other end; end of file means it has gone.
         while sys.stdin.buffer.read(4096):
