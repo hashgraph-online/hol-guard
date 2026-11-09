@@ -475,7 +475,7 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
 
 /// A short function or method's own lines, to show whole, with the span they
 /// fill. A class or a longer definition is given by its lines only.
-fn whole(file: &File, at: usize) -> Option<(Span, String)> {
+pub(super) fn whole(file: &File, at: usize) -> Option<(Span, String)> {
     let section = &file.sections[at];
     if file.container(at) || section.end + 1 - section.start > MAX_SHOWN_LINES {
         return None;

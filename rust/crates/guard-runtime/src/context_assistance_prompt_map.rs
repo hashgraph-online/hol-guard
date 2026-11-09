@@ -310,7 +310,7 @@ pub(super) fn map(
             .map(|(title, entry)| (title, vec![entry])),
     );
     // And what is defined beside it, for the helpers it can call.
-    let near = (!asked.everywhere).then(|| beside::beside(&files, &chosen, asked));
+    let near = (!asked.everywhere).then(|| beside::beside(&files, &chosen, asked, &shown));
     blocks.extend(near.flatten().map(|(title, entry)| (title, vec![entry])));
     let mut docs = Vec::new();
     if asked.docs {
