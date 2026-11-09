@@ -39,7 +39,7 @@ fn a_prompt_about_a_push_gets_the_newest_commit() {
     let title = "HOL Guard CIGAR: the newest commit in this project and any uncommitted changes";
     assert!(
         text.starts_with(&format!(
-            "{title} (the end of this note has what `git diff -U1 {}` prints now)",
+            "{title} (the end of this note has what `git diff -U3 {}` prints now)",
             &first[..7]
         )) && text.contains("\nsrc/core.py: other 8-9")
             && text.contains(" teammate: other returns 2 (src/core.py)\n")
