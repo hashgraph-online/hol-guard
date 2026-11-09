@@ -26,6 +26,8 @@ use std::time::Instant;
 
 #[path = "context_assistance_prompt_map_beside.rs"]
 mod beside;
+#[path = "context_assistance_prompt_map_docstring.rs"]
+mod docstring;
 #[path = "context_assistance_prompt_map_imports.rs"]
 mod imports;
 #[path = "context_assistance_prompt_map_more.rs"]
@@ -94,6 +96,9 @@ pub(super) struct Sought {
 #[derive(Default)]
 pub(super) struct Asked {
     pub(super) docs: bool,
+    /// About a docstring or doctest, which a long function's head is enough
+    /// for.
+    pub(super) docstring: bool,
     pub(super) changelog: bool,
     pub(super) named: Vec<String>,
     /// A rename: every use of a named definition is listed, not only the
@@ -194,6 +199,7 @@ pub(super) fn mapped(
     let texts = screened_texts(home, root, app, &files, files.len(), until);
     let asked = Asked {
         docs: more::asks_for_docs(prompt),
+        docstring: docstring::asks_for_docstring(prompt),
         changelog: more::asks_for_changelog(prompt),
         named: named(prompt),
         changes: about_changes,
@@ -509,3 +515,7 @@ mod imports_tests;
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_beside_tests.rs"]
 mod beside_tests;
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_docstring_tests.rs"]
+mod docstring_tests;
