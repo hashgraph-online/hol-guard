@@ -40,7 +40,7 @@ from .command_queue_activation import (
 from .command_queue_auth import reuse_command_queue_auth_context
 from .command_queue_authority import authorize_transport_command_queue_job as authorize_command_queue_job
 from .command_queue_authorization import start_command_authorization, start_overlapped_acknowledgement
-from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, with_review_drains
+from .command_queue_drain import REVIEW_LEASE_BATCH_SIZE, ReviewLeaseBatch, start_review_drains, with_review_drains
 from .command_queue_http import format_redacted_error as _redacted_error
 from .command_queue_http import request_json
 from .command_queue_http import request_json as _json_request
@@ -467,18 +467,18 @@ def poll_command_queue_once(
             if not _current_lane().is_drain:
                 maybe_auto_update(store, context)
             return status(store)
-        auth_context = _resolve_command_queue_auth_context(store)
-        _record_leased_job(store, state, item)
-    if on_exact_review_lease is not None and uses_exact_transport(item):
-        # A Review decision rarely comes alone: a bulk approval queues one
-        # job per request. Settle the rest beside this one; this job settles
-        # here whether or not they start.
+        hand_over = on_exact_review_lease if uses_exact_transport(item) else None
+        more_may_be_ready = batch_size == 1 or len(extras) + 1 >= batch_size
+        if hand_over is not None:
+            # Hand bulk siblings over before anything below can fail and strand them.
+            start_review_drains(hand_over, extras, more_may_be_ready=more_may_be_ready)
         try:
-            on_exact_review_lease(
-                ReviewLeaseBatch(jobs=tuple(extras), more_may_be_ready=batch_size == 1 or len(extras) + 1 >= batch_size)
-            )
-        except Exception as error:
-            _LOGGER.warning("Guard Review drain start failed: error=%s", _redacted_error(error))
+            auth_context = _resolve_command_queue_auth_context(store)
+            _record_leased_job(store, state, item)
+        except Exception:  # nothing has run for this job yet; a drain worker can settle it
+            if hand_over is not None:
+                start_review_drains(hand_over, [item], more_may_be_ready=more_may_be_ready)
+            raise
     authorization = start_command_authorization(
         store,
         item,
