@@ -39,9 +39,43 @@ class _ScriptedStore:
             self.status_reads += 1
             return str(self._row["status"]) if request_id == self._row["request_id"] else None
 
+    def get_approval_request_statuses(self, request_ids: list[str]) -> dict[str, str]:
+        statuses = {request_id: self.get_approval_request_status(request_id) for request_id in request_ids}
+        return {request_id: status for request_id, status in statuses.items() if status is not None}
+
     def resolve(self) -> None:
         with self._lock:
             self._row = {**self._row, "status": "resolved", "resolution_action": "allow"}
+
+
+class _BulkStore:
+    """Several pending requests, counting single and shared status reads."""
+
+    def __init__(self, path: Path, request_ids: list[str]) -> None:
+        self.path = path
+        self.status_reads = 0
+        self.shared_reads = 0
+        self._lock = threading.Lock()
+        self._statuses = dict.fromkeys(request_ids, "pending")
+
+    def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+        with self._lock:
+            status = self._statuses.get(request_id)
+        return None if status is None else {"request_id": request_id, "status": status}
+
+    def get_approval_request_status(self, request_id: str) -> str | None:
+        with self._lock:
+            self.status_reads += 1
+            return self._statuses.get(request_id)
+
+    def get_approval_request_statuses(self, request_ids: list[str]) -> dict[str, str]:
+        with self._lock:
+            self.shared_reads += 1
+            return {item: self._statuses[item] for item in request_ids if item in self._statuses}
+
+    def resolve_all(self) -> None:
+        with self._lock:
+            self._statuses = dict.fromkeys(self._statuses, "resolved")
 
 
 def test_wait_query_is_bounded_and_defaults_to_no_wait() -> None:
@@ -149,6 +183,77 @@ def test_wakes_while_pending_read_only_the_status(tmp_path: Path, monkeypatch) -
     assert result["status"] == "resolved"
     assert store.status_reads >= 3
     assert store.reads == 2
+
+
+def test_held_reads_woken_together_share_one_status_read(tmp_path: Path, monkeypatch) -> None:
+    # Every review event wakes every held read. In a bulk approval each wake
+    # must cost one status read for all the waiting hooks, not one per hook.
+    monkeypatch.setattr(wait_module, "RESOLUTION_RECHECK_SECONDS", 30.0)
+    request_ids = [f"req-bulk-{index}" for index in range(6)]
+    store = _BulkStore(tmp_path / "guard.db", request_ids)
+    signal = review_event_wake_signal(store.path)
+    results: dict[str, dict[str, object] | None] = {}
+
+    def hold(request_id: str) -> None:
+        approval = store.get_approval_request(request_id)
+        assert approval is not None
+        results[request_id] = wait_for_request_resolution(store, request_id, approval, 5.0)
+
+    holders = [threading.Thread(target=hold, args=(request_id,)) for request_id in request_ids]
+    for holder in holders:
+        holder.start()
+    deadline = time.monotonic() + 5.0
+    while store.status_reads < len(request_ids) and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert store.status_reads == len(request_ids)
+
+    wakes = 20
+    for _ in range(wakes):
+        signal.notify()
+        time.sleep(0.005)
+    store.resolve_all()
+    signal.notify()
+    for holder in holders:
+        holder.join(5.0)
+
+    assert {request_id: (result or {}).get("status") for request_id, result in results.items()} == dict.fromkeys(
+        request_ids, "resolved"
+    )
+    # Each hook read its own status once, before it waited; every wake after
+    # that was answered from at most one shared read. Each hook's first read
+    # also raises a wake, for Cloud Review delivery.
+    assert store.status_reads == len(request_ids)
+    assert 1 <= store.shared_reads <= wakes + 1 + len(request_ids)
+
+
+def test_a_shared_read_is_not_reused_for_a_later_wake(tmp_path: Path, monkeypatch) -> None:
+    # A decision committed after a shared read must still end the wait it wakes.
+    monkeypatch.setattr(wait_module, "RESOLUTION_RECHECK_SECONDS", 30.0)
+    store = _BulkStore(tmp_path / "guard.db", ["req-late"])
+    signal = review_event_wake_signal(store.path)
+    approval = store.get_approval_request("req-late")
+    assert approval is not None
+
+    def events_then_decide() -> None:
+        deadline = time.monotonic() + 5.0
+        while store.status_reads < 1 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        signal.notify()
+        while store.shared_reads < 1 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        store.resolve_all()
+        signal.notify()
+
+    decider = threading.Thread(target=events_then_decide)
+    started = time.monotonic()
+    decider.start()
+    result = wait_for_request_resolution(store, "req-late", approval, 5.0)
+    decider.join()
+
+    assert result is not None
+    assert result["status"] == "resolved"
+    assert time.monotonic() - started < 2.0
+    assert store.shared_reads == 2
 
 
 def test_a_request_still_pending_is_returned_at_the_deadline(tmp_path: Path, monkeypatch) -> None:
@@ -294,3 +399,5 @@ def test_the_store_reads_a_request_status_without_its_review_payload(tmp_path: P
     assert request is not None
     assert request["status"] == "pending"
     assert store.get_approval_request_status("req-missing") is None
+    assert store.get_approval_request_statuses(["req-status", "req-missing"]) == {"req-status": "pending"}
+    assert store.get_approval_request_statuses([]) == {}
