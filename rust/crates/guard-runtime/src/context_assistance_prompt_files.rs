@@ -13,6 +13,8 @@ pub(crate) use crate::context_assistance_prompt_words::terms;
 pub(crate) use crate::context_assistance_prompt_words::{asks_for_tests, named, phrases};
 use crate::context_assistance_prompt_words::{in_path, spelled, whole_word, MAX_NAMED};
 use guard_secure_fs::{credential_directory_path, credential_named_path};
+pub(crate) use kinds::wanted_file;
+use kinds::{binary, left_out};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
@@ -48,25 +50,6 @@ const SKIPPED_DIRS: &[&str] = &[
     "DerivedData",
 ];
 const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "e2e"];
-const TEXT_EXTENSIONS: &[&str] = &[
-    "adoc", "astro", "c", "cc", "cjs", "clj", "cpp", "cs", "css", "dart", "erl", "ex", "exs", "go",
-    "gradle", "graphql", "h", "hpp", "html", "java", "js", "json", "jsx", "kt", "kts", "less",
-    "lua", "m", "md", "mdx", "mjs", "mm", "nix", "php", "proto", "py", "r", "rb", "rs", "rst",
-    "sass", "scala", "scss", "sh", "sql", "svelte", "swift", "toml", "ts", "tsx", "txt", "vue",
-    "xml", "yaml", "yml", "zig",
-];
-const SKIPPED_FILES: &[&str] = &[
-    "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "Cargo.lock",
-    "poetry.lock",
-    "Gemfile.lock",
-    "composer.lock",
-    "go.sum",
-    "uv.lock",
-];
-
 /// The folder a hook's working directory belongs to: the nearest enclosing
 /// repository, or the folder itself. Never the home folder, a drive root,
 /// or anything inside Guard's own home.
@@ -129,7 +112,8 @@ pub(crate) struct Walk {
     pub(crate) quoting: Vec<usize>,
     pub(crate) words: Vec<usize>,
     /// How many files hold each term with `_` and `-` dropped, as `_a_b` holds
-    /// `ab`; and whether the walk read every file, none too big or unreadable.
+    /// `ab`; and whether the walk looked in every file `rg` would search,
+    /// none too big or unreadable.
     pub(crate) spelled: Vec<usize>,
     pub(crate) complete: bool,
 }
@@ -180,6 +164,7 @@ pub(crate) fn walk(
     let mut stack = vec![(root.to_path_buf(), String::new(), 0_usize, rules)];
     let mut visited = 0_usize;
     let mut scanned = 0_u64;
+    let mut aside = 0_u64;
     let mut files = 0_usize;
     let mut seen = Vec::new();
     let mut complete = true;
@@ -215,11 +200,13 @@ pub(crate) fn walk(
                 continue;
             }
             if kind.is_dir() {
-                complete &= depth < MAX_DEPTH;
-                if depth < MAX_DEPTH
-                    && !SKIPPED_DIRS.contains(&name.as_str())
-                    && !credential_directory_path(Path::new(&relative))
-                {
+                // `rg` searches a build or vendor folder no ignore file
+                // names, so leaving one unread leaves the walk short. It
+                // skips the bytecode in `__pycache__` as binary.
+                let skipped = SKIPPED_DIRS.contains(&name.as_str())
+                    || credential_directory_path(Path::new(&relative));
+                complete &= depth < MAX_DEPTH && (!skipped || name == "__pycache__");
+                if depth < MAX_DEPTH && !skipped {
                     // A folder whose own ignore file cannot be read stays out.
                     let path = entry.path();
                     if let Ok(inner) = extend(rules.clone(), &path.join(".gitignore"), &relative) {
@@ -231,14 +218,28 @@ pub(crate) fn walk(
                 }
                 continue;
             }
-            if !kind.is_file() || !wanted_file(&name) || credential_named_path(Path::new(&relative))
-            {
+            if !kind.is_file() || binary(&name) {
                 continue;
             }
             let metadata = entry.metadata().ok();
             let size = metadata.as_ref().map_or(u64::MAX, fs::Metadata::len);
             if size == 0 || size > MAX_FILE_BYTES {
                 complete &= size == 0;
+                continue;
+            }
+            let credential = credential_named_path(Path::new(&relative));
+            if !wanted_file(&name) || credential {
+                // Not context, but `rg` searches it, so a spelling counts.
+                aside += size;
+                let held = (aside <= MAX_SCANNED_BYTES && !credential)
+                    .then(|| left_out(&entry.path(), MAX_FILE_BYTES as usize, terms));
+                let Some(held) = held.flatten() else {
+                    complete = false;
+                    continue;
+                };
+                for (count, held) in spelled_in.iter_mut().zip(held) {
+                    *count += usize::from(held);
+                }
                 continue;
             }
             files += 1;
@@ -470,16 +471,6 @@ pub(crate) fn test_file(relative: &str) -> bool {
         || stem == "tests"
 }
 
-pub(crate) fn wanted_file(name: &str) -> bool {
-    if SKIPPED_FILES.contains(&name) || name.ends_with(".min.js") || name.ends_with(".min.css") {
-        return false;
-    }
-    Path::new(name)
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| TEXT_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
-}
-
 /// The path without Windows' `\\?\` prefix, as grants spell it.
 pub(crate) fn plain(path: PathBuf) -> PathBuf {
     #[cfg(windows)]
@@ -494,6 +485,9 @@ pub(crate) fn plain(path: PathBuf) -> PathBuf {
     }
     path
 }
+
+#[path = "context_assistance_prompt_files_kinds.rs"]
+mod kinds;
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_files_tests.rs"]

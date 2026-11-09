@@ -133,11 +133,90 @@ fn a_rename_lists_each_line_at_its_indentation() {
     let text = prompt_map(home.path(), &root, prompt).unwrap();
     assert!(
         text.contains(
-            "\n\nEvery line naming `_evict`; no other project file holds it:\n\
+            "\n\nEvery line naming `_evict`, all that `rg -nw '_evict'` finds; no other project file holds it:\n\
 src/pkg/cache.py:2:    def _evict(self):\n\
 src/pkg/cache.py:7:            self._evict()\n\
 tests/test_cache.py:2:    Cache()._evict()\n"
         ),
         "{text}"
     );
+}
+
+/// The list names the search that finds just its lines, so the agent need
+/// not run it again. A line `rg -nw` would find too, here `_evict-cache`,
+/// keeps the search out of the title.
+#[test]
+fn a_rename_names_the_search_only_when_it_finds_just_these_lines() {
+    let cache = "class Cache:\n    def _evict(self):\n        self.items.clear()\n";
+    let notes = "Call `_evict` to empty it.\n\nSee `_evict-cache` in the guide.\n";
+    let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
+    for (notes, searched) in [("Call `_evict` to empty it.\n", true), (notes, false)] {
+        let list = [("src/pkg/cache.py", cache), ("docs/cache.md", notes)];
+        let (home, _project, root) = project(ON, &list);
+        let text = prompt_map(home.path(), &root, prompt).unwrap();
+        assert_eq!(
+            text.contains("Every line naming `_evict`, all that `rg -nw '_evict'` finds;"),
+            searched,
+            "{text}"
+        );
+        assert!(text.contains("no other project file holds it:\n"), "{text}");
+    }
+}
+
+/// `rg` also searches files the map does not read for context: a `.pyi`
+/// stub, `setup.cfg`, a `Makefile`, a build folder no ignore file names. One
+/// of them naming the old name means the list cannot say no other file
+/// holds it. One naming something else, an ignored build folder, bytecode
+/// and images leave the list whole.
+#[test]
+fn a_rename_looks_in_the_files_rg_searches_but_the_map_does_not_read() {
+    let cache = "class Cache:\n    def _evict(self):\n        self.items.clear()\n";
+    let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
+    let cases: [(&[(&str, &str)], bool); 8] = [
+        (
+            &[(
+                "src/pkg/cache.pyi",
+                "class Cache:\n    def _evict(self) -> None: ...\n",
+            )],
+            false,
+        ),
+        (
+            &[("setup.cfg", "[tool]\nhook = pkg.cache:Cache._evict\n")],
+            false,
+        ),
+        (
+            &[("Makefile", "evict:\n\tpython -c 'Cache()._evict()'\n")],
+            false,
+        ),
+        (&[("build/lib/pkg/cache.py", cache)], false),
+        (&[("Makefile", "test:\n\tpytest\n")], true),
+        (
+            &[
+                (".gitignore", "build/\n"),
+                ("build/lib/pkg/cache.py", cache),
+            ],
+            true,
+        ),
+        (
+            &[(
+                "src/pkg/__pycache__/cache.cpython-312.pyc",
+                "\0\0\r\n_evict",
+            )],
+            true,
+        ),
+        (&[("docs/logo.png", "\0\0\0\r_evict")], true),
+    ];
+    for (more, whole) in cases {
+        let mut list = vec![("src/pkg/cache.py", cache)];
+        list.extend_from_slice(more);
+        let (home, _project, root) = project(ON, &list);
+        let text = prompt_map(home.path(), &root, prompt).unwrap();
+        let said = "Every line naming `_evict`, all that `rg -nw '_evict'` finds; no other project file holds it:\n";
+        assert_eq!(text.contains(said), whole, "{more:?}\n{text}");
+        assert_eq!(
+            text.contains("other files may hold it too"),
+            !whole,
+            "{more:?}\n{text}"
+        );
+    }
 }
