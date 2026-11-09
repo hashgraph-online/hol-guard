@@ -10,8 +10,10 @@ use crate::context_assistance_prompt_ignore::{extend, ignored, root_chain};
 use crate::context_assistance_prompt_words::quoted;
 #[cfg(test)]
 pub(crate) use crate::context_assistance_prompt_words::terms;
-pub(crate) use crate::context_assistance_prompt_words::{asks_for_tests, named, phrases};
-use crate::context_assistance_prompt_words::{in_path, spelled, whole_word, MAX_NAMED};
+pub(crate) use crate::context_assistance_prompt_words::{
+    asks_for_tests, named, phrases, test_file,
+};
+use crate::context_assistance_prompt_words::{in_path, spelled, whole_word, MAX_NAMED, TEST_DIRS};
 use guard_secure_fs::{credential_directory_path, credential_named_path};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,7 +49,6 @@ const SKIPPED_DIRS: &[&str] = &[
     "Pods",
     "DerivedData",
 ];
-const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "e2e"];
 const TEXT_EXTENSIONS: &[&str] = &[
     "adoc", "astro", "c", "cc", "cjs", "clj", "cpp", "cs", "css", "dart", "erl", "ex", "exs", "go",
     "gradle", "graphql", "h", "hpp", "html", "java", "js", "json", "jsx", "kt", "kts", "less",
@@ -114,6 +115,8 @@ struct Scored {
     score: f64,
     modified: SystemTime,
     named: Option<usize>,
+    /// Holds a quoted phrase only files named like tests hold.
+    quoted_alone: bool,
 }
 
 /// What the walk found: the matched files, best first; the best test files,
@@ -348,6 +351,13 @@ fn scores(seen: Vec<Seen>, files: usize, terms: usize, phrases: usize) -> Vec<Sc
     let phrase_weights: Vec<f64> = (0..phrases)
         .map(|i| 2.0 * rarity(seen.iter().filter(|s| s.quoted[i]).count()))
         .collect();
+    let only_tests_quote: Vec<bool> = (0..phrases)
+        .map(|i| {
+            seen.iter()
+                .filter(|s| s.quoted[i])
+                .all(|s| test_file(&s.relative))
+        })
+        .collect();
     seen.into_iter()
         .map(|file| {
             let mut score = 0.0;
@@ -369,6 +379,7 @@ fn scores(seen: Vec<Seen>, files: usize, terms: usize, phrases: usize) -> Vec<Sc
                 score,
                 modified: file.modified,
                 named: file.named,
+                quoted_alone: (0..phrases).any(|i| file.quoted[i] && only_tests_quote[i]),
             }
         })
         .collect()
@@ -403,7 +414,9 @@ fn named_as(relative: &str, named: &[String]) -> Option<usize> {
 /// when a name matches several; then the rest, best first. Test files stay
 /// out when a source file matched and the prompt did not ask about tests,
 /// since a test that quotes the same words would otherwise crowd out the
-/// file the request is about.
+/// file the request is about. A file named like a test that alone holds a
+/// quoted phrase stays: the name cannot tell a library's `tests.py` from a
+/// test suite, and the quote can only be found there.
 fn ranked(scored: Vec<Scored>) -> (Vec<String>, Vec<String>) {
     let (mut pinned, mut scored): (Vec<Scored>, Vec<Scored>) =
         scored.into_iter().partition(|item| item.named.is_some());
@@ -430,7 +443,7 @@ fn ranked(scored: Vec<Scored>) -> (Vec<String>, Vec<String>) {
     if scored.iter().any(|item| !test_file(&item.relative)) {
         (tests, scored) = scored
             .into_iter()
-            .partition(|item| test_file(&item.relative));
+            .partition(|item| test_file(&item.relative) && !item.quoted_alone);
     }
     let best_first = |a: &Scored, b: &Scored| {
         b.score
@@ -452,22 +465,6 @@ fn ranked(scored: Vec<Scored>) -> (Vec<String>, Vec<String>) {
         .map(|item| item.relative)
         .collect();
     (files, tests)
-}
-
-/// A test or spec file by its usual name or folder in common languages.
-pub(crate) fn test_file(relative: &str) -> bool {
-    let lower = relative.to_lowercase();
-    let name = lower.rsplit('/').next().unwrap_or(&lower);
-    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
-    lower.split('/').any(|part| TEST_DIRS.contains(&part))
-        || name.contains(".test.")
-        || name.contains(".spec.")
-        || stem.starts_with("test_")
-        || stem.ends_with("_test")
-        || stem.ends_with("_tests")
-        || stem.ends_with("_spec")
-        || stem == "test"
-        || stem == "tests"
 }
 
 pub(crate) fn wanted_file(name: &str) -> bool {

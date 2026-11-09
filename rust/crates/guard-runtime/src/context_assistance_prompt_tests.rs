@@ -436,3 +436,30 @@ fn guard_reads_nothing_a_workspace_has_not_allowed() {
     );
     assert!(!project_context_on(home.path(), &root, "codex"));
 }
+
+/// A library module named like a test, as Jinja's `tests.py` of template
+/// tests, is the only file holding a quoted docstring. It is found and read,
+/// not set aside as a test. A test that repeats a quote the source holds
+/// still gives way.
+#[test]
+fn a_quote_only_a_test_named_module_holds_is_shown() {
+    let prompt = "Which function does this? \"Return true if the variable is a number.\"";
+    let module = concat!(
+        "def test_number(value):\n",
+        "    \"\"\"Return true if the variable is a number.\"\"\"\n",
+        "    return isinstance(value, Number)\n",
+    );
+    let env = "class Environment:\n    def variable_number(self):\n        return True\n";
+    let (home, _project, root) = project(ON, &[("src/tests.py", module), ("src/env.py", env)]);
+    let words = crate::context_assistance_prompt_files::terms(prompt);
+    let search = || walk(&root, &words, &phrases(prompt), &[], Duration::from_secs(5));
+    let found = search().found(&words);
+    assert!(found.contains(&"src/tests.py".to_owned()), "{found:?}");
+    let later = Instant::now() + Duration::from_secs(5);
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    assert!(read.text.contains("src/tests.py (lines"), "{}", read.text);
+    assert!(read.text.contains("def test_number"), "{}", read.text);
+    std::fs::write(root.join("src/env.py"), format!("{env}{module}")).unwrap();
+    let found = search().found(&words);
+    assert!(!found.contains(&"src/tests.py".to_owned()), "{found:?}");
+}

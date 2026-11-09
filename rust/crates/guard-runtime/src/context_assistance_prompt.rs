@@ -412,13 +412,11 @@ fn relevant<'a>(
         })
         .collect();
     // Tests give way before the best match is measured, so a test that
-    // repeats the prompt's words cannot push the source it covers out.
-    if !asks_for_tests(words)
-        && mentions
-            .iter()
-            .any(|(excerpt, _)| !test_file(&excerpt.path))
-    {
-        mentions.retain(|(excerpt, _)| !test_file(&excerpt.path));
+    // repeats the prompt's words cannot push the source it covers out. One
+    // the search ranked stays: the prompt named it, or it alone holds a quote.
+    let shown = |path: &String| !test_file(path) || ranked.contains(path);
+    if !asks_for_tests(words) && mentions.iter().any(|(e, _)| !test_file(&e.path)) {
+        mentions.retain(|(excerpt, _)| shown(&excerpt.path));
     }
     let best = mentions.iter().map(|(_, mentioned)| *mentioned).max();
     let close = best.unwrap_or_default().div_ceil(2);
