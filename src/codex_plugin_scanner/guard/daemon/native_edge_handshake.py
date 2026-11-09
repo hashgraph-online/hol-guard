@@ -61,7 +61,7 @@ def edge_handshake(
     return json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
-def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], bytes], Callable[[], None]]:
+def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], bytes], Callable[[bytes], None]]:
     """The handshake builder and activity callback for ``server``'s edge."""
 
     def handshake() -> bytes:
