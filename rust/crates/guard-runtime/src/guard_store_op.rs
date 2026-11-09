@@ -477,7 +477,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_next_pending_request"
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
-        | "oldest_approval_request_created_at" => Kind::Snapshot,
+        | "oldest_approval_request_created_at"
+        | "cached_supply_chain_bundle" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
@@ -904,6 +905,9 @@ fn dispatch(
         "add_event" => cloud_events::add_event(connection, args),
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
+        "cached_supply_chain_bundle" => {
+            crate::supply_chain_bundle_cache_op::cached_bundle(connection)
+        }
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),
         "count_guard_events_v1" => cloud_events::count(connection, args),

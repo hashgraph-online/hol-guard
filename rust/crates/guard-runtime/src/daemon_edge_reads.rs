@@ -425,6 +425,10 @@ fn route(
             })
         }
         "/v1/inventory" => inventory::list(config, reads),
+        "/v1/supply-chain/bundle" => {
+            let bundle = reads.store_call(config, "cached_supply_chain_bundle", json!({}))?;
+            Some((200, json!({ "bundle": bundle })))
+        }
         "/v1/policy/cloud-exceptions" => {
             let harness = query_value(query, "harness").ok()?;
             let items =
