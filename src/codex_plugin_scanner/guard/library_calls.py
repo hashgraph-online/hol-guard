@@ -18,6 +18,7 @@ from typing import Any
 
 from .control_route_calls import ROUTE_CALLS
 from .routes.calls import HANDLER_CALLS
+from .routes.offline import DISPATCH_CALLS
 from .store import GuardStore
 
 LibraryCall = Callable[[GuardStore, Mapping[str, Any]], object]
@@ -209,6 +210,7 @@ REGISTRY: dict[str, LibraryCall] = {
     "approval.resolve": _approval_resolve,
     **ROUTE_CALLS,
     **HANDLER_CALLS,
+    **DISPATCH_CALLS,
 }
 
 

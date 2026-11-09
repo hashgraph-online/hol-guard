@@ -84,6 +84,25 @@ pub(super) fn respond(
             route_calls::respond(args, &payload, route_calls::call_library(config, name))?;
         return Some((status, body, caller.cors_origin, no_store));
     }
+    if request.method == "POST" && super::dispatch::post_routed(request.path) {
+        if request.has_header("Transfer-Encoding")
+            || request.has_header("X-Guard-Dashboard-Session")
+            || request.has_header("Authorization")
+        {
+            return None;
+        }
+        let caller = authorize_token(request, &config.token)?;
+        let payload = json_payload(request, body)?;
+        reads.report_activity();
+        let (status, body, no_store) = super::dispatch::answer(
+            "POST",
+            request.path,
+            request.query,
+            &payload,
+            super::dispatch::call_library(config),
+        )?;
+        return Some((status, body, caller.cors_origin, no_store));
+    }
     if let Some(route) = sessions::Route::parse(request.method, request.path) {
         // A dashboard session may come back refreshed from `initialize`,
         // which only the daemon signs.

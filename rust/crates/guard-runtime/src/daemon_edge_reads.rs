@@ -656,6 +656,8 @@ mod releases;
 
 #[path = "daemon_edge_streams.rs"]
 mod streams;
+#[path = "daemon_edge_dispatch.rs"]
+mod dispatch;
 #[path = "daemon_edge_writes.rs"]
 mod writes;
 

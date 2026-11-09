@@ -7,7 +7,7 @@ use guard_contracts::DaemonRoutePayloadV1;
 
 use super::super::http::{query_int, query_value, Request};
 use super::{activity, evidence, inventory, records, settings};
-use super::{authorize, network, plugin_updates, requests};
+use super::{authorize, dispatch, network, plugin_updates, requests};
 use super::{NativeReads, ReadConfig, MAX_READ_STATE_PAGES};
 use crate::daemon_route_session::origin_decision;
 
@@ -55,8 +55,21 @@ pub(super) fn respond(
     if request.path == "/v1/network/status" {
         return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));
     }
-    route(request.path, request.query, config, reads)
-        .map(|(status, body)| (status, body, caller.cors_origin, false))
+    if let Some((status, body)) = route(request.path, request.query, config, reads) {
+        return Some((status, body, caller.cors_origin, false));
+    }
+    if !dispatch::get_routed(request.path) {
+        return None;
+    }
+    let answer = dispatch::answer(
+        "GET",
+        request.path,
+        request.query,
+        &serde_json::Map::new(),
+        dispatch::call_library(config),
+    );
+    reads.report_activity();
+    answer.map(|(status, body, no_store)| (status, body, caller.cors_origin, no_store))
 }
 
 /// The answer the daemon's Python route gives for the same path and query, or

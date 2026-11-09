@@ -206,3 +206,28 @@ def test_handler_post_keeps_the_no_store_header(tmp_path: Path) -> None:
 def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
     assert "error" in _handler_post(tmp_path, "/v1/settings", {})
     assert _handler_post(tmp_path, "/v1/context-assistance/stop", [])["error"]["kind"] == "library_call"  # type: ignore[index]
+
+
+def _dispatch(home: Path, method: str, path: str, payload: object = None) -> dict[str, object]:
+    args: dict[str, object] = {"method": method, "path": path}
+    if payload is not None:
+        args["payload"] = payload
+    return _call(home, "route.dispatch", args)
+
+
+def test_dispatch_answers_store_reads_with_the_daemon_reply(tmp_path: Path) -> None:
+    answer = _dispatch(tmp_path, "GET", "/v1/policy")
+    assert answer["ok"]["status"] == 200  # type: ignore[index]
+    assert isinstance(answer["ok"]["body"], dict)  # type: ignore[index]
+    missing = _dispatch(tmp_path, "GET", "/v1/operations/op-missing")
+    assert missing["ok"]["status"] == 404  # type: ignore[index]
+
+
+def test_dispatch_relays_routes_that_need_a_running_daemon(tmp_path: Path) -> None:
+    assert _dispatch(tmp_path, "GET", "/v1/local-clis") == {"ok": {"relay": True}}
+    assert _dispatch(tmp_path, "GET", "/v1/no-such-route") == {"ok": {"relay": True}}
+
+
+def test_dispatch_refuses_malformed_arguments(tmp_path: Path) -> None:
+    assert _dispatch(tmp_path, "PUT", "/v1/policy")["error"]["kind"] == "library_call"  # type: ignore[index]
+    assert _dispatch(tmp_path, "POST", "/v1/policy/sync", [])["error"]["kind"] == "library_call"  # type: ignore[index]
