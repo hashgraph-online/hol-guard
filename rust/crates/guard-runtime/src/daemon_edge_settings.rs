@@ -14,6 +14,7 @@ use serde_json::{json, Map, Value};
 
 use super::ReadConfig;
 use crate::approval_gate_settings::public_config_locked;
+use crate::approval_gate_verify::SessionSignalsScope;
 use crate::guard_config_load::load_under;
 use crate::managed_policy_floor::effective_managed_policy;
 use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
@@ -28,44 +29,17 @@ const HARNESS_POSTURE_LOCK_KEYS: [&str; 4] = [
 const EXPORT_PRIVACY_WARNING: &str =
     "Exports include local Guard preferences but not secrets or receipt evidence.";
 
-/// `(harness, display_name, can_pre_block, can_ask_inline,
-/// has_native_remember, fail_open_on_hook_failure, can_pre_block_limited)`,
-/// as `HARNESS_PROTECTION_CAPABILITIES` lists them.
-const CAPABILITIES: [(&str, &str, bool, bool, bool, bool, bool); 18] = [
-    ("codex", "Codex", true, true, false, false, false),
-    (
-        "claude-code",
-        "Claude Code",
-        true,
-        true,
-        false,
-        false,
-        false,
-    ),
-    ("opencode", "OpenCode", true, true, true, false, false),
-    ("copilot", "Copilot", true, true, false, false, false),
-    ("cursor", "Cursor", true, true, true, false, false),
-    ("cline", "Cline", true, false, false, false, false),
-    ("gemini", "Gemini", true, false, false, false, true),
-    ("hermes", "Hermes", true, false, false, false, false),
-    ("openclaw", "OpenClaw", true, false, false, false, false),
-    (
-        "antigravity",
-        "Antigravity",
-        true,
-        false,
-        false,
-        false,
-        true,
-    ),
-    ("kimi", "Kimi", true, false, false, true, false),
-    ("grok", "Grok", true, false, false, true, false),
-    ("pi", "Pi", true, false, false, true, false),
-    ("omp", "Oh My Pi", true, false, false, true, false),
-    ("zcode", "ZCode", true, false, false, true, false),
-    ("devin", "Devin", true, false, false, true, false),
-    ("muse", "Muse", true, true, false, false, false),
-    ("paseo", "Paseo", true, false, false, true, true),
+/// The `protection_capability_payloads()` keys each harness contract carries.
+const CAPABILITY_KEYS: [&str; 9] = [
+    "harness",
+    "display_name",
+    "can_pre_block",
+    "can_ask_inline",
+    "has_native_remember",
+    "fail_open_on_hook_failure",
+    "can_pre_block_limited",
+    "honesty_sentence",
+    "limited",
 ];
 
 /// The daemon's `/v1/settings` answer, or `None` when the read must go to the
@@ -83,14 +57,17 @@ pub(super) fn settings(config: &ReadConfig) -> Option<(u16, Value)> {
 /// `_settings_response_payload(guard_home, editable_guard_settings(config))`.
 pub(super) fn response(config: &ReadConfig, loaded: &Loaded) -> Option<(u16, Value)> {
     let guard_home = Path::new(&config.guard_home);
-    let settings = loaded.editable(guard_home)?;
+    // Without the daemon's session the gate cannot see a recent TOTP proof,
+    // so the daemon answers.
+    let signals = config.session_signals.as_deref()?;
+    let settings = loaded.editable(guard_home, signals)?;
     Some((
         200,
         json!({
             "guard_home": config.guard_home,
             "config_path": guard_home.join("config.toml").to_str()?,
             "settings": settings,
-            "protection_capabilities": protection_capabilities(),
+            "protection_capabilities": protection_capabilities()?,
         }),
     ))
 }
@@ -98,8 +75,9 @@ pub(super) fn response(config: &ReadConfig, loaded: &Loaded) -> Option<(u16, Val
 /// `_settings_export_payload(load_guard_config(guard_home))`.
 pub(super) fn export(config: &ReadConfig) -> Option<(u16, Value)> {
     let guard_home = Path::new(&config.guard_home);
+    let signals = config.session_signals.as_deref()?;
     let loaded = Loaded::read(guard_home)?;
-    let mut settings = loaded.editable(guard_home)?;
+    let mut settings = loaded.editable(guard_home, signals)?;
     match loaded.config.get("context_assistance_export") {
         None | Some(Value::Null) => {
             settings.remove("context_assistance");
@@ -198,7 +176,11 @@ impl Loaded {
     }
 
     /// `editable_guard_settings(config)`.
-    fn editable(&self, guard_home: &Path) -> Option<Map<String, Value>> {
+    fn editable(
+        &self,
+        guard_home: &Path,
+        session_signals: &[String],
+    ) -> Option<Map<String, Value>> {
         let harness_postures = self.map("harness_postures");
         let stamps = self.map("harness_watch_entered_at");
         let resolved = resolve(json!({
@@ -328,6 +310,8 @@ impl Loaded {
         ] {
             put(key, self.get(key));
         }
+        // The gate reads a recent TOTP proof against the daemon's session.
+        let _session = SessionSignalsScope::enter(session_signals);
         put(
             "approval_gate",
             public_config_locked(guard_home, None).to_dict(),
@@ -382,60 +366,20 @@ fn now_micros() -> Option<i64> {
     .ok()
 }
 
-/// `protection_capability_payloads()`.
-pub(super) fn protection_capabilities() -> Value {
-    Value::Array(
-        CAPABILITIES
-            .iter()
-            .map(
-                |&(harness, display_name, pre_block, ask_inline, remember, fail_open, limited)| {
-                    json!({
-                        "harness": harness,
-                        "display_name": display_name,
-                        "can_pre_block": pre_block,
-                        "can_ask_inline": ask_inline,
-                        "has_native_remember": remember,
-                        "fail_open_on_hook_failure": fail_open,
-                        "can_pre_block_limited": limited,
-                        "honesty_sentence": honesty_sentence(
-                            harness, display_name, ask_inline, remember, fail_open, limited,
-                        ),
-                        "limited": fail_open || limited,
-                    })
-                },
-            )
-            .collect(),
-    )
-}
-
-fn honesty_sentence(
-    harness: &str,
-    display_name: &str,
-    ask_inline: bool,
-    remember: bool,
-    fail_open: bool,
-    limited: bool,
-) -> String {
-    if harness == "paseo" {
-        return "Paseo uses each provider's native Guard hooks; some providers continue if a hook fails. Other Paseo actions are not covered.".to_owned();
-    }
-    if ask_inline && remember {
-        return format!("{display_name} uses this app's prompt when it can.");
-    }
-    if ask_inline {
-        return format!("{display_name} asks in chat, then remembers.");
-    }
-    if fail_open {
-        return format!(
-            "Limited in {display_name}. This app cannot ask in chat. If Guard is down, this app continues."
-        );
-    }
-    if limited {
-        return format!(
-            "Limited in {display_name}. Guard stops what it can see and opens Guard for the rest."
-        );
-    }
-    format!("{display_name} stops the action and opens Guard. This app cannot ask in chat.")
+/// `protection_capability_payloads()`, read from the harness contract index
+/// in registry order.
+pub(super) fn protection_capabilities() -> Option<Value> {
+    super::inventory::contracts()?
+        .iter()
+        .map(|(_, contract)| {
+            CAPABILITY_KEYS
+                .iter()
+                .map(|key| Some(((*key).to_owned(), contract.get(*key)?.clone())))
+                .collect::<Option<Map<String, Value>>>()
+                .map(Value::Object)
+        })
+        .collect::<Option<Vec<_>>>()
+        .map(Value::Array)
 }
 
 #[cfg(test)]

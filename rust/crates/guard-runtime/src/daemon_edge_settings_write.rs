@@ -58,6 +58,9 @@ pub(super) fn apply(
     }) {
         return None;
     }
+    // The answer reads the gate under the daemon's session; without one the
+    // daemon answers before anything is written.
+    config.session_signals.as_ref()?;
     let guard_home = Path::new(&config.guard_home);
     let previous = Loaded::read(guard_home)?;
     let presentation_only = !settings.is_empty()
@@ -105,6 +108,9 @@ pub(super) fn reset(
             json!({"error": "confirmation_required", "confirm": RESET_CONFIRMATION}),
         ));
     }
+    // The answer reads the gate under the daemon's session; without one the
+    // daemon answers before anything is written.
+    config.session_signals.as_ref()?;
     let guard_home = Path::new(&config.guard_home);
     let previous = Loaded::read(guard_home)?;
     if let Some(refused) = settings_gate(json_payload, config)? {

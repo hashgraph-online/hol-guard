@@ -8,7 +8,7 @@ use crate::guard_store_cmd_vectors_tests::temp_home;
 const VECTORS: &str = include_str!("../testdata/daemon_edge_settings_vectors.json");
 
 fn config(home: &Path) -> ReadConfig {
-    let handshake = json!({
+    let mut handshake = json!({
         "schema": HANDSHAKE_SCHEMA,
         "auth_token": "settings-test-value",
         "guard_home": home.to_str().unwrap(),
@@ -16,7 +16,17 @@ fn config(home: &Path) -> ReadConfig {
         "source": "default",
         "busy_timeout_ms": 2000,
     });
+    handshake["session_signals"] = json!(["sid=1"]);
     ReadConfig::from_line(&serde_json::to_vec(&handshake).unwrap()).unwrap()
+}
+
+#[test]
+fn settings_without_the_daemon_session_are_left_to_the_daemon() {
+    let home = temp_home("edge-settings-no-session");
+    let mut config = config(&home);
+    config.session_signals = None;
+    assert_eq!(settings(&config), None);
+    assert_eq!(export(&config), None);
 }
 
 fn with_home(value: Value, home: &Path) -> Value {
@@ -79,7 +89,7 @@ fn an_unreadable_configuration_goes_to_the_daemon() {
 
 #[test]
 fn every_registered_harness_has_a_capability_row() {
-    let rows = protection_capabilities();
+    let rows = protection_capabilities().unwrap();
     let harnesses: Vec<&str> = rows
         .as_array()
         .unwrap()

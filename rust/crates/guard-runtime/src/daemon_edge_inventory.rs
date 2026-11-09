@@ -10,7 +10,7 @@ use super::{NativeReads, ReadConfig};
 const CONTRACT_INDEX: &str = include_str!("../data/harness_contract_index.v1.json");
 
 /// Every `(harness, contract)` in registry order.
-fn contracts() -> Option<Vec<(String, Value)>> {
+pub(super) fn contracts() -> Option<Vec<(String, Value)>> {
     let index: Value = serde_json::from_str(CONTRACT_INDEX).ok()?;
     index
         .get("contracts")?
