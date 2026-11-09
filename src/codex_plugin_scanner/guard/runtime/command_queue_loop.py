@@ -9,6 +9,7 @@ from ..adapters.base import HarnessContext
 from ..store import GuardStore
 from .command_queue_activation import command_queue_long_poll_enabled, nonnegative_env_float
 from .command_queue_protocol import retry_wait_seconds
+from .review_wait_activity import review_wait_recent
 from .runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
 
 COMMAND_QUEUE_POLL_INTERVAL_ENV = "GUARD_CLOUD_COMMAND_QUEUE_POLL_INTERVAL_SECONDS"
@@ -17,6 +18,9 @@ COMMAND_QUEUE_ERROR_BACKOFF_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ERROR_BACKOFF_SECON
 _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
+# While an agent waits on a decision, a failed poll is retried at this pace so a
+# decision made during an outage reaches it soon after the network returns.
+_REVIEW_WAITING_ERROR_RETRY_SECONDS = 2.0
 
 
 class StopEvent(Protocol):
@@ -81,6 +85,8 @@ def run_command_queue_loop(
                 {**load_state(store), "state": "error", "last_error": format_error(error), "last_poll_at": now()},
             )
             wait_seconds = retry_wait_seconds(poll_interval, error_backoff, error_streak)
+            if review_wait_recent():
+                wait_seconds = min(wait_seconds, _REVIEW_WAITING_ERROR_RETRY_SECONDS)
         if stop_event.wait(wait_seconds):
             return
 

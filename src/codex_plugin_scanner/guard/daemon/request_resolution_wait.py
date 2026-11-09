@@ -45,6 +45,7 @@ from urllib.parse import parse_qs
 
 from ..fork_safety import forget_in_child
 from ..review_event_wake import ReviewEventWakeSignal, review_event_wake_signal
+from ..runtime.review_wait_activity import note_review_wait
 from ..store import GuardStore
 
 MAX_RESOLUTION_WAIT_SECONDS = 1.0
@@ -147,6 +148,7 @@ def wait_for_request_resolution(
 
     if timeout_seconds <= 0 or approval.get("status") != "pending":
         return approval
+    note_review_wait()
     _wake_review_delivery_once(store, request_id)
     if not _held_reads.acquire(blocking=False):
         return approval
