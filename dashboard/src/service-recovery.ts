@@ -186,6 +186,39 @@ export function getRecoveryCapabilities(options?: {
   return { kind: "fallback", installMode: resolvedInstallMode, reason };
 }
 
+export const DESKTOP_WINDOW_RECOVERY_MESSAGE =
+  "This HOL Guard window could not reach its recovery screen. Use the HOL Guard icon instead.";
+
+/**
+ * The fallback is shown inside HOL Guard Desktop itself, which did not inject
+ * its recovery bridge. The browser-tab steps ("Open HOL Guard Desktop") would
+ * point back to this same window, so the steps use the Desktop icon instead.
+ * The `desktop_embed` hint only changes this copy; it never grants a bridge.
+ */
+export function recoveryRunsInDesktopWindow(capability: RecoveryCapabilityState): boolean {
+  if (capability.kind !== "fallback" || capability.reason !== "bridge_missing") return false;
+  if (capability.installMode !== "desktop-bundled" && capability.installMode !== "desktop-external") return false;
+  try {
+    return dashboardEmbedsInDesktop();
+  } catch {
+    return false;
+  }
+}
+
+export function resolveDesktopWindowRecoveryInstructions(): RecoveryInstructions {
+  return {
+    installMode: "desktop-bundled",
+    title: "Restart Guard from the HOL Guard icon",
+    body: "This window cannot restart Guard itself. The HOL Guard icon in the system tray or menu bar can.",
+    steps: [
+      "Open the HOL Guard icon in the system tray or menu bar and choose Troubleshoot Guard.",
+      "Choose Restart Guard, then return to this window and choose Retry connection.",
+      "If that does not help, quit HOL Guard from the icon and open it again.",
+    ],
+    command: null,
+  };
+}
+
 export function resolveRecoveryInstructions(installMode: RecoveryInstallMode): RecoveryInstructions {
   switch (installMode) {
     case "cli":
