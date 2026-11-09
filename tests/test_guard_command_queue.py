@@ -1635,6 +1635,7 @@ def test_command_queue_loop_backs_off_after_errors(tmp_path: Path, monkeypatch) 
     monkeypatch.setenv(command_queue.COMMAND_QUEUE_ERROR_BACKOFF_ENV, "8")
     monkeypatch.setattr(command_queue, "poll_command_queue_once", failing_poll)
     monkeypatch.setattr(command_queue_loop_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(command_queue_loop_module, "review_wait_recent", lambda: False)
 
     command_queue.command_queue_loop(
         store,
