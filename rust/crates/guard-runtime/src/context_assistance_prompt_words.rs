@@ -336,6 +336,13 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
             continue;
         };
         let phrase: String = chars[at + 1..at + 1 + end].iter().collect();
+        // A quote pasted with its line breaks reads as the source does once
+        // unwrapped, however the source wraps it.
+        let phrase = if phrase.contains('\n') {
+            unwrapped(&phrase)
+        } else {
+            phrase
+        };
         let phrase = first_words(phrase.trim().to_lowercase());
         if phrase.chars().count() >= 3
             && phrase.chars().any(char::is_alphanumeric)

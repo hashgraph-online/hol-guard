@@ -115,4 +115,10 @@ fn a_long_quote_is_searched_by_its_first_words() {
     assert_eq!(phrases(&longest), ["word ".repeat(16).trim_end()]);
     let unbroken = format!("`{}`", "x".repeat(100));
     assert_eq!(phrases(&unbroken), ["x".repeat(80)]);
+    // Pasted with other line breaks than the source's, still found.
+    let pasted = phrases(
+        "which function does this? \"Yield all arguments passed to the\n    function in the same order in which they were passed.\"",
+    );
+    assert_eq!(pasted, found);
+    assert_eq!(quoted(&docstring.to_lowercase(), &pasted), [true]);
 }
