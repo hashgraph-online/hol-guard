@@ -1011,6 +1011,22 @@
    "body": "e1db85fb6831"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Containment health is a macOS and Linux probe; off Unix the native read declines and the route goes to the daemon handler, as before this port. Proven by the Windows cargo check of hol-guard-runtime.",
+   "file": "rust/crates/guard-runtime/src/daemon_edge_network.rs",
+   "item": "fn containment_health -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "84987a7e812a"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "The activity socket only exists in edge mode, which is Unix-only; standalone daemon-serve passes None, so on Windows the alias names a type that is never constructed. Proven by the Windows cargo check of hol-guard-runtime.",
+   "file": "rust/crates/guard-runtime/src/daemon_edge_reads.rs",
+   "item": "use std::net::TcpStream as ActivitySocket",
+   "cfg": "not(unix)",
+   "body": "b87032c81cd9"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows reads the file through its own private-open arm; elsewhere `None` refuses the read rather than reading a file whose privacy is unproven.",
    "file": "rust/crates/guard-runtime/src/daemon_policy_authority.rs",
