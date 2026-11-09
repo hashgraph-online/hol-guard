@@ -223,24 +223,6 @@ def test_unquarantinable_oversized_event_fails_closed(tmp_path: Path, monkeypatc
         _ = store.list_ready_review_events(now="2026-09-01T12:00:00+00:00", limit=10, **identity)
 
 
-def test_idle_watcher_does_not_stay_alive_on_an_unavailable_outbox(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import time
-
-    from ci.guard_daemon_harness import GuardDaemonServer
-
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=1)
-    _unavailable_native(monkeypatch)
-    monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: {"workspace_id": "workspace-1"})
-    shutdowns: list[bool] = []
-    monkeypatch.setattr(daemon._server, "shutdown", lambda: shutdowns.append(True))
-    daemon._server.last_activity_monotonic = time.monotonic() - 30
-    daemon._watch_for_idle_shutdown()
-    assert shutdowns == [True]
-
-
 def test_the_request_digest_never_covers_the_policy_integrity_key() -> None:
     """The resident drops the same argument names before it digests the request.
 

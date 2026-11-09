@@ -42,6 +42,17 @@ def native_serve_executable(guard_home: Path) -> Path | None:
     return native_hook_bridge_executable(SERVE_FEATURE, guard_home=guard_home)
 
 
+def _cached_trust_status(guard_home: Path) -> dict[str, object] | None:
+    """The policy-integrity state the daemon publishes as its trust status."""
+
+    from ..store import GuardStore
+
+    try:
+        return GuardStore(guard_home, prime_policy_integrity=False).get_cached_policy_integrity_state()
+    except Exception:
+        return None
+
+
 def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None = None) -> dict[str, object]:
     """The launch line the native daemon reads from its standard input."""
 
@@ -85,6 +96,11 @@ def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None 
         "idle_timeout_seconds": _guard_daemon_idle_timeout_seconds(Path(home)),
     }
     config.update({key: value for key, value in optional.items() if value is not None})
+    trust_status = _cached_trust_status(Path(home))
+    if trust_status is not None:
+        state = config["state"]
+        assert isinstance(state, dict)
+        state["trust_status"] = trust_status
     nonce = os.environ.get(_LAUNCH_NONCE_ENV, "")
     if _NONCE_PATTERN.fullmatch(nonce):
         config["launch_nonce"] = nonce

@@ -3,18 +3,15 @@ from __future__ import annotations
 import json
 import os
 import stat
-import time
 from pathlib import Path
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.lifecycle_journal import (
     load_bounded_incident_lifecycle_events,
     load_daemon_lifecycle_events,
     record_daemon_lifecycle_event,
 )
-from codex_plugin_scanner.guard.store import GuardStore
 
 
 def test_lifecycle_journal_is_bounded_private_and_storage_independent(tmp_path: Path) -> None:
@@ -140,41 +137,3 @@ def test_incident_reader_omits_read_time_io_failures(tmp_path: Path, monkeypatch
     assert events == []
     assert status == "invalid_entries_omitted"
     assert load_daemon_lifecycle_events(tmp_path) == []
-
-
-def test_daemon_records_ready_and_clean_stop_without_sqlite_dependency(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-
-    daemon.start()
-    daemon.stop()
-
-    deadline = time.monotonic() + 2.0
-    while True:
-        events = load_daemon_lifecycle_events(store.guard_home)
-        lifecycle = [(event["event"], event.get("reason")) for event in events]
-        if lifecycle[-1:] == [("stopped", "requested_shutdown")] or time.monotonic() >= deadline:
-            break
-        time.sleep(0.01)
-
-    assert lifecycle == [
-        ("start_requested", None),
-        ("ready", None),
-        ("shutdown_requested", "explicit_stop"),
-        ("stopped", "requested_shutdown"),
-    ]
-    session_ids = {event.get("session_id") for event in events}
-    assert len(session_ids) == 1
-    assert None not in session_ids
-
-
-def test_daemon_classifies_requested_sigint_as_clean_shutdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    monkeypatch.setattr(daemon._server, "serve_forever", lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
-
-    daemon._serve_forever()
-
-    lifecycle = [(event["event"], event.get("reason")) for event in load_daemon_lifecycle_events(store.guard_home)]
-    assert ("serve_failed", "unexpected_exception") not in lifecycle
-    assert lifecycle[-1] == ("stopped", "requested_shutdown")

@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
 from codex_plugin_scanner.guard.daemon import server_control_connect_flow as _ctl_connect_flow
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.runtime.runner import GuardSyncNotConfiguredError
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
 from tests.test_guard_headless_daemon_api import _dashboard_token, _read_json_response, _request
@@ -606,7 +607,7 @@ def test_headless_cloud_sync_repairs_storage_and_records_sync_success(tmp_path, 
     def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
         resolve_calls["count"] += 1
         if resolve_calls["count"] == 1:
-            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+            raise GuardSyncNotConfiguredError("Guard is not logged in.")
         return {
             "access_token": "access-token-1",
             "sync_url": "https://hol.org/api/guard/receipts/sync",
@@ -681,7 +682,7 @@ def test_headless_cloud_sync_survives_storage_repair_failure(tmp_path, monkeypat
         monkeypatch,
         "_resolve_guard_sync_auth_context",
         lambda _store: (_ for _ in ()).throw(
-            daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in."),
+            GuardSyncNotConfiguredError("Guard is not logged in."),
         ),
     )
     patch_daemon_global(
@@ -711,7 +712,7 @@ def test_headless_cloud_sync_retry_unexpected_error_becomes_pending(tmp_path, mo
     def _resolve_with_repair(_store: GuardStore) -> dict[str, object]:
         resolve_calls["count"] += 1
         if resolve_calls["count"] == 1:
-            raise daemon_server_module.GuardSyncNotConfiguredError("Guard is not logged in.")
+            raise GuardSyncNotConfiguredError("Guard is not logged in.")
         return {
             "access_token": "access-token-1",
             "sync_url": "https://hol.org/api/guard/receipts/sync",

@@ -96,20 +96,6 @@ def test_a_planted_temporary_link_is_not_followed(tmp_path: Path) -> None:
     assert _ReplayState(tmp_path).get("daemon_discovery_challenges") == {"c": 1}
 
 
-def test_a_connection_bound_challenge_is_unavailable(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard"
-    guard_home.mkdir()
-    response = replay_request(
-        guard_home,
-        b"POST /v1/daemon/identity-challenge HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 2\r\n\r\n{}",
-        port=5474,
-        home_dir=tmp_path,
-    )
-    assert _status(response) == 503
-    assert _body(response) == {"error": "daemon_route_unavailable"}
-    assert not (guard_home / request_replay_state._STATE_FILENAME).exists()
-
-
 def test_discovery_jobs_are_read_and_cancelled_from_another_process(tmp_path: Path) -> None:
     started = threading.Event()
 

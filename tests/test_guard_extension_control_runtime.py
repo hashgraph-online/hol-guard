@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -293,54 +292,6 @@ def test_daemon_starts_fail_closed_without_a_resident_digest(
         daemon.stop()
 
 
-@pytest.mark.parametrize("installed_bundle", [False, True])
-def test_daemon_starts_fail_closed_with_future_authority_schema(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    installed_bundle: bool,
-) -> None:
-    from codex_plugin_scanner.guard.catalog_delivery import preparation_authority
-
-    # An installed wheel ships a pack bundle, so startup also runs the pack
-    # authority migration against the unreadable schema.
-    monkeypatch.setattr(preparation_authority, "load_installed_bundle", lambda: object() if installed_bundle else None)
-    store = GuardStore(tmp_path / "guard-home")
-    store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
-    with store._connect() as connection:
-        connection.execute("update extension_control_schema_migration set version = 99 where singleton = 1")
-
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        snapshot = daemon._server.extension_control_runtime.current()
-        assert snapshot.health is AuthorityHealth.TAMPERED
-        assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
-    finally:
-        daemon.stop()
-
-
-def test_daemon_rebinds_control_api_once_authority_reads_again(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def unavailable(self: GuardStore) -> None:
-        raise ValueError("installed bundle metadata unavailable")
-
-    monkeypatch.setattr(GuardStore, "migrate_installed_command_pack_authority", unavailable)
-    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
-    try:
-        server = daemon._server
-        assert server._extension_control_on_core_registry
-
-        monkeypatch.setattr(GuardStore, "migrate_installed_command_pack_authority", lambda self: None)
-        snapshot = server.refresh_extension_control_runtime()
-        assert snapshot.health is not AuthorityHealth.TAMPERED
-        assert not server._extension_control_on_core_registry
-        assert server.extension_control_api.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    finally:
-        daemon.stop()
-
-
 def test_daemon_rebinds_control_api_when_activated_catalog_changes_after_startup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -424,43 +375,6 @@ def test_refresh_does_not_roll_back_an_activation_applied_after_its_lease(
         assert runtime.current().catalog_digest == applied.catalog_digest
         assert api.catalog_digest == applied.catalog_digest
         assert api.effective()["catalog_digest"] == applied.catalog_digest
-    finally:
-        daemon.stop()
-
-
-def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(
-        store,
-        host="127.0.0.1",
-        port=0,
-        extension_control_refresh_interval_seconds=0.01,
-    )
-    updated = ExtensionControlAuthorityView(
-        AuthorityHealth.PROTECTED,
-        7,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        (),
-    )
-    assert daemon._server.extension_control_runtime.current().revision != updated.revision
-    # The resident snapshot is initialized in the daemon constructor. Install
-    # the external authority view before the refresh worker starts so its first
-    # read cannot race into the real SQLite path on a loaded Windows runner.
-    monkeypatch.setattr(
-        store,
-        "read_extension_control_authority_for_registry",
-        lambda registry, *, read_only=False, **_kwargs: updated,
-    )
-    daemon.start()
-    try:
-        deadline = time.monotonic() + 30
-        while daemon._server.extension_control_runtime.current().revision != 7:
-            assert time.monotonic() < deadline
-            time.sleep(0.01)
-        assert daemon._server.extension_control_runtime.current().revision == 7
     finally:
         daemon.stop()
 

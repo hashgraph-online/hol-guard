@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -39,7 +38,6 @@ from codex_plugin_scanner.guard.models import (
 )
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.daemon_control_patching import patch_daemon_global
 from tests.native_runtime_fixtures import patch_popen_past_native_runtime
 from tests.policy_store_support import replace_remote_policies, resolve_policy
 
@@ -2026,40 +2024,6 @@ class TestGuardApprovals:
 
         assert snapshot_payload["receipt_count"] == 1
         assert snapshot_payload["latest_receipts"] == []
-
-    def test_guard_daemon_updates_runtime_heartbeat_while_serving_requests(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        heartbeat_values = [
-            "2026-04-11T00:00:00+00:00",
-            "2026-04-11T00:00:00+00:00",
-            "2026-04-11T00:05:00+00:00",
-        ]
-
-        def next_heartbeat() -> str:
-            if len(heartbeat_values) > 1:
-                return heartbeat_values.pop(0)
-            return heartbeat_values[0]
-
-        patch_daemon_global(monkeypatch, "_now", next_heartbeat)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5):
-                pass
-            deadline = time.monotonic() + 1
-            while True:
-                runtime_state = store.get_runtime_state()
-                if runtime_state is not None and runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00":
-                    break
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(0.01)
-        finally:
-            daemon.stop()
-
-        assert runtime_state is not None
-        assert runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00"
 
     def test_guard_store_clears_runtime_state_only_for_matching_session(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

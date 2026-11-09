@@ -11,21 +11,6 @@ from codex_plugin_scanner.guard.daemon import manager
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def test_daemon_pins_runtime_fingerprint_at_construction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    installed = {"generation": "previous-generation"}
-    monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
-    monkeypatch.setattr(
-        manager, "_measure_runtime_fingerprint", lambda *_args: ("tree", installed["generation"], False)
-    )
-
-    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
-    try:
-        installed["generation"] = "replacement-generation"
-        assert manager.current_guard_daemon_runtime_fingerprint() == "previous-generation"
-    finally:
-        daemon.stop()
-
-
 def test_upgraded_install_cannot_adopt_previous_generation_daemon(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

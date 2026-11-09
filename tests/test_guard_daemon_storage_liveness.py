@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import socket
 import sqlite3
 import threading
 import time
@@ -9,7 +8,6 @@ import urllib.request
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from datetime import datetime
 from http.client import HTTPResponse
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,12 +18,7 @@ import pytest
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import store_review_event_outbox, store_storage_gate
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon.discovery import (
-    DAEMON_DISCOVERY_PROTOCOL_VERSION,
-    load_authenticated_daemon_state,
-)
 from codex_plugin_scanner.guard.daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHttpServer
 from codex_plugin_scanner.guard.native_daemon_route import _MAX_CONCURRENT_ASKS, native_route_facts
 from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_connect_timeout_override,
@@ -34,7 +27,6 @@ from codex_plugin_scanner.guard.sqlite_tuning import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_review_event_outbox import StoreReviewEventOutboxMixin
-from tests.daemon_control_patching import patch_daemon_global
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -51,72 +43,6 @@ def _open_json(
         raw_payload = cast(object, json.loads(response.read().decode("utf-8")))
     assert _is_string_object_dict(raw_payload)
     return raw_payload, time.monotonic() - started
-
-
-def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def empty_inventory(_home: Path) -> list[tuple[int, int]]:
-        return []
-
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", empty_inventory)
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    # Hold the native hook edge unavailable so the burst exercises storage
-    # contention rather than real native review latency.
-    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
-    daemon.start()
-    # Route policy is answered by the resident; start its stream before the
-    # store is locked so the test measures storage contention only.
-    assert native_route_facts("POST", "/v1/daemon/identity-challenge", guard_home=store.guard_home)
-    blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
-
-    try:
-        initial_runtime = store.get_runtime_state()
-        assert initial_runtime is not None
-        initial_heartbeat = str(initial_runtime["last_heartbeat_at"])
-        state = load_authenticated_daemon_state(store.guard_home)
-        assert state is not None
-        _ = blocker.execute("begin exclusive")
-
-        health, health_elapsed = _open_json(f"http://127.0.0.1:{daemon.port}/healthz")
-        identity_request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/daemon/identity-challenge",
-            data=json.dumps(
-                {
-                    "nonce": "a" * 64,
-                    "hook_event": "PreToolUse",
-                    "state_id": state["state_id"],
-                    "protocol_version": DAEMON_DISCOVERY_PROTOCOL_VERSION,
-                }
-            ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        identity, identity_elapsed = _open_json(identity_request)
-
-        assert health["ok"] is True
-        assert isinstance(identity.get("proof"), str)
-        assert health_elapsed < 0.5
-        assert identity_elapsed < 0.5
-
-        _ = blocker.execute("rollback")
-        deadline = time.monotonic() + 2
-        persisted_heartbeat = initial_heartbeat
-        while time.monotonic() < deadline:
-            runtime = store.get_runtime_state()
-            assert runtime is not None
-            persisted_heartbeat = str(runtime["last_heartbeat_at"])
-            if datetime.fromisoformat(persisted_heartbeat) > datetime.fromisoformat(initial_heartbeat):
-                break
-            time.sleep(0.02)
-        assert datetime.fromisoformat(persisted_heartbeat) > datetime.fromisoformat(initial_heartbeat)
-    finally:
-        if blocker.in_transaction:
-            blocker.rollback()
-        blocker.close()
-        daemon.stop()
 
 
 @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
@@ -380,40 +306,3 @@ def test_new_store_keeps_incremental_auto_vacuum_with_wal(tmp_path: Path) -> Non
     with sqlite3.connect(store.path) as connection:
         assert connection.execute("pragma journal_mode").fetchone() == ("wal",)
         assert connection.execute("pragma auto_vacuum").fetchone() == (2,)
-
-
-def test_unclassified_watchdog_distinguishes_complete_headers_from_trickle() -> None:
-    if not hasattr(socket, "MSG_DONTWAIT"):
-        pytest.skip("nonblocking socket peeking is unavailable")
-    server_socket, client_socket = socket.socketpair()
-    try:
-        client_socket.sendall(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n")
-        assert _GuardDaemonHttpServer._buffered_request_headers_complete(server_socket) is True
-        _ = server_socket.recv(65_536)
-        client_socket.sendall(b"GET /healthz HTTP/1.1\r\nHost:")
-        assert _GuardDaemonHttpServer._buffered_request_headers_complete(server_socket) is False
-    finally:
-        server_socket.close()
-        client_socket.close()
-
-
-def test_storage_maintenance_failure_requests_immediate_retry(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FailingStore:
-        guard_home = tmp_path
-
-        @staticmethod
-        def maintain_storage(**_kwargs: object) -> None:
-            raise sqlite3.OperationalError("database is locked")
-
-    daemon = object.__new__(GuardDaemonServer)
-    object.__setattr__(daemon, "_server", SimpleNamespace(store=FailingStore()))
-    patch_daemon_global(
-        monkeypatch,
-        "load_guard_config",
-        lambda _guard_home: SimpleNamespace(evidence_retain_days=30),
-    )
-
-    assert daemon._maintain_storage_best_effort() is False  # pyright: ignore[reportPrivateUsage]

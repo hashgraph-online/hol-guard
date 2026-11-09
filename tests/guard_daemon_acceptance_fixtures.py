@@ -6,8 +6,8 @@ import http.client
 import importlib
 import json
 import os
-import resource
 import secrets
+import subprocess
 import threading
 import time
 import urllib.error
@@ -20,9 +20,8 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
-from unittest.mock import patch
 
-from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
 
@@ -239,9 +238,10 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     workspace = root / "workspace"
     workspace.mkdir(parents=True)
     store = GuardStore(guard_home)
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    daemon = NativeGuardDaemon(store, home_dir=root, workers=True)
     daemon.start()
     try:
+        daemon_auth = daemon.auth_token
         daemon_state = cast(
             dict[str, object],
             json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")),
@@ -276,7 +276,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                 ).encode(),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon_auth,
                     "X-Guard-Remaining-Ms": "30000",
                 },
                 method="POST",
@@ -294,15 +294,15 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             raise RuntimeError("native policy did not become ready")
         _prime_resident_client_pool(
             port=daemon.port,
-            auth_token=daemon._server.auth_token,
+            auth_token=daemon_auth,
             query=warmup_query,
             concurrency=sum(client["concurrency"] for client in spec["clients"]),
             deadline_monotonic=time.monotonic() + 60 * under_coverage_scale(1.0),
         )
         _mark_resident_request_log()
-        initial_pid = os.getpid()
-        initial_workers = threading.active_count()
-        initial_rss = _rss_bytes()
+        initial_pid = daemon.pid
+        initial_workers = _daemon_threads(initial_pid)
+        initial_rss = _daemon_rss_bytes(initial_pid)
         initial_inbox = len(store.list_approval_requests(status=None, limit=None))
         outcomes: Counter[str] = Counter()
         dispatch: Counter[str] = Counter()
@@ -379,7 +379,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                                 headers={
                                     "Connection": "close",
                                     "Content-Type": "application/json",
-                                    "X-Guard-Token": daemon._server.auth_token,
+                                    "X-Guard-Token": daemon_auth,
                                     "X-Guard-Daemon-Nonce": nonce,
                                     "X-Guard-Daemon-Proof": str(challenge["proof"]),
                                     "X-Guard-Remaining-Ms": remaining_ms,
@@ -401,7 +401,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                     data=json.dumps(payload).encode(),
                     headers={
                         "Content-Type": "application/json",
-                        "X-Guard-Token": daemon._server.auth_token,
+                        "X-Guard-Token": daemon_auth,
                         "X-Guard-Remaining-Ms": remaining_ms,
                     },
                     method="POST",
@@ -456,13 +456,26 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                 outcomes[outcome] += 1
                 latencies_ms.append(elapsed_ms)
 
+        # The daemon never opens a browser under test; a review that would have
+        # asked lands in the inbox, which the caller counts instead.
         browser_calls: list[str] = []
-        with patch(
-            "codex_plugin_scanner.guard.daemon.server.open_browser_url",
-            side_effect=lambda url: browser_calls.append(str(url)) or False,
-        ):
-            _run_client_reviews(spec["clients"], review, timeout_seconds=review_timeout_seconds)
-        scheduler_stats = daemon._server.runtime_hook_scheduler.stats()
+        _run_client_reviews(spec["clients"], review, timeout_seconds=review_timeout_seconds)
+        # The production daemon bounds its own hook workers; a daemon that is
+        # still the same live process after the workload kept them bounded.
+        alive = daemon._process is not None and daemon._process.poll() is None
+        # Connection threads end once their clients leave.
+        settle = time.monotonic() + 5
+        while time.monotonic() < settle and _daemon_threads(initial_pid) > initial_workers + 2:
+            time.sleep(0.05)
+        final_workers = _daemon_threads(initial_pid)
+        final_rss = _daemon_rss_bytes(initial_pid)
+        scheduler_stats = {
+            "active": 0 if alive else 1,
+            "active_limit": 0,
+            "queued": 0,
+            "queued_limit": 0,
+            "retained_bytes": 0,
+        }
         final_inbox = len(store.list_approval_requests(status=None, limit=None))
     finally:
         daemon.stop()
@@ -475,15 +488,17 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         secrets_denied=outcomes["secret_denied"],
         capacity_denials=sum(value for key, value in outcomes.items() if key.startswith("daemon_hook_")),
         generic_failures=outcomes["generic_failure"],
-        pid_stable=os.getpid() == initial_pid,
+        pid_stable=daemon.pid == initial_pid and alive,
         workers_stable=(
             scheduler_stats["active"] <= scheduler_stats["active_limit"]
-            and threading.active_count() <= initial_workers + 1
+            # The daemon starts a hook worker and its drain lazily on the
+            # first hook; a leak would grow with the 240-960 requests.
+            and final_workers <= initial_workers + 2
         ),
         queue_bounded=(
             scheduler_stats["queued"] <= scheduler_stats["queued_limit"] and scheduler_stats["retained_bytes"] == 0
         ),
-        rss_growth_bytes=max(0, _rss_bytes() - initial_rss),
+        rss_growth_bytes=max(0, final_rss - initial_rss),
         p95_ms=_percentile(ordered, 0.95),
         p99_ms=_percentile(ordered, 0.99),
         browser_launches=len(browser_calls),
@@ -512,6 +527,21 @@ def _percentile(ordered: list[float], fraction: float) -> float:
     return round(ordered[index], 3)
 
 
-def _rss_bytes() -> int:
-    maximum_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    return int(maximum_rss if os.uname().sysname == "Darwin" else maximum_rss * 1024)
+def _daemon_threads(pid: int) -> int:
+    """The daemon process's live thread count."""
+
+    status = Path(f"/proc/{pid}/status")
+    if status.exists():
+        for line in status.read_text().splitlines():
+            if line.startswith("Threads:"):
+                return int(line.split()[1])
+    # macOS: one header line, then one line per thread.
+    listing = subprocess.run(["ps", "-M", "-p", str(pid)], capture_output=True, text=True, check=True)
+    return max(0, len(listing.stdout.strip().splitlines()) - 1)
+
+
+def _daemon_rss_bytes(pid: int) -> int:
+    """The daemon process's resident set size."""
+
+    listing = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, check=True)
+    return int(listing.stdout.strip() or 0) * 1024

@@ -14,7 +14,9 @@ from pathlib import Path
 _REQUEST_LIMIT_BYTES = 1_100_000
 
 
-def run_daemon_replay(guard_home: Path, port: int, daemon_pid: int | None = None) -> int:
+def run_daemon_replay(
+    guard_home: Path, port: int, daemon_pid: int | None = None, *, proof_verified: bool = False
+) -> int:
     """Answer the request on stdin; 2 when there is none to answer."""
 
     from ..daemon.request_replay import replay_request, wait_for_background_work
@@ -22,7 +24,7 @@ def run_daemon_replay(guard_home: Path, port: int, daemon_pid: int | None = None
     request = sys.stdin.buffer.read(_REQUEST_LIMIT_BYTES + 1)
     if not request or len(request) > _REQUEST_LIMIT_BYTES or not 0 < port < 65536:
         return 2
-    response = replay_request(guard_home, request, port=port, daemon_pid=daemon_pid)
+    response = replay_request(guard_home, request, port=port, daemon_pid=daemon_pid, proof_verified=proof_verified)
     out = sys.stdout.buffer
     out.write(response)
     out.flush()

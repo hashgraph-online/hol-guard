@@ -8,7 +8,6 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import business_review_queue as route
-from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import InvalidApprovalCursorError
 from tests.test_guard_daemon_transport_security import _dashboard_token
@@ -118,9 +117,6 @@ def test_real_local_http_routes_expose_only_read_only_projection(tmp_path, monke
         "read_native_business_review_summary",
         lambda home, request_id: values(1)[0] if request_id == "opaque-000" else None,
     )
-    # The faked queue lives in this process; the native edge would read the
-    # real resident instead.
-    monkeypatch.setattr(daemon_server, "start_native_daemon_edge", lambda *_args, **_kwargs: None)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:

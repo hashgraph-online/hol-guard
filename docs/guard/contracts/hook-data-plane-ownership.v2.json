@@ -581,7 +581,6 @@
     "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
     "src/codex_plugin_scanner/guard/daemon/hook_direct_evidence_drain.py",
     "src/codex_plugin_scanner/guard/daemon/hook_evidence_dispatch.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_evidence_shutdown.py",
     "src/codex_plugin_scanner/guard/daemon/mcp_relay_evidence_drain.py",
     "src/codex_plugin_scanner/guard/daemon/mcp_relay_package_evidence_drain.py",
     "src/codex_plugin_scanner/guard/store.py",

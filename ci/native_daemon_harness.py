@@ -12,8 +12,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 import time
 from pathlib import Path
+from typing import IO
 
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -35,13 +37,26 @@ def _runtime_binary(guard_home: Path) -> Path:
 class NativeGuardDaemon:
     """Starts and stops ``daemon-serve`` for one Guard home on a free port."""
 
-    def __init__(self, store: GuardStore, *, home_dir: Path | None = None, workers: bool = False) -> None:
+    def __init__(
+        self,
+        store: GuardStore,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        *,
+        home_dir: Path | None = None,
+        workers: bool = False,
+    ) -> None:
+        # The daemon binds loopback on a port it picks; the arguments mirror
+        # ``GuardDaemonServer`` so a test can swap one for the other.
+        if host != "127.0.0.1" or port != 0:
+            raise ValueError("The native daemon harness serves 127.0.0.1 on a free port.")
         self.store = store
         self.home_dir = home_dir
         self.workers = workers
         self.port = 0
         self.pid = 0
         self._process: subprocess.Popen[bytes] | None = None
+        self._log: IO[bytes] | None = None
 
     @property
     def auth_token(self) -> str:
@@ -76,7 +91,19 @@ class NativeGuardDaemon:
             "--port",
             "0",
         ]
-        process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        environment = dict(os.environ)
+        if self.home_dir is not None:
+            # The daemon runs as the user whose home it serves; the resident
+            # binds its direct lane to that home.
+            home = str(Path(self.home_dir).expanduser().resolve(strict=False))
+            environment["HOME"] = home
+            environment["USERPROFILE"] = home
+        # Nothing reads the daemon's diagnostics while it runs, so they go to a
+        # file: a full pipe would stall every request that logs.
+        self._log = tempfile.TemporaryFile()  # noqa: SIM115 -- closed in stop()
+        process = subprocess.Popen(
+            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._log, env=environment
+        )
         self._process = process
         assert process.stdin is not None and process.stdout is not None
         process.stdin.write(line)
@@ -102,9 +129,12 @@ class NativeGuardDaemon:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=5)
-        for stream in (process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
+        if process.stdout is not None:
+            process.stdout.close()
+        log = self._log
+        self._log = None
+        if log is not None:
+            log.close()
 
     def __enter__(self) -> NativeGuardDaemon:
         self.start()

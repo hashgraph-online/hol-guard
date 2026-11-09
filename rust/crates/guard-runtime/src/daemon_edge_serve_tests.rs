@@ -3,7 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use serde_json::json;
 
 use super::*;
-use crate::claude_hook_bridge_auth::authenticated_state;
+use crate::claude_hook_bridge_auth::{authenticated_state, verify_challenge_response};
 
 fn launch(home: &Path, extra: Value) -> Vec<u8> {
     let mut config = json!({
@@ -174,4 +174,165 @@ fn a_waiting_launcher_is_named_as_the_daemon() {
     reads.mark_standalone();
     reads.set_launcher_pid(4242);
     assert_eq!(reads.daemon_pid(), 4242);
+}
+
+/// A standalone daemon on a fresh private home whose replay CLI echoes the
+/// arguments it was run with, so a test can see what the handler was told.
+fn echoing_daemon() -> (tempfile::TempDir, SocketAddr) {
+    let dir = private_home();
+    let home = fs::canonicalize(dir.path()).unwrap();
+    let echo = json!({"cli_command": [
+        "/bin/sh", "-c", "cat >/dev/null; printf 'HTTP/1.0 200 OK\\r\\n\\r\\n%s' \"$*\"", "sh"
+    ]});
+    let config = LaunchConfig::parse(&launch(&home, echo)).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let pass = publish(&home, &config, address.port(), std::process::id()).unwrap();
+    let reads = Arc::new(NativeReads::new(None));
+    reads.mark_standalone();
+    reads.accept_handshake(&config.handshake(&pass));
+    std::thread::spawn(move || serve(&listener, None, 4, STALLED_WRITE_TIMEOUT, reads));
+    (dir, address)
+}
+
+fn http_post(path: &str, headers: &str, body: &str) -> String {
+    format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n{headers}Content-Length: {}\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+/// Reads one response with a declared length off a kept-alive connection.
+fn read_one(client: &mut std::net::TcpStream) -> (String, Map<String, Value>) {
+    let mut bytes = Vec::new();
+    let mut byte = [0u8; 1];
+    while !bytes.ends_with(b"\r\n\r\n") {
+        client.read_exact(&mut byte).unwrap();
+        bytes.push(byte[0]);
+    }
+    let head = String::from_utf8(bytes).unwrap();
+    let length: usize = head
+        .lines()
+        .find_map(|line| line.strip_prefix("Content-Length: "))
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    let mut body = vec![0u8; length];
+    client.read_exact(&mut body).unwrap();
+    (head, serde_json::from_slice(&body).unwrap())
+}
+
+fn challenge(
+    client: &mut std::net::TcpStream,
+    home: &Path,
+    nonce: &str,
+) -> (String, Map<String, Value>) {
+    let home = fs::canonicalize(home).unwrap();
+    let state = authenticated_state(&home.join(STATE_FILE)).unwrap();
+    let body = json!({
+        "protocol_version": 1,
+        "nonce": nonce,
+        "state_id": state.payload["state_id"],
+        "hook_event": "PreToolUse",
+    })
+    .to_string();
+    client
+        .write_all(http_post("/v1/daemon/identity-challenge", "", &body).as_bytes())
+        .unwrap();
+    read_one(client)
+}
+
+#[test]
+fn a_standalone_daemon_proves_its_identity_on_the_hook_connection() {
+    let (dir, address) = echoing_daemon();
+    let nonce = "ab".repeat(32);
+    let mut client = std::net::TcpStream::connect(address).unwrap();
+    let (head, answer) = challenge(&mut client, dir.path(), &nonce);
+    assert!(head.starts_with("HTTP/1.1 200 OK\r\n"), "{head}");
+    assert!(head.contains("Cache-Control: no-store\r\n"), "{head}");
+    let state =
+        authenticated_state(&fs::canonicalize(dir.path()).unwrap().join(STATE_FILE)).unwrap();
+    let proof = verify_challenge_response(&answer, &state, &nonce, "PreToolUse").unwrap();
+    let hook = json!({"hook_event_name": " PreToolUse ", "tool_name": "Bash"}).to_string();
+    let headers = format!("X-Guard-Daemon-Nonce: {nonce}\r\nX-Guard-Daemon-Proof: {proof}\r\n");
+    client
+        .write_all(http_post("/v1/hooks/codex", &headers, &hook).as_bytes())
+        .unwrap();
+    let mut response = String::new();
+    client.read_to_string(&mut response).unwrap();
+    assert!(response.ends_with("--daemon-proof-verified"), "{response}");
+}
+
+#[test]
+fn a_hook_without_the_issued_proof_reaches_the_handler_unverified() {
+    let (dir, address) = echoing_daemon();
+    let nonce = "cd".repeat(32);
+    let hook = json!({"hook_event_name": "PreToolUse"}).to_string();
+    for (headers, event_hook) in [
+        (
+            format!(
+                "X-Guard-Daemon-Nonce: {nonce}\r\nX-Guard-Daemon-Proof: {}\r\n",
+                "0".repeat(64)
+            ),
+            hook.clone(),
+        ),
+        (String::new(), hook.clone()),
+        (
+            String::new(),
+            json!({"hook_event_name": "PostToolUse"}).to_string(),
+        ),
+    ] {
+        let mut client = std::net::TcpStream::connect(address).unwrap();
+        let (_head, answer) = challenge(&mut client, dir.path(), &nonce);
+        let headers = if headers.is_empty() {
+            format!(
+                "X-Guard-Daemon-Nonce: {nonce}\r\nX-Guard-Daemon-Proof: {}\r\n",
+                answer["proof"].as_str().unwrap()
+            )
+        } else {
+            headers
+        };
+        let path = if event_hook == hook && headers.contains(&"0".repeat(64)) {
+            "/v1/hooks/codex"
+        } else if event_hook == hook {
+            "/v1/requests"
+        } else {
+            "/v1/hooks/claude-code"
+        };
+        client
+            .write_all(http_post(path, &headers, &event_hook).as_bytes())
+            .unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.0 200 OK"), "{response}");
+        assert!(!response.contains("--daemon-proof-verified"), "{response}");
+    }
+}
+
+#[test]
+fn a_malformed_or_foreign_challenge_is_refused() {
+    let (_dir, address) = echoing_daemon();
+    for (body, status, error) in [
+        (json!({"nonce": "zz"}).to_string(), "400", "invalid_daemon_identity_challenge"),
+        (
+            json!({"protocol_version": 1, "nonce": "ef".repeat(32), "state_id": "other", "hook_event": "PreToolUse"}).to_string(),
+            "409",
+            "daemon_identity_state_mismatch",
+        ),
+        (
+            json!({"protocol_version": true, "nonce": "ef".repeat(32), "state_id": "x", "hook_event": "PreToolUse"}).to_string(),
+            "400",
+            "invalid_daemon_identity_challenge",
+        ),
+    ] {
+        let mut client = std::net::TcpStream::connect(address).unwrap();
+        client
+            .write_all(http_post("/v1/daemon/identity-challenge", "", &body).as_bytes())
+            .unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with(&format!("HTTP/1.0 {status} ")), "{response}");
+        assert!(response.ends_with(&format!("{{\"error\":\"{error}\"}}")), "{response}");
+    }
 }

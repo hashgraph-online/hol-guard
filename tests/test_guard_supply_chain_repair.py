@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.daemon.server_control_connect_state import _repair_detected_package_shims
+from codex_plugin_scanner.guard.runtime import runner as runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncEndpointUntrustedError,
     GuardSyncNotConfiguredError,
@@ -170,8 +171,8 @@ def test_repair_sync_intelligence_defers_unconfigured_cloud(tmp_path: Path, monk
     def unconfigured(_store: object) -> dict[str, object]:
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
 
-    patch_daemon_global(
-        monkeypatch,
+    monkeypatch.setattr(
+        runner_module,
         "_resolve_guard_sync_auth_context",
         unconfigured,
     )
@@ -191,8 +192,8 @@ def test_repair_sync_intelligence_refreshes_bundle_without_auditing_workspaces(
     store = GuardStore(tmp_path / "guard")
     refreshed: list[tuple[GuardStore, dict[str, object]]] = []
 
-    patch_daemon_global(
-        monkeypatch,
+    monkeypatch.setattr(
+        runner_module,
         "_resolve_guard_sync_auth_context",
         lambda _store: auth_context,
     )
@@ -229,8 +230,8 @@ def test_repair_sync_intelligence_keeps_untrusted_endpoint_as_failure(
     def untrusted(_store: object) -> dict[str, object]:
         raise GuardSyncEndpointUntrustedError("Guard Cloud endpoint failed trust validation.")
 
-    patch_daemon_global(
-        monkeypatch,
+    monkeypatch.setattr(
+        runner_module,
         "_resolve_guard_sync_auth_context",
         untrusted,
     )

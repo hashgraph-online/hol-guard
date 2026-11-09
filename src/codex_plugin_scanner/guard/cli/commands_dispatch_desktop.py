@@ -622,6 +622,7 @@ def _run_guard_desktop_command(
             _Path(resolved_home),
             int(args.port),
             daemon_pid if isinstance(daemon_pid, int) and daemon_pid > 1 else None,
+            proof_verified=bool(getattr(args, "daemon_proof_verified", False)),
         )
     if getattr(args, "desktop_command", None) == "library-call":
         from pathlib import Path as _Path

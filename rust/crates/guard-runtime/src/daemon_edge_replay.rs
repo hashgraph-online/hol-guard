@@ -38,7 +38,7 @@ pub(in crate::daemon_edge) fn replay(
     daemon_pid: u32,
 ) {
     let request = if read_ahead.is_empty() {
-        read_request(client)
+        read_request(client, REQUEST_READ_TIMEOUT)
     } else {
         Some(read_ahead)
     };
@@ -46,10 +46,24 @@ pub(in crate::daemon_edge) fn replay(
         let _ = client.shutdown(Shutdown::Both);
         return;
     };
+    replay_with(client, config, request, stalled_write, daemon_pid, false);
+}
+
+/// Answers `request`, already read off `client`, through the CLI.
+/// `proof_verified` tells the handler the edge checked the daemon identity
+/// proof this hook presents on its connection.
+pub(in crate::daemon_edge) fn replay_with(
+    client: &TcpStream,
+    config: &ReadConfig,
+    request: Vec<u8>,
+    stalled_write: Duration,
+    daemon_pid: u32,
+    proof_verified: bool,
+) {
     let response = client
         .local_addr()
         .ok()
-        .and_then(|local| run(config, local.port(), daemon_pid, request))
+        .and_then(|local| run(config, local.port(), daemon_pid, proof_verified, request))
         .filter(|response| !response.is_empty());
     let _ = client.set_write_timeout(Some(stalled_write));
     let mut writer = client;
@@ -57,9 +71,13 @@ pub(in crate::daemon_edge) fn replay(
     let _ = client.shutdown(Shutdown::Both);
 }
 
-/// One request's head and declared body, read straight off the socket.
-fn read_request(client: &TcpStream) -> Option<Vec<u8>> {
-    let deadline = Instant::now() + REQUEST_READ_TIMEOUT;
+/// One request's head and declared body, read straight off the socket
+/// within `timeout`.
+pub(in crate::daemon_edge) fn read_request(
+    client: &TcpStream,
+    timeout: Duration,
+) -> Option<Vec<u8>> {
+    let deadline = Instant::now() + timeout;
     let mut bytes = Vec::new();
     let mut chunk = [0u8; 8192];
     let head_len = loop {
@@ -129,13 +147,20 @@ pub(in crate::daemon_edge) fn content_length(head: &[u8]) -> Option<usize> {
 
 /// The CLI's raw response to `request`, or `None` when the daemon named no
 /// CLI or the CLI printed nothing in time.
-fn run(config: &ReadConfig, port: u16, daemon_pid: u32, request: Vec<u8>) -> Option<Vec<u8>> {
+fn run(
+    config: &ReadConfig,
+    port: u16,
+    daemon_pid: u32,
+    proof_verified: bool,
+    request: Vec<u8>,
+) -> Option<Vec<u8>> {
     let (argv, guard_home, cwd) = config.cli()?;
     let (program, prefix) = argv.split_first()?;
     let mut command = Command::new(program);
     command
         .args(prefix)
         .args(replay_args(guard_home, port, daemon_pid))
+        .args(proof_verified.then_some("--daemon-proof-verified"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());

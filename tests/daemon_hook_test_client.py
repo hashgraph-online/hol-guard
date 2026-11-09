@@ -10,6 +10,7 @@ import urllib.request
 from urllib.parse import urlparse
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from scripts.daemon_hook_auth import _DaemonResponseError
 from scripts.daemon_hook_client import authenticated_claude_hook_response
 
@@ -21,17 +22,27 @@ class AuthenticatedHookResponse(io.BytesIO):
 
 
 def open_authenticated_claude_request(
-    daemon: GuardDaemonServer,
+    daemon: NativeGuardDaemon | GuardDaemonServer,
     request: urllib.request.Request,
     *,
     timeout: float,
 ) -> AuthenticatedHookResponse:
-    """Send an existing Claude request through the production challenge flow."""
+    """Send an existing Claude request the way the hook bridge sends it.
 
+    The native daemon answers the identity challenge, so a request to it goes
+    through the production challenge flow. The in-process handler harness has
+    no challenge; it stands where the native daemon hands a replay a hook whose
+    proof it already checked.
+    """
+
+    if isinstance(daemon, GuardDaemonServer):
+        daemon._server.daemon_proof_verified = True
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return AuthenticatedHookResponse(response.read())
     body = request.data.decode("utf-8") if isinstance(request.data, bytes) else "{}"
     try:
         response = authenticated_claude_hook_response(
-            state_path=daemon._server.store.guard_home / "daemon-state.json",
+            state_path=daemon.store.guard_home / "daemon-state.json",
             query=urlparse(request.full_url).query,
             data=body,
             timeout_seconds=timeout,

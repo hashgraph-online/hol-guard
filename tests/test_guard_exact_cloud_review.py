@@ -5,20 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
-import threading
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args, main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_review as cloud_review_dispatch
 from codex_plugin_scanner.guard.codex_live_decision import resolve_codex_live_allow_authority
-from codex_plugin_scanner.guard.daemon import command_queue_worker as queue_worker_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.native_command_capability import CommandCapabilityUnavailableError
 from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,
@@ -718,53 +714,3 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     persisted = restarted.get_sync_payload("oauth_local_credentials")
     assert isinstance(persisted, dict)
     assert "dpop_public_jwk_thumbprint" not in persisted
-
-
-def test_command_queue_worker_refresh_serializes_with_shutdown(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = _connected_store(tmp_path)
-    enable_exact_cloud_review(store)
-    starts: list[str] = []
-    monkeypatch.setattr(
-        daemon_server_module,
-        "start_command_queue_worker",
-        lambda *_args: starts.append("start") or None,
-    )
-    lifecycle_daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    lifecycle_daemon.start()
-    lifecycle_daemon._finish_service_lock.acquire()
-    entered = threading.Event()
-    refresh_result: dict[str, object] = {}
-
-    def _refresh_during_shutdown() -> None:
-        entered.set()
-        refresh_result.update(lifecycle_daemon.refresh_command_queue_worker())
-
-    refresh_thread = threading.Thread(target=_refresh_during_shutdown)
-    refresh_thread.start()
-    assert entered.wait(timeout=1)
-    lifecycle_daemon._shutdown_started.set()
-    lifecycle_daemon._finish_service_lock.release()
-    refresh_thread.join(timeout=2)
-    try:
-        assert refresh_thread.is_alive() is False
-        assert refresh_result["running"] is False
-        assert starts == ["start"]
-    finally:
-        lifecycle_daemon.stop()
-
-    old_release = threading.Event()
-    old_thread = threading.Thread(target=old_release.wait)
-    old_thread.start()
-    old_stop = threading.Event()
-    old_stop.set()
-    old_worker = queue_worker_module.CommandQueueWorker(thread=old_thread, stop_event=old_stop)
-    monkeypatch.setattr(queue_worker_module, "command_queue_enabled", lambda _store: True)
-    monkeypatch.setattr(queue_worker_module, "_COMMAND_QUEUE_THREAD_JOIN_TIMEOUT_SECONDS", 0.01)
-    try:
-        assert queue_worker_module.start_command_queue_worker(store, old_worker) is old_worker
-    finally:
-        old_release.set()
-        old_thread.join(timeout=1)

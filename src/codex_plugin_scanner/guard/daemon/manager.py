@@ -1741,6 +1741,33 @@ def write_guard_daemon_state(
         )
 
 
+def republish_guard_daemon_trust_status(guard_home: Path, trust_status: dict[str, object]) -> bool:
+    """Re-sign the running daemon's state with a new ``trust_status``.
+
+    The native daemon publishes its state once; an integrity transition a
+    replay commits updates that state in place so passive trust readers see
+    it. Every other field, the state id included, is kept.
+    """
+
+    state_path = _state_path(guard_home)
+    with _guard_daemon_state_write_lock(guard_home):
+        current = load_authenticated_daemon_state(guard_home)
+        discovery_key = load_daemon_discovery_key(guard_home)
+        if current is None or discovery_key is None:
+            return False
+        payload = {
+            field: value
+            for field, value in current.items()
+            if field not in {"discovery_protocol_version", "discovery_key_id", "state_signature"}
+        }
+        payload["trust_status"] = dict(trust_status)
+        _write_private_atomic_text(
+            state_path,
+            json.dumps(authenticate_daemon_state(payload, discovery_key=discovery_key), indent=2),
+        )
+    return True
+
+
 def clear_guard_daemon_state(guard_home: Path) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)

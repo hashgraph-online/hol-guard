@@ -22,6 +22,7 @@ import json
 import os
 import threading
 import time
+from collections.abc import Callable
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -97,6 +98,17 @@ class _Unclosable(io.BufferedIOBase):
         return None
 
 
+def _republish_trust_status(guard_home: Path) -> Callable[[dict[str, object]], None]:
+    """Carries an integrity transition this replay commits into the daemon's state."""
+
+    def republish(trust_status: dict[str, object]) -> None:
+        from .manager import republish_guard_daemon_trust_status
+
+        republish_guard_daemon_trust_status(guard_home, trust_status)
+
+    return republish
+
+
 def _replay_server_class() -> type:
     from ..runtime.surface_server import GuardSurfaceRuntime
     from . import server as daemon_server
@@ -113,12 +125,15 @@ def _replay_server_class() -> type:
             home_dir: Path,
             auth_key: str,
             daemon_pid: int | None = None,
+            daemon_proof_verified: bool = False,
         ) -> None:
             # The listening socket, executors and workers belong to the native
             # daemon; only the fields handlers read are set here.
             self._replay_state = state_file = _ReplayState(store.guard_home)
             self._replay_daemon_pid = daemon_pid
+            self.daemon_proof_verified = daemon_proof_verified
             self.store = store
+            store.set_policy_integrity_state_listener(_republish_trust_status(store.guard_home))
             self.runtime = GuardSurfaceRuntime(store)
             self.server_address = (host, port)
             self._socket_bound = True
@@ -330,7 +345,9 @@ def _replay_server_class() -> type:
             return time.monotonic() + timeout_seconds
 
         def publish_trust_state(self, trust_status: dict[str, object] | None = None) -> None:
-            del trust_status
+            _republish_trust_status(self.store.guard_home)(
+                trust_status or self.store.get_cached_policy_integrity_state()
+            )
 
         def server_close(self) -> None:
             self.diagnostics.close(timeout_seconds=0.5)
@@ -362,44 +379,26 @@ def replay_request(
     host: str = "127.0.0.1",
     home_dir: Path | None = None,
     daemon_pid: int | None = None,
+    proof_verified: bool = False,
 ) -> bytes:
-    """The raw response the daemon's handler writes for ``request``."""
+    """The raw response the daemon's handler writes for ``request``.
 
-    if _connection_bound(request):
-        return _UNAVAILABLE
+    ``proof_verified`` is the native daemon's word that this hook presented
+    the identity proof it issued on the same connection.
+    """
+
     from .auth_token import load_guard_daemon_auth_token
     from .server import _GuardDaemonHandler
 
     auth_key = load_guard_daemon_auth_token(guard_home) or ""
     store = GuardStore(guard_home)
-    server = _replay_server_class()(store, port, host, home_dir or Path.home(), auth_key, daemon_pid)
+    server = _replay_server_class()(store, port, host, home_dir or Path.home(), auth_key, daemon_pid, proof_verified)
     response = io.BytesIO()
     try:
         _GuardDaemonHandler(_ReplaySocket(request, response), ("127.0.0.1", 0), server)  # pyright: ignore[reportArgumentType]
     finally:
         server.server_close()
     return response.getvalue()
-
-
-_CONNECTION_BOUND_PATHS = frozenset({"/v1/daemon/identity-challenge"})
-_UNAVAILABLE = (
-    b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\n"
-    b"Content-Length: 38\r\nConnection: close\r\n\r\n"
-    b'{"error": "daemon_route_unavailable"}\n'
-)
-
-
-def _connection_bound(request: bytes) -> bool:
-    """Whether ``request`` opens a proof the next request must reuse its
-    connection for. Each replay is its own process on a closed connection, so
-    that proof could never be redeemed; answer as an unavailable route instead.
-    """
-
-    line = request.split(b"\r\n", 1)[0].split(b" ")
-    if len(line) < 2:
-        return False
-    path = line[1].split(b"?", 1)[0]
-    return path.decode("latin-1") in _CONNECTION_BOUND_PATHS
 
 
 def wait_for_background_work() -> None:

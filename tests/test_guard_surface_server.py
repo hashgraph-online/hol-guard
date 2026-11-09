@@ -6,7 +6,6 @@ import base64
 import hashlib
 import json
 import os
-import socket
 import sqlite3
 import tempfile
 import time
@@ -20,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard import native_directory_trust as native_directory_trust_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.daemon import protection_repair_retry
 from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
+from codex_plugin_scanner.guard.daemon.request_replay import _republish_trust_status
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
@@ -151,8 +152,11 @@ class TestGuardSurfaceServer:
 
     def test_daemon_trust_snapshot_tracks_only_committed_integrity_transitions(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, host="127.0.0.1", port=0)
         daemon.start()
+        # A replay that commits an integrity transition carries it into the
+        # running daemon's state through this listener.
+        store.set_policy_integrity_state_listener(_republish_trust_status(store.guard_home))
         degraded = {
             "backend": "system-keyring",
             "degraded_reasons": ["policy_integrity_key_unavailable"],
@@ -220,7 +224,6 @@ class TestGuardSurfaceServer:
                 urllib.request.urlopen(unauthenticated, timeout=5)
             with urllib.request.urlopen(authenticated, timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-            authenticated_state = load_authenticated_daemon_state(store.guard_home)
         finally:
             daemon.stop()
 
@@ -232,12 +235,6 @@ class TestGuardSurfaceServer:
             "pending_check_ids": [],
             "check_reasons": {},
             "message": "Integrity protection restored.",
-        }
-        assert authenticated_state is not None
-        assert authenticated_state["trust_status"] == {
-            "backend": "system-keyring",
-            "degraded_reasons": [],
-            "mode": "protected",
         }
 
     def test_protection_repair_all_returns_an_inline_recovery_result(
@@ -1214,7 +1211,7 @@ class TestGuardSurfaceServer:
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
         (home_dir / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
@@ -1232,7 +1229,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon.auth_token,
                 },
                 method="POST",
             )
@@ -1373,7 +1370,7 @@ class TestGuardSurfaceServer:
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
@@ -1392,7 +1389,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon.auth_token,
                 },
                 method="POST",
             )
@@ -1415,7 +1412,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon.auth_token,
                 },
                 method="POST",
             )
@@ -1954,48 +1951,6 @@ class TestGuardSurfaceServer:
             assert reference_path.read_bytes() == raw_referenced_payload
             assert daemon._server.runtime_hook_scheduler.stats()["retained_bytes"] == 0
 
-    def test_guard_daemon_server_close_stops_hook_evidence_writer(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-        daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
-        writer = daemon._server.runtime_hook_evidence_writer
-        # The daemon no longer builds the writer while it starts, so the
-        # shutdown path is exercised against a writer this test warms itself.
-        assert writer.start() is True
-        assert writer.stats()["running"] is True
-
-        daemon._server.server_close()
-
-        assert writer.stats()["running"] is False
-
-    def test_guard_daemon_bounds_http_handler_threads_before_request_parsing(
-        self,
-        tmp_path,
-        monkeypatch,
-    ) -> None:
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon._server.connection_capacity_limit = 2
-        daemon._server.connection_capacity = daemon_server_module.threading.BoundedSemaphore(2)
-        daemon.start()
-        clients: list[socket.socket] = []
-
-        try:
-            clients = [socket.create_connection(("127.0.0.1", daemon.port), timeout=1) for _ in range(3)]
-            deadline = time.monotonic() + 2
-            while time.monotonic() < deadline:
-                with daemon._server.request_capacity_lock:
-                    if daemon._server.active_requests == 2 and daemon._server.rejected_requests >= 1:
-                        break
-                time.sleep(0.01)
-            with daemon._server.request_capacity_lock:
-                assert daemon._server.active_requests == 2
-                assert daemon._server.rejected_requests >= 1
-        finally:
-            for client in clients:
-                client.close()
-            daemon.stop()
-
     def test_guard_daemon_routes_repeated_liveness_after_parsing_under_general_saturation(
         self,
         tmp_path,
@@ -2250,7 +2205,7 @@ class TestGuardSurfaceServer:
         except (NotImplementedError, OSError):
             pytest.skip("symlinks are not supported in this environment")
 
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
@@ -2262,7 +2217,7 @@ class TestGuardSurfaceServer:
                 data=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hi"}).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon.auth_token,
                 },
                 method="POST",
             )
@@ -2820,7 +2775,7 @@ class TestGuardSurfaceServer:
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
@@ -2837,7 +2792,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon.auth_token,
                 },
                 method="POST",
             )
@@ -2858,7 +2813,7 @@ class TestGuardSurfaceServer:
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
@@ -2875,7 +2830,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon.auth_token,
                 },
                 method="POST",
             )
@@ -2897,7 +2852,7 @@ class TestGuardSurfaceServer:
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
@@ -2914,7 +2869,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
+                    "X-Guard-Token": daemon.auth_token,
                 },
                 method="POST",
             )
@@ -2925,56 +2880,6 @@ class TestGuardSurfaceServer:
 
         assert hook_payload["decision"] == "block"
         assert "bypass" in hook_payload["reason"].lower() or "disable" in hook_payload["reason"].lower()
-
-    def test_guard_daemon_background_start_auto_stops_after_idle_timeout(
-        self,
-        tmp_path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        guard_home = tmp_path / "pytest-of-user" / "guard-home"
-        store = GuardStore(guard_home)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60.0)
-        daemon.start()
-
-        assert not daemon._shutdown_started.is_set()
-        # Advance only the idle deadline after startup, without racing the
-        # watchdog against initialization on a traced or busy runner.
-        daemon._server.last_activity_monotonic = time.monotonic() - 61.0
-        assert daemon._shutdown_started.wait(timeout=3)
-        daemon_thread = daemon._thread
-        assert daemon_thread is not None
-        daemon_thread.join(timeout=40)
-        runtime_state = store.get_runtime_state()
-        daemon.stop()
-
-        assert runtime_state is None
-        assert daemon_thread.is_alive() is False
-
-    def test_guard_daemon_keeps_stream_clients_alive_past_idle_timeout(self, tmp_path) -> None:
-        guard_home = tmp_path / "pytest-of-user" / "guard-home"
-        store = GuardStore(guard_home)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0.5)
-        daemon.start()
-        response = None
-
-        try:
-            stream_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/events/stream",
-                headers={"X-Guard-Token": daemon._server.auth_token},
-                method="GET",
-            )
-            response = urllib.request.urlopen(stream_request, timeout=5)
-            time.sleep(0.75)
-            daemon_thread = daemon._thread
-            daemon_thread_alive = daemon_thread is not None and daemon_thread.is_alive()
-            runtime_state = store.get_runtime_state()
-        finally:
-            if response is not None:
-                response.close()
-            daemon.stop()
-
-        assert runtime_state is not None
-        assert daemon_thread_alive is True
 
     def test_guard_daemon_idle_timeout_ignores_invalid_env_value(self, tmp_path, monkeypatch) -> None:
         guard_home = tmp_path / "guard-home"

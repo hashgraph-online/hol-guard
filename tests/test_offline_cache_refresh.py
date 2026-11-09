@@ -8,40 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.catalog_delivery import active_security, cache_io, discovery
-
-
-@pytest.mark.parametrize("outage", [False, True])
-def test_periodic_cleanup_runs_after_security_observation(monkeypatch, tmp_path, outage):
-    waits = iter((False, True))
-    calls = []
-    store = SimpleNamespace(guard_home=tmp_path)
-
-    def observe(value):
-        assert value is store
-        calls.append("observe")
-        if outage:
-            raise OSError("isolated publication outage")
-
-    def cleanup(value):
-        assert value is store
-        calls.append("cleanup")
-
-    monkeypatch.setattr(active_security, "observe", observe)
-    monkeypatch.setattr(cache_io, "cleanup", cleanup)
-    monkeypatch.setattr(discovery, "request_refresh", lambda home, *, store: calls.append("discovery"))
-    daemon = SimpleNamespace(
-        _shutdown_started=SimpleNamespace(wait=lambda interval: next(waits)),
-        _extension_control_refresh_interval_seconds=1,
-        _server=SimpleNamespace(
-            store=store,
-            refresh_extension_control_runtime=lambda: calls.append("refresh"),
-            extension_control_api=SimpleNamespace(expire_prepared_cache_leases=lambda: None),
-        ),
-    )
-    GuardDaemonServer._refresh_extension_control_loop(daemon)
-    assert calls == (["observe", "discovery", "cleanup"] if outage else ["observe", "discovery", "refresh", "cleanup"])
+from codex_plugin_scanner.guard.catalog_delivery import cache_io
 
 
 def test_expired_previews_release_only_native_selected_leases(monkeypatch, tmp_path):

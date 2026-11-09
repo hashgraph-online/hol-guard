@@ -15,7 +15,7 @@ from typing import cast
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.dashboard_reconnect import (
     DASHBOARD_RECONNECT_CHALLENGE_TTL_SECONDS,
     consume_dashboard_reconnect_challenge,
@@ -68,7 +68,7 @@ def _post_json(
 
 def _prepare(daemon: GuardDaemonServer) -> dict[str, object]:
     dashboard_session = build_local_dashboard_session_token(
-        auth_token=daemon._server.auth_token,
+        auth_token=daemon.auth_token,
         surface="dashboard",
     )
     status, payload = _post_json(
@@ -255,7 +255,7 @@ def test_dashboard_reconnect_rejects_wrong_proof_without_exposing_verifier(tmp_p
     }
     serialized = json.dumps(rejected)
     assert authorization["verifier"] not in serialized
-    assert daemon._server.auth_token not in serialized
+    assert daemon.auth_token not in serialized
 
 
 @pytest.mark.parametrize(

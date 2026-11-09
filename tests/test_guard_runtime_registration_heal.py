@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,8 +9,6 @@ from typing import cast
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard import store_connection_schema
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.daemon import protection_repair_retry
 from codex_plugin_scanner.guard.daemon.protection_repair_retry import containment_repair_outcome
@@ -21,9 +18,7 @@ from tests.daemon_control_patching import patch_daemon_global
 from tests.runtime_registration_support import (
     CONTAINMENT_CHECK_IDS,
     T0,
-    assert_row_reappears_with_daemon_identity,
     delete_runtime_row,
-    get_json,
     passing_containment_health,
     post_repair,
     protection_check,
@@ -109,89 +104,6 @@ def test_snapshot_stale_runtime_row_still_fails_closed(tmp_path: Path) -> None:
         "status": "fail",
         "reason_code": "daemon_heartbeat_stale",
     }
-
-
-def test_daemon_re_registers_runtime_row_after_it_is_deleted(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store, daemon = start_daemon(tmp_path, monkeypatch)
-    heartbeat = daemon._server.runtime_heartbeat  # pyright: ignore[reportPrivateUsage]
-    original_touch = heartbeat.touch
-    monkeypatch.setattr(heartbeat, "touch", lambda _at: None)
-    try:
-        delete_runtime_row(store)
-        snapshot = get_json(daemon, "/v1/runtime")
-        assert protection_check(snapshot, "daemon") == {
-            "check_id": "daemon",
-            "status": "unknown",
-            "reason_code": "daemon_registration_missing",
-        }
-        assert snapshot["headline_state"] != "setup"
-
-        original_touch(datetime.now(timezone.utc).isoformat())
-        assert_row_reappears_with_daemon_identity(store, daemon)
-    finally:
-        daemon.stop()
-
-
-def test_daemon_re_registers_after_fatal_store_recovery(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store, daemon = start_daemon(tmp_path, monkeypatch)
-    heartbeat = daemon._server.runtime_heartbeat  # pyright: ignore[reportPrivateUsage]
-    original_touch = heartbeat.touch
-    monkeypatch.setattr(heartbeat, "touch", lambda _at: None)
-    monkeypatch.setattr(store, "_store_is_proven_unusable", lambda _error: True)
-    monkeypatch.setattr(store_connection_schema, "restore_readable_sqlite_store", lambda **_kwargs: False)
-    try:
-        assert store._recover_fatal_sqlite_store(  # pyright: ignore[reportPrivateUsage]
-            sqlite3.DatabaseError("database disk image is malformed")
-        )
-        assert store.get_runtime_state() is None
-
-        snapshot = get_json(daemon, "/v1/runtime")
-        assert protection_check(snapshot, "daemon") == {
-            "check_id": "daemon",
-            "status": "unknown",
-            "reason_code": "daemon_registration_missing",
-        }
-
-        original_touch(datetime.now(timezone.utc).isoformat())
-        assert_row_reappears_with_daemon_identity(store, daemon)
-    finally:
-        daemon.stop()
-
-
-def test_shutdown_winning_the_publish_race_never_registers(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    heartbeat = daemon._server.runtime_heartbeat  # pyright: ignore[reportPrivateUsage]
-    published: list[str] = []
-    monkeypatch.setattr(daemon, "_publish_listen_state", lambda: published.append("published"))
-    monkeypatch.setattr(daemon, "_reconcile_runtime_artifacts_best_effort", lambda: None)
-    monkeypatch.setattr(daemon, "_maintain_command_activity_best_effort", lambda: None)
-
-    def win_shutdown_race() -> None:
-        # Shutdown completed between the outer generation checks and the
-        # post-listen publish/heartbeat start.
-        daemon._shutdown_started.set()  # pyright: ignore[reportPrivateUsage]
-
-    monkeypatch.setattr(daemon, "_persist_aibom_inventory_context", win_shutdown_race)
-    try:
-        with pytest.raises(RuntimeError, match="stopped during startup"):
-            daemon._complete_owned_service_after_listen(0)  # pyright: ignore[reportPrivateUsage]
-
-        assert published == []
-        assert heartbeat._thread is None  # pyright: ignore[reportPrivateUsage]
-        assert store.get_runtime_state() is None
-    finally:
-        daemon._server.server_close()  # pyright: ignore[reportPrivateUsage]
-        daemon._diagnostics.close(timeout_seconds=0.5)  # pyright: ignore[reportPrivateUsage]
 
 
 def test_protection_repair_all_restores_runtime_registration(

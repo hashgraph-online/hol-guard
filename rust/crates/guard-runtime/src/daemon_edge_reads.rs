@@ -397,6 +397,21 @@ pub(super) fn answer(
         reads.report_activity();
         return Outcome::Answered;
     }
+    if reads.is_standalone()
+        && request.as_ref().is_some_and(|request| {
+            request.method == "POST" && request.path == identity::CHALLENGE_PATH
+        })
+    {
+        return identity::serve(client, body, config, reads, stalled_write);
+    }
+    if let Some(request) = request.as_ref().filter(|request| {
+        reads.is_standalone() && request.method == "POST" && direct_hook::owns(request.path)
+    }) {
+        if let Some(response) = direct_hook::respond(request, body, config) {
+            return write_answer(client, &response, reads, stalled_write);
+        }
+        return Outcome::Relay(bytes);
+    }
     if let Some(request) = request
         .as_ref()
         .filter(|request| request.method == "GET" && request.path == "/v1/evidence/export")
@@ -698,6 +713,12 @@ use routes::{read_state, respond};
 
 #[path = "daemon_edge_evidence.rs"]
 mod evidence;
+
+#[path = "daemon_edge_identity.rs"]
+mod identity;
+
+#[path = "daemon_edge_direct_hook.rs"]
+mod direct_hook;
 
 #[path = "daemon_edge_records.rs"]
 mod records;
