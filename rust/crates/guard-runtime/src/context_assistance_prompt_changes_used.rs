@@ -5,7 +5,7 @@
 use super::super::sections::{headed, opening, sections, written_name};
 use super::super::seen::{self, Session, Span};
 use super::super::{add_context, map};
-use super::code::{changed_lines, holding};
+use super::code::{holding, touched};
 use super::Hunk;
 use crate::context_assistance_prompt_files::{test_file, walk};
 use crate::context_assistance_prompt_words::term_form;
@@ -24,9 +24,10 @@ pub(in super::super) struct Changed {
 }
 
 /// The names of the definitions `changed` falls in, by the files' current
-/// text, as the prompt's words are spelled. A method such as `__init__`,
+/// text, as they are written, lowercased. A method such as `__init__`,
 /// which every class has, is named by its class. Changed tests and prose
-/// files name nothing to look for.
+/// files name nothing to look for. Two names spelled alike, as the prompt's
+/// words are, count once.
 pub(super) fn names(changed: &[Hunk], texts: &[(String, String)]) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for (path, text) in texts {
@@ -35,8 +36,11 @@ pub(super) fn names(changed: &[Hunk], texts: &[(String, String)]) -> Vec<String>
         }
         let lines: Vec<&str> = text.lines().collect();
         let found = sections(path, &lines);
-        for hunk in changed.iter().filter(|hunk| hunk.path == *path) {
-            let Some(section) = holding(&found, changed_lines(hunk)) else {
+        let touched = (changed.iter())
+            .filter(|hunk| hunk.path == *path)
+            .flat_map(touched);
+        for line in touched {
+            let Some(section) = holding(&found, (line, line)) else {
                 continue;
             };
             let outer = (found.iter())
@@ -46,10 +50,11 @@ pub(super) fn names(changed: &[Hunk], texts: &[(String, String)]) -> Vec<String>
             let name = written_name(opening(&lines, section))
                 .filter(|name| !name.starts_with("__"))
                 .or_else(|| outer.and_then(|outer| written_name(opening(&lines, outer))));
-            let Some(name) = name.map(|name| term_form(&name)) else {
+            let Some(name) = name.map(|name| name.to_lowercase()) else {
                 continue;
             };
-            if name.chars().count() >= 3 && !names.contains(&name) {
+            let form = term_form(&name);
+            if form.chars().count() >= 3 && !names.iter().any(|n| term_form(n) == form) {
                 names.push(name);
             }
         }
@@ -71,10 +76,15 @@ pub(in super::super) fn add_tests(
     let Some(Changed { names, .. }) = changed else {
         return;
     };
+    // Files hold a name as written, `split_value`; the tests are matched by
+    // the prompt's spelling of their words, `splitvalue`.
+    let words: Vec<String> = names.iter().map(|name| term_form(name)).collect();
+    let mut terms = words.clone();
+    terms.extend(names.into_iter().filter(|name| !words.contains(name)));
     let started = Instant::now();
-    let searched = walk(root, &names, &[], &[], budget);
+    let searched = walk(root, &terms, &[], &[], budget);
     let until = started + budget;
-    let Some(tests) = map::changed_tests(home, root, app, &searched, &names, earlier, until) else {
+    let Some(tests) = map::changed_tests(home, root, app, &searched, &words, earlier, until) else {
         return;
     };
     if !context_on() {
