@@ -229,14 +229,14 @@ def test_real_128_connection_admission_keeps_control_authenticated_and_releases_
 
         monkeypatch.setattr(server, "_submit_transport_request", observed_submission)
 
-        def blocked_sessions(*_args, **_kwargs):
+        def blocked_exceptions(*_args, **_kwargs):
             nonlocal entered
             with entered_lock:
                 entered += 1
             assert release.wait(5), "test did not release normal traffic"
             return []
 
-        monkeypatch.setattr(server.store, "list_guard_sessions", blocked_sessions)
+        monkeypatch.setattr(server.store, "list_cloud_exceptions", blocked_exceptions)
         clients: list[socket.socket] = []
         try:
             for _ in range(128):
@@ -244,7 +244,7 @@ def test_real_128_connection_admission_keeps_control_authenticated_and_releases_
                 clients.append(client)
                 if traffic == "normal":
                     client.sendall(
-                        b"GET /v1/sessions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                        b"GET /v1/policy/cloud-exceptions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
                         + f"X-Guard-Token: {server.auth_token}\r\n\r\n".encode()
                     )
             deadline = time.monotonic() + 1
@@ -425,21 +425,21 @@ def test_control_admission_survives_classified_normal_connection_saturation(
         daemon._server.connection_capacity_limit = 4
         daemon._server.connection_capacity = threading.BoundedSemaphore(4)
 
-        def blocked_sessions(*args, **kwargs):
+        def blocked_exceptions(*args, **kwargs):
             nonlocal entered
             with entered_lock:
                 entered += 1
             assert release.wait(3), "test did not release classified normal requests"
             return []
 
-        monkeypatch.setattr(daemon._server.store, "list_guard_sessions", blocked_sessions)
+        monkeypatch.setattr(daemon._server.store, "list_cloud_exceptions", blocked_exceptions)
         clients: list[socket.socket] = []
         try:
             for _ in range(4):
                 client = socket.create_connection(("127.0.0.1", daemon.port), timeout=1)
                 clients.append(client)
                 client.sendall(
-                    b"GET /v1/sessions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                    b"GET /v1/policy/cloud-exceptions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
                     + f"X-Guard-Token: {daemon._server.auth_token}\r\n\r\n".encode()
                 )
             deadline = time.monotonic() + 1
@@ -515,7 +515,7 @@ def test_transport_submission_failure_releases_all_admission_ownership(
         # executors so the test exercises ownership regardless of that timing.
         for executor in executors:
             monkeypatch.setattr(executor, "submit", fail_submit)
-        path = "/v1/healthz/details" if control else "/v1/sessions"
+        path = "/v1/healthz/details" if control else "/v1/policy/cloud-exceptions"
         request = (
             f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Guard-Token: {daemon._server.auth_token}\r\n\r\n"
         ).encode()

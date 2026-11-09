@@ -125,6 +125,19 @@ pub(super) fn query_value(query: &str, key: &str) -> Result<Option<String>, ()> 
     Ok(found)
 }
 
+/// Every field, decoded as `parse_qsl(query, keep_blank_values=True)`
+/// decodes it. `Err` means a field holds an escape the edge will not guess at.
+pub(super) fn query_pairs(query: &str) -> Result<Vec<(String, String)>, ()> {
+    query
+        .split('&')
+        .filter(|field| !field.is_empty())
+        .map(|field| {
+            let (name, value) = field.split_once('=').unwrap_or((field, ""));
+            Ok((decode_component(name)?, decode_component(value)?))
+        })
+        .collect()
+}
+
 fn decode_component(text: &str) -> Result<String, ()> {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
