@@ -653,7 +653,7 @@ fn a_runtime_under_any_consulted_home_resolves() {
     plant_runtime(&node);
     assert!(!managed_runtime(
         &node,
-        &manager_roots(&[request.clone()], NODE_MANAGER_ROOTS)
+        &manager_roots(std::slice::from_ref(&request), NODE_MANAGER_ROOTS)
     ));
     assert!(managed_runtime(
         &node,

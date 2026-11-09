@@ -1075,8 +1075,8 @@ jobs:
         run: python scripts/refresh_extension_artifacts.py --trust-only
       - name: Install pinned Rust toolchain for release source compiler
         run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          rustup default 1.88.0
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup default 1.89.0
       - name: Cache release source compiler dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
@@ -1102,8 +1102,8 @@ jobs:
           SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
           SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
         run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          cargo +1.88.0 build --manifest-path rust/Cargo.toml --locked --release \
+          rustup toolchain install 1.89.0 --profile minimal
+          cargo +1.89.0 build --manifest-path rust/Cargo.toml --locked --release \
             --config 'profile.release.lto="off"' --config 'profile.release.codegen-units=16' \
             -p guard-command --bin guard-command-source
           python scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source
