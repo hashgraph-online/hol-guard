@@ -483,6 +483,8 @@ fn clean(text: &str) -> bool {
 mod code;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
+#[path = "context_assistance_prompt_changes_wait.rs"]
+pub(super) mod wait;
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_changes_tests.rs"]

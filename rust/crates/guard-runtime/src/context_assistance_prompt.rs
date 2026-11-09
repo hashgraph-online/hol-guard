@@ -171,12 +171,12 @@ fn attach(
     let earlier = session.as_ref().map(seen::earlier).unwrap_or_default();
     let left = || waiting_time(envelope.deadline_budget_ms).saturating_sub(started.elapsed());
     // What changed since the session began comes first, for a prompt about
-    // changes; a third of the wait at most, the rest is the search's. Git
-    // runs only while project context is on, checked again after it.
+    // changes, in the share of the wait `changes::wait` gives it. Git runs
+    // only while project context is on, checked again after it.
     let context_on = || {
         service.prompt_context_chosen() && project_context_on(store.guard_home(), &root, harness)
     };
-    let until = Instant::now() + left() / 3;
+    let until = Instant::now() + changes::wait::share(prompt, left(), MIN_WAIT);
     let changed = context_on()
         .then(|| {
             changes::since_start(
@@ -204,11 +204,7 @@ fn attach(
     // A prompt about changes that names no code, file or phrase is answered
     // by the changes: the lines they list are where to look, and a search on
     // the prompt's plain words would only add code the agent may not need.
-    if about_changes
-        && quoted.is_empty()
-        && named(prompt).is_empty()
-        && !marked.iter().any(|(_, name)| *name)
-    {
+    if about_changes && changes::wait::answered_alone(prompt) {
         return;
     }
     let searched = walk(&root, &words, &quoted, &named(prompt), budget);
