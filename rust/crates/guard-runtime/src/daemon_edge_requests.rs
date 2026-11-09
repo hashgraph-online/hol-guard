@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
+use super::super::http::query_value;
 use super::{NativeReads, ReadConfig};
 use crate::daemon_handler_requests::requests_list;
 
@@ -58,6 +59,52 @@ pub(super) fn list(
     Some((200, Value::Object(page), true))
 }
 
+/// `GET /v1/requests/{id}` for the hosted dashboard, which the daemon answers
+/// with the stored row less its private queue hint.
+///
+/// A local caller gets read-time extension and connector recommendations, a
+/// wait asks the daemon to hold the read, and an unknown id gets the local
+/// queue link, so all of those go to the daemon. So does a row that may carry
+/// a temporary MCP or local tool grant offer, which only the daemon attaches.
+pub(super) fn detail(
+    request_id: &str,
+    query: &str,
+    hosted: bool,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value)> {
+    if !hosted || request_id.contains('%') || query_value(query, "wait_ms").ok()?.is_some() {
+        return None;
+    }
+    let Value::Object(mut approval) = reads.store_call(
+        config,
+        "get_approval_request",
+        json!({"request_id": request_id, "derive_scope": true, "cwd": working_directory()}),
+    )?
+    else {
+        return None;
+    };
+    if may_carry_grant_offer(&approval) {
+        return None;
+    }
+    approval.remove("extension_allow_hint");
+    Some((200, Value::Object(approval)))
+}
+
+/// `_with_approval_hints` asks the resident about a filed browser intent, or
+/// about scanner evidence that names the local-tool scanner.
+fn may_carry_grant_offer(approval: &Map<String, Value>) -> bool {
+    approval.get("browser_intent").is_some_and(Value::is_object)
+        || approval
+            .get("scanner_evidence")
+            .and_then(Value::as_array)
+            .is_some_and(|entries| {
+                entries.iter().any(|entry| {
+                    entry.get("source").and_then(Value::as_str) == Some("trusted_local_tool")
+                })
+            })
+}
+
 /// `GET /v1/requests/{id}/resume` for a request whose resume is already
 /// recorded. A request with no record yet goes to the daemon, which seeds one.
 pub(super) fn resume(
@@ -90,9 +137,7 @@ fn store_page(
 ) -> Option<Map<String, Value>> {
     // The page op resolves a relative config path from the daemon's working
     // directory, which the edge inherits.
-    let cwd = std::env::current_dir()
-        .ok()
-        .and_then(|path| path.to_str().map(str::to_owned));
+    let cwd = working_directory();
     let mut args = json!({
         "status": fields.get("status")?,
         "limit": fields.get("limit")?,
@@ -127,6 +172,14 @@ fn store_page(
         }
     }
     None
+}
+
+/// The daemon's working directory, which the edge inherits; the store
+/// resolves a relative config path from it.
+fn working_directory() -> Option<String> {
+    std::env::current_dir()
+        .ok()
+        .and_then(|path| path.to_str().map(str::to_owned))
 }
 
 /// Whether the resident reports no native business rows: an empty queue, or

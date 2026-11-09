@@ -288,6 +288,10 @@ fn respond(
         return requests::resume(request_id, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
+    if let Some(request_id) = single_segment(request.path, "/v1/requests/", "") {
+        return requests::detail(request_id, request.query, hosted, config, reads)
+            .map(|(status, body)| (status, body, caller.cors_origin, false));
+    }
     route(request.path, request.query, config, reads)
         .map(|(status, body)| (status, body, caller.cors_origin, false))
 }
