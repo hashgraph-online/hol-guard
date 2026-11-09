@@ -51,18 +51,11 @@ class _FileLock:
     def __enter__(self) -> _FileLock:
         _ = self._local.acquire()
         if self._depth == 0:
-            flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
             try:
-                descriptor = os.open(self._path, flags, 0o600)
+                self._descriptor = _locked_descriptor(self._path)
             except OSError:
-                descriptor = None
-            if descriptor is not None and fcntl is not None:
-                try:
-                    fcntl.flock(descriptor, fcntl.LOCK_EX)
-                except OSError:
-                    os.close(descriptor)
-                    descriptor = None
-            self._descriptor = descriptor
+                self._local.release()
+                raise
         self._depth += 1
         return self
 
@@ -74,6 +67,24 @@ class _FileLock:
                 os.close(self._descriptor)
             self._descriptor = None
         self._local.release()
+
+
+def _locked_descriptor(path: Path) -> int:
+    """An open descriptor holding the exclusive lock on ``path``.
+
+    Raises instead of going on unlocked: two replays must never both believe
+    they hold the shared state.
+    """
+
+    if fcntl is None:
+        raise OSError("file locking is unavailable")
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+    except OSError:
+        os.close(descriptor)
+        raise
+    return descriptor
 
 
 class _ReplayState:
@@ -114,10 +125,15 @@ class _ReplayState:
             if len(encoded) > _STATE_LIMIT_BYTES:
                 return
             temporary = self._path.with_name(f".{_STATE_FILENAME}.{os.getpid()}.{threading.get_ident()}")
+            with suppress(OSError):
+                temporary.unlink()
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
             try:
-                descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                descriptor = os.open(temporary, flags, 0o600)
                 with os.fdopen(descriptor, "wb") as handle:
                     handle.write(encoded)
+                    handle.flush()
+                    os.fsync(handle.fileno())
                 os.replace(temporary, self._path)
             except OSError:
                 with suppress(OSError):

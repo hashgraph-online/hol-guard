@@ -151,7 +151,7 @@ def _replay_server_class() -> type:
             self.onefile_extraction_status = None
             self.repair_self_check_status = None
             self.guard_cloud_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
-            self.guard_cloud_browser_session_lock = threading.Lock()
+            self.guard_cloud_browser_session_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.package_firewall_mutation_lock = threading.Lock()
             self.package_firewall_session_nonces = _PersistedMapping(
                 self._replay_state, "package_firewall_session_nonces"
@@ -368,6 +368,8 @@ def replay_request(
 ) -> bytes:
     """The raw response the daemon's handler writes for ``request``."""
 
+    if _connection_bound(request):
+        return _UNAVAILABLE
     from .auth_token import load_guard_daemon_auth_token
     from .server import _GuardDaemonHandler
 
@@ -380,6 +382,27 @@ def replay_request(
     finally:
         server.server_close()
     return response.getvalue()
+
+
+_CONNECTION_BOUND_PATHS = frozenset({"/v1/daemon/identity-challenge"})
+_UNAVAILABLE = (
+    b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\n"
+    b"Content-Length: 38\r\nConnection: close\r\n\r\n"
+    b'{"error": "daemon_route_unavailable"}\n'
+)
+
+
+def _connection_bound(request: bytes) -> bool:
+    """Whether ``request`` opens a proof the next request must reuse its
+    connection for. Each replay is its own process on a closed connection, so
+    that proof could never be redeemed; answer as an unavailable route instead.
+    """
+
+    line = request.split(b"\r\n", 1)[0].split(b" ")
+    if len(line) < 2:
+        return False
+    path = line[1].split(b"?", 1)[0]
+    return path.decode("latin-1") in _CONNECTION_BOUND_PATHS
 
 
 def wait_for_background_work() -> None:
