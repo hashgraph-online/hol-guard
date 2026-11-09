@@ -14,37 +14,37 @@ import yaml
 from scripts.ci import normalize_rust_toolchains as normalize
 
 ROOT = Path(__file__).resolve().parents[1]
-PINNED = "1.88.0-x86_64-unknown-linux-gnu"
+PINNED = "1.89.0-x86_64-unknown-linux-gnu"
 ACTIVE = f"{PINNED} (default)\n"
 UNUSED = "stable-x86_64-unknown-linux-gnu"
 WINDOWS_HOST = "x86_64-pc-windows-msvc"
-WINDOWS_PINNED = f"1.88.0-{WINDOWS_HOST}"
+WINDOWS_PINNED = f"1.89.0-{WINDOWS_HOST}"
 
 
 @pytest.mark.parametrize("flags", ["default", "active, default", "default, active"])
 def test_retains_host_qualified_pinned_default(flags: str) -> None:
     installed = f"1.99.1-x86_64-unknown-linux-gnu\n{PINNED} ({flags})\n{UNUSED}\n"
-    assert normalize.removals("1.88.0", installed, ACTIVE) == [
+    assert normalize.removals("1.89.0", installed, ACTIVE) == [
         "1.99.1-x86_64-unknown-linux-gnu",
         UNUSED,
     ]
-    assert normalize.removals("1.88.0", ACTIVE, ACTIVE) == []
+    assert normalize.removals("1.89.0", ACTIVE, ACTIVE) == []
 
 
 @pytest.mark.parametrize(
     ("requested", "installed", "active"),
     [
         ("stable", ACTIVE, ACTIVE),
-        ("1.88.0", "", ACTIVE),
-        ("1.88.0", ACTIVE + ACTIVE, ACTIVE),
-        ("1.88.0", ACTIVE + "unexpected output with spaces\n", ACTIVE),
-        ("1.88.0", ACTIVE + "--help\n", ACTIVE),
-        ("1.88.0", f"{UNUSED} (default)\n", f"{UNUSED} (default)\n"),
-        ("1.88.0", ACTIVE, f"{PINNED} (active)\n"),
-        ("1.88.0", ACTIVE, ACTIVE + ACTIVE),
-        ("1.88.0", f"{PINNED}\n{UNUSED} (default)\n", ACTIVE),
-        ("1.88.0", ACTIVE + f"{UNUSED} (default)\n", ACTIVE),
-        ("1.88.0", ACTIVE, "1.88.0 (default)\n"),
+        ("1.89.0", "", ACTIVE),
+        ("1.89.0", ACTIVE + ACTIVE, ACTIVE),
+        ("1.89.0", ACTIVE + "unexpected output with spaces\n", ACTIVE),
+        ("1.89.0", ACTIVE + "--help\n", ACTIVE),
+        ("1.89.0", f"{UNUSED} (default)\n", f"{UNUSED} (default)\n"),
+        ("1.89.0", ACTIVE, f"{PINNED} (active)\n"),
+        ("1.89.0", ACTIVE, ACTIVE + ACTIVE),
+        ("1.89.0", f"{PINNED}\n{UNUSED} (default)\n", ACTIVE),
+        ("1.89.0", ACTIVE + f"{UNUSED} (default)\n", ACTIVE),
+        ("1.89.0", ACTIVE, "1.89.0 (default)\n"),
     ],
 )
 def test_rejects_ambiguous_inventory_before_removing_anything(
@@ -77,7 +77,7 @@ def test_never_invokes_rustup_outside_supported_hosted_runner(
     monkeypatch.setenv("GITHUB_ACTIONS", actions)
     monkeypatch.setenv("RUNNER_ENVIRONMENT", environment)
     monkeypatch.setenv("RUNNER_OS", runner_os)
-    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.88.0"])
+    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.89.0"])
 
     def unexpected(*_args: object, **_kwargs: object) -> None:
         pytest.fail("local/self-hosted normalization must not invoke rustup")
@@ -93,7 +93,7 @@ def test_validates_inventory_and_default_before_any_uninstall(
 ) -> None:
     for name, value in {"GITHUB_ACTIONS": "true", "RUNNER_ENVIRONMENT": "github-hosted", "RUNNER_OS": "Linux"}.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.88.0"])
+    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.89.0"])
     calls: list[list[str]] = []
 
     def rustup(arguments: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -123,7 +123,7 @@ def test_windows_runner_patch_drift_leaves_identical_compiler_key_inputs() -> No
     for version in ("1.99.0", "1.99.1"):
         active = f"{WINDOWS_PINNED} (default)\n"
         installed = f"{version}-{WINDOWS_HOST}\n{active}"
-        removed = normalize.removals("1.88.0", installed, active, expected_host=WINDOWS_HOST)
+        removed = normalize.removals("1.89.0", installed, active, expected_host=WINDOWS_HOST)
         assert removed == [f"{version}-{WINDOWS_HOST}"]
         normalized.append(
             {name: flags for name, flags in normalize.parse_toolchains(installed).items() if name not in removed}
@@ -136,7 +136,7 @@ def test_windows_runner_patch_drift_leaves_identical_compiler_key_inputs() -> No
     [
         ("X64", f"{WINDOWS_PINNED} (default)\n", f"1.99.1-{WINDOWS_HOST}", True),
         ("X64", ACTIVE, f"1.99.1-{WINDOWS_HOST}", False),
-        ("X64", "1.88.0-x86_64-pc-windows-gnu (default)\n", f"1.99.1-{WINDOWS_HOST}", False),
+        ("X64", "1.89.0-x86_64-pc-windows-gnu (default)\n", f"1.99.1-{WINDOWS_HOST}", False),
         ("X64", f"{WINDOWS_PINNED} (active)\n", f"1.99.1-{WINDOWS_HOST}", False),
         ("X64", f"{WINDOWS_PINNED} (default)\n", "bad inventory line", False),
         ("ARM64", f"{WINDOWS_PINNED} (default)\n", f"1.99.1-{WINDOWS_HOST}", False),
@@ -152,7 +152,7 @@ def test_windows_validates_pinned_host_and_inventory_before_uninstall(
         "RUNNER_ARCH": architecture,
     }.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.88.0"])
+    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.89.0"])
     calls = []
 
     def rustup(arguments: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -222,7 +222,7 @@ def test_normalization_shell_uses_available_python_and_propagates_failure(tmp_pa
             "TEST_PYTHON": sys.executable,
             "SELECTED_INTERPRETER": str(selected),
             "RUSTUP_CALLS": str(calls),
-            "RUST_TOOLCHAIN": "1.88.0",
+            "RUST_TOOLCHAIN": "1.89.0",
             "GITHUB_ACTIONS": "true",
             "RUNNER_ENVIRONMENT": "github-hosted",
             "RUNNER_OS": "Windows",
@@ -294,11 +294,11 @@ def test_release_normalization_is_hosted_windows_only_after_install_before_cache
         "runner.environment == 'github-hosted' && runner.os == 'Windows' && runner.arch == 'X64' && " + miss_guard
     )
     assert normalize_step["shell"] == "bash"
-    assert normalize_step["run"] == "python scripts/ci/normalize_rust_toolchains.py --toolchain 1.88.0"
+    assert normalize_step["run"] == "python scripts/ci/normalize_rust_toolchains.py --toolchain 1.89.0"
     assert normalize_step.get("continue-on-error", False) is False
     commands = install["run"]
-    assert commands.index("rustup toolchain install 1.88.0") < commands.index("rustup default 1.88.0")
-    assert commands.index("rustup default 1.88.0") < commands.index('rustup target add "$RUST_TARGET"')
+    assert commands.index("rustup toolchain install 1.89.0") < commands.index("rustup default 1.89.0")
+    assert commands.index("rustup default 1.89.0") < commands.index('rustup target add "$RUST_TARGET"')
 
 
 def test_windows_normalization_preserves_pinned_cross_target_components(monkeypatch) -> None:
@@ -309,7 +309,7 @@ def test_windows_normalization_preserves_pinned_cross_target_components(monkeypa
         "RUNNER_ARCH": "X64",
     }.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.88.0"])
+    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.89.0"])
     components = {"rustc", "rust-std-x86_64-pc-windows-msvc", "rust-std-aarch64-pc-windows-msvc"}
     unused = f"1.99.1-{WINDOWS_HOST}"
     toolchains = {WINDOWS_PINNED: components.copy(), unused: {"rustc"}}

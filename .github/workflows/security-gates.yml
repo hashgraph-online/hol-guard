@@ -242,7 +242,7 @@ jobs:
       - name: Add cargo-deny to PATH
         run: echo "$RUNNER_TEMP/cargo-deny-bin" >> "$GITHUB_PATH"
       - name: Install the pinned Rust toolchain
-        run: rustup toolchain install 1.88.0 --profile minimal
+        run: rustup toolchain install 1.89.0 --profile minimal
       - name: Cache the Cargo registry
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:

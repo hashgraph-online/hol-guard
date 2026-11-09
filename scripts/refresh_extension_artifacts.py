@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "src"))
 TRUST_MAP = ROOT / "contracts/extensions/build-trust-class-map.v1.json"
 TARGET_DIR = ROOT / "rust/target"
 COMPILER = TARGET_DIR / "release/guard-command-source"
-TOOLCHAIN = "1.88.0"
+TOOLCHAIN = "1.89.0"
 
 
 def _run(command: list[str], *, env: dict[str, str] | None = None) -> str:

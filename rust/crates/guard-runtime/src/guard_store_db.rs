@@ -129,11 +129,7 @@ pub(crate) fn query_each(
     mut visit: impl FnMut(Row) -> StoreResult<bool>,
 ) -> StoreResult<()> {
     let mut statement = connection.prepare_cached(sql)?;
-    let names: Vec<String> = statement
-        .column_names()
-        .iter()
-        .map(|n| (*n).to_owned())
-        .collect();
+    let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let bound: Vec<rusqlite::types::Value> = params.iter().map(bind).collect();
     let mut rows = statement.query(rusqlite::params_from_iter(bound))?;
     while let Some(row) = rows.next()? {
@@ -184,6 +180,12 @@ pub(crate) fn placeholders(count: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_sqlite_has_the_wal_page_size_security_fix() {
+        // RUSTSEC-2026-0459 is fixed in SQLite 3.54.0 and later.
+        assert!(rusqlite::version_number() >= 3_054_000);
+    }
 
     #[test]
     fn rows_keep_cell_types() {
