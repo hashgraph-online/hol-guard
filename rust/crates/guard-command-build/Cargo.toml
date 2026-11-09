@@ -22,7 +22,7 @@ bench = false
 
 [dependencies]
 guard-hook-payload = { path = "../guard-hook-payload" }
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 tempfile = "3.10"
 base64 = "=0.22.1"
 mailparse = "=0.17.0"
