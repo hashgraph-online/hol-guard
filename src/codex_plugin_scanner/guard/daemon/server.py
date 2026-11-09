@@ -1,5 +1,7 @@
 """Local Guard daemon helpers."""
 
+# pyright: reportUninitializedInstanceVariable=false
+
 from __future__ import annotations
 
 import base64
@@ -368,6 +370,20 @@ class _GuardDaemonHTTPServer:
     audit_persistence: AuditPersistence
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: Any
+    server_address: Any
+    extension_control_runtime: Any
+    extension_control_api: Any
+    hook_worker: Any
+
+    def classify_connection(self, request: Any) -> None:
+        raise NotImplementedError
+
+    def claim_request_capacity(self, request: Any, path: str) -> bool:
+        raise NotImplementedError
+
+    def request_deadline(self, request: Any, timeout_seconds: float) -> float:
+        raise NotImplementedError
+
     home_dir: Path
     workspace_dir: Path | None
 

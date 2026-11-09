@@ -7,7 +7,7 @@ use guard_contracts::DaemonRoutePayloadV1;
 
 use super::super::http::{query_int, query_value, Request};
 use super::{activity, evidence, inventory, records, settings};
-use super::{authorize, dispatch, network, plugin_updates, requests};
+use super::{authorize, composed, dispatch, network, plugin_updates, requests};
 use super::{NativeReads, ReadConfig, MAX_READ_STATE_PAGES};
 use crate::daemon_route_session::origin_decision;
 
@@ -54,6 +54,13 @@ pub(super) fn respond(
     }
     if request.path == "/v1/network/status" {
         return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));
+    }
+    if composed::routed(request.path) {
+        let dashboard_session =
+            super::session_allows(request, &config.token, caller.cors_origin.as_deref());
+        let answer = composed::respond(request, config, reads, dashboard_session);
+        reads.report_activity();
+        return answer.map(|(status, body, no_store)| (status, body, caller.cors_origin, no_store));
     }
     if let Some((status, body)) = route(request.path, request.query, config, reads) {
         return Some((status, body, caller.cors_origin, false));

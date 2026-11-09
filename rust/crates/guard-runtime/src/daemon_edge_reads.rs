@@ -37,7 +37,7 @@ use guard_contracts::{GuardStoreRequestV1, GUARD_STORE_REQUEST_SCHEMA};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::auth::{authorize, authorize_origin, authorize_token};
+use super::auth::{authorize, authorize_origin, authorize_token, session_allows};
 use super::http::{parse_request, take_request, Request};
 #[cfg(test)]
 use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
@@ -746,6 +746,8 @@ mod refusals;
 #[path = "daemon_edge_releases.rs"]
 mod releases;
 
+#[path = "daemon_edge_composed.rs"]
+mod composed;
 #[path = "daemon_edge_dispatch.rs"]
 mod dispatch;
 #[path = "daemon_edge_streams.rs"]

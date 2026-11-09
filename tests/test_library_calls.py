@@ -208,6 +208,29 @@ def test_handler_post_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
     assert _handler_post(tmp_path, "/v1/context-assistance/stop", [])["error"]["kind"] == "library_call"  # type: ignore[index]
 
 
+def test_handler_post_runs_version_administration(tmp_path: Path) -> None:
+    answer = _handler_post(tmp_path, "/v1/context-assistance/versions", {"input": "releases"})
+    assert answer["ok"] == {"status": 400, "body": {"error": "invalid_context_input"}, "no_store": False}
+
+
+def _handler_get(home: Path, path: str, query: str = "") -> dict[str, object]:
+    return _call(home, "route.handler_get", {"path": path, "query": query})
+
+
+def test_handler_get_records_the_workspace_reads(tmp_path: Path) -> None:
+    answer = _handler_get(tmp_path, "/v1/supply-chain/workspace-findings", "root=%2Fnot-tracked")
+    body = answer["ok"]["body"]  # type: ignore[index]
+    assert answer["ok"]["status"] == 200  # type: ignore[index]
+    assert body["worktrees"] == [] and body["suggested_root_tracked"] is False  # type: ignore[index]
+    runs = _handler_get(tmp_path, "/v1/supply-chain/workspace-assessments")["ok"]["body"]  # type: ignore[index]
+    assert runs["runs"] == [] and runs["latest_runs"] == []  # type: ignore[index]
+
+
+def test_handler_get_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
+    assert _handler_get(tmp_path, "/v1/settings")["error"]["kind"] == "library_call"  # type: ignore[index]
+    assert "error" in _call(tmp_path, "route.handler_get", {"path": "/v1/context-assistance", "query": 1})
+
+
 def _dispatch(home: Path, method: str, path: str, payload: object = None) -> dict[str, object]:
     args: dict[str, object] = {"method": method, "path": path}
     if payload is not None:

@@ -9,7 +9,7 @@ calls hold only the Guard library work behind each route.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from .store import GuardStore
@@ -18,7 +18,7 @@ RouteCall = Callable[[GuardStore, Mapping[str, Any]], dict[str, object]]
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _reply(body: Mapping[str, object], status: int = 200, *, no_store: bool = False) -> dict[str, object]:

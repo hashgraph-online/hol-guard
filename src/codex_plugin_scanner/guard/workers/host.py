@@ -121,6 +121,7 @@ class WorkerHost:
         self._lock = threading.Lock()
         self._threads: list[threading.Thread] = []
         self._hook_worker: Any = None
+        self._attention: Any = None
 
     def _record(self, code: str) -> None:
         _LOGGER.warning("Guard worker host error: %s", code)
@@ -166,7 +167,7 @@ class WorkerHost:
             _now(),
         )
 
-    def _loop(self, name: str, body: Callable[[], None], interval: float) -> None:
+    def _loop(self, name: str, body: Callable[[], object], interval: float) -> None:
         def run() -> None:
             while not self.stop.is_set():
                 try:

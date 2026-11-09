@@ -180,7 +180,7 @@ pub(super) fn normalize_origin(raw: &str) -> Option<String> {
 
 /// Whether a dashboard session the request presents lets it read `path`
 /// without spending a nonce.
-fn session_allows(request: &Request<'_>, token: &[u8], origin: Option<&str>) -> bool {
+pub(super) fn session_allows(request: &Request<'_>, token: &[u8], origin: Option<&str>) -> bool {
     if !session_path("GET", request.path) {
         return false;
     }

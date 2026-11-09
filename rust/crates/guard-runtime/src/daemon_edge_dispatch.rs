@@ -11,33 +11,20 @@ use super::super::library::{self, CallError};
 use super::writes::DROPPED;
 use super::ReadConfig;
 
-const GET_ROUTES: [&str; 33] = [
-    "/v1/capabilities",
-    "/v1/cloud-actions/status",
-    "/v1/cloud-review",
+const GET_ROUTES: [&str; 20] = [
     "/v1/command-activity",
     "/v1/command-activity/analytics",
     "/v1/command-activity/diagnostics",
     "/v1/connect/state",
     "/v1/events",
     "/v1/evidence",
-    "/v1/harnesses",
     "/v1/inventory",
-    "/v1/policy",
-    "/v1/policy/cloud-exception-requests",
     "/v1/policy/cloud-exceptions",
     "/v1/receipts/analytics",
     "/v1/receipts/latest",
     "/v1/sessions",
     "/v1/settings/export",
     "/v1/supply-chain/bundle",
-    "/v1/context-assistance",
-    "/v1/context-assistance/installations",
-    "/v1/context-assistance/jobs",
-    "/v1/context-assistance/interpreters",
-    "/v1/context-assistance/catalog",
-    "/v1/supply-chain/workspace-assessments",
-    "/v1/supply-chain/workspace-findings",
     "/v1/receipts",
     "/v1/requests",
     "/v1/read-state",
@@ -90,7 +77,7 @@ pub(super) fn answer(
     }
 }
 
-fn reply(answer: &Value) -> (u16, Value, bool) {
+pub(super) fn reply(answer: &Value) -> (u16, Value, bool) {
     let status = answer
         .get("status")
         .and_then(Value::as_u64)
@@ -120,7 +107,7 @@ mod tests {
 
     #[test]
     fn store_only_routes_run_the_dispatch() {
-        assert!(get_routed("/v1/policy"));
+        assert!(!get_routed("/v1/policy"));
         assert!(get_routed("/v1/operations/op-1"));
         assert!(get_routed("/v1/mcp-policy/requests/r1"));
         assert!(!get_routed("/v1/mcp-policy/requests"));

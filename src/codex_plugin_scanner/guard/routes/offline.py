@@ -55,8 +55,8 @@ def _handler_class() -> type:
     from ..daemon.server import _GuardDaemonHandler
 
     class _OfflineHandler(_GuardDaemonHandler):  # type: ignore[misc, valid-type]
-        def __init__(self, store: GuardStore, method: str, path: str) -> None:
-            self.server = _OfflineServer(store)  # type: ignore[assignment]
+        def __init__(self, store: GuardStore, method: str, path: str) -> None:  # pyright: ignore[reportMissingSuperCall]
+            self.server = _OfflineServer(store)  # type: ignore[assignment]  # pyright: ignore[reportAttributeAccessIssue]
             self.headers = Message()
             self.command = method
             self.path = path

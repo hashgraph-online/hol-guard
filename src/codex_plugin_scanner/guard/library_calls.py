@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .control_route_calls import ROUTE_CALLS
 from .routes.calls import HANDLER_CALLS
 from .routes.offline import DISPATCH_CALLS
+from .routes.reads import READ_CALLS
 from .store import GuardStore
 from .workers.ticks import WORKER_CALLS
 
@@ -30,7 +31,7 @@ class LibraryCallError(Exception):
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _text(value: object) -> str | None:
@@ -212,6 +213,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **ROUTE_CALLS,
     **HANDLER_CALLS,
     **DISPATCH_CALLS,
+    **READ_CALLS,
     **WORKER_CALLS,
 }
 
@@ -225,7 +227,8 @@ def run_library_call(guard_home: Path, request: bytes) -> dict[str, object]:
         return {"error": {"type": "LibraryCallError", "message": "invalid_request", "kind": "library_call"}}
     if not isinstance(decoded, dict):
         return {"error": {"type": "LibraryCallError", "message": "invalid_request", "kind": "library_call"}}
-    call = REGISTRY.get(decoded.get("call"))  # type: ignore[arg-type]
+    name = decoded.get("call")
+    call = REGISTRY.get(name) if isinstance(name, str) else None
     args = decoded.get("args")
     if call is None or not isinstance(args, dict):
         return {"error": {"type": "LibraryCallError", "message": "unknown_call", "kind": "library_call"}}

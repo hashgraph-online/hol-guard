@@ -27,6 +27,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..store import GuardStore
 from .request_replay_state import (
     _STATE_LIMIT_BYTES,
@@ -280,7 +281,7 @@ def _replay_server_class() -> type:
                 self._enroll_authority_by_default()
                 _, registry, _ = capture(self.store)
                 view = self._startup_extension_control_view(registry)
-            except (daemon_server._InstalledAuthorityMigrationError, daemon_server.NativePolicySnapshotError):
+            except (daemon_server._InstalledAuthorityMigrationError, NativePolicySnapshotError):
                 registry = daemon_server.BUILT_IN_COMMAND_EXTENSION_REGISTRY
                 view = self.store._tampered_view(registry.catalog_digest)
                 self._extension_control_on_core_registry = True

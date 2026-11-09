@@ -50,6 +50,11 @@ class _Recorder:
             payload["resolved"] = resolved
         self._write_json(payload, status=error.status)
 
+    def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
+        # The native daemon checked the caller before it ran this call.
+        del payload
+        return True
+
     def reply(self) -> dict[str, object]:
         if self._reply is None:
             raise RouteReplyError("no_reply")
@@ -97,4 +102,42 @@ def handler_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
     return recorder.reply()
 
 
-HANDLER_CALLS = {"route.handler_post": handler_post}
+def handler_get(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Runs the handler the daemon dispatches ``GET path?query`` to."""
+
+    from ..library_calls import LibraryCallError
+    from .context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
+    from .context_assistance_http import respond as respond_context_assistance
+    from .workspace_assessment_api import handle_workspace_assessment_get
+
+    path = args.get("path")
+    query = args.get("query", "")
+    if not isinstance(path, str) or not isinstance(query, str):
+        raise LibraryCallError("invalid_arguments")
+    recorder = _Recorder(store)
+    if path in CONTEXT_ASSISTANCE_READ_PATHS:
+        respond_context_assistance(recorder, CONTEXT_ASSISTANCE_READ_PATHS[path])
+    elif path == "/v1/policy/cloud-exception-requests":
+        _cloud_exception_request_list(recorder, store)
+    elif not handle_workspace_assessment_get(recorder, path, query):
+        raise LibraryCallError("invalid_arguments")
+    return recorder.reply()
+
+
+def _cloud_exception_request_list(recorder: _Recorder, store: GuardStore) -> None:
+    from ..cloud_exception_requests import CloudExceptionRequestError, fetch_cloud_exception_requests
+
+    try:
+        result = fetch_cloud_exception_requests(store)
+    except CloudExceptionRequestError as error:
+        message = str(error).strip() or "Unable to load Guard Cloud exception requests."
+        recorder._write_json({"error": "cloud_exception_request_list_failed", "message": message}, status=error.status)
+        return
+    except Exception as error:
+        message = str(error).strip() or "Unable to load Guard Cloud exception requests."
+        recorder._write_json({"error": "cloud_exception_request_list_failed", "message": message}, status=502)
+        return
+    recorder._write_json(result)
+
+
+HANDLER_CALLS = {"route.handler_post": handler_post, "route.handler_get": handler_get}
