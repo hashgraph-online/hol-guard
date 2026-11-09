@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None, *, inventory=None) -> int:
         if args.compiler
         else [
             "cargo",
-            "+1.88.0",
+            "+1.89.0",
             "run",
             "--locked",
             "--quiet",
