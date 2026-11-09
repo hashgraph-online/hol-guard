@@ -617,7 +617,9 @@ def _run_guard_desktop_command(
         if resolved_home is None:
             print("Guard daemon query requires --guard-home.", file=sys.stderr)
             return 2
-        return run_daemon_query(str(args.query), _Path(resolved_home), output_stream or sys.stdout)
+        return run_daemon_query(
+            str(args.query), _Path(resolved_home), output_stream or sys.stdout, getattr(args, "input", None)
+        )
     if getattr(args, "desktop_command", None) == "dashboard-update":
         from ..daemon.dashboard_update_runner import main as dashboard_update_main
 

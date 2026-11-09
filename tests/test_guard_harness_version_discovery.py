@@ -322,7 +322,8 @@ def _imports(path: Path) -> set[str]:
 
 def test_enforcement_never_reads_version_compatibility() -> None:
     allowed = {
-        PROJECT_SRC / "daemon" / "harness_version_api.py",
+        PROJECT_SRC / "harness_version_api.py",
+        PROJECT_SRC / "cli" / "desktop_daemon_query.py",
         PROJECT_SRC / "daemon" / "server_dashboard_runtime_read.py",
         PROJECT_SRC / "daemon" / "server_control_routes_post.py",
         PROJECT_SRC / "daemon" / "server_control_misc.py",

@@ -62,6 +62,7 @@ def _configure_guard_desktop_parser(
     daemon_query_parser = desktop_subparsers.add_parser("daemon-query", help=argparse.SUPPRESS)
     _add_guard_common_args(daemon_query_parser, suppress_defaults=True)
     daemon_query_parser.add_argument("--query", required=True)
+    daemon_query_parser.add_argument("--input")
     daemon_query_parser.add_argument("--json", action="store_true", required=True)
 
 

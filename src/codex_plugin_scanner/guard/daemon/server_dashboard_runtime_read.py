@@ -20,7 +20,7 @@ from .context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
 from .context_assistance_http import respond as respond_context_assistance
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
-from .harness_version_api import attach_version_compatibility
+from ..harness_version_api import attach_version_compatibility
 from .local_cli_http import handle_local_cli_list
 from .plugin_updates_http import handle_plugin_updates_read
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload

@@ -1,6 +1,7 @@
 //! The answers that depend on how Guard was installed, which only the
 //! installed CLI can describe: the edge runs the daemon's own CLI with the
-//! hidden `desktop daemon-query` command and reads one JSON object back.
+//! hidden `desktop daemon-query` command and reads one JSON envelope back,
+//! `{"status": <http status>, "body": <object>}`.
 
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -9,22 +10,33 @@ use serde_json::{Map, Value};
 
 use super::ReadConfig;
 
+/// How long a route answered through the CLI may take: the CLI's own start
+/// plus the harness detection it runs.
+pub(in crate::daemon_edge) const ROUTE_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// The most a query answer may print.
 const ANSWER_LIMIT_BYTES: u64 = 4 * 1024 * 1024;
 
-/// The JSON object the CLI prints for `name`, or `None` when the daemon named
-/// no CLI, the CLI failed, ran past `timeout`, or printed anything else.
+/// The status and body the CLI answers `name` with, or `None` when the daemon
+/// named no CLI, the CLI failed, ran past `timeout`, or printed anything else.
 pub(in crate::daemon_edge) fn query(
     config: &ReadConfig,
     name: &str,
+    input: Option<&Value>,
     timeout: Duration,
-) -> Option<Map<String, Value>> {
+) -> Option<(u16, Map<String, Value>)> {
     let argv = config.cli_command.as_deref()?;
     let (program, prefix) = argv.split_first()?;
     let mut command = Command::new(program);
     command
         .args(prefix)
         .args(query_args(&config.guard_home, name))
+        .args(
+            input
+                .map(|input| ["--input".to_owned(), input.to_string()])
+                .into_iter()
+                .flatten(),
+        )
         .stdin(Stdio::null())
         .stderr(Stdio::null());
     if let Some(cwd) = &config.daemon_cwd {
@@ -48,12 +60,19 @@ pub(in crate::daemon_edge) fn query_args(guard_home: &str, name: &str) -> [Strin
     ]
 }
 
-/// The one JSON object on the answer's last non-empty line.
-pub(in crate::daemon_edge) fn parse_answer(output: &[u8]) -> Option<Map<String, Value>> {
+/// The envelope on the answer's last non-empty line.
+pub(in crate::daemon_edge) fn parse_answer(output: &[u8]) -> Option<(u16, Map<String, Value>)> {
     let text = std::str::from_utf8(output).ok()?;
     let line = text.lines().rev().find(|line| !line.trim().is_empty())?;
-    match serde_json::from_str(line.trim()).ok()? {
-        Value::Object(answer) => Some(answer),
+    let Value::Object(mut envelope) = serde_json::from_str(line.trim()).ok()? else {
+        return None;
+    };
+    let status = envelope
+        .get("status")?
+        .as_u64()
+        .filter(|status| (200..600).contains(status))?;
+    match envelope.remove("body")? {
+        Value::Object(body) => Some((u16::try_from(status).ok()?, body)),
         _ => None,
     }
 }

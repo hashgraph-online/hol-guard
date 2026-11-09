@@ -121,10 +121,12 @@ fn a_fresh_unreadable_reservation_counts_as_active() {
 
 #[test]
 fn the_cli_answer_is_the_last_json_object_line() {
-    assert_eq!(
-        parse_answer(b"warning\n{\"status\":\"current\"}\n\n").unwrap()["status"],
-        json!("current")
-    );
+    let (status, body) =
+        parse_answer(b"warning\n{\"status\":200,\"body\":{\"state\":\"current\"}}\n\n").unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["state"], json!("current"));
+    assert!(parse_answer(b"{\"status\":99,\"body\":{}}\n").is_none());
+    assert!(parse_answer(b"{\"status\":200,\"body\":[]}\n").is_none());
     assert!(parse_answer(b"[1]\n").is_none());
     assert!(parse_answer(b"").is_none());
     assert_eq!(query_args("/g", "update-status")[1], "daemon-query");

@@ -1,39 +1,125 @@
 """Answers the native daemon asks of Guard's CLI.
 
-The daemon's native edge serves every HTTP route itself. A few answers depend
+The daemon's native edge serves every HTTP route itself. Some answers depend
 on how this Guard was installed (the package surface, the trusted update
-environment), which only the installed CLI can describe; the edge runs this
-hidden command for those and reads one JSON object from its output.
+environment, the harness adapters it ships), which only the installed CLI can
+describe; the edge runs this hidden command for those and reads one JSON
+envelope, ``{"status": <http status>, "body": <object>}``, from its output.
 """
 
 from __future__ import annotations
 
 import json
+import platform
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
+from ...version import __version__
 
-def _update_status(guard_home: Path) -> dict[str, object]:
+# ``manager.GUARD_DAEMON_COMPATIBILITY_VERSION``.
+DAEMON_COMPATIBILITY_VERSION = 2
+_HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
+_SAFE_FAILURE_REASONS = {
+    "offline": "Local Guard daemon is unavailable.",
+    "timeout": "Local Guard daemon did not answer before the browser timeout.",
+    "unauthorized": "Dashboard session is missing or stale.",
+    "unsupported": "Harness is not supported by this daemon.",
+    "confirmation_required": "Remove actions need the harness confirmation phrase.",
+}
+_NATIVE_UNAVAILABLE: tuple[int, dict[str, object]] = (503, {"error": "native_handler_policy_unavailable"})
+
+Answer = tuple[int, dict[str, object]]
+
+
+def _update_status(guard_home: Path, payload: dict[str, object]) -> Answer:
+    del payload
     from .update_commands import build_guard_update_status_payload
 
-    return build_guard_update_status_payload(guard_home=guard_home)
+    return 200, build_guard_update_status_payload(guard_home=guard_home)
 
 
-_QUERIES: dict[str, Callable[[Path], dict[str, object]]] = {
+def _harness_items(guard_home: Path) -> tuple[object, list[dict[str, object]]]:
+    from ..adapters.base import HarnessContext
+    from ..store import GuardStore
+    from .install_commands import list_harness_setup_items
+
+    context = HarnessContext(home_dir=Path.home().resolve(), workspace_dir=None, guard_home=guard_home)
+    return context, list_harness_setup_items(context, GuardStore(guard_home))
+
+
+def _harnesses(guard_home: Path, payload: dict[str, object]) -> Answer:
+    del payload
+    from ..harness_version_api import attach_version_compatibility
+
+    context, items = _harness_items(guard_home)
+    return 200, {"items": attach_version_compatibility(items, context)}
+
+
+def _capabilities(guard_home: Path, payload: dict[str, object]) -> Answer:
+    """The capability report less ``auth_state``, which the edge knows."""
+
+    del payload
+    from ..native_daemon_handler import NativeDaemonHandlerError, native_detection_app_statuses
+
+    _, items = _harness_items(guard_home)
+    listed = [item for item in items if isinstance(item.get("harness"), str)]
+    try:
+        app_statuses = native_detection_app_statuses([item.get("status") for item in listed], guard_home=guard_home)
+    except NativeDaemonHandlerError:
+        return _NATIVE_UNAVAILABLE
+    supported = [
+        {
+            "display_name": item.get("display_name"),
+            "harness": item["harness"],
+            "status": app_status,
+            "command_available": bool(item.get("command_available")),
+            "headless_actions": list(_HEADLESS_OPERATIONS[:-1]),
+            "safe_failure_reasons": dict(_SAFE_FAILURE_REASONS),
+        }
+        for item, app_status in zip(listed, app_statuses, strict=True)
+    ]
+    return 200, {
+        "command_available": any(bool(item.get("command_available")) for item in items),
+        "daemon": {
+            "compatibility_version": DAEMON_COMPATIBILITY_VERSION,
+            "package_version": __version__,
+            "platform": platform.system().lower() or "unknown",
+        },
+        "headless_api": {"execution_mode": "guard_cloud_command_queue", "operations": list(_HEADLESS_OPERATIONS)},
+        "package_firewall_api": {
+            "execution_mode": "guard_cloud_command_queue",
+            "operations": ["status", "connect", "install", "repair", "test", "audit", "sync", "remove"],
+        },
+        "safe_failure_reasons": dict(_SAFE_FAILURE_REASONS),
+        "supported_harnesses": sorted(str(item["harness"]) for item in supported),
+        "items": supported,
+    }
+
+
+_QUERIES: dict[str, Callable[[Path, dict[str, object]], Answer]] = {
+    "capabilities": _capabilities,
+    "harnesses": _harnesses,
     "update-status": _update_status,
 }
 
 
-def run_daemon_query(query: str, guard_home: Path, output_stream: TextIO) -> int:
-    """Print the answer to ``query`` as one JSON object; 2 for an unknown query."""
+def run_daemon_query(query: str, guard_home: Path, output_stream: TextIO, input_text: str | None = None) -> int:
+    """Print the answer to ``query`` as one JSON envelope; 2 for a bad request."""
 
     answer = _QUERIES.get(query)
-    if answer is None:
+    payload: object = {}
+    if input_text:
+        try:
+            payload = json.loads(input_text)
+        except json.JSONDecodeError:
+            payload = None
+    if answer is None or not isinstance(payload, dict):
         output_stream.write(json.dumps({"error": "unknown_query"}) + "\n")
         return 2
-    output_stream.write(json.dumps(answer(guard_home), separators=(",", ":"), default=str) + "\n")
+    status, body = answer(guard_home, payload)
+    output_stream.write(json.dumps({"status": status, "body": body}, separators=(",", ":"), default=str) + "\n")
     return 0
 
 
-__all__ = ["run_daemon_query"]
+__all__ = ["DAEMON_COMPATIBILITY_VERSION", "run_daemon_query"]

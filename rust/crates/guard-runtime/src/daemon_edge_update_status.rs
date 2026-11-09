@@ -24,9 +24,12 @@ const STATUS_TIMEOUT: Duration = Duration::from_secs(90);
 /// The route's answer, or `None` when the CLI cannot describe the status (the
 /// daemon then answers).
 pub(in crate::daemon_edge) fn read(config: &ReadConfig) -> Option<(u16, Value)> {
-    let status = super::cli_query::query(config, "update-status", STATUS_TIMEOUT)?;
+    let (status, body) = super::cli_query::query(config, "update-status", None, STATUS_TIMEOUT)?;
+    if status != 200 {
+        return Some((status, Value::Object(body)));
+    }
     let home = Path::new(&config.guard_home);
-    Some((200, Value::Object(merge_progress(home, status))))
+    Some((200, Value::Object(merge_progress(home, body))))
 }
 
 /// `merge_dashboard_update_progress`.
