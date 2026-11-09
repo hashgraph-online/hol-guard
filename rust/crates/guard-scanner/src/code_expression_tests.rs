@@ -407,3 +407,94 @@ class URL:
         assert!(flagged(&text), "{text:?}");
     }
 }
+
+#[test]
+fn extension_header_names_read_by_a_handler_are_not_credentials() {
+    for text in [
+        "    const token = req.header('x-service-maintenance-token');",
+        "    const token = req.header(\"x-app-plugin-data-capability\");",
+        "  const apiKey = request.headers.get('x-internal-api-key');",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    let digits = ["x-session-", "a1b2c3d4e5f6"].concat();
+    for text in [
+        "    const token = req.header('x-correct-horse-battery-staple-again-and-more');"
+            .to_string(),
+        format!("    const token = req.header('{digits}');"),
+        "    const token = req.header('X-Service-Maintenance-Token-Value');".to_string(),
+        "    const token = 'x-service-maintenance-token';".to_string(),
+        "    const password = String('x-correct-horse-battery-staple');".to_string(),
+        "    const token = Buffer.from('x-alpha-bravo-charlie-delta-echo');".to_string(),
+        "    const token = req.headers['x-service-maintenance-token-value'];".to_string(),
+        "    const token = config.get('x-service-maintenance-token');".to_string(),
+        "    const token = req.header(sha256('x-alpha-bravo-charlie-delta'));".to_string(),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
+
+#[test]
+fn a_typeof_guarded_choice_between_variables_is_not_a_credential() {
+    for text in [
+        "    const apiKey = typeof rawApiKeyHeader === 'string' ? rawApiKeyHeader : undefined;",
+        "  const token = typeof header !== 'undefined' ? header.trim() : null;",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    let secret = ["hunter2", "-production", "-value"].concat();
+    for text in [
+        format!("    const apiKey = typeof raw === 'string' ? '{secret}' : undefined;"),
+        format!("    const apiKey = typeof raw === 'string' ? raw : '{secret}';"),
+        format!("    const apiKey = typeof raw === '{secret}' ? raw : undefined;"),
+        "    const apiKey = typeof raw === 'string' ? correcthorsebatterystaple : raw;".to_string(),
+        "    const password = typeof raw === 'string' ? raw : 123456;".to_string(),
+        "    const password = typeof raw === 'string' ? 98765432 : raw;".to_string(),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
+
+#[test]
+fn a_fetch_credentials_mode_is_not_a_credential() {
+    for text in [
+        "const res = await fetch(url, {\n      credentials: 'omit',\n    });",
+        "fetch(url, { credentials: \"same-origin\" });",
+        "  credentials: 'include'",
+    ] {
+        assert!(!flagged(text), "{text:?}");
+    }
+    let secret = ["hunter2", "-production", "-value"].concat();
+    for text in [
+        format!("  credentials: '{secret}',"),
+        "  credentials: 'omit' + suffix,".to_string(),
+        "  password: 'omit',".to_string(),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
+
+#[test]
+fn an_arrow_function_with_one_parameter_per_line_is_not_a_credential() {
+    let handler = "\
+  const requireMaintenanceToken = (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    next();
+  };
+";
+    assert!(!flagged(handler));
+    let secret = ["hunter2", "-production", "-value"].concat();
+    for text in [
+        format!("  const maintenanceToken = (\n    '{secret}'\n  );\n"),
+        format!("  const maintenanceToken = (\n    {secret}\n  );\n"),
+        format!("  const maintenanceToken = ( '{secret}'\n  );\n"),
+        format!("let credentials = (\n    user: \"admin\",\n    value: \"{secret}\"\n)\n"),
+        "let token = (\n    user: admin,\n    value: hunter2production\n)\n".to_string(),
+        format!("  const maintenanceToken = (\n    req: Request,\n  ) => '{secret}';\n"),
+    ] {
+        assert!(flagged(&text), "{text:?}");
+    }
+}
