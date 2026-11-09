@@ -160,13 +160,13 @@ jobs:
         if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         shell: bash
         run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          rustup default 1.88.0
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup default 1.89.0
           rustup target add "$RUST_TARGET"
       - name: Normalize hosted Windows Rust compiler inventory
         if: runner.environment == 'github-hosted' && runner.os == 'Windows' && runner.arch == 'X64' && env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         shell: bash
-        run: python scripts/ci/normalize_rust_toolchains.py --toolchain 1.88.0
+        run: python scripts/ci/normalize_rust_toolchains.py --toolchain 1.89.0
       - name: Install Linux static toolchain
         if: runner.os == 'Linux' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         run: |
