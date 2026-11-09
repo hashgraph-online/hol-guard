@@ -105,11 +105,11 @@ Install Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), and
 git clone https://github.com/hashgraph-online/hol-guard.git
 cd hol-guard
 uv sync --extra dev --frozen --python 3.12
-rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+rustup toolchain install 1.89.0 --profile minimal --component rustfmt --component clippy
 ```
 
 The Rust version is pinned in [`rust/rust-toolchain.toml`](rust/rust-toolchain.toml). Use the
-explicit `+1.88.0` when running Cargo from the repository root. Python 3.12 is the default
+explicit `+1.89.0` when running Cargo from the repository root. Python 3.12 is the default
 contributor environment; Python code must remain compatible with the supported versions in
 [`pyproject.toml`](pyproject.toml). The source authoring examples also use `jq` to assemble JSON
 envelopes. Documentation-only edits do not require building the native binaries.
@@ -117,7 +117,7 @@ envelopes. Documentation-only edits do not require building the native binaries.
 Build both native executables before running command regression suites:
 
 ```bash
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
 uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
 ```
 
@@ -148,9 +148,9 @@ For Rust changes, use the same formatting, lint, and test gates as the
 [CI workflow](.github/workflows/ci.yml):
 
 ```bash
-cargo +1.88.0 fmt --manifest-path rust/Cargo.toml --all --check
-cargo +1.88.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
+cargo +1.89.0 fmt --manifest-path rust/Cargo.toml --all --check
+cargo +1.89.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
 Command source changes need native fixture evaluation and generated-artifact checks. Contributors
@@ -183,7 +183,7 @@ uv build --wheel
 
 Wheel and source-distribution builds generate the command catalog and native command
 program from `contributions/command-sources/`, `contributions/mcp-servers/`, and the
-reviewed trust map using Rust 1.88.0. Their contract files and packaged copies are
+reviewed trust map using Rust 1.89.0. Their contract files and packaged copies are
 ignored build outputs; do not commit them or resolve merge conflicts in them.
 The build rejects invalid sources and mismatched compiler identities. To reuse an
 already-built source compiler, set `HOL_GUARD_BUILD_SOURCE_COMPILER` to its path.

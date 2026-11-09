@@ -852,6 +852,14 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    // `$((PATH=10))` assigns as it expands, so a later step could run a
+    // program the proof never looked at.
+    if model.segments[..model.segments.len() - 1]
+        .iter()
+        .any(|segment| shell_arithmetic::arithmetic_assigns(&segment.text))
+    {
+        return false;
+    }
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
         || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)

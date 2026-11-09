@@ -231,11 +231,7 @@ pub(super) fn query_rows<P: rusqlite::Params>(
     params: P,
 ) -> Res<Vec<Row>> {
     let mut statement = connection.prepare(sql).map_err(store_fault)?;
-    let names: Vec<String> = statement
-        .column_names()
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect();
+    let names: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let rows = statement
         .query_map(params, |row| {
             let mut values = Row::new();
