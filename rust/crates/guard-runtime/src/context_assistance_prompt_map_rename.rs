@@ -11,14 +11,16 @@ use std::time::Instant;
 const MAX_NAMES: usize = 2;
 /// Lines listed with their text for a rename, and their length.
 const MAX_RENAME_LINES: usize = 40;
-const MAX_RENAME_CHARS: usize = 3_600;
+const MAX_RENAME_CHARS: usize = 4_000;
 /// Definitions calling a renamed one whose tests are looked for.
 const MAX_CALLERS: usize = 3;
 /// Lines listed with their text for a stub, and their length.
 const MAX_STUB_LINES: usize = 24;
-const MAX_STUB_CHARS: usize = 2_000;
-/// How much of each line is listed.
+const MAX_STUB_CHARS: usize = 2_200;
+/// How much of each line is listed, past its indentation, and how much of
+/// the indentation.
 const MAX_LINE_CHARS: usize = 160;
+const MAX_INDENT_CHARS: usize = 48;
 /// What a body left to be written holds.
 const STUB_MARKS: [&str; 4] = [
     "NotImplementedError",
@@ -309,12 +311,17 @@ pub(super) fn callers(files: &[File], chosen: &[Pick], until: Instant) -> Vec<St
     found
 }
 
-/// Line `number` of `file` as a search prints it: path, number and text.
+/// Line `number` of `file` as a search prints it: path, number and text,
+/// indented as the file indents it. Without the indentation an agent
+/// searched again before its edit, to write the new lines at the right depth.
 fn line_entry(file: &File, number: usize) -> String {
-    let text: String = (file.lines[number - 1].trim().chars())
-        .take(MAX_LINE_CHARS)
+    let line = file.lines[number - 1].trim_end();
+    let text = line.trim_start();
+    let indent: String = (line[..line.len() - text.len()].chars())
+        .take(MAX_INDENT_CHARS)
         .collect();
-    format!("{}:{number}: {text}", file.path)
+    let text: String = text.chars().take(MAX_LINE_CHARS).collect();
+    format!("{}:{number}:{indent}{text}", file.path)
 }
 
 /// Whether section `at` of `file` is a body left to be written.
