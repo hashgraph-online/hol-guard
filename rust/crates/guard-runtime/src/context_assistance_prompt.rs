@@ -191,9 +191,8 @@ fn attach(
         })
         .flatten()
         .filter(|_| context_on());
-    let about_changes = changed.is_some();
-    if let Some(changed) = changed {
-        add_context(response, &changed);
+    if let Some(changed) = &changed {
+        add_context(response, &changed.text);
     }
     let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
@@ -201,14 +200,15 @@ fn attach(
     let marked = marked_terms(prompt);
     let mut words: Vec<String> = marked.iter().map(|(term, _)| term.clone()).collect();
     let quoted = phrases(prompt);
-    // A prompt about changes that names no code, file or phrase is answered
-    // by the changes: the lines they list are where to look, and a search on
-    // the prompt's plain words would only add code the agent may not need.
-    if about_changes
+    // A prompt about changes naming no code, file or phrase is answered by
+    // them and their tests; a search would only add code the agent may not need.
+    if changed.is_some()
         && quoted.is_empty()
         && named(prompt).is_empty()
         && !marked.iter().any(|(_, name)| *name)
     {
+        let at = (store.guard_home(), &*root, harness, session.as_ref());
+        changes::used::add_tests(response, at, changed, &earlier, budget, context_on);
         return;
     }
     let searched = walk(&root, &words, &quoted, &named(prompt), budget);
@@ -236,7 +236,7 @@ fn attach(
                 &marked,
                 &quoted,
                 prompt,
-                about_changes,
+                changed.is_some(),
                 &earlier,
                 deadline,
             )

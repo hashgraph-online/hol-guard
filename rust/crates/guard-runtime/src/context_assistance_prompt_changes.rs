@@ -29,6 +29,7 @@ use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+pub(super) use used::Changed;
 
 /// The most this note adds to a prompt, commit diffs included.
 const BUDGET: usize = 2_000;
@@ -104,7 +105,7 @@ pub(super) fn since_start(
     session: Option<&Session>,
     prompt: &str,
     until: Instant,
-) -> Option<String> {
+) -> Option<Changed> {
     let mut git = None;
     let mut base = session.and_then(recorded);
     if let (Some(session), None) = (session, &base) {
@@ -351,7 +352,7 @@ pub(super) fn changes(
     show_diffs: bool,
     until: Instant,
     screen: impl FnOnce(&[String]) -> Vec<(String, String)>,
-) -> Option<String> {
+) -> Option<Changed> {
     let allowed = allowed(git, until);
     if allowed == Allowed::Nothing {
         return None;
@@ -440,14 +441,16 @@ pub(super) fn changes(
     }
     let pending = pending.map(|names| Named::new(&names, &readable));
     let back = (!against.is_empty() && !back.is_empty()).then(|| Named::new(&back, &readable));
-    render(
+    let text = render(
         since,
         &changed,
         &texts,
         &listed,
         [pending.as_ref(), back.as_ref()],
         whole.as_ref(),
-    )
+    )?;
+    let names = used::names(&changed, &texts);
+    Some(Changed { text, names })
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file
@@ -483,6 +486,8 @@ fn clean(text: &str) -> bool {
 mod code;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
+#[path = "context_assistance_prompt_changes_used.rs"]
+pub(super) mod used;
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_changes_tests.rs"]
