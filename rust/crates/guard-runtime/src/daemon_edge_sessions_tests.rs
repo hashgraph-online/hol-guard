@@ -328,3 +328,24 @@ fn updates_status_with_the_daemon_event_for_each_outcome() {
 fn a_failure_after_the_write_closes_the_connection_unanswered() {
     assert_eq!(written(|| None), Some((DROPPED, Value::Null)));
 }
+
+#[test]
+fn a_write_that_committed_before_failing_is_never_relayed() {
+    let store = store("committed-failure");
+    // A wake table without `generation` fails the read that follows the
+    // commit, so the session row lands and the call still fails.
+    Connection::open(&store.db)
+        .unwrap()
+        .execute_batch("create table guard_review_outbox_wake_state (singleton integer);")
+        .unwrap();
+    let count = || store.text("select cast(count(*) as text) from guard_sessions");
+    let before = count();
+    assert_eq!(
+        store.post(
+            "/v1/sessions/start",
+            r#"{"harness": "codex", "surface": "cli", "client_name": "Codex"}"#,
+        ),
+        Some((DROPPED, Value::Null))
+    );
+    assert_ne!(count(), before);
+}

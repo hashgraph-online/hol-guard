@@ -186,13 +186,19 @@ impl NativeReads {
     }
 
     fn store_call(&self, config: &ReadConfig, method: &str, args: Value) -> Option<Value> {
+        self.store_write(config, method, args).ok()
+    }
+
+    /// `store_call` for a write: `Err(true)` when the call failed after its
+    /// write committed, which the daemon must not repeat.
+    fn store_write(&self, config: &ReadConfig, method: &str, args: Value) -> Result<Value, bool> {
         let Value::Object(args) = args else {
-            return None;
+            return Err(false);
         };
         let wait = Duration::from_millis(config.busy_timeout_ms);
         let _gate =
             crate::hook_evidence_store_gate::hold_storage_gate(Path::new(&config.guard_home), wait)
-                .ok()?;
+                .map_err(|_| false)?;
         let request = GuardStoreRequestV1 {
             schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
             request_id: format!(
@@ -206,9 +212,8 @@ impl NativeReads {
             busy_timeout_ms: config.busy_timeout_ms,
             args,
         };
-        crate::guard_store_op::evaluate(&request)
-            .ok()
-            .map(|(payload, _)| payload)
+        let (outcome, committed) = crate::guard_store_op::evaluate_committing(&request);
+        outcome.map_err(|_| committed)
     }
 }
 
@@ -281,10 +286,6 @@ fn respond(
     }
     if let Some(request_id) = single_segment(request.path, "/v1/requests/", "/resume") {
         return requests::resume(request_id, config, reads)
-            .map(|(status, body)| (status, body, caller.cors_origin, false));
-    }
-    if let Some(request_id) = single_segment(request.path, "/v1/requests/", "") {
-        return requests::detail(request_id, request.query, hosted, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
     route(request.path, request.query, config, reads)

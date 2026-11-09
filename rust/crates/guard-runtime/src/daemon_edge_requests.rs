@@ -11,7 +11,6 @@ use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
-use super::super::http::query_value;
 use super::{NativeReads, ReadConfig};
 use crate::daemon_handler_requests::requests_list;
 
@@ -57,34 +56,6 @@ pub(super) fn list(
         Value::Bool(true),
     );
     Some((200, Value::Object(page), true))
-}
-
-/// `GET /v1/requests/{id}` for the hosted dashboard, which the daemon answers
-/// with the stored row less its private queue hint.
-///
-/// A local caller gets read-time extension and connector recommendations, a
-/// wait asks the daemon to hold the read, and an unknown id gets the local
-/// queue link, so all of those go to the daemon.
-pub(super) fn detail(
-    request_id: &str,
-    query: &str,
-    hosted: bool,
-    config: &ReadConfig,
-    reads: &NativeReads,
-) -> Option<(u16, Value)> {
-    if !hosted || request_id.contains('%') || query_value(query, "wait_ms").ok()?.is_some() {
-        return None;
-    }
-    let Value::Object(mut approval) = reads.store_call(
-        config,
-        "get_approval_request",
-        json!({"request_id": request_id}),
-    )?
-    else {
-        return None;
-    };
-    approval.remove("extension_allow_hint");
-    Some((200, Value::Object(approval)))
 }
 
 /// `GET /v1/requests/{id}/resume` for a request whose resume is already

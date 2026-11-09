@@ -47,7 +47,12 @@ pub(super) fn require_high_risk(
     config: &ReadConfig,
 ) -> Option<Gate> {
     let session_signals = config.session_signals.clone()?;
-    let configured = Path::new(&config.guard_home).join(STATE_FILE).exists();
+    // A state file that cannot be checked goes to the daemon, before the
+    // resident has run anything.
+    let configured = Path::new(&config.guard_home)
+        .join(STATE_FILE)
+        .try_exists()
+        .ok()?;
     let request = ApprovalGateRequestV1 {
         schema: APPROVAL_GATE_REQUEST_SCHEMA.to_owned(),
         request_id: format!(

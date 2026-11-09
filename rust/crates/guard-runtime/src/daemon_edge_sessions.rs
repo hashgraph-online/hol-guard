@@ -131,7 +131,7 @@ impl Writer<'_> {
             Some(PyVal::List(items)) => strings(items),
             _ => PyVal::List(Vec::new()),
         };
-        let row = self.call(
+        let row = match self.write(
             "upsert_guard_session",
             json!({
                 "session_id": uuid4_hex()?,
@@ -145,7 +145,10 @@ impl Writer<'_> {
                 "capabilities_json": dumps(&capabilities)?,
                 "now": now_isoformat()?,
             }),
-        )?;
+        ) {
+            Ok(row) => row,
+            Err(answer) => return answer,
+        };
         written(|| {
             let session = shaped(&row, SESSION)?;
             self.add_event("session/started", "session", &session)?;
@@ -172,7 +175,7 @@ impl Writer<'_> {
         if self.session(&session_id)?.is_none() {
             return unknown_session(&session_id);
         }
-        let row = self.call(
+        let row = match self.write(
             "upsert_guard_operation",
             json!({
                 "operation_id": uuid4_hex()?,
@@ -185,7 +188,10 @@ impl Writer<'_> {
                 "metadata_json": dumps(&metadata)?,
                 "now": now_isoformat()?,
             }),
-        )?;
+        ) {
+            Ok(row) => row,
+            Err(answer) => return answer,
+        };
         written(|| {
             let operation = shaped(&row, OPERATION)?;
             // `_set_session_status(session_id, "active")`.
@@ -230,7 +236,7 @@ impl Writer<'_> {
         if self.operation(operation_id)?.is_none() {
             return unknown_operation(operation_id);
         }
-        let row = self.call(
+        let row = match self.write(
             "add_guard_operation_item",
             json!({
                 "item_id": uuid4_hex()?,
@@ -240,7 +246,10 @@ impl Writer<'_> {
                 "payload_json": dumps(item_payload)?,
                 "now": now_isoformat()?,
             }),
-        )?;
+        ) {
+            Ok(row) => row,
+            Err(answer) => return answer,
+        };
         written(|| {
             let item = shaped(&row, ITEM)?;
             self.add_event("item/completed", "item", &item)?;
@@ -284,7 +293,7 @@ impl Writer<'_> {
         if !plain(&metadata) || !plain(&request_ids) {
             return None;
         }
-        let row = self.call(
+        let row = match self.write(
             "upsert_guard_operation",
             json!({
                 "operation_id": operation_id,
@@ -297,7 +306,10 @@ impl Writer<'_> {
                 "metadata_json": dumps(&metadata)?,
                 "now": now_isoformat()?,
             }),
-        )?;
+        ) {
+            Ok(row) => row,
+            Err(answer) => return answer,
+        };
         written(|| {
             let operation = shaped(&row, OPERATION)?;
             self.add_event(event_name, "operation", &operation)?;
@@ -307,6 +319,15 @@ impl Writer<'_> {
 
     fn call(&self, method: &str, args: Value) -> Option<Value> {
         self.reads.store_call(self.config, method, args)
+    }
+
+    /// A write that creates or changes a row. Once it has committed, a
+    /// failure closes the connection: the daemon would write it again under
+    /// a fresh id.
+    fn write(&self, method: &str, args: Value) -> Result<Value, Option<(u16, Value)>> {
+        self.reads
+            .store_write(self.config, method, args)
+            .map_err(|committed| committed.then_some((DROPPED, Value::Null)))
     }
 
     /// `get_guard_session`, shaped; `Some(None)` when there is none.

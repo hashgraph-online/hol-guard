@@ -154,47 +154,6 @@ fn populated_pages_fit_the_connection_worker_stack() {
 }
 
 #[test]
-fn hosted_details_drop_the_private_queue_hint() {
-    let store = store("page_mixed");
-    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
-    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
-    let stored = store
-        .reads
-        .store_call(
-            &store.config,
-            "get_approval_request",
-            json!({"request_id": request_id}),
-        )
-        .unwrap();
-    let mut expected = stored.as_object().unwrap().clone();
-    expected.remove("extension_allow_hint");
-    assert_eq!(
-        detail(&request_id, "", true, &store.config, &store.reads),
-        Some((200, Value::Object(expected)))
-    );
-}
-
-#[test]
-fn local_waiting_and_unknown_details_go_to_the_daemon() {
-    let store = store("page_mixed");
-    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
-    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
-    assert_eq!(
-        detail(&request_id, "", false, &store.config, &store.reads),
-        None
-    );
-    assert_eq!(
-        detail(&request_id, "wait_ms=0", true, &store.config, &store.reads),
-        None
-    );
-    assert_eq!(
-        detail("missing", "", true, &store.config, &store.reads),
-        None
-    );
-    assert_eq!(detail("a%2Fb", "", true, &store.config, &store.reads), None);
-}
-
-#[test]
 fn reads_a_recorded_resume_and_leaves_seeding_to_the_daemon() {
     let store = store("page_mixed");
     let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
