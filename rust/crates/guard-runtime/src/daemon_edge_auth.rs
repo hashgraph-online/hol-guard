@@ -44,16 +44,6 @@ pub(super) fn authorize(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
     session_allows(request, token, caller.cors_origin.as_deref()).then_some(caller)
 }
 
-/// `_dashboard_session_token_is_valid` for a read: whether the request carries
-/// a dashboard session the daemon would honor, whatever else it carries.
-pub(super) fn has_dashboard_session(
-    request: &Request<'_>,
-    token: &[u8],
-    origin: Option<&str>,
-) -> bool {
-    session_allows(request, token, origin)
-}
-
 /// A caller the daemon would let write: an allowed origin and its auth token.
 /// A dashboard session goes to the daemon, whose write verdicts can spend a
 /// nonce.

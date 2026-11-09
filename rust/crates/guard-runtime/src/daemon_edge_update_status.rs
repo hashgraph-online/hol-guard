@@ -129,15 +129,9 @@ struct Snapshot {
     modified: Option<SystemTime>,
 }
 
-#[cfg(unix)]
 fn identity(meta: &std::fs::Metadata) -> (u64, u64) {
     use std::os::unix::fs::MetadataExt;
     (meta.dev(), meta.ino())
-}
-
-#[cfg(not(unix))]
-fn identity(meta: &std::fs::Metadata) -> (u64, u64) {
-    (0, meta.len())
 }
 
 /// `_read_update_lock_snapshot`: `None` for no lock at all.

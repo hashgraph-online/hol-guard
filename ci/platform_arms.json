@@ -2172,19 +2172,19 @@
   },
   {
    "verdict": "windows-unsupported",
-   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "note": "POSIX process groups have no Windows equivalent, and no caller starts a grouped command off Unix: `posix-processes` gets `None` from `trusted_ps_path` there, so `bounded_stdout_in_group` is unreachable, and the daemon edge's CLI replay lives in the `cfg(unix)` `daemon_edge` module. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
    "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
-   "item": "fn isolate_group(_command: &mut Command)",
+   "item": "pub(crate) fn isolate_group(_command: &mut Command)",
    "cfg": "not(unix)",
-   "body": "ec39219807ef"
+   "body": "2c96c761359f"
   },
   {
    "verdict": "windows-unsupported",
-   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "note": "POSIX process groups have no Windows equivalent, and no caller starts a grouped command off Unix: `posix-processes` gets `None` from `trusted_ps_path` there, so `bounded_stdout_in_group` is unreachable, and the daemon edge's CLI replay lives in the `cfg(unix)` `daemon_edge` module. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
    "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
-   "item": "fn kill_group(_child: &Child)",
+   "item": "pub(crate) fn kill_group(_child: &Child)",
    "cfg": "not(unix)",
-   "body": "42851029dd12"
+   "body": "fbbee2b865ab"
   },
   {
    "verdict": "windows-unsupported",

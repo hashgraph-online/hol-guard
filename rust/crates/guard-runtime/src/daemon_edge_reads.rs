@@ -34,7 +34,7 @@ use guard_contracts::{GuardStoreRequestV1, GUARD_STORE_REQUEST_SCHEMA};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::auth::{authorize, has_dashboard_session};
+use super::auth::authorize;
 use super::http::{parse_request, query_int, query_value, take_request, Request};
 #[cfg(test)]
 use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
@@ -419,39 +419,6 @@ fn respond(
     if request.path == "/v1/plugins/updates" {
         return plugin_updates::read(config)
             .map(|(status, body)| (status, body, caller.cors_origin, true));
-    }
-    if request.path == "/v1/harnesses" {
-        return cli_query::query(config, "harnesses", None, cli_query::ROUTE_TIMEOUT)
-            .map(|(status, body)| (status, Value::Object(body), caller.cors_origin, false));
-    }
-    if request.path == "/v1/capabilities" {
-        let (status, mut body) =
-            cli_query::query(config, "capabilities", None, cli_query::ROUTE_TIMEOUT)?;
-        if status == 200 {
-            let session =
-                has_dashboard_session(request, &config.token, caller.cors_origin.as_deref());
-            let auth_state = if session {
-                "dashboard_session"
-            } else {
-                "local_token"
-            };
-            body.insert("auth_state".into(), Value::from(auth_state));
-        }
-        return Some((status, Value::Object(body), caller.cors_origin, false));
-    }
-    if let Some((name, no_store)) = match request.path {
-        "/v1/cloud-review" => Some(("cloud-review", true)),
-        "/v1/cloud-actions/status" => Some(("cloud-actions-status", true)),
-        _ => None,
-    } {
-        return cli_query::query(config, name, None, cli_query::ROUTE_TIMEOUT)
-            .map(|(status, body)| (status, Value::Object(body), caller.cors_origin, no_store));
-    }
-    if request.path == "/v1/policy" {
-        let harness = query_value(request.query, "harness").ok()?;
-        let input = serde_json::json!({ "harness": harness });
-        return cli_query::query(config, "policy", Some(&input), cli_query::ROUTE_TIMEOUT)
-            .map(|(status, body)| (status, Value::Object(body), caller.cors_origin, false));
     }
     if request.path == "/v1/update/status" {
         return update_status::read(config)

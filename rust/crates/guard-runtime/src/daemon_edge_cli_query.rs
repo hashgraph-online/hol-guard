@@ -10,10 +10,6 @@ use serde_json::{Map, Value};
 
 use super::ReadConfig;
 
-/// How long a route answered through the CLI may take: the CLI's own start
-/// plus the harness detection it runs.
-pub(in crate::daemon_edge) const ROUTE_TIMEOUT: Duration = Duration::from_secs(30);
-
 /// The most a query answer may print.
 const ANSWER_LIMIT_BYTES: u64 = 4 * 1024 * 1024;
 

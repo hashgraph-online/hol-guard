@@ -12,6 +12,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon.command_activity_api import stream_command_activity_events
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
@@ -321,7 +323,10 @@ def test_sse_retention_gap_emits_reset_before_retained_events(tmp_path: Path) ->
     assert reset_payload == {"event": "command_activity_reset", "reset_required": True}
 
 
-def test_sse_admission_is_capped(tmp_path: Path) -> None:
+def test_sse_admission_is_capped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The handler's own cap, used when the daemon serves its public port
+    # itself; the native edge enforces the same limit for streams it serves.
+    monkeypatch.setenv("HOL_GUARD_DAEMON_NATIVE_EDGE", "0")
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
