@@ -327,6 +327,9 @@ class StoreOAuthConnectMixin:
         supply_chain_firewall = payload.get("supply_chain_firewall")
         if isinstance(supply_chain_firewall, bool):
             result["supply_chain_firewall"] = supply_chain_firewall
+        cloud_user_profile = payload.get("cloud_user_profile")
+        if isinstance(cloud_user_profile, dict):
+            result["cloud_user_profile"] = cloud_user_profile
         return result
 
     def _oauth_primary_repair_available(self) -> bool:
@@ -792,6 +795,9 @@ class StoreOAuthConnectMixin:
         supply_chain_firewall = metadata.get("supply_chain_firewall")
         if isinstance(supply_chain_firewall, bool):
             result["supply_chain_firewall"] = supply_chain_firewall
+        cloud_user_profile = metadata.get("cloud_user_profile")
+        if isinstance(cloud_user_profile, dict):
+            result["cloud_user_profile"] = cloud_user_profile
         return result
 
     def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
