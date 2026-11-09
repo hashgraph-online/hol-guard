@@ -3,7 +3,7 @@
   "defaults": {
     "reason": "HOL Guard could not complete native review safely.",
     "reason_code": "native_hook_render_unavailable",
-    "prompt_reason": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard or run hol-guard daemon recovery restart, then send the prompt again."
+    "prompt_reason": "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard or run hol-guard daemon recovery restart, then send the prompt again."
   },
   "events": {
     "userpromptsubmit": "prompt",

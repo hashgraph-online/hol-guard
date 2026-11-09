@@ -26,7 +26,7 @@ pub(crate) const NATIVE_HARNESSES: [&str; 8] = [
 
 pub(crate) const FAILURE_REASON: &str =
     "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.";
-const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running, open HOL Guard or run hol-guard daemon recovery restart, then send the prompt again.";
+const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard or run hol-guard daemon recovery restart, then send the prompt again.";
 const PROMPT_UNAVAILABLE_REASON_CODE: &str = "native_prompt_unavailable";
 
 const EVENT_NAME_KEYS: [&str; 6] = [

@@ -397,7 +397,7 @@ def _failure_payload(event_name: str, reason: str) -> tuple[dict[str, object], i
     if prompt_event:
         prompt_reason = (
             "HOL Guard could not check this prompt, so it was blocked. "
-            "If HOL Guard is not running, open HOL Guard or run hol-guard daemon recovery restart, "
+            "If HOL Guard is not running or not responding, open HOL Guard or run hol-guard daemon recovery restart, "
             "then send the prompt again."
         )
         if HARNESS == "copilot":
