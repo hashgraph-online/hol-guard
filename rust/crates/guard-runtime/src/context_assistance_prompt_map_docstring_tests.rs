@@ -98,3 +98,22 @@ fn a_short_function_keeps_showing_whole_with_the_note() {
     assert!(!shown.contains("Those are lines"), "{shown}");
     assert!(!mapped(text, false).contains("not a raw string"));
 }
+
+/// `python -m doctest` fails on a module that imports from its own package by
+/// a relative import, so a prompt about its docstring names the command that
+/// runs its doctests. A module without one, or another prompt, gets nothing.
+#[test]
+fn a_module_with_relative_imports_names_the_doctest_command() {
+    let text = "from .recipes import take\n\n\ndef remap(root):\n    r\"\"\"Remap it.\"\"\"\n    return take(1, root)\n";
+    let shown = mapped(text, true);
+    assert!(
+        shown.contains(
+            "```\nRun its doctests with `python -m pytest --doctest-modules src/iterutils.py`: \
+`python -m doctest` loads the file outside its package, so its relative imports fail."
+        ),
+        "{shown}"
+    );
+    assert!(!mapped(text, false).contains("--doctest-modules"));
+    let absolute = text.replace("from .recipes", "from recipes");
+    assert!(!mapped(&absolute, true).contains("--doctest-modules"));
+}

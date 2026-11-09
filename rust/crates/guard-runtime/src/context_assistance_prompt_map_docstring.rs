@@ -2,7 +2,9 @@
 //! names. A long function is not shown whole, but such an edit needs only its
 //! signature and docstring, so the map shows those lines. A docstring that is
 //! not a raw string turns `\n` in an example into a newline, so the map says
-//! to write a backslash twice.
+//! to write a backslash twice. `python -m doctest` loads a file outside its
+//! package, so a module with relative imports fails there; the map names a
+//! command that runs its doctests.
 use super::super::seen::Span;
 use super::more::whole;
 use super::{Asked, File};
@@ -12,6 +14,8 @@ const WORDS: [&str; 4] = ["docstring", "docstrings", "doctest", "doctests"];
 const MAX_HEAD_LINES: usize = 80;
 const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in an example \
 twice (`\\\\n` shows as `\\n`).";
+const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modules {path}`: \
+`python -m doctest` loads the file outside its package, so its relative imports fail.";
 
 /// True when the prompt asks about docstrings or doctests.
 pub(super) fn asks_for_docstring(prompt: &str) -> bool {
@@ -22,13 +26,17 @@ pub(super) fn asks_for_docstring(prompt: &str) -> bool {
 
 /// The code shown for a named definition, the span it fills and a note to
 /// put after it: the whole definition when it is short, or, for a prompt
-/// about docstrings, a long Python function's signature and docstring.
+/// about docstrings, a long Python function's signature and docstring, with
+/// how to write a backslash and run the doctests when that matters.
 pub(super) fn shown(file: &File, at: usize, asked: &Asked) -> Option<(Span, String, String)> {
     let python = asked.docstring && file.path.ends_with(".py") && !file.container(at);
     let head = python.then(|| head(file, at)).flatten();
     let mut note = String::new();
     if head.is_some_and(|(_, raw)| raw == Some(false)) {
         note.push_str(NOT_RAW);
+    }
+    if python && relative(file) {
+        note.push_str(&DOCTESTS.replace("{path}", file.path));
     }
     if let Some((span, code)) = whole(file, at) {
         return Some((span, code, note));
@@ -101,4 +109,13 @@ fn docstring(lines: &[&str], from: usize) -> Option<(usize, Option<bool>)> {
     let close =
         (lines.iter().enumerate().skip(index + 1)).find(|(_, line)| line.contains(quote))?;
     Some((close.0, raw))
+}
+
+/// Whether a Python file imports from its own package by a relative import,
+/// and its path can be named in a command as it is.
+fn relative(file: &File) -> bool {
+    let plain = (file.path.chars()).all(|c| c.is_alphanumeric() || "/._-".contains(c));
+    plain
+        && !file.path.starts_with('-')
+        && (file.lines.iter()).any(|line| line.trim_start().starts_with("from ."))
 }
