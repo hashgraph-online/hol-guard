@@ -50,7 +50,7 @@
   ],
   "saferAlternatives": [
     "Start with hub_whoami, hub_list_tasks, and hub_get_task to inspect server and task state without modifying records or acquiring locks.",
-    "hub_heartbeat updates agent presence (last_seen_at) and hub_read_inbox marks returned messages as read for the requesting agent; both are routine lifecycle tools mapped to inherit.",
+    "hub_heartbeat updates agent status, last_seen_at, and sets or clears current task; hub_read_inbox marks returned messages as read for the requesting agent.",
     "Acquire granular file locks with hub_lock_files before modifying code and promptly call hub_release_locks upon completion.",
     "This entry matches the agent-hub-mcp executable. When launched via node or local script paths, Guard keeps its normal handling; configure it on the Protect page."
   ]
