@@ -80,6 +80,9 @@ fn the_same_verbs_on_a_guarded_object_stay_refused() {
         "Format the logs volume",
         "Format the values volume",
         "Format the drive named entries",
+        "Format the values and logs volumes",
+        "Format the values, cache and logs disks",
+        "Format the entries / time machine drives",
     ] {
         assert_not_benign(text);
     }

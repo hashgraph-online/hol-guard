@@ -13,13 +13,16 @@ use std::sync::OnceLock;
 /// Two of the printed nouns also name storage once another word follows them:
 /// `format the time machine disk`, `format the logs volume`. The mask reads
 /// what comes after its own match and leaves such a phrase alone, so the verb
-/// stays in the text for the guarded reading below.
+/// stays in the text for the guarded reading below. The storage word may also
+/// close a short list (`format the values and logs volumes`, `format the
+/// values, cache and logs disks`), so up to four names joined by `and`, `or`,
+/// `&`, `/` or commas are read through before it.
 pub(super) fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
     static STORAGE: OnceLock<Regex> = OnceLock::new();
     let storage = STORAGE.get_or_init(|| {
         Regex::new(
-            r"(?i)^\s*(?:machine\s+)?(?:disks?|drives?|volumes?|partitions?|usb|ssd|hdd|sd\s*cards?|media)\b",
+            r"(?i)^(?:\s*(?:,|\band\b|\bor\b|&|/)\s*(?:the\s+)?[a-z0-9_.-]+){0,4}\s*(?:machine\s+)?(?:disks?|drives?|volumes?|partitions?|usb|ssd|hdd|sd\s*cards?|media)\b",
         )
         .expect("bounded storage noun")
     });
