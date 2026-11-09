@@ -399,7 +399,7 @@ def _failure_payload(event_name: str, reason: str) -> tuple[dict[str, object], i
             "HOL Guard could not check this prompt, so it was blocked. "
             "If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, "
             "then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. "
-            "For a custom Guard home, add --guard-home with the affected home path to the recovery command."
+            "For a custom Guard home, run hol-guard daemon recovery restart --guard-home <path>."
         )
         if HARNESS == "copilot":
             return {"behavior": "deny", "message": prompt_reason, "interrupt": False}, 0

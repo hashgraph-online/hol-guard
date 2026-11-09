@@ -336,7 +336,7 @@ def test_generated_client_prompt_unavailability_matches_host_contract(tmp_path: 
     assert code == 0
     reason = payload["message"] if harness == "copilot" else payload["reason"]
     assert "choose Troubleshoot Guard, then Restart Guard" in reason
-    assert "For a custom Guard home, add --guard-home with the affected home path" in reason
+    assert "hol-guard daemon recovery restart --guard-home <path>" in reason
     if harness == "copilot":
         assert payload["behavior"] == "deny"
     else:
