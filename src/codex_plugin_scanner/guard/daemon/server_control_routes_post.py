@@ -15,6 +15,8 @@ from ..approval_scope_support import (
     request_scope_contract_payload,
 )
 from ..approvals import ApprovalRequestAlreadyResolvedError, ApprovalRequestNotFoundError, apply_approval_resolution
+from ..harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
+from ..harness_version_api import handle_harness_version_write
 from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
 from ..native_resident_revival import native_route_unavailable_body
@@ -24,8 +26,6 @@ from .command_activity_api import handle_command_activity_feedback
 from .context_assistance_http import WRITE_PATHS as CONTEXT_ASSISTANCE_WRITE_PATHS
 from .context_assistance_http import respond as respond_context_assistance
 from .extension_control_api import ExtensionControlApiError
-from ..harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
-from ..harness_version_api import handle_harness_version_write
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator

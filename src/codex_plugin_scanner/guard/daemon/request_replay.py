@@ -88,7 +88,7 @@ class _ReplayState:
                     temporary.unlink()
 
 
-class _PersistedMapping(dict):  # type: ignore[type-arg]
+class _PersistedMapping(dict[str, Any]):
     """A dict whose every change is written back to the replay state."""
 
     def __init__(self, state: _ReplayState, field: str) -> None:
@@ -176,7 +176,9 @@ def _replay_server_class() -> type:
     base = daemon_server._GuardDaemonHTTPServer
 
     class ReplayServer(base):  # type: ignore[misc, valid-type]
-        def __init__(self, store: GuardStore, port: int, host: str, home_dir: Path, auth_key: str) -> None:
+        def __init__(  # pyright: ignore[reportMissingSuperCall]
+            self, store: GuardStore, port: int, host: str, home_dir: Path, auth_key: str
+        ) -> None:
             # The listening socket, executors and workers belong to the native
             # daemon; only the fields handlers read are set here.
             self._replay_state = _ReplayState(store.guard_home)
@@ -260,37 +262,37 @@ def _replay_server_class() -> type:
             self.unclassified_watchdog_thread = None
 
         @property
-        def guard_cloud_connect_state(self) -> dict[str, object] | None:
+        def guard_cloud_connect_state(self) -> dict[str, object] | None:  # pyright: ignore[reportIncompatibleVariableOverride]
             value = self._replay_state.get("guard_cloud_connect_state")
             return value if isinstance(value, dict) else None
 
         @guard_cloud_connect_state.setter
-        def guard_cloud_connect_state(self, value: dict[str, object] | None) -> None:
+        def guard_cloud_connect_state(self, value: dict[str, object] | None) -> None:  # pyright: ignore[reportIncompatibleVariableOverride]
             self._replay_state.set("guard_cloud_connect_state", value)
 
         @property
-        def package_firewall_connect_state(self) -> dict[str, object] | None:
+        def package_firewall_connect_state(self) -> dict[str, object] | None:  # pyright: ignore[reportIncompatibleVariableOverride]
             value = self._replay_state.get("package_firewall_connect_state")
             return value if isinstance(value, dict) else None
 
         @package_firewall_connect_state.setter
-        def package_firewall_connect_state(self, value: dict[str, object] | None) -> None:
+        def package_firewall_connect_state(self, value: dict[str, object] | None) -> None:  # pyright: ignore[reportIncompatibleVariableOverride]
             self._replay_state.set("package_firewall_connect_state", value)
 
         @cached_property
-        def package_firewall_action_rate_limiter(self) -> Any:
+        def package_firewall_action_rate_limiter(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
             from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 
             return PackageFirewallActionRateLimiter()
 
         @cached_property
-        def network_supervisor(self) -> Any:
+        def network_supervisor(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
             from ..runtime.network_supervisor import NetworkSupervisor
 
             return NetworkSupervisor()
 
         @cached_property
-        def runtime_hook_scheduler(self) -> Any:
+        def runtime_hook_scheduler(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
             from .runtime_hook_scheduler import RuntimeHookScheduler
 
             return RuntimeHookScheduler(
@@ -299,7 +301,7 @@ def _replay_server_class() -> type:
             )
 
         @cached_property
-        def runtime_heartbeat(self) -> Any:
+        def runtime_heartbeat(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
             from .runtime_heartbeat import RuntimeHeartbeatWriter
 
             return RuntimeHeartbeatWriter(
@@ -343,7 +345,7 @@ def _replay_server_class() -> type:
             return LocalCliApiService(store=self.store, record_exception=self.diagnostics.record_exception)
 
         @cached_property
-        def approval_attention(self) -> Any:
+        def approval_attention(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
             from ..browser_opener import open_browser_url
             from ..runtime.approval_attention import ApprovalAttentionCoordinator
 
@@ -431,7 +433,7 @@ def replay_request(
     server = _replay_server_class()(store, port, host, home_dir or Path.home(), auth_key)
     response = io.BytesIO()
     try:
-        _GuardDaemonHandler(_ReplaySocket(request, response), ("127.0.0.1", 0), server)
+        _GuardDaemonHandler(_ReplaySocket(request, response), ("127.0.0.1", 0), server)  # pyright: ignore[reportArgumentType]
     finally:
         server.server_close()
     return response.getvalue()

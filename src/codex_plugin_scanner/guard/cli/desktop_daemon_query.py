@@ -13,9 +13,13 @@ import json
 import platform
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO
+from typing import TYPE_CHECKING, TextIO
 
 from ...version import __version__
+
+if TYPE_CHECKING:
+    from ..adapters.base import HarnessContext
+    from ..store import GuardStore
 
 # ``manager.GUARD_DAEMON_COMPATIBILITY_VERSION``.
 DAEMON_COMPATIBILITY_VERSION = 2
@@ -39,7 +43,7 @@ def _update_status(guard_home: Path, payload: dict[str, object]) -> Answer:
     return 200, build_guard_update_status_payload(guard_home=guard_home)
 
 
-def _harness_items(guard_home: Path) -> tuple[object, list[dict[str, object]]]:
+def _harness_items(guard_home: Path) -> tuple[HarnessContext, list[dict[str, object]]]:
     from ..adapters.base import HarnessContext
     from ..store import GuardStore
     from .install_commands import list_harness_setup_items
@@ -97,7 +101,7 @@ def _capabilities(guard_home: Path, payload: dict[str, object]) -> Answer:
     }
 
 
-def _store(guard_home: Path) -> object:
+def _store(guard_home: Path) -> GuardStore:
     from ..store import GuardStore
 
     return GuardStore(guard_home)
@@ -110,8 +114,8 @@ def _policy(guard_home: Path, payload: dict[str, object]) -> Answer:
     harness_filter = harness if isinstance(harness, str) else None
     store = _store(guard_home)
     return 200, {
-        "items": managed_policy_rows(store, harness_filter),  # type: ignore[arg-type]
-        "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),  # type: ignore[attr-defined]
+        "items": managed_policy_rows(store, harness_filter),
+        "cloud_exceptions": store.list_cloud_exceptions(harness=harness_filter),
     }
 
 
@@ -119,7 +123,7 @@ def _cloud_review(guard_home: Path, payload: dict[str, object]) -> Answer:
     del payload
     from ..daemon.cloud_review_settings import cloud_review_settings_status
 
-    return 200, cloud_review_settings_status(_store(guard_home))  # type: ignore[arg-type]
+    return 200, cloud_review_settings_status(_store(guard_home))
 
 
 def _cloud_actions_status(guard_home: Path, payload: dict[str, object]) -> Answer:
@@ -127,7 +131,7 @@ def _cloud_actions_status(guard_home: Path, payload: dict[str, object]) -> Answe
     from ..daemon.cloud_actions_status import CloudActionsStatusUnavailableError, cloud_actions_local_status
 
     try:
-        return 200, cloud_actions_local_status(_store(guard_home))  # type: ignore[arg-type]
+        return 200, cloud_actions_local_status(_store(guard_home))
     except CloudActionsStatusUnavailableError:
         return 503, {
             "error": "status_unavailable",
