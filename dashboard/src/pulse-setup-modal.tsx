@@ -9,7 +9,7 @@ import {
   type GuardPulseEnrollment,
 } from "./guard-api";
 import type { GuardSettingsPayload } from "./guard-types";
-import { waitForPulseApproval } from "./pulse-approval";
+import { PULSE_FACE_SCAN_OPTIONS, waitForPulseApproval, type PulseMinTier } from "./pulse-approval";
 import { GuardModalLayer } from "./guard-modal-layer";
 
 export const PULSE_SITE_URL = "https://pulse.yanez.ai";
@@ -91,6 +91,7 @@ export function PulseSetupModal(props: {
   const [totpCode, setTotpCode] = useState("");
   const [agentKey, setAgentKey] = useState("");
   const [cooldown, setCooldown] = useState<0 | 900 | 3600>(0);
+  const [minTier, setMinTier] = useState<PulseMinTier>("medium");
   const [enrollment, setEnrollment] = useState<GuardPulseEnrollment | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -123,7 +124,7 @@ export function PulseSetupModal(props: {
   }), [password, props.totpEnabled, run, totpCode]);
 
   const handleConnect = useCallback(() => run(async () => {
-    const response = await beginApprovalGatePulseEnrollment({ pulse_agent_key: agentKey.trim() });
+    const response = await beginApprovalGatePulseEnrollment({ pulse_agent_key: agentKey.trim(), min_tier: minTier });
     // The key is now in Guard's secret store; drop it from page memory.
     setAgentKey("");
     const started = response.pulse_enrollment;
@@ -154,7 +155,7 @@ export function PulseSetupModal(props: {
     } finally {
       cancelWait.current = null;
     }
-  }), [agentKey, cooldown, props, run]);
+  }), [agentKey, cooldown, minTier, props, run]);
 
   const text = STEP_TEXT[step];
   const onEnter = (ready: boolean, action: () => void) => (event: { key: string }) => {
@@ -253,6 +254,20 @@ export function PulseSetupModal(props: {
                   onKeyDown={onEnter(connectReady, handleConnect)}
                   className={INPUT_CLASS}
                 />
+              </Field>
+              <Field
+                label="Face scan"
+                hint="Strict needs a phone that supports the stronger face scan. To change this later, turn Pulse off and set it up again."
+              >
+                <select
+                  value={minTier}
+                  onChange={(event) => setMinTier(event.target.value === "high" ? "high" : "medium")}
+                  className={INPUT_CLASS}
+                >
+                  {PULSE_FACE_SCAN_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </Field>
               <Field label="Cooldown" hint="A cooldown only covers the same kind of action and scope from the same session. Guard changes always ask again.">
                 <select

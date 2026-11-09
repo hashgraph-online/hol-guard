@@ -58,7 +58,7 @@ order, and any failure leaves the action blocked:
 | 7 | Receipt terms structurally equal Guard's own copy (Pulse rules: bool ≠ number, `-0 = 0`, ordered arrays, integers ≤ 2^53−1) | `…_terms_mismatch` |
 | 8 | Approver's key is in the YID's **live** key registry, read at verification time, at a tier that covers the one it signed. The registry answer must be for the pinned YID | `…_user_key_unregistered`, `…_wrong_yid` |
 | 8a | Approver's key is one Guard pinned at enrollment (`pulse_user_keys`). A key Yanez registers later does not count; the user sets up Pulse again to use a new device | `…_user_key_unconfirmed` |
-| 9 | Tier is `medium` or `high`. The floor is fixed at `medium`, not a setting; `low` is never accepted | `…_assurance_too_low` |
+| 9 | Tier is at or above the floor the user chose at setup: `medium` (the default, "Standard face scan") or `high` ("Strict face scan"). `low` is never accepted | `…_assurance_too_low` |
 | 10 | Freshness: `now − decided_at ≤ 900 s` (Pulse's recommended maximum age), and `now ≤ consent_not_after` | `…_stale`, `…_consent_expired` |
 
 Then, in the resident (`approval_gate_pulse.rs`):
@@ -75,6 +75,25 @@ Then, in the resident (`approval_gate_pulse.rs`):
   `consumer_token` is derived from the key and the `jti`, so retries reuse it.
   The pending entry is taken out of the table before verification, so one
   request can be verified once.
+- **Minimum face scan.** Setup takes `min_tier`, `medium` (the default when
+  it is absent) or `high`; anything else, `low` included, is refused with
+  `approval_gate_pulse_invalid_tier` before anything reaches the phone. With
+  `high`, setup needs a device on the YID that can sign at high
+  (`approval_gate_pulse_no_signing_key`) and a high enrollment scan. The choice
+  is saved as `pulse_min_tier`, and every later approval is verified against
+  it. A saved value Guard cannot read counts as `high`, so a damaged or edited
+  setting can only make the check stricter. Changing it means turning Pulse
+  off and setting it up again.
+- **Each settings change is its own approval.** A Pulse-protected settings
+  change names itself as `params.settings_change`, one of `save` (with the
+  settings), `update_channel` (with the channel), `reset` or `pulse_disable`.
+  The resident derives the `action` and `subject` from it
+  (`approval_gate_settings_binding.rs`); a save is bound to a digest of the
+  change, keyed with the daemon's auth token, that leaves out how the change
+  is approved. The binding goes into the Pulse request and is checked again
+  when the change is applied (`require_settings_write`, `disable_pulse`), so
+  an approval for one settings change cannot complete another. A request that
+  names a settings change may not also name its own `action` or `subject`.
 - **No fallback.** In Pulse mode a password or TOTP code is refused
   (`approval_gate_pulse_required`), `unlock_cooldown` is refused, and TOTP
   enrollment is refused.
@@ -142,10 +161,11 @@ approval shows its label without a per-action summary.
 | --- | --- | --- |
 | `approval_gate_pulse.rs` (new) | `pulse_request`, `pulse_poll`, `verify_pulse_stage`, config loading, error mapping | The Pulse factor, split so no network wait happens inside the gate's critical section |
 | `approval_gate_pulse_store.rs` (new) | Transport seam, Yanez key cache (10 min), pending-request table (in memory, ≤16 per home), MAC'd Pulse cooldown record, local `jti` ledger | Resident-side state; no lock held across HTTP |
-| `approval_gate_pulse_enrollment.rs` (new) | `begin`, `confirm`, `disable`, `recover` | Enrollment needs the current factor and a verified enrollment receipt. Disabling needs a fresh Pulse grant. Recovery needs the password and the one-time code |
+| `approval_gate_pulse_enrollment.rs` (new) | `begin`, `confirm`, `disable`, `recover`; the minimum face scan (`min_tier`) | Enrollment needs the current factor and a verified enrollment receipt at the chosen floor. Disabling needs a fresh Pulse grant bound to turning Pulse off. Recovery needs the password and the one-time code |
+| `approval_gate_settings_binding.rs` (new) | Derives the `action` and `subject` of a settings write from `params.settings_change` | What an approval for a settings change covers is decided in the resident, not by the caller |
 | `approval_gate_pulse_summary.rs` (new) | Reads the stored approval request and reduces it to the YID app summary | What the phone shows comes from Guard's own record, never from the caller |
 | `approval_gate_pulse_summary_tests.rs` (new) | 12 tests: program names, risk level, secret filter, closed lists, store lookup | See Tests |
-| `approval_gate_pulse_tests.rs` (new) | 32 acceptance tests through the real wire op | See Tests |
+| `approval_gate_pulse_tests.rs` (new), `approval_gate_pulse_review_tests.rs`, `approval_gate_pulse_binding_tests.rs`, `approval_gate_settings_binding_tests.rs` | Acceptance tests through the real wire op, plus the cases found in review | See Tests |
 | `approval_gate_verify.rs` | Pulse branch at the top of `verify_or_raise_locked`; Pulse fields on the gate input | Pulse replaces both factors, the way TOTP replaces the password |
 | `approval_gate_grants.rs` | A strict check accepts `["pulse"]` as well as `["password"]` | Strict purposes (settings, policy clear and similar) must work in Pulse mode. A Pulse grant can only exist in the factor generation Pulse was enrolled in |
 | `approval_gate_settings.rs` | Pulse fields in the public config; explicit `pulse_cooldown_seconds`; turning the gate off ends Pulse; revoking the cooldown also closes a Pulse cooldown; `unlock_cooldown` is refused in Pulse mode | A password must never open a window the Pulse factor guards |
@@ -174,8 +194,11 @@ Python and dashboard grant decoders keep working.
 | `approval_gate_state.py` | Public config Pulse fields | Parity with Rust |
 | `native_approval_gate.py` | Sends the Pulse input fields; new config-returning methods | Bridge |
 | `cli/approval_gate_prompt.py` | In Pulse mode, returns a "wait" input and prints the match code | `hol-guard approvals approve` and every other prompt get Pulse automatically |
-| `cli/approval_pulse_commands.py` (new), `commands_parser_policy.py`, `commands_dispatch_records.py` | `hol-guard settings approval-pulse status / enroll / disable / recover` | Secrets read only with `getpass`; never from arguments or environment variables |
-| `daemon/server_control_pulse.py` (new), `server.py`, `server_control_routes_post.py` | Daemon routes for setup, poll, disable and recover | Dashboard setup flow |
+| `cli/approval_pulse_commands.py` (new), `commands_parser_policy.py`, `commands_dispatch_records.py` | `hol-guard settings approval-pulse status / enroll [--min-tier medium\|high] / disable / recover` | Secrets read only with `getpass`; never from arguments or environment variables |
+| `cli/approval_gate_prompt.py`, `cli/extension_controls_commands.py` | `submit_with_pulse`: a daemon-bound CLI command asks for a Pulse request for the exact mutation, waits for the YID app and sends the same payload again | Extension changes from the CLI work in Pulse mode |
+| `daemon/server_control_pulse.py` (new), `server.py`, `server_control_routes_post.py` | Daemon routes for setup (passing `min_tier`), poll, disable and recover; dispatch matches only the five exact paths the token check covers | Dashboard setup flow; no other path reaches a Pulse handler |
+| `daemon/server_control_repair.py`, `config.py` | Settings save, update channel and reset name their `settings_change` | Each settings change is its own approval |
+| `daemon/extension_control_errors.py`, `extension_control_api.py` | A Pulse refusal keeps its code and the request to approve | The CLI and dashboard can wait for the YID app and send again |
 
 ### Dashboard
 
@@ -183,10 +206,11 @@ Python and dashboard grant decoders keep working.
 | --- | --- | --- |
 | `pulse-approval.ts` (new) | Inside `fetchWithGuardAuth`: on `approval_gate_pulse_required`, retry once in defer mode, wait for the YID app, resubmit with the request id; rejection, expiry and outage become errors | Every gated request gets Pulse with no per-call-site change, and a 202 is never mistaken for success |
 | `pulse-approval-overlay.tsx` (new), `app.tsx` | Toast with the match code and status | The user can check that the YID app shows the same request |
-| `pulse-settings-panel.tsx`, `pulse-setup-modal.tsx` (new), `settings-workspace.tsx` | "Yanez Pulse" card below the authenticator card, and a three-step setup window styled like the authenticator one: 1) approval password, plus the authenticator code when it is on; 2) the YID steps, the hidden agent key field and the cooldown; 3) the match code while Guard waits for the scan, then the one-time recovery code. Turn off and recovery stay on the card | Pulse is the named third option in Settings, set up the same way as the authenticator |
+| `pulse-settings-panel.tsx`, `pulse-setup-modal.tsx` (new), `settings-workspace.tsx` | "Yanez Pulse" card below the authenticator card, and a three-step setup window styled like the authenticator one: 1) approval password, plus the authenticator code when it is on; 2) the YID steps, the hidden agent key field, the face scan ("Standard face scan (recommended)" sends `min_tier: medium`, "Strict face scan" sends `high`) and the cooldown; 3) the match code while Guard waits for the scan, then the one-time recovery code. Turn off and recovery stay on the card | Pulse is the named third option in Settings, set up the same way as the authenticator |
 | `approval-proof-inline.tsx` | In Pulse mode, no password or code field; a "you will approve in the YID app" notice; no credentials sent | No local secret is needed or sent |
 | `guard-api.ts`, `guard-types.ts` | Pulse API calls and config fields | |
 | `pulse-approval.test.ts` (new), `package.json` | Dashboard tests, added to `npm test` | |
+| `settings-save-proof-modal.tsx`, `home-dashboard.tsx` | In Pulse mode, "Save settings" and "Clear remembered decisions?" show a YID app notice and send no credentials | Pulse pauses the authenticator, so these windows must not ask for a password or code |
 
 ### Fixtures and docs
 
@@ -204,6 +228,8 @@ Python and dashboard grant decoders keep working.
 | Named third option, same experience in dashboard and CLI | Settings card and `approval-pulse` CLI; both approval surfaces go through `_with_pulse` to the same resident call (tested for identical Pulse requests) |
 | Receipt bound to action, scope, session and nonce; freshness window | HMAC binding; 15-minute decision window (Pulse's default) plus 60 s deadline margin; 15-minute maximum age |
 | Verify Pulse and user signatures, pinned YID and issuer, tier, single use | Checks 1–10, the ledger, and introspect-consume |
+| Minimum assurance chosen by the user | `min_tier` at setup (medium by default, or high), saved and checked on every approval; an unreadable value counts as high |
+| One approval covers one settings change | `settings_change` bindings derived in the resident and checked when the request is verified and when the change is applied |
 | No sensitive data to Pulse | No commands: only program names, the agent, the request type, the risk level, the filtered headline, a match code, an HMAC and a nonce (tested end to end) |
 | Fresh approval per action by default; cooldown explicit and tightly scoped; high-impact always fresh | Cooldown defaults to 0. A cooldown covers only the same purpose, scope, session and factor generation, its record is MAC'd, and strict purposes never use it |
 | Rejection, expiry and outage fail closed | Tested in Rust, Python and the dashboard |
@@ -216,10 +242,11 @@ Python and dashboard grant decoders keep working.
 
 | Suite | Count | Result |
 | --- | --- | --- |
-| `cargo test -p guard-yanez-pulse` (receipt vectors, parsers, terms and summary rows, client parsing) | 49 | pass |
-| `cargo test -p hol-guard-runtime approval_gate` (Pulse acceptance, summary, and all existing gate parity vectors) | 103 | pass |
-| `pytest tests/test_guard_approval_gate_pulse.py` (CLI/dashboard parity, defer, wait, cooldown, fixed scopes, secret handling, settings saves) | 16 | pass |
-| `tsx src/pulse-approval.test.ts` (resubmission, reject, expire, outage, pass-through, deadline, proof fields) | 6 groups | pass |
+| `cargo test -p guard-yanez-pulse` (receipt vectors, parsers, terms and summary rows, client parsing) | 50 | pass |
+| `cargo test -p hol-guard-runtime --lib approval_gate` (Pulse acceptance, review cases, minimum face scan, settings-change bindings, summary, and all existing gate parity vectors) | 137 | pass |
+| `pytest tests/test_guard_approval_gate_pulse.py` (CLI/dashboard parity, defer, wait, cooldown, fixed scopes, secret handling, settings saves, minimum face scan, settings-change bindings, extension changes) | 32 | pass |
+| The Python approval-gate, Pulse, native parity, daemon-route, bridge, cooldown prompt, nudge and settings API suites together | 237 | pass |
+| `tsx src/pulse-approval.test.ts` (resubmission, reject, expire, outage, pass-through, deadline, proof fields, face scan choice, setup refusals) | 11 cases | pass |
 | Existing dashboard tests: approval-gate, guard-api, queue-bulk-approve, settings-workspace, settings-save-proof-modal, approval-retry-ux | | pass |
 
 Acceptance cases covered in Rust: accept; reject; expiry; pending is not
@@ -232,14 +259,17 @@ verification; hard block; scoped cooldown and the fresh default; a forged
 cooldown record; agent-key revocation; device removal and downgrade; a device
 Guard did not pin; Yanez key rotation through a refresh; user key rotation; enrollment needing the current
 factor and the same session; enrollment ending older grants; disable needing a
-Pulse grant; recovery needing both secrets.
+Pulse grant bound to turning Pulse off; recovery needing both secrets; a high
+floor refusing a medium scan, needing a high-capable device and a high
+enrollment scan, and an unreadable saved floor counting as high; an approval
+for one settings change (update channel, reset, turning Pulse off, a save)
+refused for another, in both directions and for a different channel.
 
-**Not run here.** The resident-backed Python suites
-(`test_guard_approval_gate_native_parity.py`, `test_guard_totp_recent_mfa.py`
-and similar) need a live resident. This sandbox cannot start one: the same
-tests fail on a clean `main` checkout with "The native approval authority did
-not answer". The same parity vectors pass through the Rust op. Run those suites
-in CI. Local Rust checks used 1.88, the version CI pins.
+The resident-backed Python suites need the native runtime forced, as in CI
+(`HOL_GUARD_NATIVE=force`, with `HOL_GUARD_NATIVE_BINARY` and
+`HOL_GUARD_NATIVE_SOURCE_COMPILER` pointing at a release build); without it
+they fail with "The native approval authority did not answer". Local Rust
+checks used 1.88, the version CI pins.
 
 ## Known gaps and follow-ups
 

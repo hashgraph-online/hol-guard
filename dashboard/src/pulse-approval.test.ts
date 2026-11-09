@@ -1,4 +1,11 @@
-import { PULSE_POLL_PATH, sendWithPulseApproval, waitForPulseApproval } from "./pulse-approval";
+import {
+  PULSE_FACE_SCAN_OPTIONS,
+  PULSE_POLL_PATH,
+  pulseEnrollmentBody,
+  pulseSetupRefusalMessage,
+  sendWithPulseApproval,
+  waitForPulseApproval,
+} from "./pulse-approval";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
@@ -164,6 +171,27 @@ function proofFieldsAskForNothingLocal(): void {
     "PULSE-6: a locked gate stays locked");
 }
 
+function setupSendsTheChosenFaceScan(): void {
+  const values = PULSE_FACE_SCAN_OPTIONS.map((option) => option.value);
+  assert(values.join(",") === "medium,high", "PULSE-7: only standard and strict are offered, standard first");
+  assert(PULSE_FACE_SCAN_OPTIONS.every((option) => !/tier|medium|high|low|assurance/i.test(option.label)),
+    "PULSE-7: the labels never name an assurance tier");
+  const strict = pulseEnrollmentBody("yak_x", "high");
+  assert(strict.min_tier === "high" && strict.pulse_agent_key === "yak_x", "PULSE-7: setup sends the chosen face scan");
+  assert(pulseEnrollmentBody("yak_x", "medium").min_tier === "medium", "PULSE-7: standard is sent as medium");
+}
+
+function setupRefusalsUsePlainWords(): void {
+  const strict = pulseSetupRefusalMessage("approval_gate_pulse_no_signing_key", "high");
+  assert(strict !== null && strict.includes("strict face scan"), "PULSE-8: a phone without the strict scan is explained");
+  const standard = pulseSetupRefusalMessage("approval_gate_pulse_no_signing_key", "medium");
+  assert(standard !== null && !standard.includes("strict"), "PULSE-8: standard setup does not mention strict");
+  for (const message of [strict, standard, pulseSetupRefusalMessage("approval_gate_pulse_invalid_tier", "medium")]) {
+    assert(message !== null && !/tier|assurance|medium|high/i.test(message), "PULSE-8: refusals never name a tier");
+  }
+  assert(pulseSetupRefusalMessage("approval_gate_required", "medium") === null, "PULSE-8: other refusals keep their message");
+}
+
 await approvedRequestIsResubmittedWithTheSameBody();
 await resubmissionDropsThePasswordAndCode();
 await rejectionAndExpiryFailClosed();
@@ -173,4 +201,6 @@ await aLostRequestStopsTheWait();
 await ungatedRequestsPassThrough();
 await pollingStopsOnTheDeadline();
 proofFieldsAskForNothingLocal();
+setupSendsTheChosenFaceScan();
+setupRefusalsUsePlainWords();
 console.log("pulse-approval tests passed");

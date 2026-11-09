@@ -100,7 +100,12 @@ import {
 import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
-import { sendWithPulseApproval } from "./pulse-approval";
+import {
+  pulseEnrollmentBody,
+  pulseSetupRefusalMessage,
+  sendWithPulseApproval,
+  type PulseMinTier,
+} from "./pulse-approval";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -4648,12 +4653,27 @@ export async function authorizeApprovalGatePulseSetup(payload: {
  */
 export async function beginApprovalGatePulseEnrollment(payload: {
   pulse_agent_key: string;
+  min_tier: PulseMinTier;
 }): Promise<GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment }> {
-  return readJson("/v1/approval-gate/pulse/enroll", {
+  const response = await fetchWithGuardAuth("/v1/approval-gate/pulse/enroll", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(pulseEnrollmentBody(payload.pulse_agent_key, payload.min_tier)),
   });
+  if (!response.ok) {
+    let code: unknown = null;
+    try {
+      const refused: unknown = await response.clone().json();
+      code = isRecord(refused) ? refused["error"] : null;
+    } catch {
+      code = null;
+    }
+    throw new Error(
+      pulseSetupRefusalMessage(code, payload.min_tier)
+        ?? (await requestErrorMessage(response, `Request failed with ${response.status}`)),
+    );
+  }
+  return (await response.json()) as GuardSettingsPayload & { pulse_enrollment: GuardPulseEnrollment };
 }
 
 /** One bounded poll of a Pulse request. */

@@ -187,3 +187,36 @@ export async function sendWithPulseApproval(
   const { approval_gate_pulse: _defer, approval_password: _password, approval_totp_code: _code, ...rest } = body;
   return send(input, { ...init, body: JSON.stringify({ ...rest, approval_pulse_request_id: requestId }) });
 }
+
+/**
+ * The face scan Pulse setup asks for. Guard verifies every later Pulse
+ * approval against it: "medium" is a standard face scan, "high" a strict one.
+ * The resident refuses anything else, so "low" is never offered.
+ */
+export type PulseMinTier = "medium" | "high";
+
+export const PULSE_FACE_SCAN_OPTIONS: ReadonlyArray<{ value: PulseMinTier; label: string }> = [
+  { value: "medium", label: "Standard face scan (recommended)" },
+  { value: "high", label: "Strict face scan" },
+];
+
+/** The body that starts Pulse setup: the agent key and the chosen face scan. */
+export function pulseEnrollmentBody(agentKey: string, minTier: PulseMinTier): Record<string, string> {
+  return { pulse_agent_key: agentKey, min_tier: minTier };
+}
+
+/**
+ * Plain words for a setup refusal about the face scan, or null to show the
+ * daemon's own message. The UI never names assurance tiers.
+ */
+export function pulseSetupRefusalMessage(code: unknown, minTier: PulseMinTier): string | null {
+  if (code === "approval_gate_pulse_no_signing_key") {
+    return minTier === "high"
+      ? "None of your devices in the YID app supports a strict face scan. Choose Standard face scan, or add a device that supports it in the YID app, then try again."
+      : "Your Yanez identity has no device that can approve yet. Finish setting up the YID app on your phone, then try again.";
+  }
+  if (code === "approval_gate_pulse_invalid_tier") {
+    return "Choose Standard or Strict face scan, then try again.";
+  }
+  return null;
+}
