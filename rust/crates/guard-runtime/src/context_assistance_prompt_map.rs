@@ -157,6 +157,17 @@ impl File<'_> {
             None => own,
         }
     }
+
+    /// The names tests use to reach the section. A special method such as
+    /// `__exit__` mostly runs through its class, so tests name the class, and
+    /// a test may still call it on an instance by its own name.
+    fn tested_names(&self, at: usize) -> Vec<String> {
+        let special = written_name(self.opening(at)).is_some_and(|name| name.starts_with("__"));
+        let class = self.parent[at].filter(|_| special);
+        (class.into_iter().chain([at]))
+            .filter_map(|at| self.sections[at].name.clone())
+            .collect()
+    }
 }
 
 /// The map for a prompt, read through Guard's checks, or `None` when no
@@ -291,7 +302,7 @@ pub(super) fn map(
     let mut mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)
         .take(2)
-        .filter_map(|pick| files[pick.file].sections[pick.at].name.clone())
+        .flat_map(|pick| files[pick.file].tested_names(pick.at))
         .chain(used.iter().take(3).map(|word| (*word).to_owned()))
         .collect();
     if asked.everywhere {
