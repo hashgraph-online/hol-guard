@@ -71,3 +71,16 @@ fn a_refused_file_leaves_the_others_diff_shown() {
         None
     );
 }
+
+/// The note gets a third of the prompt's wait, about 250 ms of a 1 s hook
+/// budget. When a Git call needed 150 ms of that left, only the first ~100 ms
+/// could start one, so a session with commits and an uncommitted change ran
+/// out before its diff and the note named `git diff` instead of showing it.
+#[test]
+fn a_git_call_starts_while_the_share_of_the_wait_lasts() {
+    let repo = Repo::new();
+    let git = repo.found();
+    let until = Instant::now() + Duration::from_millis(100);
+    assert!(git.run(&["rev-parse", "HEAD"], until).is_some());
+    assert!(git.run(&["rev-parse", "HEAD"], Instant::now()).is_none());
+}
