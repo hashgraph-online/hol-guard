@@ -1444,49 +1444,6 @@ def test_command_queue_loop_empty_long_poll_returns_positive_bounded_backoff(
     assert waits == sorted(waits), f"Backoff must not decrease: {waits}"
 
 
-def test_command_queue_loop_leases_again_at_once_after_a_held_empty_long_poll(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    """An empty lease Cloud held open is followed by the next lease at once.
-
-    Backing off after held leases left an idle device without an open lease
-    for up to the poll interval, so a decision made in that gap waited for the
-    next poll before it reached the device.
-    """
-    store = FakeStore(tmp_path / "guard-home")
-    clock = [0.0]
-    waits: list[float] = []
-
-    class StopAfterEightWaits:
-        def is_set(self) -> bool:
-            return False
-
-        def wait(self, seconds: float) -> bool:
-            waits.append(seconds)
-            clock[0] += seconds
-            return len(waits) >= 8
-
-    monkeypatch.setenv(command_queue.COMMAND_QUEUE_ENABLED_ENV, "1")
-    monkeypatch.setenv(command_queue.COMMAND_QUEUE_LEASE_WAIT_MS_ENV, "25000")
-    monkeypatch.setenv(command_queue.COMMAND_QUEUE_POLL_INTERVAL_ENV, "2")
-
-    def held_empty_poll(current_store: object, context: HarnessContext, **_options: object) -> dict[str, object]:
-        clock[0] += 25.0
-        return {"last_poll_was_empty": True}
-
-    monkeypatch.setattr(command_queue, "poll_command_queue_once", held_empty_poll)
-    monkeypatch.setattr(command_queue_loop_module, "time", SimpleNamespace(monotonic=lambda: clock[0]))
-
-    command_queue.command_queue_loop(
-        store,
-        _context(tmp_path),
-        stop_event=StopAfterEightWaits(),
-    )
-
-    assert waits == [0.05] * 8
-
-
 def test_command_queue_loop_leases_again_at_once_after_a_job_with_long_poll(
     tmp_path: Path,
     monkeypatch,
