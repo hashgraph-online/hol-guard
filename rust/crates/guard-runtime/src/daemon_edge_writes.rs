@@ -29,6 +29,8 @@ const MAX_HANDLER_LIST_ITEMS: usize = 4_096;
 
 #[path = "daemon_edge_gate.rs"]
 mod gate;
+#[path = "daemon_edge_gate_config.rs"]
+mod gate_config;
 #[path = "daemon_edge_sessions.rs"]
 mod sessions;
 #[path = "daemon_edge_settings_write.rs"]
@@ -54,6 +56,16 @@ pub(super) fn respond(
         let payload = py_payload(request, body)?;
         reads.report_activity();
         return sessions::respond(&route, &payload, config, reads)
+            .map(|(status, body)| (status, body, caller.cors_origin, false));
+    }
+    if let Some(route) = gate_config::Route::parse(request.method, request.path) {
+        if request.has_header("Transfer-Encoding") {
+            return None;
+        }
+        let caller = authorize_token(request, &config.token)?;
+        let payload = json_payload(request, body)?;
+        reads.report_activity();
+        return gate_config::respond(&route, &payload, config)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
     if request.method == "POST"
