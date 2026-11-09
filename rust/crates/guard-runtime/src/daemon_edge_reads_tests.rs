@@ -495,3 +495,26 @@ fn records_command_activity_feedback_itself_as_the_daemon_does() {
     assert_eq!(answer["created_at"], answer["updated_at"]);
     assert!(edge.requests.try_recv().is_err());
 }
+
+#[test]
+fn answers_unavailable_when_the_daemon_listener_is_gone_and_no_cli_can_replay() {
+    let home = tempfile::tempdir().unwrap();
+    let guard_home = home.path().canonicalize().unwrap();
+    let unused = TcpListener::bind("127.0.0.1:0").unwrap();
+    let upstream = unused.local_addr().unwrap();
+    drop(unused);
+    let reads = Arc::new(NativeReads::new(None));
+    reads.accept_handshake(&handshake(&guard_home));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    thread::spawn(move || serve(&listener, Some(upstream), 8, Duration::from_secs(30), reads));
+    let response = exchange(
+        address,
+        "POST /v1/requests HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}",
+    );
+    assert!(
+        response.starts_with("HTTP/1.0 503 Service Unavailable\r\n"),
+        "{response}"
+    );
+    assert!(response.ends_with("{\"error\": \"daemon_route_unavailable\"}\n"));
+}

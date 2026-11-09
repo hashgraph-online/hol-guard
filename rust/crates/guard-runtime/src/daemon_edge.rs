@@ -301,7 +301,20 @@ fn serve_connection(
         None => Vec::new(),
     };
     match (upstream, config) {
-        (Some(upstream), _) => relay_connection(client, upstream, stalled_write, &read_ahead),
+        (Some(upstream), config) => {
+            let Ok(server) = TcpStream::connect_timeout(&upstream, UPSTREAM_CONNECT_TIMEOUT) else {
+                // The daemon's own listener is gone; its handler can still
+                // answer through the CLI.
+                match config {
+                    Some(config) => replay::replay(&client, &config, read_ahead, stalled_write),
+                    None => {
+                        let _ = client.shutdown(Shutdown::Both);
+                    }
+                }
+                return;
+            };
+            relay_connection(client, server, stalled_write, &read_ahead)
+        }
         (None, Some(config)) => replay::replay(&client, &config, read_ahead, stalled_write),
         (None, None) => {
             let _ = client.shutdown(Shutdown::Both);
@@ -309,18 +322,15 @@ fn serve_connection(
     }
 }
 
-/// Relays one connection both ways until each side has finished, sending
-/// `read_ahead`, the bytes already read from the client, first.
+/// Relays one connection to the daemon's connected `server` both ways until
+/// each side has finished, sending `read_ahead`, the bytes already read from
+/// the client, first.
 fn relay_connection(
     client: TcpStream,
-    upstream: SocketAddr,
+    server: TcpStream,
     stalled_write: Duration,
     read_ahead: &[u8],
 ) {
-    let Ok(server) = TcpStream::connect_timeout(&upstream, UPSTREAM_CONNECT_TIMEOUT) else {
-        let _ = client.shutdown(Shutdown::Both);
-        return;
-    };
     let _ = client.set_nodelay(true);
     let _ = server.set_nodelay(true);
     if client.set_write_timeout(Some(stalled_write)).is_err()
