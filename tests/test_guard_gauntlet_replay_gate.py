@@ -26,6 +26,7 @@ from ci.gauntlet.input_evidence import redact_value
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import gauntlet_replay_diagnostics
 from tests.benign_fp_gate_connectors import allow_ready_cli
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_projects import host_tool_path
@@ -45,7 +46,6 @@ from tests.gauntlet_replay import (
     source_ref_payload,
     write_global_gitconfig,
 )
-from tests.gauntlet_replay_diagnostics import replay_diagnostics
 from tests.native_gate_retry import review_with_unavailable_retry
 
 _CASES = expand()
@@ -176,9 +176,12 @@ def test_replayed_payload_is_quiet_offers_always_or_blocks(
             pytest.fail(f"stale known gap: {label} now behaves; remove it ({reason})")
         pytest.skip(f"known gap {label} behaves on this host; CI decides staleness")
     if failure is not None:
+        diagnostics = gauntlet_replay_diagnostics.replay_diagnostics(
+            fixture, fixture.cwd(case.cwd), result, rows, elapsed
+        )
         pytest.fail(
             f"{label}: {failure} reasons={sorted(failure_reasons(case, result, rows))} "
-            f"diagnostics={replay_diagnostics(fixture, fixture.cwd(case.cwd), result, rows, elapsed)}"
+            f"diagnostics={diagnostics}"
         )
 
 
