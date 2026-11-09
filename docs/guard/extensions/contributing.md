@@ -214,9 +214,9 @@ an addition with `base: "packaged"` cannot overwrite an ID already embedded in t
 Build current binaries and run the native source CLI contract:
 
 ```bash
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source
 ```
 

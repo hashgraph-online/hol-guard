@@ -48,6 +48,11 @@ pub(crate) fn is_code_expression(matched: &str, rest_of_line: &str) -> bool {
     {
         return false;
     }
+    if separator == b':'
+        && crate::code_shapes::fetch_credentials_mode(&matched[..index], tail, rest_of_line)
+    {
+        return true;
+    }
     let mut body = tail.trim_start();
     let mut mode = Mode::Assign;
     if body.starts_with('=') {
@@ -161,6 +166,12 @@ impl<'a> Cursor<'a> {
                 structural = structural || fallback_proves;
             } else if self.keyword(b"as") || self.keyword(b"satisfies") {
                 if self.scan(None, 1) == Scan::Fail {
+                    return false;
+                }
+                structural = true;
+                break;
+            } else if self.equality_operator() {
+                if !self.guarded_choice() {
                     return false;
                 }
                 structural = true;
@@ -300,7 +311,7 @@ impl<'a> Cursor<'a> {
 }
 
 /// A bare run of at least sixteen lower-case letters, as in a passphrase.
-fn spelled_word(word: &[u8]) -> bool {
+pub(crate) fn spelled_word(word: &[u8]) -> bool {
     word.len() >= 16 && word.iter().all(u8::is_ascii_lowercase)
 }
 
@@ -418,7 +429,7 @@ fn code_after(mut text: &[u8]) -> &[u8] {
     }
 }
 
-fn label(literal: &[u8]) -> bool {
+pub(crate) fn label(literal: &[u8]) -> bool {
     literal.len() <= 12
         && literal
             .iter()
@@ -426,7 +437,7 @@ fn label(literal: &[u8]) -> bool {
 }
 
 /// The body of a quoted literal that opens `text`, or the rest when unclosed.
-fn leading_literal(text: &[u8]) -> Option<&[u8]> {
+pub(crate) fn leading_literal(text: &[u8]) -> Option<&[u8]> {
     let quote = *text.first()?;
     if !matches!(quote, b'"' | b'\'' | b'`') {
         return None;
@@ -448,7 +459,7 @@ fn trailing_literal(text: &[u8]) -> Option<&[u8]> {
 }
 
 /// `name:` or `name?:` at the start of a parameter list.
-fn starts_typed_parameter(inner: &[u8]) -> bool {
+pub(crate) fn starts_typed_parameter(inner: &[u8]) -> bool {
     let inner = inner.strip_prefix(b"...").unwrap_or(inner);
     let name = inner
         .iter()
