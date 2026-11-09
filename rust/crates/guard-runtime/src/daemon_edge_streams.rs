@@ -335,6 +335,6 @@ impl Drop for ActivitySlot {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_streams_tests.rs"]
 mod tests;

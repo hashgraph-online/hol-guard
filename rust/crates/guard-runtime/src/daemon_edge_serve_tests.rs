@@ -164,3 +164,14 @@ fn a_standalone_daemon_answers_the_health_probe_itself() {
         "{response}"
     );
 }
+
+#[test]
+fn a_waiting_launcher_is_named_as_the_daemon() {
+    let home = Path::new("/tmp/guard-home");
+    let config = LaunchConfig::parse(&launch(home, json!({"launcher_pid": 4242}))).unwrap();
+    assert_eq!(config.launcher_pid, Some(4242));
+    let reads = NativeReads::new(None);
+    reads.mark_standalone();
+    reads.set_launcher_pid(4242);
+    assert_eq!(reads.daemon_pid(), 4242);
+}

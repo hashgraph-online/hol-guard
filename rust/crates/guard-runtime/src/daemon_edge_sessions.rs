@@ -470,6 +470,6 @@ fn uuid4_hex() -> Option<String> {
 #[path = "daemon_edge_initialize.rs"]
 mod initialize;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_sessions_tests.rs"]
 mod tests;

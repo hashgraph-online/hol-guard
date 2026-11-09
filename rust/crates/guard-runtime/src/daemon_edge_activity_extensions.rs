@@ -179,6 +179,6 @@ pub(in crate::daemon_edge) fn diagnostics(
     Some((200, Value::Object(body)))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_activity_extensions_tests.rs"]
 mod tests;

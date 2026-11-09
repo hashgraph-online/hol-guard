@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -83,3 +84,10 @@ def test_exec_hands_the_launch_line_to_the_runtime_on_stdin(monkeypatch: pytest.
     line = seen["line"]
     assert isinstance(line, bytes) and line.endswith(b"\n")
     assert json.loads(line)["port"] == 5474
+
+
+def test_windows_launcher_hands_the_line_over_and_returns_the_daemon_exit() -> None:
+    from codex_plugin_scanner.guard.daemon.native_serve import _run_native_daemon
+
+    child = "import sys\nline = sys.stdin.readline()\nsys.exit(7 if line == '{\"x\":1}\\n' else 1)"
+    assert _run_native_daemon([sys.executable, "-c", child], b'{"x":1}\n') == 7

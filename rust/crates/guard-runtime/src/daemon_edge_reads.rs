@@ -22,10 +22,14 @@
 //! still counts the activity it no longer sees.
 
 use std::io::Write;
+/// No edge mode runs on Windows; the standalone daemon has no activity socket.
+#[cfg(not(unix))]
+use std::net::TcpStream as ActivitySocket;
 use std::net::{Shutdown, TcpStream};
-use std::os::unix::net::UnixStream;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream as ActivitySocket;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -39,6 +43,7 @@ use super::http::{parse_request, take_request, Request};
 use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
 
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";
+#[cfg(unix)]
 pub(super) const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
 /// The request headers the daemon names in its CORS answer.
 const CORS_ALLOW_HEADERS: &str =
@@ -162,13 +167,16 @@ impl ReadConfig {
 /// the socket that reports answered requests back.
 pub(super) struct NativeReads {
     config: RwLock<Option<Arc<ReadConfig>>>,
-    activity: Option<UnixStream>,
+    activity: Option<ActivitySocket>,
     last_activity: Mutex<Option<Instant>>,
     request_ids: AtomicU64,
     /// Set when this process is the daemon itself rather than an edge in
     /// front of one: it then answers liveness probes and names itself as the
     /// daemon its replays serve.
     standalone: AtomicBool,
+    /// The process the launcher started, when it waits on this one instead
+    /// of becoming it (Windows has no exec); zero otherwise.
+    launcher_pid: AtomicU32,
     /// Connections being served, and when the last one began or ended: what
     /// the standalone daemon's idle shutdown reads.
     connections: AtomicUsize,
@@ -176,7 +184,7 @@ pub(super) struct NativeReads {
 }
 
 impl NativeReads {
-    pub(super) fn new(activity: Option<UnixStream>) -> Self {
+    pub(super) fn new(activity: Option<ActivitySocket>) -> Self {
         // The timeout covers only writes, so the parent watcher's reads on the
         // same socket keep blocking.
         let activity = activity.filter(|socket| {
@@ -190,6 +198,7 @@ impl NativeReads {
             last_activity: Mutex::new(None),
             request_ids: AtomicU64::new(0),
             standalone: AtomicBool::new(false),
+            launcher_pid: AtomicU32::new(0),
             connections: AtomicUsize::new(0),
             touched: Mutex::new(Instant::now()),
         }
@@ -228,6 +237,11 @@ impl NativeReads {
         self.standalone.store(true, Ordering::Release);
     }
 
+    /// Names the launcher that waits on this process as the daemon's pid.
+    pub(super) fn set_launcher_pid(&self, pid: u32) {
+        self.launcher_pid.store(pid, Ordering::Release);
+    }
+
     fn is_standalone(&self) -> bool {
         self.standalone.load(Ordering::Acquire)
     }
@@ -235,10 +249,13 @@ impl NativeReads {
     /// The process the published daemon state names: this one when it is the
     /// daemon, otherwise the daemon that started this edge.
     pub(super) fn daemon_pid(&self) -> u32 {
-        if self.is_standalone() {
-            std::process::id()
-        } else {
-            std::os::unix::process::parent_id()
+        #[cfg(unix)]
+        if !self.is_standalone() {
+            return std::os::unix::process::parent_id();
+        }
+        match self.launcher_pid.load(Ordering::Acquire) {
+            0 => std::process::id(),
+            pid => pid,
         }
     }
 
@@ -696,6 +713,6 @@ mod streams;
 #[path = "daemon_edge_writes.rs"]
 mod writes;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_reads_tests.rs"]
 mod tests;

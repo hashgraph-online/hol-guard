@@ -381,6 +381,6 @@ pub(in crate::daemon_edge) fn reset_cache_for_tests() {
         .clear();
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_releases_tests.rs"]
 mod tests;

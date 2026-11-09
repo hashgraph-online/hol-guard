@@ -138,6 +138,6 @@ pub(super) fn respond(
     Some((status, body))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_gate_config_tests.rs"]
 mod tests;

@@ -4,6 +4,11 @@ The native runtime serves the approval center itself when it advertises
 ``daemon-serve-v1``. This process replaces itself with it (same pid, so the
 launcher's spawn and liveness checks still name the process it started) after
 putting the one-line launch configuration on its standard input.
+
+Windows has no exec, so there this process starts the native daemon, names
+itself in the launch line as the pid to report, keeps the daemon's standard
+input open and waits. The daemon stops when that input closes, so ending this
+process ends the daemon.
 """
 
 from __future__ import annotations
@@ -11,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,7 +35,7 @@ _MAX_LAUNCH_BYTES = 16 * 1024
 def native_serve_executable(guard_home: Path) -> Path | None:
     """The native runtime that serves the daemon, or ``None`` to stay in Python."""
 
-    if os.name != "posix" or os.environ.get(NATIVE_SERVE_ENV, "").strip() == "0":
+    if os.name not in {"posix", "nt"} or os.environ.get(NATIVE_SERVE_ENV, "").strip() == "0":
         return None
     from ..adapters.native_hook_bridge import native_hook_bridge_executable
 
@@ -91,10 +97,10 @@ def exec_native_daemon(guard_home: Path, port: int, *, user_home: Path | None = 
     executable = native_serve_executable(guard_home)
     if executable is None:
         return
-    line = (
-        json.dumps(launch_configuration(guard_home, port, user_home=user_home), separators=(",", ":")).encode("utf-8")
-        + b"\n"
-    )
+    config = launch_configuration(guard_home, port, user_home=user_home)
+    if os.name == "nt":
+        config["launcher_pid"] = os.getpid()
+    line = json.dumps(config, separators=(",", ":")).encode("utf-8") + b"\n"
     if len(line) > _MAX_LAUNCH_BYTES:
         return
     argv = [
@@ -105,6 +111,8 @@ def exec_native_daemon(guard_home: Path, port: int, *, user_home: Path | None = 
         "--port",
         str(port),
     ]
+    if os.name == "nt":
+        sys.exit(_run_native_daemon(argv, line))
     read_end, write_end = os.pipe()
     try:
         os.write(write_end, line)
@@ -115,6 +123,31 @@ def exec_native_daemon(guard_home: Path, port: int, *, user_home: Path | None = 
     os.dup2(read_end, 0)
     os.close(read_end)
     os.execv(str(executable), argv)
+
+
+def _run_native_daemon(argv: list[str], line: bytes) -> int:
+    """Runs the native daemon as a child that lives as long as this process."""
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    process = subprocess.Popen(argv, stdin=subprocess.PIPE)
+    stdin = process.stdin
+    if stdin is None:
+        process.kill()
+        return 1
+    try:
+        stdin.write(line)
+        stdin.flush()
+        # The input stays open: the daemon stops when it closes.
+        return process.wait()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        stdin.close()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
 
 
 __all__ = ["LAUNCH_SCHEMA", "NATIVE_SERVE_ENV", "SERVE_FEATURE", "exec_native_daemon", "launch_configuration"]

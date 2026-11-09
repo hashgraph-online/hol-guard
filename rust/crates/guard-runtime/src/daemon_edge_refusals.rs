@@ -297,6 +297,6 @@ fn record(event_name: &str, payload: &PyVal, config: &ReadConfig, reads: &Native
         .is_ok()
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_refusals_tests.rs"]
 mod tests;

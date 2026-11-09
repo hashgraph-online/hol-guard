@@ -26,9 +26,13 @@
 //! connection, so a peer that stops reading cannot hold a slot. Idle
 //! connections are not affected: the timeout only runs while a write waits.
 
-use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{self, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+#[cfg(unix)]
 use std::os::fd::AsFd;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -49,7 +53,9 @@ pub(crate) mod standalone;
 
 use reads::{NativeReads, Outcome};
 
+#[cfg(unix)]
 pub(crate) const EDGE_COMMAND: &str = "daemon-edge";
+#[cfg(unix)]
 pub(crate) const EDGE_FEATURE: &str = "daemon-edge-v1";
 
 /// Connections relayed at once. Each takes two small threads; further
@@ -65,15 +71,19 @@ const STALLED_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 /// behind the edge.
 const HANDSHAKE_WAIT: Duration = Duration::from_secs(2);
 
+#[cfg(unix)]
 const EXIT_USAGE: i32 = 2;
+#[cfg(unix)]
 const EXIT_LISTENER: i32 = 3;
 
+#[cfg(unix)]
 #[derive(Debug, PartialEq, Eq)]
 struct EdgeArgs {
     upstream_port: u16,
     parent_pid: u32,
 }
 
+#[cfg(unix)]
 pub(crate) fn run(args: &[String]) -> i32 {
     let Some(parsed) = parse_args(args) else {
         eprintln!("usage: guard-runtime daemon-edge --upstream-port P --parent-pid N");
@@ -116,6 +126,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
     }
 }
 
+#[cfg(unix)]
 fn parse_args(args: &[String]) -> Option<EdgeArgs> {
     let mut upstream_port = None;
     let mut parent_pid = None;
@@ -138,6 +149,7 @@ fn parse_args(args: &[String]) -> Option<EdgeArgs> {
     })
 }
 
+#[cfg(unix)]
 /// The daemon's private port on the listener's own loopback address, or
 /// `None` when the socket is not a loopback TCP listener. Port 0 names no
 /// upstream: the edge then replays every request it does not answer through
@@ -150,6 +162,7 @@ fn upstream_address(listener: &TcpListener, upstream_port: u16) -> Option<Option
     Some((upstream_port != 0).then(|| SocketAddr::new(local.ip(), upstream_port)))
 }
 
+#[cfg(unix)]
 /// Exits the process as soon as the daemon's end of the liveness socket on
 /// standard output closes. The kernel closes it when the daemon exits for any
 /// reason, so a daemon killed outright leaves no edge accepting on its port.
@@ -275,10 +288,21 @@ fn accept_error_is_transient(error: &io::Error) -> bool {
             | io::ErrorKind::ConnectionAborted
             | io::ErrorKind::ConnectionReset
             | io::ErrorKind::WouldBlock
-    ) || matches!(
-        error.raw_os_error(),
+    ) || resource_exhausted(error.raw_os_error())
+}
+
+#[cfg(unix)]
+fn resource_exhausted(code: Option<i32>) -> bool {
+    matches!(
+        code,
         Some(libc::EMFILE | libc::ENFILE | libc::ENOBUFS | libc::ENOMEM)
     )
+}
+
+/// `WSAEMFILE` and `WSAENOBUFS`.
+#[cfg(windows)]
+fn resource_exhausted(code: Option<i32>) -> bool {
+    matches!(code, Some(10024 | 10055))
 }
 
 /// Answers one connection's request natively when it can, and relays the
@@ -396,6 +420,6 @@ fn relay_connection(
     let _ = request.join();
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_tests.rs"]
 mod tests;

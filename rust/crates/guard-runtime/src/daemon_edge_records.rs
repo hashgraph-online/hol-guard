@@ -234,6 +234,6 @@ fn now_isoformat() -> Option<String> {
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_records_tests.rs"]
 mod tests;

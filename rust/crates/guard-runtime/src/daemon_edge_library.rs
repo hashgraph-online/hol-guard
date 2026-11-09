@@ -166,6 +166,6 @@ fn stop(mut child: Child) {
     });
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_library_tests.rs"]
 mod tests;

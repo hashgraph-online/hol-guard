@@ -234,6 +234,6 @@ pub(in crate::daemon_edge) fn call_library(
     move |args| library::call(config, "approval.resolve", args)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_resolve_tests.rs"]
 mod tests;

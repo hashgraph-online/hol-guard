@@ -154,7 +154,6 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
     #[cfg(unix)]
     features.push(crate::daemon_edge::EDGE_FEATURE.into());
-    #[cfg(unix)]
     features.push(crate::daemon_edge::standalone::SERVE_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     features.push(guard_contracts::SKILL_DOCUMENT_EVIDENCE_FEATURE.into());

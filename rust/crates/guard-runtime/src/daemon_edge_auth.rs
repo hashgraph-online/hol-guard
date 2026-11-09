@@ -279,6 +279,6 @@ fn now_micros() -> i128 {
         .map_or(0, |elapsed| elapsed.as_micros() as i128)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_auth_tests.rs"]
 mod tests;

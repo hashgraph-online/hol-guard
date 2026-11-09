@@ -255,6 +255,6 @@ fn native_request(request: &Value) -> Result<Value, String> {
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_plugin_updates_tests.rs"]
 mod tests;

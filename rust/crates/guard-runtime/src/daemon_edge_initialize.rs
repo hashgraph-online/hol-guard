@@ -101,6 +101,6 @@ pub(super) fn respond(
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_initialize_tests.rs"]
 mod tests;

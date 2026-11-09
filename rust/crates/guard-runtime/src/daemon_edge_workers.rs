@@ -206,6 +206,6 @@ fn watch_idle(reads: &NativeReads, timeout: Duration, mut sleep: impl FnMut(Dura
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_workers_tests.rs"]
 mod tests;

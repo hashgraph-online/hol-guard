@@ -632,6 +632,6 @@ pub(in crate::daemon_edge) fn reset_cache_for_tests() {
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_discovery_tests.rs"]
 mod tests;

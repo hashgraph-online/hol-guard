@@ -13,7 +13,7 @@ use crate::daemon_lifecycle_text::python_int;
 
 const HOOK_LAUNCHER_ARGS: [&str; 2] = ["__guard-bounded-hook", "__guard-cursor-hook"];
 const MODULE: &str = "codex_plugin_scanner.cli";
-/// `daemon_edge::standalone::SERVE_COMMAND`, which only unix builds carry.
+/// `daemon_edge::standalone::SERVE_COMMAND`.
 const NATIVE_SERVE_COMMAND: &str = "daemon-serve";
 
 /// `_guard_daemon_command_parts_match`.

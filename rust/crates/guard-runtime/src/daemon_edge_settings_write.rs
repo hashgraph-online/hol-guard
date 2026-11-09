@@ -381,6 +381,6 @@ fn now_seconds() -> Option<String> {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_settings_write_tests.rs"]
 mod tests;

@@ -214,6 +214,6 @@ fn queue_answer_empty(response: &Value) -> Option<bool> {
         .then_some(true)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_requests_tests.rs"]
 mod tests;

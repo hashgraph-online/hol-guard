@@ -476,6 +476,6 @@ mod cursor;
 #[path = "daemon_edge_activity_extensions.rs"]
 pub(super) mod extensions;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_activity_tests.rs"]
 mod tests;

@@ -3,6 +3,7 @@ use super::super::serve;
 use super::*;
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener};
+use std::os::unix::net::UnixStream;
 use std::sync::mpsc;
 use std::thread;
 

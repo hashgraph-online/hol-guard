@@ -143,6 +143,6 @@ pub(in crate::daemon_edge) fn call_library<'a>(
     move |args| library::call(config, name, args)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_route_calls_tests.rs"]
 mod tests;

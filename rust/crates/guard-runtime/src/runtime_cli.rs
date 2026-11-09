@@ -86,7 +86,6 @@ pub(super) fn run() -> Result<(), String> {
         [command, rest @ ..] if command == daemon_edge::EDGE_COMMAND => {
             std::process::exit(daemon_edge::run(rest))
         }
-        #[cfg(unix)]
         [command, rest @ ..] if command == daemon_edge::standalone::SERVE_COMMAND => {
             std::process::exit(daemon_edge::standalone::run(rest))
         }

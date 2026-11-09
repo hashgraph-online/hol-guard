@@ -102,15 +102,24 @@ pub(in crate::daemon_edge) fn status() -> Option<(u16, Value)> {
 /// fingerprint, or `null` when the probe cannot run, as the daemon writes a
 /// failed probe. Left to the daemon until its handshake names a fingerprint.
 pub(in crate::daemon_edge) fn containment_health(config: &ReadConfig) -> Option<(u16, Value)> {
-    if !cfg!(any(target_os = "macos", target_os = "linux")) {
-        return None;
+    #[cfg(unix)]
+    {
+        if !cfg!(any(target_os = "macos", target_os = "linux")) {
+            return None;
+        }
+        let fingerprint = config.daemon_fingerprint.as_deref()?;
+        let evidence = guard_command::contained_runner::containment_health_evidence(fingerprint)
+            .unwrap_or(Value::Null);
+        Some((200, json!({ "containment_health": evidence })))
     }
-    let fingerprint = config.daemon_fingerprint.as_deref()?;
-    let evidence = guard_command::contained_runner::containment_health_evidence(fingerprint)
-        .unwrap_or(Value::Null);
-    Some((200, json!({ "containment_health": evidence })))
+    #[cfg(not(unix))]
+    {
+        // Containment runs only on macOS and Linux.
+        let _ = config.daemon_fingerprint.as_deref();
+        None
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_network_tests.rs"]
 mod tests;

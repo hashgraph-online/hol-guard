@@ -351,6 +351,6 @@ pub(super) fn unavailable() -> Gate {
     Gate::Refused(503, body)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_gate_tests.rs"]
 mod tests;
