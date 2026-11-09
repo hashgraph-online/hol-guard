@@ -96,7 +96,7 @@ pub(super) fn operate(
     payload: &Map<String, Value>,
     device_label: Option<&str>,
     config: &ReadConfig,
-) -> Option<Result<Map<String, Value>, (u16, Map<String, Value>)>> {
+) -> Option<Operated> {
     let input = wire_input(payload);
     let (request, digest, encoded) =
         build(method, params, input, None, None, device_label, config)?;
@@ -167,6 +167,9 @@ fn wire_input(payload: &Map<String, Value>) -> Option<ApprovalGateInputWireV1> {
 }
 
 type Built = (ApprovalGateRequestV1, String, Vec<u8>);
+
+/// A configuration method's payload, or the refusal the daemon would write.
+pub(super) type Operated = Result<Map<String, Value>, (u16, Map<String, Value>)>;
 
 fn build(
     method: ApprovalGateMethodV1,
