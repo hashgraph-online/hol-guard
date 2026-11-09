@@ -84,6 +84,22 @@ pub(super) fn respond(
             route_calls::respond(args, &payload, route_calls::call_library(config, name))?;
         return Some((status, body, caller.cors_origin, no_store));
     }
+    if request.method == "POST" && legacy_cloud_handoff(request.path) {
+        if request.has_header("Transfer-Encoding")
+            || request.has_header("X-Guard-Dashboard-Session")
+            || request.has_header("Authorization")
+        {
+            return None;
+        }
+        let caller = authorize_token(request, &config.token)?;
+        json_payload(request, body)?;
+        reads.report_activity();
+        let body = serde_json::json!({
+            "error": "legacy_cloud_handoff_disabled",
+            "message": "Use hol-guard connect for browser OAuth.",
+        });
+        return Some((410, body, caller.cors_origin, false));
+    }
     if request.method == "POST" && super::dispatch::post_routed(request.path) {
         if request.has_header("Transfer-Encoding")
             || request.has_header("X-Guard-Dashboard-Session")
@@ -209,6 +225,15 @@ pub(super) fn respond(
 
 /// `_handle_requests_clear`: the native option check, the approval gate, then
 /// `clear_approval_requests`.
+/// `POST /v1/apps/{app}/cloud/{action}`: the old Cloud handoff, now refused.
+fn legacy_cloud_handoff(path: &str) -> bool {
+    crate::daemon_route_paths::route_class(path) == "none"
+        && matches!(
+            crate::daemon_route_paths::segments(path).as_slice(),
+            ["v1", "apps", _, "cloud", _]
+        )
+}
+
 fn requests_clear(
     payload: &Map<String, Value>,
     config: &ReadConfig,

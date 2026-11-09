@@ -520,3 +520,19 @@ fn answers_unavailable_when_the_daemon_listener_is_gone_and_no_cli_can_replay() 
     );
     assert!(response.ends_with("{\"error\": \"daemon_route_unavailable\"}\n"));
 }
+
+#[test]
+fn refuses_the_legacy_cloud_handoff_itself() {
+    let edge = spawn_configured_edge();
+    let request = post("{}", "").replace("/v1/read-state", "/v1/apps/codex/cloud/start");
+    let answer = exchange(edge.address, &request);
+    assert!(
+        answer.starts_with("HTTP/1.0 410") || answer.starts_with("HTTP/1.1 410"),
+        "{answer}"
+    );
+    assert!(answer.contains("legacy_cloud_handoff_disabled"), "{answer}");
+    let relayed = post("{}", "")
+        .replace("/v1/read-state", "/v1/apps/codex/cloud/start")
+        .replace(TOKEN, "wrong");
+    assert_eq!(exchange(edge.address, &relayed), "daemon");
+}
