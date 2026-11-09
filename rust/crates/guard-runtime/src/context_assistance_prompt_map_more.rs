@@ -3,7 +3,9 @@
 //! changelog section an entry for the change belongs in.
 use super::super::sections::{headed_sections, marked_test, members, written_name, Section};
 use super::super::seen::Span;
-use super::{Asked, Entry, File, Kind, Pick, LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS};
+use super::{
+    docstring, Asked, Entry, File, Kind, Pick, LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS,
+};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
 use std::collections::BTreeSet;
@@ -458,13 +460,16 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
     };
     for pick in chosen {
         let mut item = Entry::plain(entry(files, pick));
-        let code = pick.whole.then(|| whole(&files[pick.file], pick.at));
-        if let Some((span, code)) = code.flatten() {
+        let code = pick
+            .whole
+            .then(|| docstring::shown(&files[pick.file], pick.at, asked));
+        if let Some((span, code, note)) = code.flatten() {
             if code.len() <= room && !asked.earlier.contains(&span) {
                 room -= code.len();
                 let shown = fenced(&code);
                 item.code += shown.len();
                 item.text.push_str(&shown);
+                item.text.push_str(&note);
                 item.shown.push(span);
             }
         }
