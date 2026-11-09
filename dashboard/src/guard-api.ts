@@ -236,31 +236,47 @@ export class GuardOperationTimeoutError extends Error {
   }
 }
 
+/** Pause and restart a local-protection deadline around a wait on the user. */
+export type LocalProtectionDeadline = {
+  /** Stop counting: the operation is waiting on the user, not on Guard. */
+  pause: () => void;
+  /** Count a fresh `timeoutMs` from now: the operation is waiting on Guard again. */
+  restart: () => void;
+};
+
 /**
- * Run `operation` under a deadline. The operation can stop the deadline
- * (`stopDeadline`) once it is waiting on the user rather than on Guard: a Pulse
- * approval has its own 16-minute window and fails closed.
+ * Run `operation` under a deadline. While a Pulse approval waits on the YID
+ * app the operation pauses the deadline (that wait has its own 16-minute
+ * window and fails closed), and restarts it for the resubmission, so every
+ * call to Guard stays bounded.
  */
 export function withLocalProtectionDeadline<T>(
-  operation: (signal: AbortSignal, stopDeadline: () => void) => Promise<T>,
+  operation: (signal: AbortSignal, deadline: LocalProtectionDeadline) => Promise<T>,
   timeoutMs: number,
   message: string,
 ): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const stopDeadline = () => {
+  let expire: () => void = () => undefined;
+  const pause = () => {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
   };
+  const restart = () => {
+    pause();
+    timer = setTimeout(expire, timeoutMs);
+  };
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
+    expire = () => {
       reject(new GuardOperationTimeoutError(message));
       controller.abort();
-    }, timeoutMs);
+    };
   });
-  return Promise.race([Promise.resolve().then(() => operation(controller.signal, stopDeadline)), deadline]).finally(
-    stopDeadline,
-  );
+  restart();
+  return Promise.race([
+    Promise.resolve().then(() => operation(controller.signal, { pause, restart })),
+    deadline,
+  ]).finally(pause);
 }
 
 function fetchLocalProtectionJson(
@@ -269,8 +285,12 @@ function fetchLocalProtectionJson(
   timeoutMs: number,
   message: string,
 ): Promise<{ response: Response; payload: unknown }> {
-  return withLocalProtectionDeadline(async (signal, stopDeadline) => {
-    const response = await fetchWithGuardAuth(input, { ...init, signal }, { onPending: stopDeadline });
+  return withLocalProtectionDeadline(async (signal, deadline) => {
+    const response = await fetchWithGuardAuth(
+      input,
+      { ...init, signal },
+      { onPending: deadline.pause, onApproved: deadline.restart },
+    );
     const payload = (await response.json().catch(() => null)) as unknown;
     return { response, payload };
   }, timeoutMs, message);

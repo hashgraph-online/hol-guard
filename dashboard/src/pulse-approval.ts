@@ -33,6 +33,12 @@ export type PulseWaitTiming = {
    * wait has its own 16-minute window and fails closed.
    */
   onPending?: () => void;
+  /**
+   * Called once the YID app has approved, just before the request is sent
+   * again. A caller that paused its deadline in `onPending` restarts it here,
+   * so the resubmission is bounded like the first request.
+   */
+  onApproved?: () => void;
 };
 
 export type PulseApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "error" | "cancelled";
@@ -237,6 +243,7 @@ export async function sendWithPulseApproval(
   }
   // The YID approval is the proof now; the resident refuses a password or code beside it.
   const { approval_gate_pulse: _defer, approval_password: _password, approval_totp_code: _code, ...rest } = body;
+  timing?.onApproved?.();
   return send(input, { ...init, body: JSON.stringify({ ...rest, approval_pulse_request_id: requestId }) });
 }
 

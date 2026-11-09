@@ -226,14 +226,25 @@ async function aStalledCheckCannotHoldTheWaitOpen(): Promise<void> {
 
 async function aShortDeadlineStopsOnceThePulseRequestExists(): Promise<void> {
   const daemon = pulseDaemon(["approved"]);
-  let pendingCalls = 0;
+  const heard: string[] = [];
   const response = await sendWithPulseApproval(daemon.send, "/v1/requests/r1/decision", decision, {
     ...fast,
-    onPending: () => {
-      pendingCalls += 1;
+    onPending: () => heard.push("pending"),
+    onApproved: () => heard.push(`approved after ${daemon.calls.length} calls`),
+  });
+  assert(response.status === 200 && heard.length === 2 && heard[0] === "pending",
+    "PULSE-10: the caller hears once when the Pulse wait starts and once when it ends");
+  assert(heard[1] === `approved after ${daemon.calls.length - 1} calls`,
+    "PULSE-10: the approval is announced just before the resubmission");
+  const rejected = pulseDaemon(["rejected"]);
+  let restarted = false;
+  await sendWithPulseApproval(rejected.send, "/v1/requests/r1/decision", decision, {
+    ...fast,
+    onApproved: () => {
+      restarted = true;
     },
   });
-  assert(response.status === 200 && pendingCalls === 1, "PULSE-10: the caller hears once that the Pulse wait started");
+  assert(!restarted, "PULSE-10: nothing is resubmitted, and no deadline restarted, without an approval");
   let ungated = 0;
   await sendWithPulseApproval(async () => json(200, { ok: true }), "/v1/settings", decision, {
     onPending: () => {
@@ -241,12 +252,31 @@ async function aShortDeadlineStopsOnceThePulseRequestExists(): Promise<void> {
     },
   });
   assert(ungated === 0, "PULSE-10: an ungated request never stops the caller's deadline");
-  const slowApproval = await withLocalProtectionDeadline(async (_signal, stopDeadline) => {
-    stopDeadline();
+  const slowApproval = await withLocalProtectionDeadline(async (_signal, deadline) => {
+    deadline.pause();
     await new Promise((resolve) => setTimeout(resolve, 60));
+    deadline.restart();
     return "approved";
   }, 20, "too slow");
-  assert(slowApproval === "approved", "PULSE-10: a stopped deadline lets a slow face scan finish");
+  assert(slowApproval === "approved", "PULSE-10: a paused deadline lets a slow face scan finish");
+  let stalledResubmission = false;
+  let aborted = false;
+  try {
+    await withLocalProtectionDeadline((signal, deadline) => {
+      signal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      deadline.pause();
+      return new Promise((resolve) => setTimeout(() => {
+        deadline.restart();
+        // The resubmission never answers.
+        void resolve;
+      }, 40));
+    }, 20, "too slow");
+  } catch {
+    stalledResubmission = true;
+  }
+  assert(stalledResubmission && aborted, "PULSE-10: a stalled resubmission still hits a fresh deadline and is aborted");
   let refused = false;
   try {
     await withLocalProtectionDeadline(() => new Promise(() => undefined), 20, "too slow");
