@@ -182,7 +182,7 @@ project, including tests. Behavior must not change.";
     let text = prompt_map(home.path(), &root, prompt).unwrap();
     assert!(
         text.contains(
-            "\n\nEvery line naming `_batched`; no other project file holds it:\n\
+            "\n\nEvery line naming `_batched`, all that `rg -nw '_batched'` finds; no other project file holds it:\n\
 pkg/recipes.py:1:def _batched(iterable, n):\npkg/recipes.py:5:batched = _batched\n"
         ),
         "{text}"
@@ -314,7 +314,7 @@ def visit_FromImport(self, node):\n        self._import_common(node)\n        re
         "{text}"
     );
     assert!(
-        text.contains("\n\nEvery line naming `_import_common`; no other project file holds it:\n"),
+        text.contains("\n\nEvery line naming `_import_common`, all that `rg -nw '_import_common'` finds; no other project file holds it:\n"),
         "{text}"
     );
     for listed in [
@@ -475,7 +475,7 @@ fn a_rename_list_is_whole_only_when_no_file_is_left_out() {
         .text;
     assert!(
         text.contains(
-            "\n\nEvery line naming `_old_name`; no other project file holds it:\n\
+            "\n\nEvery line naming `_old_name`, all that `rg -nw '_old_name'` finds; no other project file holds it:\n\
              src/core.py:1:def _old_name():\nsrc/core.py:6:    return _old_name()\n\
              tests/test_core.py:2:    assert _old_name() == 1\ndocs/api.md:1:Call `_old_name` once.\n\n\
              Lines naming a longer name holding `_old_name`:\ndocs/api.md:3:`_old_name_cache`"

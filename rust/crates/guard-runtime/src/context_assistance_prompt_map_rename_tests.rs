@@ -133,11 +133,32 @@ fn a_rename_lists_each_line_at_its_indentation() {
     let text = prompt_map(home.path(), &root, prompt).unwrap();
     assert!(
         text.contains(
-            "\n\nEvery line naming `_evict`; no other project file holds it:\n\
+            "\n\nEvery line naming `_evict`, all that `rg -nw '_evict'` finds; no other project file holds it:\n\
 src/pkg/cache.py:2:    def _evict(self):\n\
 src/pkg/cache.py:7:            self._evict()\n\
 tests/test_cache.py:2:    Cache()._evict()\n"
         ),
         "{text}"
     );
+}
+
+/// The list names the search that finds just its lines, so the agent need
+/// not run it again. A line `rg -nw` would find too, here `_evict-cache`,
+/// keeps the search out of the title.
+#[test]
+fn a_rename_names_the_search_only_when_it_finds_just_these_lines() {
+    let cache = "class Cache:\n    def _evict(self):\n        self.items.clear()\n";
+    let notes = "Call `_evict` to empty it.\n\nSee `_evict-cache` in the guide.\n";
+    let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
+    for (notes, searched) in [("Call `_evict` to empty it.\n", true), (notes, false)] {
+        let list = [("src/pkg/cache.py", cache), ("docs/cache.md", notes)];
+        let (home, _project, root) = project(ON, &list);
+        let text = prompt_map(home.path(), &root, prompt).unwrap();
+        assert_eq!(
+            text.contains("Every line naming `_evict`, all that `rg -nw '_evict'` finds;"),
+            searched,
+            "{text}"
+        );
+        assert!(text.contains("no other project file holds it:\n"), "{text}");
+    }
 }

@@ -199,9 +199,11 @@ fn every_line(
     let mut others = Vec::new();
     let mut building = Vec::new();
     let mut extended: Vec<String> = Vec::new();
+    let mut listed = Vec::new();
     for file in files {
         let found = naming(file, &item.text, exact, until)?;
         written = written.or(found.written);
+        listed.push((file, found.lines.clone()));
         holding += usize::from(found.held);
         for number in found.lines {
             let count = entries.len();
@@ -226,7 +228,14 @@ fn every_line(
     }
     let name = written?;
     whole &= item.spelled == Some(holding);
-    let title = if whole {
+    // Named as the search an agent runs, since a list it only had to trust
+    // was searched for again before half the renames.
+    let searched = (listed.iter()).all(|(file, lines)| searched_alike(file, &name, lines));
+    let title = if whole && building.is_empty() && searched {
+        format!(
+            "Every line naming `{name}`, all that `rg -nw '{name}'` finds; no other project file holds it:"
+        )
+    } else if whole {
         format!("Every line naming `{name}`; no other project file holds it:")
     } else {
         format!("Lines naming `{name}` in the files read; other files may hold it too:")
@@ -271,6 +280,21 @@ fn every_line(
         ));
     }
     Some(blocks)
+}
+
+/// Whether `rg -nw` for `name` finds just `lines` in `file`: the lines
+/// writing `name` with no letter, digit or `_` either side.
+fn searched_alike(file: &File, name: &str, lines: &[usize]) -> bool {
+    let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+    let finds = |line: &str| {
+        (line.match_indices(name)).any(|(at, _)| {
+            !word(line[..at].chars().next_back()) && !word(line[at + name.len()..].chars().next())
+        })
+    };
+    (file.lines.iter().enumerate())
+        .filter(|(_, line)| finds(line))
+        .map(|(at, _)| at + 1)
+        .eq(lines.iter().copied())
 }
 
 /// For a rename of a definition no test names, the source definitions
