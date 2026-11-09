@@ -5,9 +5,14 @@ use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
 /// A storage word, numbered device names (`disk0`, `disk2s1`, `nvme0n1`)
-/// and block device paths (`/dev/sda1`, `/dev/mmcblk0p1`) included. Other
-/// `/dev` paths, such as `/dev/null` or `/dev/stderr`, are not storage.
-const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/(?:sd|hd|vd|xvd|nvme|mmcblk|r?disk|mapper/|md|dm-|loop|sr)\w*)";
+/// and any `/dev` path (`/dev/sda1`, `/dev/vg0/lv0`) included. The streams
+/// and terminals in [`PSEUDO_DEVICE`] are taken out of the text first.
+const STORAGE_NOUN: &str = r"(?:\b(?:disks?|disk\d+(?:s\d+)?|drives?|volumes?|partitions?|usb|ssd|hdd|nvme\w*|sd\s*cards?|media)\b|/dev/\w)";
+
+/// `/dev` paths that are where output goes or comes from, not storage, such
+/// as `/dev/null` or `/dev/stderr`. Any other `/dev` path may be a disk.
+const PSEUDO_DEVICE: &str =
+    r"(?i)/dev/(?:null|zero|full|u?random|std(?:in|out|err)|tty\w*|pts/\d+|fd/\d+|ptmx|console)\b";
 
 /// `--format`, `-format`, the `format:` value of `--pretty=format:` and
 /// `format` applied to what a program prints or to a piece of code (`format
@@ -31,6 +36,8 @@ pub(super) fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
     static NEXT: OnceLock<Regex> = OnceLock::new();
     static SENTENCE: OnceLock<Regex> = OnceLock::new();
+    static PSEUDO: OnceLock<Regex> = OnceLock::new();
+    let pseudo = PSEUDO.get_or_init(|| Regex::new(PSEUDO_DEVICE).expect("bounded pseudo device"));
     let next = NEXT.get_or_init(|| {
         Regex::new(&format!(r"(?i)^\s*(?:machine\s+)?{STORAGE_NOUN}"))
             .expect("bounded storage noun")
@@ -46,9 +53,9 @@ pub(super) fn mask_format_options(value: &str) -> String {
         })
         .replace_all(value, |captures: &Captures| {
             let whole = captures.get(0).expect("whole match present");
-            let rest = &value[whole.end()..];
+            let rest = pseudo.replace_all(&value[whole.end()..], "stream");
             let verb = (whole.as_str().get(..6)).is_some_and(|w| w.eq_ignore_ascii_case("format"));
-            if next.is_match(rest) || (verb && sentence.is_match(rest)) {
+            if next.is_match(&rest) || (verb && sentence.is_match(&rest)) {
                 return whole.as_str().to_owned();
             }
             format!(
