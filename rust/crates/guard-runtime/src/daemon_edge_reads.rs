@@ -6,22 +6,22 @@
 //! arrives, and for an older daemon that never sends it, the edge relays every
 //! connection exactly as before.
 //!
-//! With a handshake the edge peeks at the head of each new connection, without
-//! consuming it, for a few milliseconds. A head that has not fully arrived by
-//! then, or that is followed by more bytes, leaves the connection untouched for
-//! the daemon. The edge answers a request itself only when it is a `GET` for
-//! one of the store reads below, with no body, from a caller `auth` finds the
-//! daemon would let through: its token, or a dashboard session, from an
-//! allowed origin. Anything else is replayed byte for byte to the daemon,
-//! which keeps every rejection, audit record and nonce check it has today. A
-//! store read that fails is replayed too, so the daemon answers it as it
-//! always has. Only reads that never write the store are answered here.
+//! With a handshake the edge peeks at each new connection, without consuming
+//! it, for a few milliseconds. A request that has not fully arrived by then,
+//! or that is followed by more bytes, leaves the connection untouched for the
+//! daemon. The edge answers a request itself only when it is a `GET` for one of
+//! the store reads below, with no body, from a caller `auth` finds the daemon
+//! would let through: its token, or a dashboard session, from an allowed
+//! origin; or one of the `POST` and `DELETE` routes in `writes`. Anything else is replayed
+//! byte for byte to the daemon, which keeps every rejection, audit record and
+//! nonce check it has today. A store call that fails is replayed too, so the
+//! daemon answers it as it always has.
 //!
 //! Each authenticated request writes one byte back on the liveness socket when
 //! it starts and when it is answered, at most twice a second, so the daemon
 //! still counts the activity it no longer sees.
 
-use std::io::{self, Read, Write};
+use std::io::Write;
 use std::net::{Shutdown, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -35,17 +35,13 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::auth::authorize;
-use super::http::{head_end, parse_get, query_int, query_value, GetRequest};
+use super::http::{parse_request, query_int, query_value, take_request, Request};
+#[cfg(test)]
+use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
 use crate::daemon_route_session::origin_decision;
 
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";
 pub(super) const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
-const MAX_HEAD_BYTES: usize = 16 * 1024;
-// A client that has not sent its whole head this soon after the edge accepted
-// it goes to the daemon untouched, so the daemon's own partial-header
-// admission and deadlines see it as before.
-const HEAD_PEEK_WINDOW: Duration = Duration::from_millis(25);
-const HEAD_PEEK_PAUSE: Duration = Duration::from_millis(1);
 /// The request headers the daemon names in its CORS answer.
 const CORS_ALLOW_HEADERS: &str =
     "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token";
@@ -53,6 +49,8 @@ const ACTIVITY_INTERVAL: Duration = Duration::from_millis(500);
 const ACTIVITY_WRITE_TIMEOUT: Duration = Duration::from_millis(10);
 const MAX_BUSY_TIMEOUT_MS: u64 = 60_000;
 const MAX_READ_STATE_PAGES: usize = 100_000;
+const MAX_SESSION_SIGNALS: usize = 16;
+const MAX_SESSION_SIGNAL_BYTES: usize = 1024;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -67,6 +65,8 @@ struct Handshake {
     dashboard_build: Option<String>,
     #[serde(default)]
     user_home: Option<String>,
+    #[serde(default)]
+    session_signals: Option<Vec<String>>,
 }
 
 pub(super) struct ReadConfig {
@@ -78,6 +78,9 @@ pub(super) struct ReadConfig {
     dashboard_build: Option<String>,
     /// `str(Path.home())` in the daemon, which evidence reads shorten to `~`.
     user_home: Option<String>,
+    /// The daemon's local OS-session facts, which approval-gate checks bind a
+    /// recent TOTP proof to. The edge runs in a session of its own.
+    session_signals: Option<Vec<String>>,
 }
 
 impl ReadConfig {
@@ -98,6 +101,12 @@ impl ReadConfig {
                 && build.len() <= 64
                 && build.bytes().all(|b| b.is_ascii_alphanumeric())
         });
+        let session_signals = handshake.session_signals.filter(|signals| {
+            (1..=MAX_SESSION_SIGNALS).contains(&signals.len())
+                && signals
+                    .iter()
+                    .all(|signal| (1..=MAX_SESSION_SIGNAL_BYTES).contains(&signal.len()))
+        });
         Some(Self {
             token: handshake.auth_token.into_bytes(),
             guard_home: handshake.guard_home,
@@ -106,6 +115,7 @@ impl ReadConfig {
             busy_timeout_ms: handshake.busy_timeout_ms,
             dashboard_build,
             user_home: handshake.user_home,
+            session_signals,
         })
     }
 }
@@ -176,13 +186,19 @@ impl NativeReads {
     }
 
     fn store_call(&self, config: &ReadConfig, method: &str, args: Value) -> Option<Value> {
+        self.store_write(config, method, args).ok()
+    }
+
+    /// `store_call` for a write: `Err(true)` when the call failed after its
+    /// write committed, which the daemon must not repeat.
+    fn store_write(&self, config: &ReadConfig, method: &str, args: Value) -> Result<Value, bool> {
         let Value::Object(args) = args else {
-            return None;
+            return Err(false);
         };
         let wait = Duration::from_millis(config.busy_timeout_ms);
         let _gate =
             crate::hook_evidence_store_gate::hold_storage_gate(Path::new(&config.guard_home), wait)
-                .ok()?;
+                .map_err(|_| false)?;
         let request = GuardStoreRequestV1 {
             schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
             request_id: format!(
@@ -196,9 +212,8 @@ impl NativeReads {
             busy_timeout_ms: config.busy_timeout_ms,
             args,
         };
-        crate::guard_store_op::evaluate(&request)
-            .ok()
-            .map(|(payload, _)| payload)
+        let (outcome, committed) = crate::guard_store_op::evaluate_committing(&request);
+        outcome.map_err(|_| committed)
     }
 }
 
@@ -215,14 +230,20 @@ pub(super) fn answer(
     reads: &NativeReads,
     stalled_write: Duration,
 ) -> Outcome {
-    let Some(head) = take_head(client) else {
+    let Some((bytes, head_len)) = take_request(client) else {
         return Outcome::Relay(Vec::new());
     };
-    let Some((status, body, cors_origin, no_store)) =
-        parse_get(&head).and_then(|request| respond(&request, config, reads))
-    else {
-        return Outcome::Relay(head);
+    let (head, body) = bytes.split_at(head_len);
+    let answer = parse_request(head).and_then(|request| match request.method {
+        "POST" | "DELETE" => writes::respond(&request, body, config, reads),
+        _ => respond(&request, config, reads),
+    });
+    let Some((status, body, cors_origin, no_store)) = answer else {
+        return Outcome::Relay(bytes);
     };
+    if status == writes::DROPPED {
+        return Outcome::Answered;
+    }
     let response = json_response(
         status,
         &body,
@@ -238,50 +259,8 @@ pub(super) fn answer(
     Outcome::Answered
 }
 
-/// The client's whole head, read off the socket only once a peek shows it
-/// has fully arrived with nothing after it. `None` leaves every byte unread.
-fn take_head(client: &TcpStream) -> Option<Vec<u8>> {
-    let peeked = peek_head(client);
-    let _ = client.set_read_timeout(None);
-    let mut head = peeked?;
-    let mut reader = client;
-    reader.read_exact(&mut head).ok()?;
-    Some(head)
-}
-
-/// A zeroed buffer as long as the complete head waiting on `client`.
-fn peek_head(client: &TcpStream) -> Option<Vec<u8>> {
-    let deadline = Instant::now() + HEAD_PEEK_WINDOW;
-    let mut buffer = vec![0u8; MAX_HEAD_BYTES];
-    let mut seen = 0;
-    let peeked = loop {
-        let remaining = deadline.checked_duration_since(Instant::now())?;
-        if remaining.is_zero() || client.set_read_timeout(Some(remaining)).is_err() {
-            return None;
-        }
-        let peeked = match client.peek(&mut buffer) {
-            Ok(0) => return None,
-            Ok(peeked) => peeked,
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(_) => return None,
-        };
-        if head_end(&buffer[..peeked]).is_some() || peeked == buffer.len() {
-            break peeked;
-        }
-        // A peek returns at once while any bytes wait, so pause rather than
-        // spin until more of the head arrives.
-        if peeked == seen {
-            std::thread::sleep(HEAD_PEEK_PAUSE);
-        }
-        seen = peeked;
-    };
-    // Bytes after the head belong to a body or a pipelined request: only the
-    // daemon reads those.
-    (head_end(&buffer[..peeked])? == peeked).then(|| vec![0u8; peeked])
-}
-
 fn respond(
-    request: &GetRequest<'_>,
+    request: &Request<'_>,
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value, Option<String>, bool)> {
@@ -292,18 +271,22 @@ fn respond(
     // Reported at the start as well as the end, so a slow store read never
     // looks idle to the daemon.
     reads.report_activity();
+    let hosted = caller.cors_origin.as_deref().is_some_and(|origin| {
+        matches!(
+            origin_decision(origin, "/"),
+            DaemonRoutePayloadV1::Origin {
+                hosted_origin: true,
+                ..
+            }
+        )
+    });
     if request.path == "/v1/requests" {
-        let hosted = caller.cors_origin.as_deref().is_some_and(|origin| {
-            matches!(
-                origin_decision(origin, "/"),
-                DaemonRoutePayloadV1::Origin {
-                    hosted_origin: true,
-                    ..
-                }
-            )
-        });
         return requests::list(request.query, hosted, config, reads)
             .map(|(status, body, no_store)| (status, body, caller.cors_origin, no_store));
+    }
+    if let Some(request_id) = single_segment(request.path, "/v1/requests/", "/resume") {
+        return requests::resume(request_id, config, reads)
+            .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
     route(request.path, request.query, config, reads)
         .map(|(status, body)| (status, body, caller.cors_origin, false))
@@ -361,6 +344,9 @@ fn route(
         )),
         "/v1/receipts/analytics" => records::receipt_analytics(query, config, reads),
         _ => {
+            if let Some(session_id) = single_segment(path, "/v1/sessions/", "/resume") {
+                return records::session_resume(session_id, config, reads);
+            }
             if let Some(operation_id) = single_segment(path, "/v1/operations/", "") {
                 return records::operation(operation_id, config, reads);
             }
@@ -483,6 +469,9 @@ mod activity;
 
 #[path = "daemon_edge_requests.rs"]
 mod requests;
+
+#[path = "daemon_edge_writes.rs"]
+mod writes;
 
 #[cfg(test)]
 #[path = "daemon_edge_reads_tests.rs"]

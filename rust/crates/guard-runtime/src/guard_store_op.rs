@@ -34,7 +34,9 @@ use crate::guard_store_approval_resolve::{
     resolve_matching_duplicate_requests,
 };
 use crate::guard_store_approval_sweep::resolve_matching_approval_requests;
-use crate::guard_store_approval_write::{add_approval_request, add_native_review_approval_request};
+use crate::guard_store_approval_write::{
+    add_approval_request, add_native_review_approval_request, clear_approval_requests,
+};
 use crate::guard_store_args::Args;
 use crate::guard_store_claude_review::{
     add_claude_approval_request, add_claude_native_review_approval_request,
@@ -549,6 +551,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_analytics"
         | "reconcile_receipt_events"
         | "mark_requests_read"
+        | "clear_approval_requests"
         | "mark_request_unread"
         | "clear_read_state"
         | "set_device_label"
@@ -890,6 +893,7 @@ fn dispatch(
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
         "mark_requests_read" => read_state::mark_read(connection, args),
+        "clear_approval_requests" => clear_approval_requests(connection, args),
         "mark_request_unread" => read_state::mark_unread(connection, args),
         "get_read_state" => read_state::ids(connection, args),
         "clear_read_state" => read_state::clear(connection, args),

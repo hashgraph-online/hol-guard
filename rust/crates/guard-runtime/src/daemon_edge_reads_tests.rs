@@ -1,6 +1,7 @@
 use super::super::http::{parse_get, query_int, query_value};
 use super::super::serve;
 use super::*;
+use std::io::Read;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::mpsc;
 use std::thread;
@@ -168,7 +169,15 @@ fn spawn_configured_edge() -> Edge {
                  payload_hash text not null default ''
              );
              create table guard_request_read_state (request_id text primary key, read_at text not null);
-             insert into guard_request_read_state values ('older', 't1'), ('newer', 't2');",
+             insert into guard_request_read_state values ('older', 't1'), ('newer', 't2');
+             create table guard_evidence (evidence_id text primary key);
+             insert into guard_evidence values ('e1'), ('e2');
+             create table command_activity (activity_id text primary key);
+             insert into command_activity values ('act-1');
+             create table command_activity_feedback (
+                 activity_id text primary key, label text, created_at text,
+                 updated_at text, schema_version text
+             );",
         )
         .unwrap();
     drop(connection);
@@ -304,4 +313,185 @@ fn leaves_a_head_still_arriving_to_the_daemon() {
     assert_eq!(response, "daemon");
     let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
     assert_eq!(relayed, request.as_bytes());
+}
+
+fn post(body: &str, extra_headers: &str) -> String {
+    format!(
+        "POST /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Type: application/json\r\n{extra_headers}Content-Length: {}\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+#[test]
+fn updates_read_state_itself_as_the_daemon_does() {
+    let edge = spawn_configured_edge();
+    for (body, status, answer) in [
+        (
+            r#"{"action":"mark_unread","request_id":"older"}"#,
+            "200 OK",
+            r#"{"ids":["newer"],"ok":true}"#,
+        ),
+        (
+            r#"{"action":"mark_all_read","request_ids":["a",1,"b"]}"#,
+            "200 OK",
+            r#"{"ids":["a","b","newer"],"ok":true}"#,
+        ),
+        (
+            r#"{"action":"other","request_id":"c"}"#,
+            "200 OK",
+            r#"{"ids":["a","b","c","newer"],"ok":true}"#,
+        ),
+        (
+            r#"{"action":"mark_all_read"}"#,
+            "400 Bad Request",
+            r#"{"error":"invalid_request_ids"}"#,
+        ),
+        (
+            r#"{"action":"mark_unread","request_id":1}"#,
+            "400 Bad Request",
+            r#"{"error":"invalid_request_id"}"#,
+        ),
+        ("[]", "400 Bad Request", r#"{"error":"invalid_action"}"#),
+        ("", "400 Bad Request", r#"{"error":"invalid_action"}"#),
+    ] {
+        let response = exchange(edge.address, &post(body, ""));
+        let (head, answered) = response.split_once("\r\n\r\n").unwrap();
+        assert!(
+            head.starts_with(&format!("HTTP/1.0 {status}\r\n")),
+            "{body}: {response}"
+        );
+        // Marks made in the same second sort by id once their `read_at` ties.
+        let mut answered: Value = serde_json::from_str(answered).unwrap();
+        if let Some(ids) = answered.get_mut("ids").and_then(Value::as_array_mut) {
+            ids.sort_by(|left, right| left.as_str().cmp(&right.as_str()));
+        }
+        assert_eq!(
+            answered,
+            serde_json::from_str::<Value>(answer).unwrap(),
+            "{body}"
+        );
+    }
+    assert!(edge.requests.try_recv().is_err());
+}
+
+#[test]
+fn relays_every_post_it_does_not_read_as_the_daemon_does() {
+    let edge = spawn_configured_edge();
+    let body = r#"{"request_id":"x"}"#;
+    for request in [
+        post(body, "").replace(TOKEN, "wrong"),
+        post(body, "").replace("application/json", "application/x-www-form-urlencoded"),
+        post(body, "Content-Type: application/json\r\n"),
+        post(body, "Transfer-Encoding: chunked\r\n"),
+        post(body, "Origin: http://x\r\n"),
+        post(r#"{"request_id":NaN}"#, ""),
+        post(body, "").replace("/v1/read-state", "/v1/settings"),
+        format!("{}GET /v1/read-state HTTP/1.1\r\n\r\n", post(body, "")),
+        post(body, "").replace(
+            &format!("Content-Length: {}", body.len()),
+            &format!("Content-Length: {}", MAX_BODY_BYTES + 1),
+        ),
+    ] {
+        assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
+        let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
+        assert!(request.as_bytes().starts_with(&relayed), "{request}");
+    }
+}
+
+fn delete(path: &str, body: &str) -> String {
+    format!(
+        "DELETE {path} HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+#[test]
+fn clears_read_state_and_evidence_itself_as_the_daemon_does() {
+    let edge = spawn_configured_edge();
+    let read_state = |edge: &Edge| {
+        let response = exchange(
+            edge.address,
+            &format!("GET /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
+        );
+        response.split_once("\r\n\r\n").unwrap().1.to_owned()
+    };
+    for (body, ids) in [
+        ("", r#"{"ids":["newer","older"]}"#),
+        ("[1]", r#"{"ids":["newer","older"]}"#),
+        (r#"{"clear_all":0}"#, r#"{"ids":["newer","older"]}"#),
+        (
+            r#"{"request_id":"older","clear_all":true}"#,
+            r#"{"ids":["newer"]}"#,
+        ),
+        (r#"{"clear_all":"yes"}"#, r#"{"ids":[]}"#),
+    ] {
+        let response = exchange(edge.address, &delete("/v1/read-state", body));
+        assert!(
+            response.starts_with("HTTP/1.0 200 OK\r\n"),
+            "{body}: {response}"
+        );
+        assert!(response.ends_with(r#"{"ok":true}"#), "{body}: {response}");
+        assert_eq!(read_state(&edge), ids, "{body}");
+    }
+    let response = exchange(edge.address, &delete("/v1/evidence", ""));
+    assert!(response.ends_with(r#"{"deleted":2}"#), "{response}");
+    assert!(edge.requests.try_recv().is_err());
+}
+
+#[test]
+fn relays_every_delete_it_does_not_read_as_the_daemon_does() {
+    let edge = spawn_configured_edge();
+    for request in [
+        delete("/v1/read-state", "{}").replace(TOKEN, "wrong"),
+        delete("/v1/read-state", "NaN"),
+        delete("/v1/command-activity", "{}"),
+        format!("DELETE /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nTransfer-Encoding: chunked\r\n\r\n"),
+        format!("POST /v1/evidence HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Length: 0\r\n\r\n"),
+    ] {
+        assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
+        let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
+        assert!(request.as_bytes().starts_with(&relayed), "{request}");
+    }
+}
+
+#[test]
+fn records_command_activity_feedback_itself_as_the_daemon_does() {
+    let edge = spawn_configured_edge();
+    let feedback = |body: &str| {
+        let request = format!(
+            "POST /v1/command-activity/feedback HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let response = exchange(edge.address, &request);
+        let (head, body) = response.split_once("\r\n\r\n").unwrap();
+        let status = head.split(' ').nth(1).unwrap().to_owned();
+        (status, serde_json::from_str::<Value>(body).unwrap())
+    };
+    for (body, error) in [
+        (r#"{"activity_id":"act-1"}"#, "invalid_feedback_payload"),
+        (r#"{"activity_id":"","label":"x"}"#, "invalid_activity_id"),
+        (
+            r#"{"activity_id":"act-1","label":"maybe"}"#,
+            "invalid_feedback_label",
+        ),
+    ] {
+        assert_eq!(
+            feedback(body),
+            ("400".to_owned(), json!({ "error": error })),
+            "{body}"
+        );
+    }
+    let (status, answer) =
+        feedback(r#"{"activity_id":"gone","label":"expected_guard_to_stop_this"}"#);
+    assert_eq!(
+        (status.as_str(), answer),
+        ("404", json!({"error": "activity_not_found"}))
+    );
+    let (status, answer) =
+        feedback(r#"{"activity_id":"act-1","label":"should_not_have_interrupted"}"#);
+    assert_eq!(status, "200");
+    assert_eq!(answer["schema_version"], "guard.command-activity-api.v1");
+    assert_eq!(answer["changed"], true);
+    assert_eq!(answer["created_at"], answer["updated_at"]);
+    assert!(edge.requests.try_recv().is_err());
 }

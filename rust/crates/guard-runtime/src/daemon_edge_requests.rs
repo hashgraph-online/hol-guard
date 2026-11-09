@@ -58,6 +58,30 @@ pub(super) fn list(
     Some((200, Value::Object(page), true))
 }
 
+/// `GET /v1/requests/{id}/resume` for a request whose resume is already
+/// recorded. A request with no record yet goes to the daemon, which seeds one.
+pub(super) fn resume(
+    request_id: &str,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value)> {
+    let not_found = || Some((404, json!({"error": "not_found"})));
+    let approval = reads.store_call(
+        config,
+        "get_approval_request",
+        json!({"request_id": request_id}),
+    )?;
+    if approval.is_null() {
+        return not_found();
+    }
+    let resume = reads.store_call(
+        config,
+        "get_request_resume",
+        json!({"request_id": request_id}),
+    )?;
+    resume.is_object().then_some((200, resume))
+}
+
 /// `list_approval_request_page`: every chunk of the one page.
 fn store_page(
     fields: &Value,

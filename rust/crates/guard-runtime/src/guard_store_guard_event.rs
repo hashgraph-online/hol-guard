@@ -59,6 +59,14 @@ pub(crate) fn add_guard_event(
     Ok(Some(connection.last_insert_rowid()))
 }
 
+/// `json.dumps(value)`: insertion order, CPython's default separators and
+/// `ensure_ascii`. `None` for a value Python could not encode.
+pub(crate) fn dumps(value: &PyVal) -> Option<String> {
+    let mut out = Vec::new();
+    write_value(value, 0, &mut out)?;
+    String::from_utf8(out).ok()
+}
+
 /// `json.dumps(payload)` for a dict built in insertion order.
 fn dumps_dict(payload: &[(String, PyVal)]) -> Option<String> {
     let mut out = Vec::new();

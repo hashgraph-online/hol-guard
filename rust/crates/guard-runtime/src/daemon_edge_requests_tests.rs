@@ -152,3 +152,37 @@ fn populated_pages_fit_the_connection_worker_stack() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn reads_a_recorded_resume_and_leaves_seeding_to_the_daemon() {
+    let store = store("page_mixed");
+    let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
+    let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
+    assert_eq!(resume(&request_id, &store.config, &store.reads), None);
+    assert_eq!(
+        resume("missing", &store.config, &store.reads),
+        Some((404, json!({"error": "not_found"})))
+    );
+    let home = store.config.guard_home.clone();
+    rusqlite::Connection::open(std::path::Path::new(&home).join("guard.db"))
+        .unwrap()
+        .execute(
+            "insert into guard_request_resumes (request_id, harness, strategy, status,
+                 created_at, updated_at)
+             values (?1, 'codex', 'manual-only', 'skipped', 't1', 't2')",
+            [&request_id],
+        )
+        .unwrap();
+    let (status, body) = resume(&request_id, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert_eq!(body["request_id"], json!(request_id));
+    assert_eq!(body["strategy"], "manual-only");
+    assert_eq!(
+        Some(body),
+        store.reads.store_call(
+            &store.config,
+            "get_request_resume",
+            json!({"request_id": request_id}),
+        )
+    );
+}
