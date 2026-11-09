@@ -439,6 +439,7 @@ pub(super) fn changes(
     }
     let pending = pending.map(|names| Named::new(&names, &readable));
     let back = (!against.is_empty() && !back.is_empty()).then(|| Named::new(&back, &readable));
+    let status = tree::status(git, &against, untracked.as_deref(), &readable, until);
     render(
         since,
         &changed,
@@ -446,8 +447,8 @@ pub(super) fn changes(
         &listed,
         [pending.as_ref(), back.as_ref()],
         whole.as_ref(),
+        &status,
     )
-    .map(|note| note + &tree::status(git, &against, untracked.as_deref(), &readable, until))
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file

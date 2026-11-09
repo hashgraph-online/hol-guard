@@ -141,10 +141,12 @@ fn a_review_note_says_what_git_status_and_diff_check_would() {
         };
         changes(&repo.found(), Since::Start(&base), false, later(), screen).unwrap()
     };
+    // Before the whole diff, as an agent runs them before `git diff`.
     let text = note();
     assert!(
-        text.ends_with(&format!(
-            "\n\nUntracked files: none.\n\n`git diff --check {short}` finds no whitespace errors."
+        text.contains(&format!(
+            "\n\nUntracked files: none.\n\n`git diff --check {short}` finds no whitespace errors.\
+\n\n`git diff {short}` prints:"
         )),
         "{text}"
     );
@@ -159,10 +161,11 @@ fn a_review_note_says_what_git_status_and_diff_check_would() {
     repo.write("private/key.txt", "hidden\n");
     let text = note();
     assert!(
-        text.ends_with(&format!(
+        text.contains(&format!(
             "\n\nUntracked files, in no diff here: src/core_test.py and 1 more file.\
 \n\n`git diff --check {short}` finds:\nsrc/core.py:5: trailing whitespace.\
-\n(1 more error left out)"
+\n(1 more error left out)\
+\n\n`git diff {short} -- src/core.py` prints:"
         )),
         "{text}"
     );

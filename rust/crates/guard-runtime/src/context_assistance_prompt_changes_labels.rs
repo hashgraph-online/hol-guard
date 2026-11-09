@@ -286,8 +286,9 @@ impl<'a> Since<'a> {
 }
 
 /// The note: what changed, file by file, at current line numbers, then the
-/// commits, the files not committed yet and those changed back, then the
-/// whole diff. Nothing when no accepted file changed and no commit was made.
+/// commits, the files not committed yet and those changed back, `status`,
+/// then the whole diff. What comes before the whole diff fits in
+/// `MAX_NOTE`. Nothing when no accepted file changed and no commit was made.
 pub(super) fn render(
     since: Since,
     changed: &[Hunk],
@@ -295,6 +296,7 @@ pub(super) fn render(
     commits: &[Commit],
     [pending, back]: [Option<&Named>; 2],
     whole: Option<&Whole>,
+    status: &str,
 ) -> Option<String> {
     let mut files = Vec::new();
     for (path, text) in texts {
@@ -321,6 +323,7 @@ pub(super) fn render(
     if files.is_empty() && commits.is_empty() {
         return None;
     }
+    let max_note = MAX_NOTE.saturating_sub(status.len());
     // Pointing at `git diff` when the note holds its output only gets it run.
     let all = match (whole, since.base()) {
         (Some(whole), _) => {
@@ -364,7 +367,7 @@ pub(super) fn render(
             format!("{}{files}", line.trim_end())
         })
         .collect();
-    let room = MAX_NOTE.saturating_sub(out.len() + CUT.len());
+    let room = max_note.saturating_sub(out.len() + CUT.len());
     let mut reserved = 0;
     let held: Vec<usize> = (subjects.iter())
         .map(|subject| {
@@ -386,7 +389,7 @@ pub(super) fn render(
             format!("\n\n{LABELS_TITLE}")
         };
         let part = format!("{title}\n{file}");
-        if out.len() + part.len() + reserved + CUT.len() > MAX_NOTE {
+        if out.len() + part.len() + reserved + CUT.len() > max_note {
             cut = true;
             continue;
         }
@@ -395,7 +398,7 @@ pub(super) fn render(
     }
     for ((commit, subject), held) in commits.iter().zip(&subjects).zip(held) {
         reserved -= held;
-        let fits = |part: &str| out.len() + part.len() + reserved + CUT.len() <= MAX_NOTE;
+        let fits = |part: &str| out.len() + part.len() + reserved + CUT.len() <= max_note;
         let full = (commit.diff.as_ref())
             .map(|diff| format!("{subject}:\n```diff\n{}\n```", diff.trim_end()));
         let part = match full {
@@ -421,13 +424,14 @@ pub(super) fn render(
     });
     let pending = pending.map(|pending| format!("\n\nNot committed yet: {}", pending.text()));
     for part in [pending, back].into_iter().flatten() {
-        if out.len() + part.len() + CUT.len() <= MAX_NOTE {
+        if out.len() + part.len() + CUT.len() <= max_note {
             out.push_str(&part);
         }
     }
     if cut {
         out.push_str(CUT);
     }
+    out.push_str(status);
     if let Some(whole) = whole {
         out.push_str(&format!(
             "\n\n`{}` prints:\n```diff\n{}\n```",

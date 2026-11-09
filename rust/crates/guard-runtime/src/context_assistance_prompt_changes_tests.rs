@@ -1,8 +1,6 @@
 use super::*;
 #[cfg(unix)]
-use std::fs;
-#[cfg(unix)]
-use std::process::Command;
+use std::{fs, process::Command};
 #[cfg(unix)]
 use tempfile::TempDir;
 
@@ -236,6 +234,7 @@ fn changes_are_named_by_the_definition_they_fall_in() {
         &commits,
         [Some(&pending), None],
         None,
+        "",
     )
     .unwrap();
     assert!(
@@ -263,11 +262,9 @@ Not committed yet: src/store.py"
         !text.contains("hidden") && !text.contains("value.strip()"),
         "no file the screen refused and no uncommitted diff: {text}"
     );
-    assert_eq!(
-        render(Since::Start(base), &changed, &[], &[], [None, None], None),
-        None
-    );
-    let uncommitted = render(Since::Nothing, &changed[..1], &texts, &[], [None; 2], None).unwrap();
+    assert!(render(Since::Start(base), &changed, &[], &[], [None; 2], None, "").is_none());
+    let first = &changed[..1];
+    let uncommitted = render(Since::Nothing, first, &texts, &[], [None; 2], None, "").unwrap();
     assert!(
         uncommitted
             .starts_with("HOL Guard CIGAR: uncommitted changes in this project (`git diff HEAD`"),
