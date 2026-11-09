@@ -117,3 +117,65 @@ fn a_module_with_relative_imports_names_the_doctest_command() {
     let absolute = text.replace("from .recipes", "from recipes");
     assert!(!mapped(&absolute, true).contains("--doctest-modules"));
 }
+
+/// A docstring in single quotes ends on its line, raw or not, and a comment
+/// is not a statement, so a docstring after one is still the docstring.
+#[test]
+fn a_single_quoted_docstring_after_a_comment_is_found() {
+    let text = long_function(
+        "def remap(root):\n    # walk it\n    \"Remap a structure.\"",
+        "",
+    );
+    let shown = mapped(&text, true);
+    assert!(
+        shown.contains(
+            "    \"Remap a structure.\"\n```\nThose are lines 4-6 only, its signature and \
+docstring.\nIts docstring is not a raw string"
+        ),
+        "{shown}"
+    );
+    let raw = mapped(
+        &long_function("def remap(root):\n    r'Remap it.'", ""),
+        true,
+    );
+    assert!(
+        raw.contains("Those are lines 4-5 only, its signature and docstring."),
+        "{raw}"
+    );
+    assert!(!raw.contains("not a raw string"), "{raw}");
+}
+
+/// A `#` or bracket in a default string is neither a comment nor a bracket,
+/// so the signature still ends where its colon is.
+#[test]
+fn string_defaults_do_not_hide_the_signature() {
+    let text = long_function(
+        "def remap(root, marker=\"#\",\n          pattern=\"(\"):",
+        "\"\"\"Remap a structure.",
+    );
+    let shown = mapped(&text, true);
+    assert!(
+        shown.contains(
+            "```\ndef remap(root, marker=\"#\",\n          pattern=\"(\"):\n    \"\"\"Remap"
+        ),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("Those are lines 4-10 only, its signature and docstring."),
+        "{shown}"
+    );
+}
+
+/// A quote after a backslash does not end the docstring.
+#[test]
+fn an_escaped_quote_does_not_end_the_docstring() {
+    let text = long_function(
+        "def remap(root):",
+        "\"\"\"Remap it, as in \\\"\"\" strings.",
+    );
+    let shown = mapped(&text, true);
+    assert!(
+        shown.contains("Those are lines 4-9 only, its signature and docstring."),
+        "{shown}"
+    );
+}

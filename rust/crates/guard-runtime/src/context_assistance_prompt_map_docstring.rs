@@ -6,7 +6,7 @@
 //! package, so a module with relative imports fails there; the map names a
 //! command that runs its doctests.
 use super::super::seen::Span;
-use super::more::whole;
+use super::more::{prompt_words, whole};
 use super::{Asked, File};
 
 const WORDS: [&str; 4] = ["docstring", "docstrings", "doctest", "doctests"];
@@ -19,9 +19,7 @@ const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modu
 
 /// True when the prompt asks about docstrings or doctests.
 pub(super) fn asks_for_docstring(prompt: &str) -> bool {
-    prompt
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|word| WORDS.contains(&word.to_lowercase().as_str()))
+    prompt_words(prompt).any(|word| WORDS.contains(&word.as_str()))
 }
 
 /// The code shown for a named definition, the span it fills and a note to
@@ -71,14 +69,8 @@ fn head(file: &File, at: usize) -> Option<(usize, Option<bool>)> {
     let mut depth = 0_i32;
     let mut signed = None;
     for (index, line) in lines.iter().enumerate().skip(def) {
-        let code = line.split('#').next().unwrap_or_default();
-        for c in code.chars() {
-            match c {
-                '(' | '[' | '{' => depth += 1,
-                ')' | ']' | '}' => depth -= 1,
-                _ => {}
-            }
-        }
+        let (code, opened) = scanned(line);
+        depth += opened;
         if depth <= 0 && code.trim_end().ends_with(':') {
             signed = Some(index);
             break;
@@ -92,23 +84,64 @@ fn head(file: &File, at: usize) -> Option<(usize, Option<bool>)> {
 /// Where the docstring that opens the body at `from` ends, and whether it is
 /// raw, when the body opens with one.
 fn docstring(lines: &[&str], from: usize) -> Option<(usize, Option<bool>)> {
-    let (index, line) =
-        (lines.iter().enumerate().skip(from)).find(|(_, line)| !line.trim().is_empty())?;
-    let text = line.trim_start();
+    // A comment is not a statement, so a docstring may follow one.
+    let (index, text) = (lines.iter().enumerate().skip(from))
+        .map(|(index, line)| (index, line.trim_start()))
+        .find(|(_, text)| !text.is_empty() && !text.starts_with('#'))?;
     let prefix = text.find(['"', '\'']).filter(|prefix| *prefix <= 2)?;
     if !text[..prefix].chars().all(|c| "rRuUbB".contains(c)) {
         return None;
     }
-    let quote = ["\"\"\"", "'''"]
+    let quote = ["\"\"\"", "'''", "\"", "'"]
         .into_iter()
         .find(|quote| text[prefix..].starts_with(quote))?;
     let raw = Some(text[..prefix].contains(['r', 'R']));
-    if text[prefix + 3..].contains(quote) {
+    if closes(&text[prefix + quote.len()..], quote) {
         return Some((index, raw));
     }
-    let close =
-        (lines.iter().enumerate().skip(index + 1)).find(|(_, line)| line.contains(quote))?;
+    // A string in single quotes ends on its own line.
+    if quote.len() == 1 {
+        return None;
+    }
+    let close = (lines.iter().enumerate().skip(index + 1)).find(|(_, line)| closes(line, quote))?;
     Some((close.0, raw))
+}
+
+/// Whether `text` holds `quote` with no backslash before it.
+fn closes(text: &str, quote: &str) -> bool {
+    let mut chars = text.char_indices();
+    while let Some((at, c)) = chars.next() {
+        if c == '\\' {
+            chars.next();
+        } else if text[at..].starts_with(quote) {
+            return true;
+        }
+    }
+    false
+}
+
+/// A line of a signature without its comment, and the brackets it opens less
+/// those it closes, both read outside string literals: `marker="#"` holds
+/// no comment and `pattern="("` no bracket.
+fn scanned(line: &str) -> (&str, i32) {
+    let mut depth = 0;
+    let mut open = None;
+    let mut chars = line.char_indices();
+    while let Some((at, c)) = chars.next() {
+        match (open, c) {
+            (Some(_), '\\') => {
+                chars.next();
+            }
+            (Some(quote), _) if c == quote => open = None,
+            (Some(_), _) => {}
+            (None, '"' | '\'') => open = Some(c),
+            (None, '#') => return (&line[..at], depth),
+            (None, '(' | '[' | '{') => depth += 1,
+            (None, ')' | ']' | '}') => depth -= 1,
+            _ => {}
+        }
+    }
+    (line, depth)
 }
 
 /// Whether a Python file imports from its own package by a relative import,

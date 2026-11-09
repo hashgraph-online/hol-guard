@@ -85,7 +85,7 @@ pub(super) fn asks_for_changelog(prompt: &str) -> bool {
     prompt_words(prompt).any(|word| word == "changelog")
 }
 
-fn prompt_words(prompt: &str) -> impl Iterator<Item = String> + '_ {
+pub(super) fn prompt_words(prompt: &str) -> impl Iterator<Item = String> + '_ {
     prompt
         .split(|c: char| !c.is_alphanumeric())
         .map(str::to_lowercase)
