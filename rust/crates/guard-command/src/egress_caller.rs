@@ -709,6 +709,77 @@ pub fn policy_get(
     }
 }
 
+/// The status, lowercased response headers and body of one exchange.
+pub type PolicyExchange = (u16, BTreeMap<String, String>, Vec<u8>);
+
+/// [`policy_get`] that also hands back the final response's headers, their
+/// names lowercased, for a caller that revalidates what it cached.
+pub fn policy_get_with_headers(
+    url: &str,
+    headers: BTreeMap<String, String>,
+    seconds: f64,
+    max_redirects: u32,
+    max_bytes: u64,
+    policy: &dyn EgressPolicy,
+) -> Result<PolicyExchange, Box<EgressOutcomeV1>> {
+    policy_send(
+        "GET",
+        url,
+        headers,
+        None,
+        seconds,
+        max_redirects,
+        max_bytes,
+        policy,
+    )
+}
+
+/// One policy-screened exchange with any method and an optional UTF-8 body:
+/// the status, the lowercased response headers and the body, whatever the
+/// status.
+#[allow(clippy::too_many_arguments)]
+pub fn policy_send(
+    method: &str,
+    url: &str,
+    headers: BTreeMap<String, String>,
+    body: Option<String>,
+    seconds: f64,
+    max_redirects: u32,
+    max_bytes: u64,
+    policy: &dyn EgressPolicy,
+) -> Result<PolicyExchange, Box<EgressOutcomeV1>> {
+    use sha2::{Digest, Sha256};
+    let body_sha256 = body
+        .as_ref()
+        .map(|text| hex::encode(Sha256::digest(text.as_bytes())))
+        .unwrap_or_default();
+    let need = EgressNeedV1 {
+        class: "registry".to_owned(),
+        method: method.to_owned(),
+        url: url.to_owned(),
+        headers,
+        body,
+        body_sha256,
+        occurrence: 1,
+        timeout_seconds: seconds,
+        max_redirects,
+        max_response_bytes: max_bytes,
+        delay_seconds: 0.0,
+        inspect: None,
+    };
+    match fetch_within(&need, policy, seconds) {
+        Fetched::Outcome(outcome) => Err(Box::new(outcome)),
+        Fetched::Response { body, .. } if body.len() as u64 > max_bytes => {
+            Err(Box::new(error_outcome("response too large")))
+        }
+        Fetched::Response {
+            status,
+            headers,
+            body,
+        } => Ok((status, headers, body)),
+    }
+}
+
 /// The lowercase scheme of an absolute URL.
 fn scheme_of(url: &str) -> Option<String> {
     let (scheme, rest) = url.split_once("://")?;

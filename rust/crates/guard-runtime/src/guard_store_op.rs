@@ -411,6 +411,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
         | "get_read_state"
+        | "get_sync_payload"
         | "count_guard_events_v1"
         | "get_request_resume"
         | "get_latest_request_resume"
@@ -558,6 +559,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "mark_request_unread"
         | "clear_read_state"
         | "set_device_label"
+        | "set_sync_payload"
         | "rotate_installation_id"
         | "add_event"
         | "add_guard_event_v1"
@@ -901,6 +903,8 @@ fn dispatch(
         "get_read_state" => read_state::ids(connection, args),
         "clear_read_state" => read_state::clear(connection, args),
         "set_device_label" => devices::set_label(connection, args),
+        "get_sync_payload" => crate::guard_store_sync_state::get(connection, args),
+        "set_sync_payload" => crate::guard_store_sync_state::set(connection, args),
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "list_events_after" => cloud_events::list_after(connection, args),

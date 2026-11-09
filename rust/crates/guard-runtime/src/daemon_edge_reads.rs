@@ -33,7 +33,7 @@ use guard_contracts::{GuardStoreRequestV1, GUARD_STORE_REQUEST_SCHEMA};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::auth::authorize;
+use super::auth::{authorize, authorize_origin, authorize_token};
 use super::http::{parse_request, take_request, Request};
 #[cfg(test)]
 use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
@@ -342,9 +342,47 @@ pub(super) fn answer(
         };
         return write_answer(client, &response, reads, stalled_write);
     }
-    let answer = request.and_then(|request| match request.method {
-        "POST" | "DELETE" => writes::respond(&request, body, config, reads),
-        _ => respond(&request, config, reads),
+    if let Some(request) = request
+        .as_ref()
+        .filter(|request| request.method == "POST" && request.path == "/v1/healthz/verify")
+    {
+        let port = client.local_addr().map(|address| address.port()).ok();
+        let Some(response) = port.and_then(|port| verify_response(request, body, port, config))
+        else {
+            return Outcome::Relay(bytes);
+        };
+        return write_answer(client, &response, reads, stalled_write);
+    }
+    if let Some(request) = request
+        .as_ref()
+        .filter(|request| matches!(request.method, "GET" | "POST") && discovery::owns(request.path))
+    {
+        let Some(response) = discovery_response(request, body, config, reads) else {
+            return Outcome::Relay(bytes);
+        };
+        return write_answer(client, &response, reads, stalled_write);
+    }
+    if let Some(request) = request
+        .as_ref()
+        .filter(|request| request.method == "GET" && releases::owns(request.path))
+    {
+        let Some(response) = releases_response(request, config, reads) else {
+            return Outcome::Relay(bytes);
+        };
+        return write_answer(client, &response, reads, stalled_write);
+    }
+    let answer = request.as_ref().and_then(|request| match request.method {
+        "POST" | "DELETE" => writes::respond(request, body, config, reads),
+        _ => respond(request, config, reads),
+    });
+    let answer = answer.or_else(|| {
+        // A standalone daemon has no server behind it to refuse a caller
+        // without the token or from a disallowed origin.
+        let request = request.as_ref().filter(|_| reads.is_standalone())?;
+        let refusal = refusals::refusal(request, &config.token)?;
+        let (status, body, cors_origin) =
+            refusals::respond(request, &refusal, client.local_addr().ok(), config, reads);
+        Some((status, body, cors_origin, false))
     });
     let Some((status, body, cors_origin, no_store)) = answer else {
         return Outcome::Relay(bytes);
@@ -423,6 +461,98 @@ fn export_response(
     )
 }
 
+/// `_serve_release_feed_read` behind the daemon's token check: the
+/// projector's body verbatim and uncached, or the daemon's JSON error.
+fn releases_response(
+    request: &Request<'_>,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    if request.has_header("Content-Length") || request.has_header("Transfer-Encoding") {
+        return None;
+    }
+    let caller = authorize(request, &config.token)?;
+    reads.report_activity();
+    let build = config.dashboard_build.as_deref();
+    let cors_origin = caller.cors_origin.as_deref();
+    Some(match releases::read(request)? {
+        releases::Answer::Error(status, body) => {
+            json_response(status, &body, build, cors_origin, false)
+        }
+        releases::Answer::Body(body) => encoded_response(200, body, build, cors_origin, true),
+    })
+}
+
+/// `POST /v1/healthz/verify`: the HMAC of `"{port}:{nonce}"` under the auth
+/// secret, which proves to a hook that this listener is the daemon that holds
+/// it. Binding the port stops a relay on another port from reusing the proof.
+fn verify_response(
+    request: &Request<'_>,
+    body: &[u8],
+    port: u16,
+    config: &ReadConfig,
+) -> Option<Vec<u8>> {
+    use hmac::{Hmac, Mac};
+    if request.has_header("Transfer-Encoding") {
+        return None;
+    }
+    let caller = authorize_origin(request)?;
+    let payload = writes::py_payload(request, body)?;
+    let nonce = payload
+        .iter()
+        .rev()
+        .find(|(key, _)| key == "nonce")
+        .and_then(|(_, value)| value.as_str())
+        .map(str::trim)
+        .filter(|nonce| !nonce.is_empty());
+    let build = config.dashboard_build.as_deref();
+    let cors_origin = caller.cors_origin.as_deref();
+    let Some(nonce) = nonce else {
+        let body = serde_json::json!({"error": "missing_nonce"});
+        return Some(json_response(400, &body, build, cors_origin, false));
+    };
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(&config.token).ok()?;
+    mac.update(format!("{port}:{nonce}").as_bytes());
+    let proof = hex::encode(mac.finalize().into_bytes());
+    let body = serde_json::json!({"proof": proof});
+    Some(json_response(200, &body, build, cors_origin, false))
+}
+
+/// The daemon's sponsored discovery routes behind its header-token check. A
+/// `token` query parameter goes to the daemon, which records the refusal.
+fn discovery_response(
+    request: &Request<'_>,
+    body: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    if request.has_header("Transfer-Encoding") || discovery::query_names_token(request.query) {
+        return None;
+    }
+    let caller = authorize_token(request, &config.token)?;
+    let answer = if request.method == "GET" {
+        if request.has_header("Content-Length") {
+            return None;
+        }
+        reads.report_activity();
+        discovery::read(request, config, reads)?
+    } else {
+        let payload = writes::py_payload(request, body)?;
+        reads.report_activity();
+        discovery::write(request, Some(&payload), config, reads)?
+    };
+    let build = config.dashboard_build.as_deref();
+    let cors_origin = caller.cors_origin.as_deref();
+    Some(match answer {
+        discovery::Answer::Json(status, body) => {
+            json_response(status, &body, build, cors_origin, false)
+        }
+        discovery::Answer::Raw(status, body) => {
+            encoded_response(status, body, build, cors_origin, true)
+        }
+    })
+}
+
 /// The response the daemon's `_write_json` writes: HTML-safe JSON, `nosniff`,
 /// the dashboard build stamp and, for an allowed `Origin`, its CORS headers.
 pub(super) fn json_response(
@@ -433,6 +563,17 @@ pub(super) fn json_response(
     no_store: bool,
 ) -> Vec<u8> {
     let encoded = serde_json::to_vec(body).unwrap_or_else(|_| b"null".to_vec());
+    encoded_response(status, encoded, dashboard_build, cors_origin, no_store)
+}
+
+/// [`json_response`] for a body that is already encoded JSON.
+pub(super) fn encoded_response(
+    status: u16,
+    encoded: Vec<u8>,
+    dashboard_build: Option<&str>,
+    cors_origin: Option<&str>,
+    no_store: bool,
+) -> Vec<u8> {
     let mut escaped = Vec::with_capacity(encoded.len());
     for byte in encoded {
         match byte {
@@ -447,10 +588,13 @@ pub(super) fn json_response(
         400 => "Bad Request",
         401 => "Unauthorized",
         403 => "Forbidden",
+        404 => "Not Found",
         409 => "Conflict",
         410 => "Gone",
         429 => "Too Many Requests",
         500 => "Internal Server Error",
+        501 => "Not Implemented",
+        502 => "Bad Gateway",
         503 => "Service Unavailable",
         _ => "Not Found",
     };
@@ -497,10 +641,16 @@ mod requests;
 #[path = "daemon_edge_settings.rs"]
 mod settings;
 
+#[path = "daemon_edge_discovery.rs"]
+mod discovery;
 #[path = "daemon_edge_network.rs"]
 mod network;
 #[path = "daemon_edge_plugin_updates.rs"]
 mod plugin_updates;
+#[path = "daemon_edge_refusals.rs"]
+mod refusals;
+#[path = "daemon_edge_releases.rs"]
+mod releases;
 
 #[path = "daemon_edge_streams.rs"]
 mod streams;

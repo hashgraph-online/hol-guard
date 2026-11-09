@@ -368,7 +368,7 @@ fn json_payload(request: &Request<'_>, body: &[u8]) -> Option<Map<String, Value>
 /// [`json_payload`] read into Python's values, key order included. A lone
 /// surrogate escape, which Python keeps and the edge cannot, goes to the
 /// daemon.
-fn py_payload(request: &Request<'_>, body: &[u8]) -> Option<Vec<(String, PyVal)>> {
+pub(super) fn py_payload(request: &Request<'_>, body: &[u8]) -> Option<Vec<(String, PyVal)>> {
     if body.is_empty() {
         return Some(Vec::new());
     }

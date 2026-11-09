@@ -52,6 +52,11 @@ pub(super) fn authorize_token(request: &Request<'_>, token: &[u8]) -> Option<Cal
     token_matches(request, token)?.then_some(caller)
 }
 
+/// A caller on a route the daemon opens to any allowed origin.
+pub(super) fn authorize_origin(request: &Request<'_>) -> Option<Caller> {
+    allowed_origin(request)
+}
+
 /// Whether the request carries the auth token, or `None` when it repeats the
 /// header, which the edge does not read the way the daemon does.
 fn token_matches(request: &Request<'_>, token: &[u8]) -> Option<bool> {
