@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -44,6 +45,7 @@ from tests.gauntlet_replay import (
     source_ref_payload,
     write_global_gitconfig,
 )
+from tests.gauntlet_replay_diagnostics import replay_diagnostics
 from tests.native_gate_retry import review_with_unavailable_retry
 
 _CASES = expand()
@@ -152,7 +154,9 @@ def test_replayed_payload_is_quiet_offers_always_or_blocks(
     case: ReplayCase, replay_environment: tuple[str, BenignFixture, HookWorker]
 ) -> None:
     kind, fixture, worker = replay_environment
+    started = time.monotonic()
     result, rows = _replay(case, fixture, worker)
+    elapsed = time.monotonic() - started
     failure = judge(case, result, rows)
     label = f"{case.case_id}/{kind}"
     # A gap may name one harness and environment, one harness, every harness in one environment, or the case.
@@ -171,7 +175,11 @@ def test_replayed_payload_is_quiet_offers_always_or_blocks(
         if _ENFORCE_STALE:
             pytest.fail(f"stale known gap: {label} now behaves; remove it ({reason})")
         pytest.skip(f"known gap {label} behaves on this host; CI decides staleness")
-    assert failure is None, f"{label}: {failure} reasons={sorted(failure_reasons(case, result, rows))}"
+    if failure is not None:
+        pytest.fail(
+            f"{label}: {failure} reasons={sorted(failure_reasons(case, result, rows))} "
+            f"diagnostics={replay_diagnostics(fixture, fixture.cwd(case.cwd), result, rows, elapsed)}"
+        )
 
 
 def test_every_harness_and_attack_class_is_covered() -> None:
