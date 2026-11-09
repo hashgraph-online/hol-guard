@@ -127,7 +127,9 @@ fn a_test_that_repeats_the_request_does_not_push_out_its_source() {
             "def test_invalid_choice_suggests():\n    convert(choice, value)",
         ),
     ];
-    let found = words(&["tests/test_types.py", "src/types.py"]);
+    // The search ranks a test only when the prompt names it or only tests
+    // hold its quote; this one is here from an earlier prompt.
+    let found = words(&["src/types.py"]);
     let asked = words(&["choice", "invalid", "value", "convert", "suggest"]);
     let rendered = render(&picked, &found, &asked).unwrap();
     assert!(rendered.contains("src/types.py (lines"), "{rendered}");
@@ -436,3 +438,61 @@ fn guard_reads_nothing_a_workspace_has_not_allowed() {
     );
     assert!(!project_context_on(home.path(), &root, "codex"));
 }
+
+/// A library module named like a test, as Jinja's `tests.py` of template
+/// tests, is the only file holding a quoted docstring. It is found and read,
+/// not set aside as a test. A test that repeats a quote the source holds
+/// still gives way.
+#[test]
+fn a_quote_only_a_test_named_module_holds_is_shown() {
+    let prompt = "Which function does this? \"Return true if the variable is a number.\"";
+    let module = concat!(
+        "def test_number(value):\n",
+        "    \"\"\"Return true if the variable is a number.\"\"\"\n",
+        "    return isinstance(value, Number)\n",
+    );
+    let env = "class Environment:\n    def variable_number(self):\n        return True\n";
+    let (home, _project, root) = project(ON, &[("src/tests.py", module), ("src/env.py", env)]);
+    let words = crate::context_assistance_prompt_files::terms(prompt);
+    let search = || walk(&root, &words, &phrases(prompt), &[], Duration::from_secs(5));
+    let found = search().found(&words);
+    assert!(found.contains(&"src/tests.py".to_owned()), "{found:?}");
+    let later = Instant::now() + Duration::from_secs(5);
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    assert!(read.text.contains("src/tests.py (lines"), "{}", read.text);
+    assert!(read.text.contains("def test_number"), "{}", read.text);
+    std::fs::write(root.join("src/env.py"), format!("{env}{module}")).unwrap();
+    let found = search().found(&words);
+    assert!(!found.contains(&"src/tests.py".to_owned()), "{found:?}");
+}
+
+/// A prompt that names its source file, with no other source matching, still
+/// sets aside a test that repeats more of its words, so the test cannot raise
+/// the bar the named file is measured against and hide it.
+#[test]
+fn a_test_cannot_push_out_the_source_file_the_prompt_names() {
+    let prompt = "In types.py, convert should suggest a choice for an invalid value.";
+    let source = "def convert(raw):\n    return raw\n";
+    let test = "def test_invalid_choice_suggests():\n    \
+assert convert('bad') == 'suggest a choice for an invalid value'\n";
+    let files = [("src/types.py", source), ("src/test_types.py", test)];
+    let (home, _project, root) = project(ON, &files);
+    let words = crate::context_assistance_prompt_files::terms(prompt);
+    let named = crate::context_assistance_prompt_words::named(prompt);
+    assert_eq!(named, ["types.py".to_owned()]);
+    let found = walk(
+        &root,
+        &words,
+        &phrases(prompt),
+        &named,
+        Duration::from_secs(5),
+    )
+    .found(&words);
+    assert_eq!(found, ["src/types.py".to_owned()]);
+    let later = Instant::now() + Duration::from_secs(5);
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    assert!(read.text.contains("src/types.py (lines"), "{}", read.text);
+}
+
+#[path = "context_assistance_prompt_quoted_tests.rs"]
+mod quoted;

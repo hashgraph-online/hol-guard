@@ -14,6 +14,7 @@ const MAX_PHRASE_CHARS: usize = 80;
 /// `MAX_NAMED_MATCHES` files with that name.
 pub(crate) const MAX_NAMED: usize = 4;
 const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
+pub(crate) const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "e2e"];
 const STOP_WORDS: &[&str] = &[
     "about", "add", "after", "again", "all", "already", "also", "and", "any", "are", "because",
     "been", "before", "being", "both", "build", "but", "can", "cannot", "change", "could",
@@ -292,6 +293,22 @@ pub(crate) fn named(prompt: &str) -> Vec<String> {
 /// True when the search terms ask about tests.
 pub(crate) fn asks_for_tests(terms: &[String]) -> bool {
     terms.iter().any(|term| TEST_WORDS.contains(&term.as_str()))
+}
+
+/// A test or spec file by its usual name or folder in common languages.
+pub(crate) fn test_file(relative: &str) -> bool {
+    let lower = relative.to_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or(&lower);
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    lower.split('/').any(|part| TEST_DIRS.contains(&part))
+        || name.contains(".test.")
+        || name.contains(".spec.")
+        || stem.starts_with("test_")
+        || stem.ends_with("_test")
+        || stem.ends_with("_tests")
+        || stem.ends_with("_spec")
+        || stem == "test"
+        || stem == "tests"
 }
 
 fn prompt_mentions_tests(prompt: &str) -> bool {

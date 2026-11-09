@@ -383,7 +383,7 @@ fn truncated(text: &str, max_bytes: usize) -> String {
 /// loaded. An excerpt that mentions fewer than half as many of the prompt's
 /// words as the best one does is a passing match, such as a progress bar
 /// that only shares the word "error" with a request about choices, and is
-/// left out.
+/// left out. When tests give way, only source excerpts set that bar.
 fn relevant<'a>(
     picked: &'a [PickedExcerpt],
     ranked: &[String],
@@ -412,15 +412,21 @@ fn relevant<'a>(
         })
         .collect();
     // Tests give way before the best match is measured, so a test that
-    // repeats the prompt's words cannot push the source it covers out.
-    if !asks_for_tests(words)
-        && mentions
-            .iter()
-            .any(|(excerpt, _)| !test_file(&excerpt.path))
-    {
-        mentions.retain(|(excerpt, _)| !test_file(&excerpt.path));
+    // repeats the prompt's words cannot push the source it covers out. One
+    // the search ranked stays: the prompt named it, or it alone holds a quote.
+    // A test that stays still does not set the bar, so a source the prompt
+    // names beside a quoted test keeps its code.
+    let shown = |path: &String| !test_file(path) || ranked.contains(path);
+    let tests_give_way =
+        !asks_for_tests(words) && mentions.iter().any(|(e, _)| !test_file(&e.path));
+    if tests_give_way {
+        mentions.retain(|(excerpt, _)| shown(&excerpt.path));
     }
-    let best = mentions.iter().map(|(_, mentioned)| *mentioned).max();
+    let best = mentions
+        .iter()
+        .filter(|(excerpt, _)| !tests_give_way || !test_file(&excerpt.path))
+        .map(|(_, mentioned)| *mentioned)
+        .max();
     let close = best.unwrap_or_default().div_ceil(2);
     let mut found: Vec<&PickedExcerpt> = mentions
         .into_iter()
