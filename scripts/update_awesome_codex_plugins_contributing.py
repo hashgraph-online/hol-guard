@@ -38,7 +38,8 @@ def _build_step2_body(scanner_version: str, scanner_sha256: str) -> str:
         f'--dest .hol-plugin-scanner-dist "plugin-scanner=={scanner_version}"\n'
         "python3 -m pip hash .hol-plugin-scanner-dist/*.whl\n"
         "```\n\n"
-        "You need a score of **80/130** or higher with **no critical or high severity findings**. "
+        "Listing eligibility requires a normalized centralized score of **75/100** or higher. "
+        "Finding severities are advisory; required catalog checks and substantive review issues must also be clear. "
         "Save the output to include in your PR description."
     )
 
