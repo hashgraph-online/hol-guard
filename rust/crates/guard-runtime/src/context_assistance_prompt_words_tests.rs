@@ -53,10 +53,13 @@ fn words_beside_a_path_and_web_routes_still_count() {
     let found = terms("Fix parse; the log is /private/tmp/tests/task.output");
     assert!(!found.contains(&"test".to_owned()), "{found:?}");
     assert!(found.contains(&"parse".to_owned()), "{found:?}");
-    let found = terms("Fix the /api/users/{id} handler and `/v1/orders/refund`.");
-    for word in ["api", "user", "handler", "order", "refund"] {
+    let found = terms("Fix the /api/cart/{id} handler, GET /users/{id}/orders and `/v1/refund`.");
+    for word in ["api", "cart", "handler", "user", "order", "refund"] {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
     }
+    // A backticked command keeps reading as one with its path left out.
+    let found = terms("Run `cat /tmp/out/log.txt` and fix render");
+    assert_eq!(found, ["render"]);
     // Nor does a path give names written as code.
     let found = spellings("Fix `parse` in C:\\Users\\alice\\Parser.parse and /tmp/my_run/out.log");
     assert_eq!(found, ["parse"]);

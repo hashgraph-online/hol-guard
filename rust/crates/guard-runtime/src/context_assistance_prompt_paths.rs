@@ -1,9 +1,12 @@
 //! Absolute paths in a prompt, whose folders name the machine the prompt was
 //! written on rather than the code it asks about.
 
-/// Top folders of a POSIX machine path. A web route such as `/api/users/{id}`
-/// starts with none of them, so its words still count.
+/// Top folders of a POSIX machine path, matched with their case: macOS
+/// writes `/Users`, so a web route such as `/users/{id}` or
+/// `/api/orders/{id}` starts with none of them and keeps its words.
 const MACHINE_ROOTS: &[&str] = &[
+    "Users",
+    "Volumes",
     "dev",
     "etc",
     "home",
@@ -14,10 +17,8 @@ const MACHINE_ROOTS: &[&str] = &[
     "root",
     "srv",
     "tmp",
-    "users",
     "usr",
     "var",
-    "volumes",
     "workspaces",
 ];
 /// What a path can follow besides a space, such as the `=` of `out=/tmp/a.log`.
@@ -28,7 +29,9 @@ const CLOSERS: &[char] = &[')', ']', '}', '>', '"', '\'', '`', ',', ';', ':'];
 /// `prompt` with each absolute machine path blanked: `/tmp/run-1/out.log`,
 /// `~/work`, `C:\Users\me`, `C:/Users/me` and `\\server\share`. A path inside
 /// quotes runs to the closing quote, spaces and all; any other path ends at a
-/// space or a closing mark, so `/tmp/a.py:parse()` keeps `parse`.
+/// space or a closing mark, so `/tmp/a.py:parse()` keeps `parse`. A `/`
+/// stays where each path was, so a backticked `cat /tmp/out.log` still reads
+/// as a command.
 pub(super) fn without_paths(prompt: &str) -> String {
     let mut out = String::with_capacity(prompt.len());
     let mut rest = prompt;
@@ -37,7 +40,9 @@ pub(super) fn without_paths(prompt: &str) -> String {
         let opens = before.is_none_or(|b| b.is_whitespace() || OPENERS.contains(&b));
         if opens && starts_path(rest) {
             let end = path_end(rest, before);
-            out.extend(std::iter::repeat_n(' ', rest[..end].chars().count()));
+            let width = rest[..end].chars().count();
+            out.push('/');
+            out.extend(std::iter::repeat_n(' ', width.saturating_sub(1)));
             before = rest[..end].chars().last();
             rest = &rest[end..];
             continue;
@@ -70,7 +75,7 @@ fn starts_path(text: &str) -> bool {
     let Some((root, _)) = posix.trim_start_matches('/').split_once('/') else {
         return false;
     };
-    MACHINE_ROOTS.contains(&root.to_ascii_lowercase().as_str())
+    MACHINE_ROOTS.contains(&root)
 }
 
 /// Where the path at the start of `text` ends. One opened by a quote runs to
