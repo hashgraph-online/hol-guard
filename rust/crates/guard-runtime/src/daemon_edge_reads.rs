@@ -361,6 +361,9 @@ fn respond(
         return requests::detail(request_id, request.query, hosted, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
+    if request.path == "/v1/network/status" {
+        return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));
+    }
     route(request.path, request.query, config, reads)
         .map(|(status, body)| (status, body, caller.cors_origin, false))
 }
@@ -581,6 +584,9 @@ mod requests;
 
 #[path = "daemon_edge_settings.rs"]
 mod settings;
+
+#[path = "daemon_edge_network.rs"]
+mod network;
 
 #[path = "daemon_edge_writes.rs"]
 mod writes;
