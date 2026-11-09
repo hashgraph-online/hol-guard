@@ -27,7 +27,7 @@ from codex_plugin_scanner.guard.continuation_payload import offer_hash
 from codex_plugin_scanner.guard.continuation_runtime import _live_hook_recorded_offer
 from codex_plugin_scanner.guard.continuation_snapshot import validated_continuation_snapshot
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.local_approval_continuation import apply_local_approval_continuation
+from codex_plugin_scanner.guard.continuation_runtime_local import apply_local_approval_continuation
 from codex_plugin_scanner.guard.live_process_identity import (
     CODEX_BROWSER_WAIT_PROCESS_KEY,
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,

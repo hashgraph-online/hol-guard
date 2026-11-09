@@ -38,6 +38,8 @@ use std::time::Duration;
 mod auth;
 #[path = "daemon_edge_http.rs"]
 mod http;
+#[path = "daemon_edge_library.rs"]
+mod library;
 #[path = "daemon_edge_reads.rs"]
 mod reads;
 #[path = "daemon_edge_replay.rs"]

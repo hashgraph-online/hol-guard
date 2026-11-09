@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 
-from ..codex_live_hook_target import codex_live_hook_process_is_unavailable
-from ..codex_resume import ResumeUnavailableError, defer_request_resume_to_live_hook, retry_request_resume
-from ..codex_resume_response import project_codex_resume_response
-from ..continuation_runtime import continue_request_after_application
-from ..store import GuardStore
+from .codex_live_hook_target import codex_live_hook_process_is_unavailable
+from .codex_resume import ResumeUnavailableError, defer_request_resume_to_live_hook, retry_request_resume
+from .codex_resume_response import project_codex_resume_response
+from .continuation_runtime import continue_request_after_application
+from .store import GuardStore
 
 
 def apply_local_approval_continuation(

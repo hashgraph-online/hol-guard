@@ -17,7 +17,7 @@ def _configure_guard_desktop_parser(
         dest="desktop_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{bootstrap,qualify,dashboard-update,converge,daemon-replay}",
+        metavar="{bootstrap,qualify,dashboard-update,converge,daemon-replay,library-call}",
     )
     bootstrap_parser = desktop_subparsers.add_parser("bootstrap", help=argparse.SUPPRESS)
     _add_guard_common_args(bootstrap_parser, suppress_defaults=True)
@@ -63,6 +63,8 @@ def _configure_guard_desktop_parser(
     _add_guard_common_args(daemon_replay_parser, suppress_defaults=True)
     daemon_replay_parser.add_argument("--port", type=int, required=True)
     daemon_replay_parser.add_argument("--daemon-pid", type=int, default=None)
+    library_call_parser = desktop_subparsers.add_parser("library-call", help=argparse.SUPPRESS)
+    _add_guard_common_args(library_call_parser, suppress_defaults=True)
 
 
 __all__ = ["_configure_guard_desktop_parser"]

@@ -79,7 +79,7 @@ def _continuation(store: GuardStore, request_id: str, now: str) -> dict[str, obj
     """Codex rows reuse the resume binding; every other harness gets the retry-hint text."""
 
     from ..cli.approval_commands import _build_retry_hint
-    from .local_approval_continuation import apply_local_approval_continuation
+    from ..continuation_runtime_local import apply_local_approval_continuation
 
     row = store.get_approval_request(request_id)
     harness = str(row.get("harness") or "") if isinstance(row, Mapping) else ""

@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_resume as resume
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import local_approval_continuation as continuation
+from codex_plugin_scanner.guard import continuation_runtime_local as continuation
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global

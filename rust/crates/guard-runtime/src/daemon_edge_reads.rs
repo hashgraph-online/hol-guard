@@ -372,7 +372,9 @@ pub(super) fn answer(
         return write_answer(client, &response, reads, stalled_write);
     }
     let answer = request.as_ref().and_then(|request| match request.method {
-        "POST" | "DELETE" => writes::respond(request, body, config, reads),
+        "POST" | "DELETE" => {
+            writes::respond(request, body, client.local_addr().ok(), config, reads)
+        }
         _ => respond(request, config, reads),
     });
     let answer = answer.or_else(|| {

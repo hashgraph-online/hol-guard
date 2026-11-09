@@ -26,7 +26,7 @@ from .command_activity_api import handle_command_activity_feedback
 from .context_assistance_http import WRITE_PATHS as CONTEXT_ASSISTANCE_WRITE_PATHS
 from .context_assistance_http import respond as respond_context_assistance
 from .extension_control_api import ExtensionControlApiError
-from .local_approval_continuation import apply_local_approval_continuation
+from ..continuation_runtime_local import apply_local_approval_continuation
 from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
 from .plugin_updates_http import handle_plugin_updates_dismiss

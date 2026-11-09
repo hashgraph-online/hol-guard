@@ -9,7 +9,8 @@ import pytest
 
 from codex_plugin_scanner.guard import approvals
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import local_approval_continuation, local_cli_api, local_cli_http
+from codex_plugin_scanner.guard import continuation_runtime_local as local_approval_continuation
+from codex_plugin_scanner.guard.daemon import local_cli_api, local_cli_http
 from codex_plugin_scanner.guard.daemon import local_cli_connector_group as group
 from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
     build_approval_connector_recommendation,

@@ -8,6 +8,8 @@
 //! form body, a dashboard session, a chunked body or JSON that only Python
 //! accepts goes to it untouched, with every rejection it writes today.
 
+use std::net::SocketAddr;
+
 use guard_contracts::DaemonFieldV1;
 use serde_json::{json, Map, Value};
 
@@ -31,6 +33,8 @@ const MAX_HANDLER_LIST_ITEMS: usize = 4_096;
 mod gate;
 #[path = "daemon_edge_gate_config.rs"]
 mod gate_config;
+#[path = "daemon_edge_resolve.rs"]
+mod resolve;
 #[path = "daemon_edge_sessions.rs"]
 mod sessions;
 #[path = "daemon_edge_settings_write.rs"]
@@ -39,9 +43,27 @@ mod settings_write;
 pub(super) fn respond(
     request: &Request<'_>,
     body: &[u8],
+    local: Option<SocketAddr>,
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value, Option<String>, bool)> {
+    if request.method == "POST" && resolve::owns(request.path) {
+        // A dashboard session decides only what its link names, which only
+        // the daemon reads.
+        if request.has_header("Transfer-Encoding")
+            || request.has_header("X-Guard-Dashboard-Session")
+            || request.has_header("Authorization")
+        {
+            return None;
+        }
+        let local = local?;
+        let caller = authorize_token(request, &config.token)?;
+        let payload = json_payload(request, body)?;
+        reads.report_activity();
+        let (status, body, no_store) =
+            resolve::respond(request.path, &payload, local, resolve::call_library(config))?;
+        return Some((status, body, caller.cors_origin, no_store));
+    }
     if let Some(route) = sessions::Route::parse(request.method, request.path) {
         // A dashboard session may come back refreshed from `initialize`,
         // which only the daemon signs.
