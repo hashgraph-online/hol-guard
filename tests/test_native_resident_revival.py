@@ -400,4 +400,4 @@ def test_prompt_denial_names_repair_when_the_runtime_will_not_restart(tmp_path: 
     assert "hol-guard repair" in refused
     timed_out = _unavailable_denial(tmp_path, "native_client_timed_out", "UserPromptSubmit")
     assert "hol-guard repair" not in timed_out
-    assert "could not complete native prompt review safely" in timed_out
+    assert "could not check this prompt, so it was blocked" in timed_out
