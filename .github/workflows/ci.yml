@@ -157,7 +157,7 @@ jobs:
   native-workspace:
     name: Rust workspace (${{ matrix.check }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: ${{ matrix.check == 'clippy' && 30 || 15 }}
     # Required main consumers are the archive producers. Only the two runtime
     # shards share an archive; core/command and PR/Clippy work stay independent.
     concurrency:
