@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import repair_api
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import repair_api, repair_self_check
+from codex_plugin_scanner.guard.daemon import repair_self_check
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 

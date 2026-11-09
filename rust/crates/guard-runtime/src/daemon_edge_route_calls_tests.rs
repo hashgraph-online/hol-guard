@@ -121,3 +121,12 @@ fn daemon_handlers_run_behind_one_call() {
         assert_eq!(route(path), None, "{path}");
     }
 }
+
+#[test]
+fn repair_and_hook_removal_name_their_route() {
+    for path in ["/v1/repair", "/v1/protection/remove-hooks"] {
+        let (name, args) = route(path).unwrap_or_else(|| unreachable!());
+        assert_eq!(name, "route.repair");
+        assert_eq!(args["path"], path);
+    }
+}

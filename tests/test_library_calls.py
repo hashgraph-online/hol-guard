@@ -268,3 +268,17 @@ def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_p
     assert taken == [{"operation_id": "op-1", "requests": requests}]
     assert "secret" not in json.dumps(taken)
     assert _take_attention(store) == []
+
+
+def test_hook_removal_needs_its_confirmation(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "route.repair", {"path": "/v1/protection/remove-hooks", "payload": {}})
+    assert answer["ok"] == {  # type: ignore[index]
+        "status": 400,
+        "body": {"error": "confirmation_required", "confirm": "remove-guard-hooks"},
+        "no_store": False,
+    }
+
+
+def test_repair_refuses_a_path_it_does_not_answer(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "route.repair", {"path": "/v1/other", "payload": {}})
+    assert "ok" not in answer

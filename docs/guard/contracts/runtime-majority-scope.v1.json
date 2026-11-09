@@ -517,11 +517,11 @@
       {
         "id": "repair-lifecycle",
         "category": "control_plane",
-        "reason": "Explicit and periodic Guard repair: `guard repair` (cli/commands_repair), POST /v1/repair and the removal endpoint (daemon/repair_api via _handle_repair_api) and the 600 s repair self-check thread (daemon/repair_self_check started by _start_repair_self_check). None runs inside hook admission, decision or enforcement. resident_state_prune.py and daemon/runtime_repair.py are reached only from repair_engine (repair_native_runtime, repair_daemon) and the daemon package's lazy export used by the repair CLI handler.",
+        "reason": "Explicit and periodic Guard repair: `guard repair` (cli/commands_repair), POST /v1/repair and the removal endpoint (repair_api via the route.repair library call) and the 600 s repair self-check thread (daemon/repair_self_check started by _start_repair_self_check). None runs inside hook admission, decision or enforcement. resident_state_prune.py and daemon/runtime_repair.py are reached only from repair_engine (repair_native_runtime, repair_daemon) and the daemon package's lazy export used by the repair CLI handler.",
         "path": [
           "src/codex_plugin_scanner/guard/repair_engine.py",
           "src/codex_plugin_scanner/guard/resident_state_prune.py",
-          "src/codex_plugin_scanner/guard/daemon/repair_api.py",
+          "src/codex_plugin_scanner/guard/repair_api.py",
           "src/codex_plugin_scanner/guard/daemon/repair_self_check.py",
           "src/codex_plugin_scanner/guard/daemon/runtime_repair.py"
         ]

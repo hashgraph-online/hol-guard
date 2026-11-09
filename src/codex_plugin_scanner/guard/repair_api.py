@@ -22,19 +22,19 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..adapters.base import HarnessContext
-from ..approval_gate import (
+from .adapters.base import HarnessContext
+from .approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
     input_from_mapping,
     public_config,
     require_high_risk,
 )
-from ..hook_removal import HarnessPlan, plan_hook_removal, remove_all_guard_hooks
-from ..repair_engine import run_repair
+from .hook_removal import HarnessPlan, plan_hook_removal, remove_all_guard_hooks
+from .repair_engine import run_repair
 
 if TYPE_CHECKING:
-    from ..store import GuardStore
+    from .store import GuardStore
 
 REMOVE_CONFIRMATION = "remove-guard-hooks"
 REPAIR_ACTION = "doctor.repair"
@@ -46,7 +46,7 @@ class RemovalConfirmationError(ValueError):
 
 
 def _authority_home(guard_home: Path, action: str) -> Path:
-    from ..cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
+    from .cli.commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
 
     return lifecycle_authority_home(guard_home, requirement=LifecycleGateRequirement(action, "all"))
 

@@ -20,6 +20,11 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
         "/v1/requests/bulk-allow-once" => "route.bulk_allow_once",
         "/v1/insights/share" => "route.insights_share",
         "/v1/policy/cloud-exception-requests" => "route.cloud_exception_request_create",
+        "/v1/repair" | "/v1/protection/remove-hooks" => {
+            let mut args = Map::new();
+            args.insert("path".to_owned(), Value::String(path.to_owned()));
+            return Some(("route.repair", args));
+        }
         _ if runs_handler(path) => {
             let mut args = Map::new();
             args.insert("path".to_owned(), Value::String(path.to_owned()));

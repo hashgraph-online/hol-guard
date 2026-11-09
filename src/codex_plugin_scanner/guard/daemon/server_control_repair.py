@@ -10,7 +10,7 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .. import native_context_assistance
+from .. import native_context_assistance, repair_api
 from ..approval_gate import (
     ApprovalGateError,
     require_high_risk,
@@ -44,7 +44,6 @@ from ..runtime.runner import (
 from ..runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
 )
-from . import repair_api
 from .protection_repair_retry import containment_repair_outcome, incomplete_protection_repair_payload
 from .protection_repair_stages import (
     harness_hooks_repair_reason,

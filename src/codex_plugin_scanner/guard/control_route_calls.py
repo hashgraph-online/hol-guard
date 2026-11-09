@@ -335,6 +335,31 @@ def request_resume_retry(store: GuardStore, args: Mapping[str, Any]) -> dict[str
     return _reply(payload)
 
 
+_REPAIR_PATHS = frozenset({"/v1/repair", "/v1/protection/remove-hooks"})
+
+
+def repair(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """The dashboard's "Repair Guard" and "Remove from all apps" actions."""
+
+    from .approval_gate import ApprovalGateError
+    from .repair_api import REMOVE_CONFIRMATION, RemovalConfirmationError, removal_request, repair_request
+
+    payload = _payload(args)
+    path = args.get("path")
+    if path not in _REPAIR_PATHS:
+        from .library_calls import LibraryCallError
+
+        raise LibraryCallError("invalid_arguments")
+    handler = repair_request if path == "/v1/repair" else removal_request
+    try:
+        result = handler(store, payload)
+    except ApprovalGateError as error:
+        return _reply(error.to_payload(), error.status)
+    except RemovalConfirmationError:
+        return _reply({"error": "confirmation_required", "confirm": REMOVE_CONFIRMATION}, 400)
+    return _reply(result, no_store=True)
+
+
 ROUTE_CALLS: dict[str, RouteCall] = {
     "route.policy_clear": policy_clear,
     "route.policy_upsert": policy_upsert,
@@ -345,6 +370,7 @@ ROUTE_CALLS: dict[str, RouteCall] = {
     "route.insights_share": insights_share,
     "route.cloud_exception_request_create": cloud_exception_request_create,
     "route.harness_action": harness_action,
+    "route.repair": repair,
 }
 
 
