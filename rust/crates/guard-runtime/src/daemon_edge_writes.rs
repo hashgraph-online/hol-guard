@@ -84,6 +84,31 @@ pub(super) fn respond(
             route_calls::respond(args, &payload, route_calls::call_library(config, name))?;
         return Some((status, body, caller.cors_origin, no_store));
     }
+    if request.method == "POST" && request.path == "/v1/notifications/setup" {
+        if request.has_header("Transfer-Encoding")
+            || request.has_header("X-Guard-Dashboard-Session")
+            || request.has_header("Authorization")
+        {
+            return None;
+        }
+        let local = local?;
+        let caller = authorize_token(request, &config.token)?;
+        json_payload(request, body)?;
+        reads.report_activity();
+        let host = match local.ip() {
+            std::net::IpAddr::V6(ip) => format!("[{ip}]"),
+            std::net::IpAddr::V4(ip) => ip.to_string(),
+        };
+        let approval_url = format!(
+            "http://{host}:{}/approvals/notification-preview",
+            local.port()
+        );
+        let body = crate::desktop_notification::setup_reply(
+            std::path::Path::new(&config.guard_home),
+            &approval_url,
+        );
+        return Some((200, body, caller.cors_origin, false));
+    }
     if request.method == "POST" && legacy_cloud_handoff(request.path) {
         if request.has_header("Transfer-Encoding")
             || request.has_header("X-Guard-Dashboard-Session")
