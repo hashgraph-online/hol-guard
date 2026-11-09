@@ -42,7 +42,9 @@ async function waitForCommittedRevision(state: IntegrationState, previous: numbe
 // show, it must name the committed revision.
 async function expectToastMatches(page: Page, revision: number) {
   const toast = page.getByTestId("extension-policy-applied-toast");
-  if (await toast.isVisible()) await expect(toast).toContainText(`Applied · revision ${revision}`);
+  // Capture existence and text in one DOM read so a remount cannot race the assertion.
+  const messages = await toast.allTextContents();
+  for (const message of messages) expect(message).toContain(`Applied · revision ${revision}`);
 }
 
 // Reviews the one pending change, proves it with the approval password and
