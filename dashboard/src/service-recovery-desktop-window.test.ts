@@ -11,7 +11,7 @@ function assert(condition: boolean, message: string): void {
 const BROWSER_STEP = "Open HOL Guard Desktop from the installed application.";
 const BROWSER_MESSAGE = "This browser tab cannot control the local service.";
 const ICON_TITLE = "Restart Guard from the HOL Guard icon";
-const ICON_MESSAGE = "This HOL Guard window could not reach its recovery screen.";
+const ICON_MESSAGE = "The HOL Guard recovery screen is not reachable from this page.";
 
 function render(): string {
   return renderToStaticMarkup(createElement(ServiceRecoveryPanel, {
@@ -46,6 +46,16 @@ assert(desktop.includes("choose Troubleshoot Guard"), "#7485: the Desktop window
 assert(!desktop.includes(BROWSER_STEP), "#7485: the Desktop window is not told to open Guard Desktop");
 assert(!desktop.includes(BROWSER_MESSAGE), "#7485: the Desktop window is not called a browser tab");
 assert(desktop.includes("Retry connection"), "#7485: the Desktop window keeps the retry action");
+
+// desktop_embed is only a URL parameter, so a browser tab can carry it too.
+// The same steps must still hold there: they never claim to be in the
+// Desktop window, and they cover a Desktop that is not running.
+assert(!desktop.includes("This HOL Guard window"), "#7485: the copy does not claim to be the Desktop window");
+assert(!desktop.includes("return to this window"), "#7485: the steps do not assume a Desktop window");
+assert(
+  desktop.includes("If there is no HOL Guard icon, HOL Guard is not running. Open it from your applications menu."),
+  "#7485: a page without a running Desktop is told how to start it",
+);
 
 // The embed hint still never grants the native recovery handoff.
 const capability = getRecoveryCapabilities({ bridge: null, installMode: "desktop-bundled" });

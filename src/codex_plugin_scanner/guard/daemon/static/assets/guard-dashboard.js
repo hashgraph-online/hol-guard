@@ -38648,7 +38648,7 @@ function getRecoveryCapabilities(options) {
   }
   return { kind: "fallback", installMode: resolvedInstallMode, reason };
 }
-const DESKTOP_WINDOW_RECOVERY_MESSAGE = "This HOL Guard window could not reach its recovery screen. Use the HOL Guard icon instead.";
+const DESKTOP_WINDOW_RECOVERY_MESSAGE = "The HOL Guard recovery screen is not reachable from this page. Use the HOL Guard icon instead.";
 function recoveryRunsInDesktopWindow(capability) {
   if (capability.kind !== "fallback" || capability.reason !== "bridge_missing") return false;
   if (capability.installMode !== "desktop-bundled" && capability.installMode !== "desktop-external") return false;
@@ -38662,11 +38662,12 @@ function resolveDesktopWindowRecoveryInstructions() {
   return {
     installMode: "desktop-bundled",
     title: "Restart Guard from the HOL Guard icon",
-    body: "This window cannot restart Guard itself. The HOL Guard icon in the system tray or menu bar can.",
+    body: "Guard cannot be restarted from this page. The HOL Guard icon in the system tray or menu bar can restart it.",
     steps: [
       "Open the HOL Guard icon in the system tray or menu bar and choose Troubleshoot Guard.",
-      "Choose Restart Guard, then return to this window and choose Retry connection.",
-      "If that does not help, quit HOL Guard from the icon and open it again."
+      "Choose Restart Guard, then return here and choose Retry connection.",
+      "If the restart does not help, quit HOL Guard from the icon, then open it again from your applications menu.",
+      "If there is no HOL Guard icon, HOL Guard is not running. Open it from your applications menu."
     ],
     command: null
   };
