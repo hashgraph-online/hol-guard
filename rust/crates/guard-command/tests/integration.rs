@@ -171,6 +171,7 @@ pub mod pretool_grep_pattern_clearance;
 pub mod pretool_grep_repository_metadata;
 pub mod pretool_grep_sibling_tree;
 pub mod pretool_guard_diagnostics;
+pub mod pretool_hidden_listing_globs;
 pub mod pretool_home_aliases;
 pub mod pretool_home_cd;
 pub mod pretool_home_dotdir_content_reads;
