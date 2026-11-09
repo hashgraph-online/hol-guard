@@ -24,8 +24,7 @@ fn daemon_edge_parses_its_two_flags_in_either_order() {
 #[test]
 fn daemon_edge_refuses_malformed_flags() {
     for bad in [
-        &["--upstream-port", "0", "--parent-pid", "4321"][..],
-        &["--upstream-port", "41234", "--parent-pid", "1"],
+        &["--upstream-port", "41234", "--parent-pid", "1"][..],
         &["--upstream-port", "41234"],
         &["--upstream-port", "41234", "--parent-pid"],
         &[
@@ -49,9 +48,11 @@ fn daemon_edge_only_relays_to_another_port_on_the_loopback_listener() {
     let other = port.wrapping_add(1).max(1);
     assert_eq!(
         upstream_address(&listener, other),
-        Some(SocketAddr::from(([127, 0, 0, 1], other)))
+        Some(Some(SocketAddr::from(([127, 0, 0, 1], other))))
     );
     assert_eq!(upstream_address(&listener, port), None);
+    // Port 0 names no upstream: the edge replays through the CLI.
+    assert_eq!(upstream_address(&listener, 0), Some(None));
 }
 
 fn spawn_edge(upstream: SocketAddr) -> SocketAddr {
@@ -64,7 +65,7 @@ fn spawn_edge_with(upstream: SocketAddr, limit: usize, stalled_write: Duration) 
     thread::spawn(move || {
         serve(
             &listener,
-            upstream,
+            Some(upstream),
             limit,
             stalled_write,
             Arc::new(NativeReads::new(None)),

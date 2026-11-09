@@ -31,19 +31,28 @@ pub(in crate::daemon_edge) fn query(
     command
         .args(prefix)
         .args(query_args(&config.guard_home, name))
-        .args(
-            input
-                .map(|input| ["--input".to_owned(), input.to_string()])
-                .into_iter()
-                .flatten(),
-        )
-        .stdin(Stdio::null())
         .stderr(Stdio::null());
     if let Some(cwd) = &config.daemon_cwd {
         command.current_dir(cwd);
     }
-    let output =
-        crate::onefile_open_paths::bounded_stdout_in_group(command, ANSWER_LIMIT_BYTES, timeout)?;
+    let output = match input {
+        // The input goes on stdin, never argv: request bodies can carry
+        // one-time codes.
+        Some(input) => {
+            command.arg("--input-stdin");
+            crate::onefile_open_paths::bounded_stdout_in_group_with_input(
+                command,
+                input.to_string().into_bytes(),
+                ANSWER_LIMIT_BYTES,
+                timeout,
+            )?
+        }
+        None => crate::onefile_open_paths::bounded_stdout_in_group(
+            command,
+            ANSWER_LIMIT_BYTES,
+            timeout,
+        )?,
+    };
     parse_answer(&output)
 }
 

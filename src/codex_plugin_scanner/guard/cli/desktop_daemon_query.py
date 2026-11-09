@@ -145,12 +145,25 @@ _QUERIES: dict[str, Callable[[Path, dict[str, object]], Answer]] = {
 }
 
 
-def run_daemon_query(query: str, guard_home: Path, output_stream: TextIO, input_text: str | None = None) -> int:
+# The edge refuses request bodies past 1 MiB; leave room for the JSON envelope.
+_INPUT_LIMIT_BYTES = 2 * 1024 * 1024
+
+
+def read_daemon_query_input(stream: TextIO) -> str | None:
+    """The query input the edge wrote to stdin, or ``None`` past the limit."""
+
+    text = stream.read(_INPUT_LIMIT_BYTES + 1)
+    return None if len(text) > _INPUT_LIMIT_BYTES else text
+
+
+def run_daemon_query(query: str, guard_home: Path, output_stream: TextIO, input_text: str | None = "") -> int:
     """Print the answer to ``query`` as one JSON envelope; 2 for a bad request."""
 
     answer = _QUERIES.get(query)
     payload: object = {}
-    if input_text:
+    if input_text is None:
+        payload = None
+    elif input_text:
         try:
             payload = json.loads(input_text)
         except json.JSONDecodeError:

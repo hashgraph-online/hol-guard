@@ -75,6 +75,18 @@ struct Handshake {
     cli_command: Option<Vec<String>>,
 }
 
+impl ReadConfig {
+    /// What the edge needs to run the daemon's Guard CLI: its argv prefix,
+    /// the Guard home and the daemon's working directory.
+    pub(super) fn cli(&self) -> Option<(&[String], &str, Option<&str>)> {
+        Some((
+            self.cli_command.as_deref()?,
+            &self.guard_home,
+            self.daemon_cwd.as_deref(),
+        ))
+    }
+}
+
 pub(super) struct ReadConfig {
     token: Vec<u8>,
     guard_home: String,

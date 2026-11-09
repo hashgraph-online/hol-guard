@@ -40,6 +40,8 @@ mod auth;
 mod http;
 #[path = "daemon_edge_reads.rs"]
 mod reads;
+#[path = "daemon_edge_replay.rs"]
+mod replay;
 
 use reads::{NativeReads, Outcome};
 
@@ -115,7 +117,7 @@ fn parse_args(args: &[String]) -> Option<EdgeArgs> {
         let value = rest.next()?;
         match flag.as_str() {
             "--upstream-port" if upstream_port.is_none() => {
-                upstream_port = Some(value.parse::<u16>().ok().filter(|port| *port != 0)?);
+                upstream_port = Some(value.parse::<u16>().ok()?);
             }
             "--parent-pid" if parent_pid.is_none() => {
                 parent_pid = Some(value.parse::<u32>().ok().filter(|pid| *pid > 1)?);
@@ -130,13 +132,15 @@ fn parse_args(args: &[String]) -> Option<EdgeArgs> {
 }
 
 /// The daemon's private port on the listener's own loopback address, or
-/// `None` when the socket is not a loopback TCP listener.
-fn upstream_address(listener: &TcpListener, upstream_port: u16) -> Option<SocketAddr> {
+/// `None` when the socket is not a loopback TCP listener. Port 0 names no
+/// upstream: the edge then replays every request it does not answer through
+/// the Guard CLI.
+fn upstream_address(listener: &TcpListener, upstream_port: u16) -> Option<Option<SocketAddr>> {
     let local = listener.local_addr().ok()?;
     if !local.ip().is_loopback() || local.port() == upstream_port {
         return None;
     }
-    Some(SocketAddr::new(local.ip(), upstream_port))
+    Some((upstream_port != 0).then(|| SocketAddr::new(local.ip(), upstream_port)))
 }
 
 /// Exits the process as soon as the daemon's end of the liveness socket on
@@ -212,7 +216,7 @@ impl Slots {
 
 fn serve(
     listener: &TcpListener,
-    upstream: SocketAddr,
+    upstream: Option<SocketAddr>,
     limit: usize,
     stalled_write: Duration,
     native_reads: Arc<NativeReads>,
@@ -272,18 +276,25 @@ fn accept_error_is_transient(error: &io::Error) -> bool {
 /// connection to the daemon otherwise.
 fn serve_connection(
     client: TcpStream,
-    upstream: SocketAddr,
+    upstream: Option<SocketAddr>,
     stalled_write: Duration,
     native_reads: &NativeReads,
 ) {
-    let read_ahead = match native_reads.config() {
-        Some(config) => match reads::answer(&client, &config, native_reads, stalled_write) {
+    let config = native_reads.config();
+    let read_ahead = match &config {
+        Some(config) => match reads::answer(&client, config, native_reads, stalled_write) {
             Outcome::Answered => return,
             Outcome::Relay(bytes) => bytes,
         },
         None => Vec::new(),
     };
-    relay_connection(client, upstream, stalled_write, &read_ahead);
+    match (upstream, config) {
+        (Some(upstream), _) => relay_connection(client, upstream, stalled_write, &read_ahead),
+        (None, Some(config)) => replay::replay(&client, &config, read_ahead, stalled_write),
+        (None, None) => {
+            let _ = client.shutdown(Shutdown::Both);
+        }
+    }
 }
 
 /// Relays one connection both ways until each side has finished, sending

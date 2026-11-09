@@ -611,15 +611,24 @@ def _run_guard_desktop_command(
     if getattr(args, "desktop_command", None) == "daemon-query":
         from pathlib import Path as _Path
 
-        from .desktop_daemon_query import run_daemon_query
+        from .desktop_daemon_query import read_daemon_query_input, run_daemon_query
 
         resolved_home = getattr(args, "guard_home", None) or guard_home
         if resolved_home is None:
             print("Guard daemon query requires --guard-home.", file=sys.stderr)
             return 2
-        return run_daemon_query(
-            str(args.query), _Path(resolved_home), output_stream or sys.stdout, getattr(args, "input", None)
-        )
+        query_input = read_daemon_query_input(sys.stdin) if getattr(args, "input_stdin", False) else ""
+        return run_daemon_query(str(args.query), _Path(resolved_home), output_stream or sys.stdout, query_input)
+    if getattr(args, "desktop_command", None) == "daemon-replay":
+        from pathlib import Path as _Path
+
+        from .desktop_daemon_replay import run_daemon_replay
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard daemon replay requires --guard-home.", file=sys.stderr)
+            return 2
+        return run_daemon_replay(_Path(resolved_home), int(args.port))
     if getattr(args, "desktop_command", None) == "dashboard-update":
         from ..daemon.dashboard_update_runner import main as dashboard_update_main
 

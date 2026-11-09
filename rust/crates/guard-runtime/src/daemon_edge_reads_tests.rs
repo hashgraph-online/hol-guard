@@ -187,7 +187,7 @@ fn spawn_configured_edge() -> Edge {
     reads.accept_handshake(&handshake(&guard_home));
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
-    thread::spawn(move || serve(&listener, upstream, 8, Duration::from_secs(30), reads));
+    thread::spawn(move || serve(&listener, Some(upstream), 8, Duration::from_secs(30), reads));
     Edge {
         address,
         requests,
