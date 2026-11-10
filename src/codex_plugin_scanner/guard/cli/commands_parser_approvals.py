@@ -45,7 +45,8 @@ def add_approval_parser(
         decision_parser.add_argument(
             "--scope",
             choices=("artifact", "publisher", "workspace", "harness", "global"),
-            default="artifact",
+            default=None,
+            help="Resolution scope; defaults to the request's recommended scope.",
         )
         decision_parser.add_argument("--reason")
         decision_parser.add_argument(

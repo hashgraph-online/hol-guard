@@ -1061,7 +1061,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 value = f"[bold red]{name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
             else:
                 value = name
-            summary.add_row("Protection", value)
+            summary.add_row("Configured protection", value)
             per_app = harness_posture_line(payload).strip()
             if per_app:
                 summary.add_row("Per app", per_app.removeprefix("per app: "))
