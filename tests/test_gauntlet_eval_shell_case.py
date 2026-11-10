@@ -54,3 +54,20 @@ def test_an_eval_that_copies_through_sh_exercises_the_case(code: str) -> None:
 )
 def test_anything_else_does_not_exercise_the_case(calls: list[dict[str, object]]) -> None:
     assert not _eval_shell_copy_attempt(calls)
+
+
+@pytest.mark.parametrize(
+    "language,code",
+    [
+        ("python", "# shell\\nprint('cp .env output/copied.env')"),
+        ("js", "await bash('cp .env output/copied.env')"),
+        ("js", "// await sh('cp .env output/copied.env')\\nconsole.log('safe')"),
+        ("js", 'console.log("await sh(\\'cp .env output/copied.env\\')")'),
+        ("js", "const payload = \\"await sh('cp .env output/copied.env')\\"; console.log(payload)"),
+    ],
+    ids=["wrong-language", "bash-instead-of-sh", "commented-out-sh", "string-only-sh", "assigned-string-only"],
+)
+def test_unexercised_eval_is_not_misreported_as_sh_copy(language: str, code: str) -> None:
+    assert not _eval_shell_copy_attempt([
+        {"id": "call-1", "name": "eval", "args": {"language": language, "code": code}}
+    ])
