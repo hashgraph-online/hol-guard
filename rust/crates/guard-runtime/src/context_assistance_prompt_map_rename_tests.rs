@@ -169,13 +169,17 @@ fn a_whole_rename_opens_with_the_command_making_it() {
     let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
     let text = prompt_map(home.path(), &root, prompt).unwrap();
     let first = text.split("\n\n").nth(1).unwrap();
+    // From the project root, since the session may have started below it.
     assert_eq!(
         first,
-        "One command makes this whole rename: it writes `_evict_all` in place of every `_evict` \
-written as a whole word, in each file holding it, then runs the tests named in it. Run it \
-instead of opening and editing each file, then check its output:\n\
-perl -pi -e 's/(?<![\\w-])_evict(?![\\w-])/_evict_all/g' src/pkg/cache.py tests/test_cache.py \
-&& python -m pytest -q tests/test_cache.py",
+        format!(
+            "One command makes this whole rename: it writes `_evict_all` in place of every \
+`_evict` written as a whole word, in each file holding it, then runs the tests named in it. Run \
+it instead of opening and editing each file, then check its output:\n\
+cd '{}' && perl -pi -e 's/(?<![\\w-])_evict(?![\\w-])/_evict_all/g' src/pkg/cache.py \
+tests/test_cache.py && python -m pytest -q tests/test_cache.py",
+            root.display()
+        ),
         "{text}"
     );
     assert!(text.contains("Every line naming `_evict`; no other project file holds it:"));
@@ -240,4 +244,63 @@ everywhere in the project, including tests.";
     let text = prompt_map(home.path(), &root, prompt).unwrap();
     assert!(text.contains("Every line naming `_evict`"), "{text}");
     assert!(!text.contains("One command makes"), "{text}");
+}
+
+/// No command where `perl` would change a line the list does not name, or
+/// one it should not: a changelog's released entry, a name touching a letter
+/// past ASCII, which `perl` reads as a break, or a name a string part before
+/// it builds into a longer one.
+#[cfg(not(windows))]
+#[test]
+fn a_rename_gives_no_command_where_perl_reads_the_name_apart() {
+    let cache = "class Cache:\n    def _evict(self):\n        pass\n\n    def put(self):\n        self._evict()\n";
+    let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
+    for (path, text) in [
+        (
+            "CHANGES.md",
+            "# Changes\n\n## 1.2.0\n\n- Fixed a leak in `_evict`.\n",
+        ),
+        ("src/pkg/greek.py", "_evict\u{3c0} = 1\n_evict()\n"),
+        (
+            "src/pkg/hooks.py",
+            "def run(self, prefix):\n    getattr(self, f\"{prefix}_evict\")()\n",
+        ),
+        (
+            "src/pkg/joined.py",
+            "def run(self, prefix):\n    getattr(self, prefix + \"_evict\")()\n",
+        ),
+    ] {
+        let list = [("src/pkg/cache.py", cache), (path, text)];
+        let (home, _project, root) = project(ON, &list);
+        let text = prompt_map(home.path(), &root, prompt).unwrap();
+        assert!(
+            text.contains("Every line naming `_evict`"),
+            "{path}: {text}"
+        );
+        assert!(!text.contains("One command makes"), "{path}: {text}");
+    }
+}
+
+/// A helper beside the tests is not a test file: the command does not run
+/// pytest on `tests/support.py`, which collects no tests.
+#[cfg(not(windows))]
+#[test]
+fn a_rename_command_runs_no_helper_beside_the_tests() {
+    let cache = "class Cache:\n    def _evict(self):\n        pass\n\n    def clear(self):\n        self._evict()\n";
+    let list = [
+        ("src/pkg/cache.py", cache),
+        (
+            "tests/support.py",
+            "from pkg.cache import Cache\n\n\ndef emptied():\n    return Cache()._evict()\n",
+        ),
+        (
+            "tests/test_cache.py",
+            "from pkg.cache import Cache\n\n\ndef test_clear():\n    Cache().clear()\n",
+        ),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the private method `_evict` to `_evict_all` everywhere in the project.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(text.contains("One command makes"), "{text}");
+    assert!(!text.contains("pytest -q tests/support.py"), "{text}");
 }

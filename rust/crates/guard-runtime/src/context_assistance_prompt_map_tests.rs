@@ -130,9 +130,7 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let text = map(
         &files(&[
@@ -431,9 +429,7 @@ fn a_named_changelog_stays_on_the_map() {
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(

@@ -3,9 +3,13 @@
 //! the agent need not search or open them again before editing. For a stubbed-out
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
-use super::{Asked, Entry, File, Kind, Pick, Sought, Span, CHECK_EVERY};
+use super::{Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
+
+#[path = "context_assistance_prompt_map_rewrite.rs"]
+mod rewrite;
+use rewrite::Rewrite;
 
 /// Names listed for one prompt: the old name, and at most one more.
 const MAX_NAMES: usize = 2;
@@ -68,77 +72,6 @@ pub(super) fn blocks(
 
 /// Titled blocks of lines.
 type Blocks = Vec<(String, Vec<String>)>;
-
-/// A rename one command makes: every file holding the old name, from a
-/// list that is complete, and the test files among them.
-#[derive(Clone)]
-pub(super) struct Rewrite {
-    old: String,
-    new: String,
-    files: Vec<String>,
-    tests: Vec<String>,
-}
-
-impl Rewrite {
-    /// The note's block: a title and the command, which writes the new name
-    /// for each whole-word old one in those files and then runs their tests,
-    /// or the tests the map lists when none of them is a test. None on
-    /// Windows, where the shell may lack `perl`, or for a name or path a
-    /// shell would read as more than itself.
-    pub(super) fn block(&self, listed: &[Entry]) -> Option<(String, String)> {
-        if cfg!(windows) || !([&self.old, &self.new].iter()).all(|name| plain_name(name)) {
-            return None;
-        }
-        // The map's test lines start with their file: "tests/test_a.py: 3 related tests".
-        let listed =
-            (listed.iter()).filter_map(|entry| entry.text.lines().next()?.split_once(": "));
-        let tests: Vec<&str> = if self.tests.is_empty() {
-            listed.map(|(path, _)| path).collect()
-        } else {
-            self.tests.iter().map(String::as_str).collect()
-        };
-        if !(self
-            .files
-            .iter()
-            .map(String::as_str)
-            .chain(tests.iter().copied()))
-        .all(plain_path)
-        {
-            return None;
-        }
-        // A word as the lists read one: `-` and `_` join, so `x-old` is not `old`.
-        let (old, new) = (&self.old, &self.new);
-        let mut line = format!(
-            "perl -pi -e 's/(?<![\\w-]){old}(?![\\w-])/{new}/g' {}",
-            self.files.join(" ")
-        );
-        let run = !tests.is_empty() && tests.iter().all(|path| path.ends_with(".py"));
-        if run {
-            line.push_str(&format!(" && python -m pytest -q {}", tests.join(" ")));
-        }
-        let then = if run {
-            ", then runs the tests named in it"
-        } else {
-            ""
-        };
-        let title = format!(
-            "One command makes this whole rename: it writes `{new}` in place of every `{old}` \
-written as a whole word, in each file holding it{then}. Run it instead of opening and editing \
-each file, then check its output:"
-        );
-        Some((title, line))
-    }
-}
-
-fn plain_name(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-fn plain_path(path: &str) -> bool {
-    !path.is_empty()
-        && !path.starts_with('-')
-        && (path.chars()).all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
-}
 
 /// The name the prompt renames `old` to: "rename `a` to `b`".
 fn renamed_to<'a>(renames: &'a [(String, String)], old: &str) -> Option<&'a str> {
@@ -324,15 +257,7 @@ fn every_line(
     } else {
         None
     };
-    let rewrite = rewrite.map(|(old, new)| Rewrite {
-        old: old.to_owned(),
-        new: new.to_owned(),
-        files: holders.iter().map(|file| file.path.to_owned()).collect(),
-        tests: (holders.iter())
-            .filter(|file| file.kind == Kind::Test)
-            .map(|file| file.path.to_owned())
-            .collect(),
-    });
+    let rewrite = rewrite.and_then(|(old, new)| Rewrite::new(old, new, &holders));
     let mut blocks = vec![(title, entries)];
     // `f"_get_default_module{choose_async('_async')}"` also calls
     // `_get_default_module_async`, which renaming only the first breaks.
