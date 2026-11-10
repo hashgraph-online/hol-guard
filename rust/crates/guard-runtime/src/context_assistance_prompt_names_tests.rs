@@ -1,4 +1,5 @@
 use super::*;
+use crate::context_assistance_engine::PickedExcerpt;
 use crate::context_assistance_prompt_files::{named, phrases, plain, walk};
 use crate::context_assistance_prompt_words::marked_terms;
 use std::time::{Duration, Instant};
@@ -32,37 +33,52 @@ fn excerpt(path: &str, text: &str) -> PickedExcerpt {
     }
 }
 
-/// A name the project holds counts, without the class it is read on; a
-/// name no file holds, such as a helper the prompt asks to add, does not.
+/// Once the project holds one of the names, every name the prompt writes as
+/// code counts, beside its singular form, without the class it is read on:
+/// a search cut short may not reach the file holding `list_entries`, and a
+/// new helper such as `make_slug` holds nothing to drop. With no name held,
+/// none count.
 #[test]
-fn only_names_the_project_holds_count() {
+fn named_code_counts_once_the_project_holds_some() {
     let prompt = "Fix `Parser.parse_filter_block` and add a `make_slug` helper for `list_entries`.";
-    let terms = terms(prompt);
-    let spelled: Vec<usize> = (terms.iter())
-        .map(|term| usize::from(term != "makeslug"))
-        .collect();
-    let names = held_names(prompt, &terms, &spelled);
-    assert_eq!(names, ["parsefilterblock", "listentries"], "{terms:?}");
-    let none = vec![0; terms.len()];
-    assert!(held_names(prompt, &terms, &none).is_empty());
+    let words = terms(prompt);
+    let only = |held: &str| -> Vec<usize> {
+        let spelled = words.iter().map(|term| usize::from(term == held));
+        spelled.collect()
+    };
+    let all = ["parsefilterblock", "makeslug", "listentries", "listentry"];
+    let names = held_names(prompt, &words, &only("parsefilterblock"));
+    assert_eq!(names, all, "{words:?}");
+    assert_eq!(held_names(prompt, &words, &only("listentry")), all);
+    assert!(held_names(prompt, &words, &only("")).is_empty());
+    let plural = "Fix `parse_filters`.";
+    let words = terms(plural);
+    let names = held_names(plural, &words, &vec![1; words.len()]);
+    assert!(holds("def parse_filter(source):", &names), "{names:?}");
 }
 
-/// Excerpts that hold none of the names are dropped, written either way;
-/// with no names, or one excerpt holding one, all of them stay.
+/// The excerpts that are shown must hold a name, written either way: the
+/// one holding it can lose to code matching more of the prompt's words, and
+/// what is left is then about something else.
 #[test]
-fn excerpts_holding_no_named_code_are_dropped() {
+fn shown_excerpts_must_hold_the_named_code() {
+    let asked = "parse filter block lexer token stream line source";
+    let words: Vec<String> = asked.split(' ').map(String::from).collect();
+    let lexer = "def tokenize(source, line):\n    \
+return lexer(stream, token)  # parse filter block";
     let picked = [
-        excerpt("src/filters.py", FILTERS),
-        excerpt("src/lexer.py", "def tokenize(source):\n    return []"),
+        excerpt("src/parser.py", "def parse-filter-Block(self):\n    return self.body"),
+        excerpt("src/lexer.py", lexer),
     ];
     let names = vec!["parsefilterblock".to_owned()];
-    assert!(holding(&picked, &names).is_empty());
-    assert_eq!(holding(&picked, &[]).len(), 2);
-    let named = [
-        excerpt("src/filters.py", FILTERS),
-        excerpt("src/parser.py", "def parse-filter-Block():"),
-    ];
-    assert_eq!(holding(&named, &names).len(), 2);
+    let render = |picked: &[PickedExcerpt], names: &[String]| {
+        super::super::render(picked, &[], &words, &[], names).map(|rendered| rendered.text)
+    };
+    assert_eq!(render(&picked, &names), None);
+    let unnamed = render(&picked, &[]).unwrap();
+    assert!(unnamed.contains("def tokenize") && !unnamed.contains("parse-filter"));
+    let parser = render(&picked[..1], &names).unwrap();
+    assert!(parser.contains("def parse-filter-Block"));
 }
 
 /// The seed this came from: the prompt names `Parser.parse_filter_block`,

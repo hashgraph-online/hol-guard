@@ -2,7 +2,7 @@
 //! its own thread, so a hook never waits past its budget. A prompt that finds
 //! CIGAR still starting leaves a warm-up behind: it waits for the worker and
 //! loads the project, so the next prompt gets code instead of a file list.
-use super::{holding, render, Rendered, Span};
+use super::{render, Rendered, Span};
 use crate::context_assistance_engine::PickedExcerpt;
 use crate::context_assistance_service::{LaneMiss, LaneWatch, PromptLane, Service};
 use std::collections::{BTreeMap, BTreeSet};
@@ -85,7 +85,7 @@ pub(super) fn lookup(
     // the lane took.
     let cutoff = short_of(deadline, Instant::now());
     let shown = |found: Arc<(Vec<PickedExcerpt>, Vec<String>)>| {
-        render(holding(&found.0, &names), &found.1, &words, &earlier)
+        render(&found.0, &found.1, &words, &earlier, &names)
     };
     let rendered = |flight: &Flight| {
         answer(service, flight, cutoff)
