@@ -21,7 +21,7 @@ from .extension_control_host import EXTENSION_CONTROL_CALLS
 from .routes.calls import HANDLER_CALLS
 from .routes.catalog_calls import CATALOG_CALLS
 from .routes.connect_calls import CONNECT_CALLS
-from .routes.control_host import CONTROL_HOST_CALLS
+from .routes.headless_calls import HEADLESS_CALLS
 from .routes.hook_host import HOOK_HOST_CALLS
 from .routes.policy_sync_call import POLICY_SYNC_CALLS
 from .routes.reads import READ_CALLS
@@ -225,7 +225,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **SERVICE_CALLS,
     **SETTINGS_CALLS,
     **POLICY_SYNC_CALLS,
-    **CONTROL_HOST_CALLS,
+    **HEADLESS_CALLS,
     **HOOK_HOST_CALLS,
     **READ_CALLS,
     **CONNECT_CALLS,

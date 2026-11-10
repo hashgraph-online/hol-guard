@@ -246,16 +246,15 @@ def test_policy_sync_refuses_a_request_without_a_bundle(tmp_path: Path) -> None:
     assert _call(tmp_path, "route.policy_sync", {"payload": []})["error"]["kind"] == "library_call"  # type: ignore[index]
 
 
-def test_control_get_answers_live_reads_from_the_daemon_state(tmp_path: Path) -> None:
-    def control_get(path: str, **extra: object) -> dict[str, object]:
-        return _call(tmp_path, "route.control_get", {"path": path, "port": 5999, "daemon_pid": 1, **extra})
-
+def test_control_library_steps_read_the_daemon_state(tmp_path: Path) -> None:
     facts = _call(tmp_path, "connect.facts", {"kind": "cloud", "port": 5999, "daemon_pid": 1})["ok"]
     assert set(facts) == {"required", "repair", "connect_url", "cloud_state", "package_state"}  # type: ignore[arg-type]
     update = _call(tmp_path, "update.status", {"progress": True})["ok"]
     assert "current_version" in update  # type: ignore[operator]
-    assert "error" in control_get("/v1/settings")
-    assert "error" in control_get("/v1/runtime", query=1)
+    unknown = _call(tmp_path, "headless.app_action", {"harness": "no-such-harness", "port": 5999})["ok"]
+    assert unknown == {"error": "unknown_harness"}
+    listed = _call(tmp_path, "local_clis.list", {"port": 5999, "daemon_pid": 1})["ok"]
+    assert set(listed) == {"payload"}  # type: ignore[arg-type]
 
 
 def test_worker_passes_answer_ok(tmp_path: Path) -> None:

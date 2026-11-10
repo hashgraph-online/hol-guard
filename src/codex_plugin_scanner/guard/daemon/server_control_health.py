@@ -1,4 +1,4 @@
-"""Capability, health and catalog route handlers for the daemon control plane."""
+"""The containment health cache the runtime snapshot reads."""
 
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
 
@@ -8,30 +8,9 @@ import threading
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs
-
-from .manager import (
-    current_guard_daemon_runtime_fingerprint,
-)
-from .server_common import (
-    _build_local_url,
-)
 
 if TYPE_CHECKING:
     from ..routes.request_handler import _GuardDaemonHTTPServer as _GuardDaemonHttpServer
-
-
-_HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
-
-
-def _headless_safe_failure_reasons() -> dict[str, str]:
-    return {
-        "offline": "Local Guard daemon is unavailable.",
-        "timeout": "Local Guard daemon did not answer before the browser timeout.",
-        "unauthorized": "Dashboard session is missing or stale.",
-        "unsupported": "Harness is not supported by this daemon.",
-        "confirmation_required": "Remove actions need the harness confirmation phrase.",
-    }
 
 
 _CONTAINMENT_HEALTH_CACHE_SECONDS = 10.0
@@ -99,76 +78,3 @@ def cached_containment_health(
             server.containment_health_completed_generation = probe_generation
             event.set()
     return None if payload is None else dict(payload)
-
-
-class _ControlHealthRoutes:
-    """Handler methods for control-plane routes."""
-
-    def _local_queue_url(self) -> str:
-        host = self._daemon_server().daemon_host()
-        port = self._daemon_server().daemon_port()
-        return _build_local_url(host, port, "/#/inbox")
-
-    @staticmethod
-    def _optional_bool(value: object, *, default: bool) -> bool:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"true", "1", "yes", "on"}:
-                return True
-            if normalized in {"false", "0", "no", "off", ""}:
-                return False
-        raise ValueError("invalid boolean value")
-
-    @staticmethod
-    def _optional_int(value: object) -> int | None:
-        if isinstance(value, int):
-            return value
-        if isinstance(value, str) and value.strip():
-            try:
-                return int(value.strip())
-            except ValueError:
-                return None
-        return None
-
-    def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
-        from ..runtime.containment_health import probe_containment_health
-
-        daemon_server = self._daemon_server()
-
-        def probe() -> dict[str, object]:
-            return probe_containment_health(
-                daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
-                guard_home=daemon_server.store.guard_home,
-            ).to_dict()
-
-        return cached_containment_health(daemon_server, force_refresh=force_refresh, probe=probe)
-
-    def _coalesce_string(self, mapping: dict[str, object], *keys: str) -> str | None:
-        for key in keys:
-            value = self._optional_string(mapping.get(key))
-            if value is not None:
-                return value
-        return None
-
-    @staticmethod
-    def _query_string(query_string: str, key: str) -> str | None:
-        value = parse_qs(query_string).get(key, [None])[-1]
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-        return None
-
-    @staticmethod
-    def _query_bool(query_string: str, key: str, *, default: bool) -> bool:
-        value = parse_qs(query_string).get(key, [None])[-1]
-        if not isinstance(value, str):
-            return default
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-        return default

@@ -50,6 +50,8 @@ const GATED_OPERATIONS: [&str; 5] = ["install", "repair", "remove", "test", "syn
 const AUTHORITY_UNAVAILABLE: &str = "package_firewall_authority_unavailable";
 const AUTHORITY_UNAVAILABLE_MESSAGE: &str =
     "The HOL Guard runtime could not answer what package firewall access permits on this machine.";
+/// The one audit remediation: routing a package manager through Guard.
+const REMEDIATION: &str = "package_shim_path";
 const WORKSPACE_UNAVAILABLE: &str = "supply_chain_workspace_unavailable";
 
 type Reply = (u16, Value);
@@ -172,6 +174,7 @@ fn route_post(
             package_action(host, "sync", payload)
         })),
         ["v1", "supply-chain", "audit"] => Some(finish(package_action(host, "audit", payload))),
+        ["v1", "audit", "remediations", REMEDIATION] => Some(finish(remediate(host, payload))),
         _ => None,
     }
 }
@@ -499,6 +502,96 @@ fn package_action(
         body["cloud_sync"] = cloud_sync.clone();
     }
     Ok((200, body))
+}
+
+/// `POST /v1/audit/remediations/package_shim_path`: routes the named package
+/// manager through Guard's shims when the entitlement allows it.
+fn remediate(host: &mut Host<'_, '_>, payload: &Map<String, Value>) -> Result<Reply, Stop> {
+    let refused = |code: &str| (400, json!({ "error": code, "operation": REMEDIATION }));
+    let Some(manager) = text(payload.get("manager")).map(str::to_owned) else {
+        return Ok(refused("missing_manager"));
+    };
+    let answer = host.step(
+        "supply_chain.prepare",
+        json!({ "operation": REMEDIATION, "access_operation": null, "payload": payload }),
+    )?;
+    let supported: Vec<String> = answer
+        .get("supported_managers")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut requested = Map::new();
+    requested.insert("managers".to_owned(), json!([manager]));
+    let managers = match managers(&requested, &supported) {
+        Ok(Some(managers)) => managers,
+        Ok(None) => return Err(Stop::Dropped),
+        Err(code) => return Ok(refused(code)),
+    };
+    let entitlement = answer.get("entitlement").cloned().unwrap_or(Value::Null);
+    match answer.get("workspace").and_then(Value::as_str) {
+        Some("ok") => {}
+        Some("unavailable") => return Ok(workspace_unavailable(REMEDIATION)),
+        Some("invalid") => {
+            return Ok(refused(
+                text(answer.get("error")).unwrap_or("workspace_dir_invalid"),
+            ))
+        }
+        _ => return Err(Stop::Dropped),
+    }
+    if !truthy(entitlement.get("allowed")) {
+        let Some(access) = answer.get("access").and_then(Value::as_object) else {
+            return Ok(authority_unavailable(&entitlement, REMEDIATION));
+        };
+        let (status, error, message) = block(access).ok_or(Stop::Dropped)?;
+        return Ok((
+            status,
+            json!({
+                "available_actions": access.get("available_actions").cloned().unwrap_or(json!([])),
+                "entitlement": entitlement,
+                "error": error,
+                "message": message,
+                "operation": REMEDIATION,
+            }),
+        ));
+    }
+    if let Some(refusal) = gate_refusal(host, payload)? {
+        return Ok(refusal);
+    }
+    let answer = host.step(
+        "supply_chain.remediate",
+        json!({
+            "operation": REMEDIATION,
+            "manager": manager,
+            "managers": managers,
+            "payload": payload,
+        }),
+    )?;
+    if answer.get("workspace").and_then(Value::as_str) == Some("unavailable") {
+        return Ok(workspace_unavailable(REMEDIATION));
+    }
+    if let Some(code) = text(answer.get("value_error")) {
+        return Ok(refused(code));
+    }
+    let result = answer
+        .get("result")
+        .filter(|result| result.is_object())
+        .ok_or(Stop::Dropped)?;
+    Ok((
+        200,
+        json!({
+            "entitlement": entitlement,
+            "operation": REMEDIATION,
+            "receipt": answer.get("receipt").cloned().unwrap_or(Value::Null),
+            "result": result,
+            "status": "completed",
+        }),
+    ))
 }
 
 fn repair_all(host: &mut Host<'_, '_>, payload: &Map<String, Value>) -> Result<Reply, Stop> {

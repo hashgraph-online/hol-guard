@@ -156,8 +156,9 @@ def prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Entitlement, workspace and access for one package-protection action."""
 
     operation = args.get("operation")
+    # A null access operation asks what the entitlement permits overall.
     access_operation = args.get("access_operation", operation)
-    if not isinstance(operation, str) or not isinstance(access_operation, str):
+    if not isinstance(operation, str) or not (access_operation is None or isinstance(access_operation, str)):
         return {"workspace": "invalid", "error": "unsupported_supply_chain_operation"}
     payload = _payload(args)
     with control_server(store, args) as server:
@@ -332,6 +333,39 @@ def choose_folder(store: GuardStore, args: Mapping[str, Any]) -> dict[str, objec
     return {"picker": "chosen", "workspace": "ok", "workspace_dir": str(resolved)}
 
 
+def remediate(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Routes one package manager through Guard's shims and records the receipt."""
+
+    action = str(args.get("operation") or "")
+    manager = str(args.get("manager") or "")
+    managers = _managers(args) or (manager,)
+    payload = _payload(args)
+    try:
+        context = supply_chain_context(store, payload)
+        result = {"manager": manager, **activate_package_shims(context, managers=managers)}
+    except NativeRunnerAuthorityError:
+        return {"workspace": "unavailable"}
+    except ValueError as error:
+        return {"value_error": str(error)}
+    overrides = package_firewall_receipt_metadata(
+        operation=action, result=result, managers=(manager,), workspace_dir=context.workspace_dir
+    )
+    evidence = overrides.get("scanner_evidence")
+    receipt = record_headless_receipt(
+        store,
+        harness="package-firewall",
+        operation=action,
+        payload=payload,
+        result=result,
+        workspace_id=_text(payload.get("workspace_id")) or store.get_cloud_workspace_id(),
+        policy_decision=_text(overrides.get("policy_decision")),
+        capabilities_summary=_text(overrides.get("capabilities_summary")),
+        artifact_name=_text(overrides.get("artifact_name")),
+        scanner_evidence_extra=evidence if isinstance(evidence, dict) else None,
+    )
+    return {"result": result, "receipt": receipt}
+
+
 def workspace_id(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """The paired Cloud workspace, which keys the action rate limit."""
 
@@ -347,4 +381,5 @@ SUPPLY_CHAIN_CALLS = {
     "supply_chain.run": run,
     "supply_chain.repair_all": repair_all,
     "supply_chain.choose_folder": choose_folder,
+    "supply_chain.remediate": remediate,
 }

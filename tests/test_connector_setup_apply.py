@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import approvals
-from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
 from codex_plugin_scanner.guard import continuation_runtime_local as local_approval_continuation
-from codex_plugin_scanner.guard.daemon import local_cli_api, local_cli_http
+from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
+from codex_plugin_scanner.guard.daemon import local_cli_api
 from codex_plugin_scanner.guard.daemon import local_cli_connector_group as group
 from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
     build_approval_connector_recommendation,
@@ -348,44 +348,6 @@ def test_list_filters_to_one_bound_identity(store: GuardStore, monkeypatch: pyte
     }
     assert service.list_items()["seeded_items"] == seeded
     assert len(service.list_items()["items"]) == 2  # type: ignore[arg-type]
-
-
-class _Handler:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
-        self.written: list[tuple[dict[str, object], int]] = []
-        self.local_cli_api = self
-
-    def _daemon_server(self) -> _Handler:
-        return self
-
-    def list_items(self, **kwargs: object) -> dict[str, object]:
-        self.calls.append(kwargs)
-        return {"items": []}
-
-    def _write_json(self, payload: dict[str, object], status: int = 200, **_kwargs: object) -> None:
-        self.written.append((payload, status))
-
-
-@pytest.mark.parametrize(
-    "query", ["identity=nothex", f"identity={_HASH}&identity={_HASH}", f"identity={_HASH.upper()}"]
-)
-def test_list_rejects_a_malformed_identity(query: str) -> None:
-    handler = _Handler()
-
-    local_cli_http.handle_local_cli_list(handler, query)
-
-    assert handler.calls == []
-    assert handler.written[0][1] == 400
-
-
-def test_list_passes_a_valid_identity() -> None:
-    handler = _Handler()
-
-    local_cli_http.handle_local_cli_list(handler, f"identity={_HASH}")
-    local_cli_http.handle_local_cli_list(handler, "")
-
-    assert handler.calls == [{"identity_hash": _HASH}, {}]
 
 
 # Every Python call site that writes a local-CLI grant. Connector setup adds

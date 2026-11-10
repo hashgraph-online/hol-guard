@@ -381,3 +381,72 @@ fn connect_and_unknown_paths_are_not_answered_and_libraries_relay() {
     );
     assert_eq!(run.reply, Some(None));
 }
+
+#[test]
+fn a_remediation_routes_the_manager_through_the_gate() {
+    let run = drive(
+        &home("remediate"),
+        "/v1/audit/remediations/package_shim_path",
+        json!({"manager": " NPM "}),
+        &[
+            ("supply_chain.prepare", ready(false)),
+            (
+                "supply_chain.remediate",
+                json!({"result": {"manager": "NPM"}, "receipt": {"id": "r"}}),
+            ),
+        ],
+        None,
+    );
+    assert_eq!(run.gated, 1);
+    assert_eq!(
+        run.seen,
+        vec!["supply_chain.prepare", "supply_chain.remediate"]
+    );
+    let (status, body) = answered(run);
+    assert_eq!(status, 200);
+    assert_eq!(body["operation"], "package_shim_path");
+    assert_eq!(body["status"], "completed");
+}
+
+#[test]
+fn a_remediation_refuses_a_missing_or_unknown_manager_and_a_blocked_plan() {
+    let path = "/v1/audit/remediations/package_shim_path";
+    let run = drive(&home("r-missing"), path, json!({"manager": " "}), &[], None);
+    assert_eq!(
+        answered(run),
+        (
+            400,
+            json!({"error": "missing_manager", "operation": "package_shim_path"})
+        )
+    );
+    let run = drive(
+        &home("r-unknown"),
+        path,
+        json!({"manager": "cargo"}),
+        &[("supply_chain.prepare", ready(true))],
+        None,
+    );
+    assert_eq!(answered(run).1["error"], "unsupported_manager");
+    let mut blocked = ready(false);
+    blocked["entitlement"]["allowed"] = json!(false);
+    let run = drive(
+        &home("r-blocked"),
+        path,
+        json!({"manager": "npm"}),
+        &[("supply_chain.prepare", blocked)],
+        None,
+    );
+    assert_eq!(run.gated, 0);
+    let (status, body) = answered(run);
+    assert_eq!(status, 402);
+    assert_eq!(body["operation"], "package_shim_path");
+    assert!(drive(
+        &home("r-other"),
+        "/v1/audit/remediations/other",
+        json!({"x": 1}),
+        &[],
+        None
+    )
+    .reply
+    .is_none());
+}

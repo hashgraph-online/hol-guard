@@ -19,7 +19,6 @@ import pytest
 from codex_plugin_scanner.guard import native_daemon_route as route
 from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.approval_scope_support import APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX
-from codex_plugin_scanner.guard.daemon.server_control_headless import _HEADLESS_APP_ACTIONS
 from codex_plugin_scanner.guard.routes import request_handler as daemon_server
 from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
@@ -166,7 +165,7 @@ def test_resolve_request_matches_recorded_vectors(native_approval_reuse_runtime:
 
 
 def test_route_constants_stay_in_step_with_the_resident_tables(native_approval_reuse_runtime: Path) -> None:
-    for name in _HEADLESS_APP_ACTIONS:
+    for name in ("connect", "repair", "disconnect", "status", "test"):
         facts = route.native_route_facts("POST", f"/v1/apps/{name}", guard_home=native_approval_reuse_runtime)
         assert facts.requires_header_token, name
         assert facts.session_path, name

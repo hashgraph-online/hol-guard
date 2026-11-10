@@ -19,15 +19,10 @@ _MODULES = (
     "codex_plugin_scanner.guard.daemon.server_control_cloud_sync",
     "codex_plugin_scanner.guard.daemon.server_control_connect_flow",
     "codex_plugin_scanner.guard.daemon.server_control_connect_state",
-    "codex_plugin_scanner.guard.daemon.server_control_headless",
-    "codex_plugin_scanner.guard.daemon.server_control_health",
-    "codex_plugin_scanner.guard.daemon.server_control_misc",
-    "codex_plugin_scanner.guard.daemon.server_control_policy",
     "codex_plugin_scanner.guard.routes.repair_calls",
-    "codex_plugin_scanner.guard.daemon.server_control_routes_post",
     "codex_plugin_scanner.guard.routes.supply_chain_calls",
     "codex_plugin_scanner.guard.routes.update_calls",
-    "codex_plugin_scanner.guard.daemon.server_dashboard_support",
+    "codex_plugin_scanner.guard.routes.headless_calls",
     # Library calls import these collaborators where they run.
     "codex_plugin_scanner.guard.cli.update_commands",
 )

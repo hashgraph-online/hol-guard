@@ -40,6 +40,8 @@ pub(super) mod cloud_connect;
 mod gate;
 #[path = "daemon_edge_gate_config.rs"]
 mod gate_config;
+#[path = "daemon_edge_headless.rs"]
+pub(super) mod headless;
 #[path = "daemon_edge_protection_repair.rs"]
 mod protection_repair;
 #[path = "daemon_edge_reconnect.rs"]
@@ -371,13 +373,16 @@ fn control_post(
         let (status, body) = protection_repair::protection_repair(&payload, config, port)?;
         return Some((status, body, caller.cors_origin, false));
     }
-    args.insert("path".to_owned(), Value::from(request.path));
-    let (status, body, no_store) = route_calls::respond(
-        args,
-        &payload,
-        route_calls::call_resident(config, "route.control_post"),
-    )?;
-    Some((status, body, caller.cors_origin, no_store))
+    if let Some(answer) = headless::post(request.path, &payload, config, args) {
+        let (status, body) = answer?;
+        return Some((status, body, caller.cors_origin, false));
+    }
+    Some((
+        404,
+        json!({"error": "not_found"}),
+        caller.cors_origin,
+        false,
+    ))
 }
 
 /// Every `DELETE`, as `do_DELETE` answered it: the header token or, on a

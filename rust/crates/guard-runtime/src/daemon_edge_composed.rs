@@ -168,17 +168,14 @@ pub(super) fn respond(
         }
         path if CONTROL_READS.contains(&path) => {
             let port = reads.published_state()?.get("port")?.as_u64()?;
-            whole_reply(library::call_resident(
-                config,
-                "route.control_get",
-                json!({
-                    "path": path,
-                    "query": request.query,
-                    "port": port,
-                    "daemon_pid": reads.daemon_pid(),
-                    "home_dir": config.user_home.as_deref(),
-                }),
-            ))
+            let mut args = Map::new();
+            args.insert("port".to_owned(), Value::from(port));
+            args.insert("daemon_pid".to_owned(), Value::from(reads.daemon_pid()));
+            args.insert(
+                "home_dir".to_owned(),
+                config.user_home.as_deref().map_or(Value::Null, Value::from),
+            );
+            super::writes::headless::get(path, request.query, config, args)?
         }
         path if EXTENSION_CONTROL_READS.contains(&path) => whole_reply(library::call_resident(
             config,
