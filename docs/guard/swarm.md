@@ -213,7 +213,8 @@ above.
   Observed PIDs can never become signal targets. Unix children use an owned
   process group; Windows uses the existing suspended-child job primitive.
   Active runs prevent idle resident retirement. Explicit shutdown terminates
-  owned work and joins its workers.
+  owned work and joins its workers before draining resident requests, even if
+  another request retains the policy store. New workers cannot start afterward.
 - CIGAR counts successful, correlated responses from known Guard context MCP
   tools (`get_guard_context`, `explain_guard_context`, `explain_guard_action`).
   Grants, connection pairing, and actual reported use remain separate. Hook
@@ -238,8 +239,9 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
 - Rust Swarm: 17 tests cover process discovery, daemon PATH transport, literal stdin, exact resume,
   duplicate/stale/foreign actions, output limits, owned descendant shutdown,
   inert recovery, CLI permissions, and truthful context counts.
-- Native resident: two tests cover scoped home binding, reply identity, schema validation, and
-  local-dashboard authorization; approval and repair sessions are denied.
+- Native resident: three tests cover scoped home binding, reply identity, schema
+  validation, local-dashboard authorization, and owned-tree cleanup while another
+  request retains the policy store. Approval and repair sessions are denied.
 - Rust 1.89.0 workspace formatting and Clippy for `guard-swarm` and
   `hol-guard-runtime` pass, including all targets with warnings denied.
 - Python: 12 native reply binding, error handling, and HTTP framing tests pass,
@@ -262,11 +264,12 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
   with no new diagnostics. The default TypeScript invocation also inherits
   main's missing Node-type configuration.
 
-Before the rebase, an isolated live macOS dashboard verified authenticated Swarm
+After rebasing onto main at `alpha/v3.60.0a66`, an isolated live macOS dashboard verified authenticated Swarm
 reads, real process inventory, and installed Codex detection through the resident/HTTP path.
 The context regression then exercised an observed agent's handoff, both saved
 projects (eight selected files each), successful cited previews, and return to
-the same inspector. CIGAR stayed Ready and the browser reported no page errors.
+the same inspector. After CIGAR startup completed, both previews succeeded and
+the browser reported no page errors.
 
 Use an optimized native runtime for source-checkout UI previews:
 

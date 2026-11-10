@@ -95,6 +95,22 @@ impl Default for Service {
 }
 
 impl Service {
+    /// Stop owned runs even if another request still holds the service alive.
+    /// Joining under the worker lock also covers launches already in flight.
+    pub fn shutdown(&self) {
+        self.registry
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .shutdown = true;
+        let mut workers = self
+            .workers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        for worker in workers.drain(..) {
+            let _ = worker.join();
+        }
+    }
+
     /// The daemon provides its own launch PATH as metadata, never a browser
     /// field. The resident keeps its restricted environment; only owned CLI
     /// children receive the validated absolute search directories.
@@ -362,6 +378,19 @@ impl Service {
     fn start_worker(&self, id: String) -> Result<(), &'static str> {
         let registry = self.registry.clone();
         let mut workers = self.workers.lock().map_err(|_| "swarm_unavailable")?;
+        {
+            let mut state = registry.lock().map_err(|_| "swarm_unavailable")?;
+            if state.shutdown {
+                if let Some(run) = state.runs.get_mut(&id) {
+                    run.active = false;
+                    run.pending.clear();
+                    run.agent.state = AgentState::Stopped;
+                    run.agent.revision += 1;
+                    run.controls();
+                }
+                return Err("swarm_unavailable");
+            }
+        }
         let mut running = Vec::new();
         for worker in workers.drain(..) {
             if worker.is_finished() {
@@ -397,14 +426,7 @@ impl Service {
 
 impl Drop for Service {
     fn drop(&mut self) {
-        if let Ok(mut registry) = self.registry.lock() {
-            registry.shutdown = true;
-        }
-        if let Ok(workers) = self.workers.get_mut() {
-            for worker in workers.drain(..) {
-                let _ = worker.join();
-            }
-        }
+        self.shutdown();
     }
 }
 

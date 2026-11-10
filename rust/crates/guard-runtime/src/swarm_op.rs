@@ -17,6 +17,10 @@ pub(crate) struct ResidentSwarm {
 }
 
 impl ResidentSwarm {
+    pub(crate) fn shutdown(&self) {
+        self.service.shutdown();
+    }
+
     pub(crate) fn has_active_runs(&self) -> bool {
         self.service.has_active_runs()
     }
