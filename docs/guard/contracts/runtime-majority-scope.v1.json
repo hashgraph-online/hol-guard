@@ -288,7 +288,6 @@
           "src/codex_plugin_scanner/guard/daemon/mcp_discovery_jobs.py",
           "src/codex_plugin_scanner/guard/routes/mcp_policy_decisions.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_v2_client.py",
-          "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py",
           "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py"
         ]
       },
@@ -419,14 +418,6 @@
           "src/codex_plugin_scanner/guard/daemon/approval_connector_recommendation.py",
           "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
           "src/codex_plugin_scanner/guard/daemon/local_cli_capability_api.py"
-        ]
-      },
-      {
-        "id": "daemon-dashboard-read-routes",
-        "category": "control_plane",
-        "reason": "Dashboard read routes and their support handlers split out of routes/request_handler.py: extension-control, runtime, inventory, settings, update, request-queue, receipt, policy, evidence and command-activity GET routes, plus the request list, capabilities, operator health, MCP policy request read, static asset, dashboard shell and event stream handlers. Each is reached only from an explicit /v1 GET branch (or a static dashboard path) dispatched by do_GET after the dashboard token check. Evidence: the transitive self-call closure of _handle_runtime_hook, _handle_runtime_hook_fast, _handle_hook_readiness, _execute_runtime_hook and _handle_daemon_identity_challenge contains none of the moved methods, and hook routes are POST-only so do_GET never reaches the hook path.",
-        "path": [
-          "src/codex_plugin_scanner/guard/daemon/server_dashboard_*.py"
         ]
       },
       {

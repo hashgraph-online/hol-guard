@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import server_runtime_hook
 from codex_plugin_scanner.guard.daemon.hook_direct_pi_transport import PI_DIRECT_SWITCH, pi_direct_answer
-from codex_plugin_scanner.guard.routes import request_handler as server
+from tests import daemon_handler_support as server
 
 PAYLOAD = {"tool_name": "bash", "tool_input": {"command": "pwd"}, "cwd": "/work", "guard_remaining_ms": 4000}
 RESPONSE = {"decision": "allow", "policy_action": "allow", "reason_code": "native_allow", "extra": [1, None]}
@@ -183,10 +183,10 @@ def _handle(worker: SimpleNamespace, harness: str, query: str = "workspace=/work
     # The real check: whether the lane may answer a request that names a Guard
     # home is the question these tests exercise, not one to stub away.
     handler._hook_guard_home_query_is_this_home = partial(  # pyright: ignore[reportPrivateUsage]
-        server._GuardDaemonHandler._hook_guard_home_query_is_this_home,  # pyright: ignore[reportPrivateUsage]
+        server.GuardDaemonHandler._hook_guard_home_query_is_this_home,  # pyright: ignore[reportPrivateUsage]
         handler,
     )
-    server._GuardDaemonHandler._handle_runtime_hook(
+    server.GuardDaemonHandler._handle_runtime_hook(
         handler,  # pyright: ignore[reportArgumentType]
         {**PAYLOAD, "hook_env": {"PATH": "/bin"}},
         query,
@@ -289,7 +289,7 @@ def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
         _runtime_hook_fail_safe_response=lambda *args, **kwargs: {"reason_code": kwargs["reason_code"]},
         _write_json=responses.append,
     )
-    server._GuardDaemonHandler._handle_runtime_hook(
+    server.GuardDaemonHandler._handle_runtime_hook(
         handler,  # pyright: ignore[reportArgumentType]
         dict(PAYLOAD),
         "workspace=/work",

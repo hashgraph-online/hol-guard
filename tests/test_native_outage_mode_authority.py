@@ -12,8 +12,8 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
-from codex_plugin_scanner.guard.routes import request_handler as daemon
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import daemon_handler_support as daemon
 
 from .native_policy_snapshot_test_fixtures import _config
 from .test_native_policy_snapshot_cache_binding import _write_resident_authority
@@ -65,7 +65,7 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         "tool_input": {"command": "printf fixture > output.txt"},
     }
     if failure == "capacity":
-        handler = object.__new__(daemon._GuardDaemonHandler)
+        handler = object.__new__(daemon.GuardDaemonHandler)
         handler.server = Mock(store=store)
         response = handler._runtime_hook_capacity_response(payload, {}, default_harness="codex")
     else:

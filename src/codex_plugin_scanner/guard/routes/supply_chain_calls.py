@@ -185,7 +185,9 @@ def _managers(args: Mapping[str, Any]) -> tuple[str, ...] | None:
     return None
 
 
-def _run(store: GuardStore, operation: str, context: HarnessContext, managers: tuple[str, ...] | None) -> dict:
+def _run(
+    store: GuardStore, operation: str, context: HarnessContext, managers: tuple[str, ...] | None
+) -> dict[str, object]:
     from ..daemon.server_control_cloud_sync import _sync_supply_chain_cloud_state_with_optional_auth_context
 
     if operation == "install":

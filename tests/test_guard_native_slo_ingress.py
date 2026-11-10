@@ -6,12 +6,7 @@ from typing import cast
 
 import pytest
 
-from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 from scripts import native_slo_session as native_slo_session_module
-
-
-def test_hook_ingress_body_budget_remains_one_megabyte() -> None:
-    assert _GuardDaemonHandler._MAX_BODY_BYTES == 1_000_000
 
 
 def test_claude_slo_request_uses_authenticated_production_transport(

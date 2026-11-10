@@ -630,6 +630,16 @@
         "warn"
       ],
       "note": "Same scan-finding record field."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/headless_receipts.py",
+      "func": "record_headless_receipt",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "allow"
+      ],
+      "note": "Files the receipt for an app action the user already ran from the dashboard; the stored decision labels history and no hook reads it."
     }
   ]
 }

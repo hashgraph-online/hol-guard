@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
-from codex_plugin_scanner.guard.routes import request_handler as server
+from tests import daemon_handler_support as server
 
 
 class _SettledDirectories:
@@ -93,7 +93,7 @@ def test_server_deadline_includes_elapsed_admission_and_missing_policy_blocks(
         },
         _write_json=responses.append,
     )
-    server._GuardDaemonHandler._handle_runtime_hook(
+    server.GuardDaemonHandler._handle_runtime_hook(
         handler,
         {"hook_event_name": event, "prompt": "synthetic", **hints},
         "",
