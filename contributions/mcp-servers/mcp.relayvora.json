@@ -3,7 +3,7 @@
   "id": "mcp.relayvora",
   "version": "1.0.0",
   "name": "Relayvora",
-  "description": "Local stdio server that saves and resumes coding-agent checkpoints so work can move between Claude Code, Codex and OpenCode. Git evidence is collected by the server; goal and steps are agent-reported, and it never runs tests or shell commands. Listing and reading local checkpoints inherit; saving a checkpoint (reads agent session records, writes under .relayvora/), fetching the shared Git branch and importing or applying carried changes need review. Off until you turn it on.",
+  "description": "Local stdio server that saves and resumes coding-agent checkpoints across Claude Code, Codex and OpenCode. Git evidence is server-collected; goal and steps are agent-reported; it never runs tests or shell commands. Listing and reading checkpoints inherit. Saving one (reads agent session records, writes under .relayvora/, deletes checkpoints past retention, 30 days by default), fetching the shared Git branch and importing or applying carried changes need review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -24,6 +24,7 @@
   },
   "riskClasses": [
     "workspace-file-write",
+    "workspace-file-delete",
     "agent-transcript-read",
     "external-repository-read",
     "untrusted-shared-content",
