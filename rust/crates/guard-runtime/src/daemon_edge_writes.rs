@@ -38,6 +38,8 @@ const MAX_HANDLER_LIST_ITEMS: usize = 4_096;
 mod gate;
 #[path = "daemon_edge_gate_config.rs"]
 mod gate_config;
+#[path = "daemon_edge_protection_repair.rs"]
+mod protection_repair;
 #[path = "daemon_edge_reconnect.rs"]
 mod reconnect;
 #[path = "daemon_edge_resolve.rs"]
@@ -340,6 +342,10 @@ fn control_post(
     }
     let port = reads.published_state()?.get("port")?.as_u64()?;
     reads.report_activity();
+    if request.path == "/v1/protection/repair" {
+        let (status, body) = protection_repair::protection_repair(&payload, config, port)?;
+        return Some((status, body, caller.cors_origin, false));
+    }
     let mut args = serde_json::Map::new();
     args.insert("path".to_owned(), Value::from(request.path));
     args.insert("port".to_owned(), Value::from(port));

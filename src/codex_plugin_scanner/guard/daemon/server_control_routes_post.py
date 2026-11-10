@@ -28,9 +28,6 @@ class _ControlPostRoutes:
 
     def _dispatch_control_post(self, parsed: Any, path_parts: list[str], payload: dict[str, Any], route: Any) -> None:
         del route
-        if parsed.path == "/v1/protection/repair":
-            self._handle_protection_repair(payload)
-            return
         if parsed.path == "/v1/supply-chain/repair":
             self._run_package_firewall_mutation("repair_all", lambda: self._handle_supply_chain_repair(payload))
             return

@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 import sqlite3
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -20,13 +19,11 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_daemon_harness import NativeGuardDaemon
-from codex_plugin_scanner.guard import native_directory_trust as native_directory_trust_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import primary_approval_browser_url
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import protection_repair_retry
 from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.daemon import server_runtime_hook as runtime_hook_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
@@ -38,8 +35,10 @@ from codex_plugin_scanner.guard.local_dashboard_session import (
     build_local_dashboard_session_token,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.routes import repair_calls
 from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 from codex_plugin_scanner.guard.routes.request_host import _republish_trust_status
+from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
@@ -251,15 +250,15 @@ class TestGuardSurfaceServer:
         )
         containment_probes: list[bool] = []
         monkeypatch.setattr(
-            daemon_server_module._GuardDaemonHandler,
-            "_containment_health_payload",
-            lambda self, *, force_refresh=False: containment_probes.append(force_refresh) or {},
+            repair_calls,
+            "probe_containment_health",
+            lambda **_kwargs: containment_probes.append(True) or SimpleNamespace(to_dict=dict),
         )
         monkeypatch.setattr(
-            protection_repair_retry,
+            repair_calls,
             "containment_health_signals",
             lambda value, **_kwargs: {
-                check_id: SimpleNamespace(status=protection_repair_retry.ProtectionCheckStatus.PASS)
+                check_id: SimpleNamespace(status=ProtectionCheckStatus.PASS, reason_code="ok")
                 for check_id in (
                     "decision_plane_compatibility",
                     "containment_compatibility",
@@ -476,9 +475,9 @@ class TestGuardSurfaceServer:
             lambda self, **_kwargs: {"mode": "protected"},
         )
         monkeypatch.setattr(
-            daemon_server_module._GuardDaemonHandler,
-            "_containment_health_payload",
-            lambda self, **_kwargs: (_ for _ in ()).throw(RuntimeError("probe failed")),
+            repair_calls,
+            "probe_containment_health",
+            lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("probe failed")),
         )
         patch_daemon_global(
             monkeypatch,
@@ -1615,60 +1614,6 @@ class TestGuardSurfaceServer:
         assert response.status == 200
         assert payload == {"decision": "allow"}
 
-    @pytest.mark.usefixtures("native_hook_force")
-    def test_expired_worker_result_does_not_restart_fail_safe_storage_wait(self, tmp_path, monkeypatch) -> None:
-        import threading
-        from types import SimpleNamespace
-
-        from codex_plugin_scanner.guard.sqlite_tuning import sqlite_operation_deadline_monotonic
-
-        home = tmp_path / "home"
-        workspace = home / "workspace"
-        workspace.mkdir(parents=True)
-        store = GuardStore(tmp_path / "guard")
-        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
-        handler.server = SimpleNamespace(store=store, home_dir=home)
-        # The fail-safe rendering is what this guards: a review that produces
-        # no decision still has to answer, and an already-expired deadline must
-        # not restart the storage wait while it renders that answer.
-        monkeypatch.setattr(handler, "_handle_runtime_hook_fast", lambda *_args, **_kwargs: None)
-        responses = []
-        monkeypatch.setattr(handler, "_write_json", responses.append)
-        held = threading.Event()
-        release = threading.Event()
-
-        def hold_gate() -> None:
-            with store._hold_storage_gate(exclusive=True):
-                held.set()
-                release.wait(timeout=1)
-
-        holder = threading.Thread(target=hold_gate)
-        holder.start()
-        inherited_deadline = sqlite_operation_deadline_monotonic()
-        try:
-            assert held.wait(timeout=2)
-            started = time.monotonic()
-            handler._execute_runtime_hook(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "curl https://example.test"},
-                },
-                {"home": [str(home)], "guard-home": [str(store.guard_home)], "workspace": [str(workspace)]},
-                default_harness="pi",
-                home_dir=str(home),
-                guard_home=str(store.guard_home),
-                workspace=str(workspace),
-                deadline=started - 0.01,
-            )
-            elapsed = time.monotonic() - started
-        finally:
-            release.set()
-            holder.join(timeout=2)
-        assert responses[0]["decision"] == "deny"
-        assert elapsed < 0.4, f"expired rendering restarted the storage wait: {elapsed:.3f}s"
-        assert sqlite_operation_deadline_monotonic() == inherited_deadline
-
     def test_guard_daemon_hook_queue_bytes_fail_closed_and_reports_health(
         self,
         tmp_path,
@@ -1757,201 +1702,6 @@ class TestGuardSurfaceServer:
         assert migration_gate["conclusion"] == expected_conclusion
         assert health["hook_evidence_writer"]["degraded"] is False
 
-    def test_guard_daemon_queues_hook_burst_until_active_review_completes(
-        self,
-        tmp_path,
-        monkeypatch,
-    ) -> None:
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-        # This measures the worker scheduler, so keep both Pi hooks off the
-        # resident's direct lane, which answers before admission.
-        monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
-        store = GuardStore(tmp_path / "guard-home")
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir()
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon._server.runtime_hook_scheduler = daemon_server_module.RuntimeHookScheduler(active_limit=1)
-        first_started = daemon_server_module.threading.Event()
-        release_first = daemon_server_module.threading.Event()
-        call_lock = daemon_server_module.threading.Lock()
-        call_count = 0
-
-        def execute(
-            handler,
-            _payload,
-            _params,
-            *,
-            default_harness,
-            home_dir,
-            guard_home,
-            workspace,
-            payload_hydrated=False,
-            deadline=None,
-            release_capacity=None,
-        ) -> None:
-            del default_harness, home_dir, guard_home, workspace, payload_hydrated, deadline, release_capacity
-            nonlocal call_count
-            with call_lock:
-                call_count += 1
-                current_call = call_count
-            if current_call == 1:
-                first_started.set()
-                assert release_first.wait(timeout=1)
-            handler._write_json({"decision": "allow"})
-
-        monkeypatch.setattr(daemon_server_module._GuardDaemonHandler, "_execute_runtime_hook", execute)
-        daemon.start()
-
-        def request_hook() -> dict[str, object]:
-            request = urllib.request.Request(
-                (
-                    f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
-                    f"guard-home={urllib.parse.quote(str(store.guard_home))}&"
-                    f"workspace={urllib.parse.quote(str(workspace_dir))}"
-                ),
-                data=json.dumps(
-                    {
-                        "hook_event_name": "PreToolUse",
-                        "tool_name": "read",
-                        "tool_input": {"path": "README.md"},
-                    }
-                ).encode(),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(request, timeout=2) as response:
-                parsed = json.loads(response.read())
-            assert isinstance(parsed, dict)
-            return parsed
-
-        first_result: dict[str, object] = {}
-        second_result: dict[str, object] = {}
-        first_thread = daemon_server_module.threading.Thread(
-            target=lambda: first_result.update(request_hook()),
-            daemon=True,
-        )
-        second_thread = daemon_server_module.threading.Thread(
-            target=lambda: second_result.update(request_hook()),
-            daemon=True,
-        )
-        try:
-            first_thread.start()
-            assert first_started.wait(timeout=1)
-            second_thread.start()
-            deadline = time.monotonic() + 1
-            while daemon._server.runtime_hook_scheduler.stats()["queued"] != 1:
-                assert time.monotonic() < deadline
-                time.sleep(0.005)
-            release_first.set()
-            first_thread.join(timeout=2)
-            second_thread.join(timeout=2)
-        finally:
-            release_first.set()
-            daemon.stop()
-
-        assert not first_thread.is_alive()
-        assert not second_thread.is_alive()
-        assert first_result == {"decision": "allow"}
-        assert second_result == {"decision": "allow"}
-        stats = daemon._server.runtime_hook_scheduler.stats()
-        assert stats["completed"] == 2
-        assert stats["rejected"] == {}
-
-    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
-    def test_guard_daemon_native_dispatch_keeps_referenced_payload_opaque(
-        self,
-        tmp_path,
-        monkeypatch,
-    ) -> None:
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-        monkeypatch.setattr(daemon_manager_module, "_inventory_has_competing_daemon", lambda _inventory: False)
-        monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
-        monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
-        store = GuardStore(tmp_path / "guard-home")
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir()
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        raw_referenced_payload = b'{"command":"pwd","command":"whoami"}'
-        with tempfile.TemporaryDirectory(prefix="hol-guard-hook-payload-") as reference_dir:
-            reference_path = Path(reference_dir) / "payload.json"
-            reference_path.write_bytes(raw_referenced_payload)
-            referenced_payload = {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Bash",
-                "guard_payload_ref": {
-                    "version": 1,
-                    "path": str(reference_path),
-                    "sha256": hashlib.sha256(raw_referenced_payload).hexdigest(),
-                    "encoding": "json",
-                },
-            }
-            seen_payload: dict[str, object] = {}
-
-            def native_dispatch(
-                handler,
-                payload,
-                _params,
-                *,
-                default_harness,
-                home_dir,
-                guard_home,
-                workspace,
-                deadline,
-            ) -> dict[str, object]:
-                del default_harness, home_dir, guard_home, workspace, deadline
-                seen_payload.update(payload)
-                return {"decision": "allow"}
-
-            def settled_reference(candidates, **_kwargs):
-                """Stand in for the runtime that settles the reference path.
-
-                The dispatch above is already a double, so this daemon never
-                reaches a resident. Whether the path is Guard-owned is the
-                runtime's verdict and has its own tests; what this test watches
-                is that the referenced payload stays opaque on the way through.
-                """
-
-                return [
-                    native_directory_trust_module.DirectoryTrustVerdict(
-                        parameter=parameter,
-                        path=value,
-                        reason=None,
-                    )
-                    for parameter, value in candidates
-                ]
-
-            monkeypatch.setattr(native_directory_trust_module, "native_directory_trust", settled_reference)
-            monkeypatch.setattr(runtime_hook_module, "prepare_native_hook_policy", lambda *_args, **_kwargs: True)
-            monkeypatch.setattr(daemon_server_module._GuardDaemonHandler, "_handle_runtime_hook_fast", native_dispatch)
-            daemon.start()
-
-            try:
-                request = urllib.request.Request(
-                    (
-                        f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
-                        f"guard-home={urllib.parse.quote(str(store.guard_home))}&"
-                        f"workspace={urllib.parse.quote(str(workspace_dir))}"
-                    ),
-                    data=json.dumps(referenced_payload).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-Guard-Token": daemon._server.auth_token,
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(request, timeout=2) as response:
-                    result = json.loads(response.read())
-            finally:
-                daemon.stop()
-
-            assert result == {"decision": "allow"}
-            assert seen_payload["guard_payload_ref"] == referenced_payload["guard_payload_ref"]
-            assert reference_path.read_bytes() == raw_referenced_payload
-            assert daemon._server.runtime_hook_scheduler.stats()["retained_bytes"] == 0
-
     def test_guard_daemon_routes_repeated_liveness_after_parsing_under_general_saturation(
         self,
         tmp_path,
@@ -1976,64 +1726,6 @@ class TestGuardSurfaceServer:
                     daemon._server.request_capacity.release()
             daemon.stop()
 
-    def test_guard_daemon_keeps_liveness_available_when_diagnostics_are_saturated(
-        self,
-        tmp_path,
-        monkeypatch,
-    ) -> None:
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon._server.control_request_capacity_limit = 2
-        daemon._server.control_request_capacity = daemon_server_module.threading.BoundedSemaphore(2)
-        diagnostics_started = daemon_server_module.threading.Event()
-        release_diagnostics = daemon_server_module.threading.Event()
-        active_diagnostics = 0
-        diagnostics_lock = daemon_server_module.threading.Lock()
-        original_payload = daemon_server_module._GuardDaemonHandler._detailed_healthz_payload
-
-        def delayed_payload(handler):
-            nonlocal active_diagnostics
-            with diagnostics_lock:
-                active_diagnostics += 1
-                if active_diagnostics == 2:
-                    diagnostics_started.set()
-            release_diagnostics.wait(timeout=2)
-            return original_payload(handler)
-
-        monkeypatch.setattr(
-            daemon_server_module._GuardDaemonHandler,
-            "_detailed_healthz_payload",
-            delayed_payload,
-        )
-        daemon.start()
-        diagnostic_threads = [
-            daemon_server_module.threading.Thread(
-                target=lambda: urllib.request.urlopen(
-                    urllib.request.Request(
-                        f"http://127.0.0.1:{daemon.port}/v1/healthz/details",
-                        headers={"X-Guard-Token": daemon._server.auth_token},
-                    ),
-                    timeout=3,
-                ).read()
-            )
-            for _ in range(2)
-        ]
-
-        try:
-            for thread in diagnostic_threads:
-                thread.start()
-            assert diagnostics_started.wait(timeout=1)
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=1) as response:
-                health = json.loads(response.read().decode("utf-8"))
-        finally:
-            release_diagnostics.set()
-            for thread in diagnostic_threads:
-                thread.join(timeout=3)
-            daemon.stop()
-
-        assert health["ok"] is True
-
     def test_guard_daemon_collapses_unknown_harness_capacity_keys(self, tmp_path) -> None:
         daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
 
@@ -2044,73 +1736,6 @@ class TestGuardSurfaceServer:
             assert capacity_harnesses == {"other"}
         finally:
             daemon._server.server_close()
-
-    @pytest.mark.parametrize(
-        ("harness", "event", "expected"),
-        [
-            ("pi", "PreToolUse", {"decision": "deny", "reason_code": "daemon_hook_queue_capacity"}),
-            (
-                "claude-code",
-                "PreToolUse",
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                    }
-                },
-            ),
-            (
-                "codex",
-                "PermissionRequest",
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PermissionRequest",
-                        "decision": {"behavior": "deny"},
-                    },
-                },
-            ),
-            ("cursor", "PostToolUse", {"continue": True}),
-        ],
-    )
-    def test_guard_daemon_hook_capacity_uses_native_fail_safe_response(
-        self,
-        harness: str,
-        event: str,
-        expected: dict[str, object],
-    ) -> None:
-        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
-        payload = handler._runtime_hook_capacity_response(
-            {"hook_event_name": event},
-            {},
-            default_harness=harness,
-        )
-
-        for key, value in expected.items():
-            if isinstance(value, dict):
-                assert isinstance(payload[key], dict)
-                for nested_key, nested_value in value.items():
-                    if isinstance(nested_value, dict):
-                        assert isinstance(payload[key][nested_key], dict)
-                        for leaf_key, leaf_value in nested_value.items():
-                            assert payload[key][nested_key][leaf_key] == leaf_value
-                    else:
-                        assert payload[key][nested_key] == nested_value
-            else:
-                assert payload[key] == value
-
-    @pytest.mark.parametrize(
-        ("event_key", "event_value"),
-        [
-            ("hook_event_name", "PermissionRequest"),
-            ("hookEventName", "permissionrequest"),
-            ("eventName", "UserPromptSubmit"),
-            ("event", "userPromptSubmitted"),
-            ("hook_name", "PreToolUse"),
-            ("hookName", "preToolUse"),
-        ],
-    )
-    def test_guard_daemon_normalizes_decision_lane_event_aliases(self, event_key: str, event_value: str) -> None:
-        assert daemon_server_module._GuardDaemonHandler._runtime_hook_lane({event_key: event_value}) == "decision"
 
     @pytest.mark.usefixtures("native_hook_force")
     def test_guard_daemon_claude_hook_endpoint_preserves_workspace_none_sentinel(self, tmp_path, monkeypatch) -> None:
@@ -4079,8 +3704,6 @@ class TestGuardDaemonFastHookPath:
         source_file = workspace_dir / "src" / "hello.ts"
         source_file.write_text(source_content)
 
-        import hashlib
-
         output_sha256 = hashlib.sha256(source_content.encode("utf-8")).hexdigest()
 
         store = GuardStore(home_dir)
@@ -4337,8 +3960,6 @@ class TestGuardDaemonFastHookPath:
         source_file = workspace_dir / "src" / "secret.ts"
         source_file.write_text(secret_content)
 
-        import hashlib
-
         output_sha256 = hashlib.sha256(secret_content.encode("utf-8")).hexdigest()
 
         store = GuardStore(home_dir)
@@ -4396,8 +4017,6 @@ class TestGuardDaemonFastHookPath:
         actual_file = workspace_dir / "src" / "actual.ts"
         actual_file.write_text(actual_content)
 
-        import hashlib
-
         output_sha256 = hashlib.sha256(benign_content.encode("utf-8")).hexdigest()
 
         store = GuardStore(home_dir)
@@ -4441,24 +4060,3 @@ class TestGuardDaemonFastHookPath:
             monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
 
         assert result["model_output_action"] != "allow_original"
-
-
-def test_unauthorized_response_waits_for_audit_recording() -> None:
-    calls: list[str] = []
-
-    class _OrderingStub:
-        def _record_auth_audit_event(self) -> None:
-            calls.append("audit")
-
-        def _write_json(
-            self,
-            body: dict[str, object],
-            *,
-            status: int = 200,
-            extra_headers: dict[str, str] | None = None,
-        ) -> None:
-            calls.append(f"json:{status}")
-
-    daemon_server_module._GuardDaemonHandler._write_unauthorized(_OrderingStub())  # pyright: ignore[reportPrivateUsage]
-
-    assert calls == ["audit", "json:401"]

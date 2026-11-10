@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
-from codex_plugin_scanner.guard.daemon import protection_repair_retry
-from codex_plugin_scanner.guard.daemon.protection_repair_retry import containment_repair_outcome
-from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
 from tests.runtime_registration_support import (
@@ -151,49 +147,3 @@ def test_protection_repair_all_clears_degraded_evidence_without_a_native_probe(
     assert "decision_stream" in cast(list[str], payload["check_ids"])
     assert "decision_stream" not in cast(dict[str, str], payload["check_reasons"])
     assert store.get_command_activity_persistence_health().active_error_count == 0
-
-
-def test_containment_repair_outcome_reports_signal_reasons(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        protection_repair_retry,
-        "containment_health_signals",
-        lambda _value, **_kwargs: {
-            "decision_plane_compatibility": SimpleNamespace(
-                status=ProtectionCheckStatus.PASS,
-                reason_code="decision_plane_compatible",
-            ),
-            "containment_compatibility": SimpleNamespace(
-                status=ProtectionCheckStatus.FAIL,
-                reason_code="containment_probe_stale",
-            ),
-            "sandbox": SimpleNamespace(
-                status=ProtectionCheckStatus.FAIL,
-                reason_code="unsupported_platform",
-            ),
-        },
-    )
-
-    repaired, failed, reasons = containment_repair_outcome(lambda: {"ok": True})
-
-    assert repaired == ["decision_plane_compatibility"]
-    assert failed == ["containment_compatibility"]
-    assert reasons == {"containment_compatibility": "containment_probe_stale"}
-
-
-def test_containment_repair_outcome_marks_unavailable_health(monkeypatch: pytest.MonkeyPatch) -> None:
-    def raise_probe() -> dict[str, object]:
-        raise RuntimeError("probe failed")
-
-    repaired, failed, reasons = containment_repair_outcome(raise_probe, attempts=2)
-
-    assert repaired == []
-    assert failed == [
-        "decision_plane_compatibility",
-        "containment_compatibility",
-        "sandbox",
-    ]
-    assert reasons == {
-        "decision_plane_compatibility": "containment_health_unavailable",
-        "containment_compatibility": "containment_health_unavailable",
-        "sandbox": "containment_health_unavailable",
-    }

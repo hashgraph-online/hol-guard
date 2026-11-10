@@ -1,6 +1,6 @@
 """Daemon control writes whose handlers share the daemon's server state.
 
-Supply-chain package protection, protection repair, Guard Cloud connect,
+Supply-chain package protection, Guard Cloud connect,
 dashboard updates and first-run initialization run through the daemon's
 control handlers, which read and write the cross-request state the server
 keeps (the package-protection mutation lock, the action rate limiter, the
@@ -28,7 +28,6 @@ def _host_class() -> type:
     from ..daemon.server_control_health import _ControlHealthRoutes
     from ..daemon.server_control_misc import _ControlMiscRoutes
     from ..daemon.server_control_policy import _ControlPolicyRoutes
-    from ..daemon.server_control_repair import _RepairSettingsRoutes
     from ..daemon.server_control_routes_post import _ControlPostRoutes
     from ..daemon.server_control_supply_chain import _SupplyChainRoutes
     from ..daemon.server_dashboard_support import _DashboardSupportRoutes
@@ -40,7 +39,6 @@ def _host_class() -> type:
         _CloudConnectRoutes,
         _HeadlessRoutes,
         _ControlMiscRoutes,
-        _RepairSettingsRoutes,
         _ControlPolicyRoutes,
         _ControlHealthRoutes,
     ):
