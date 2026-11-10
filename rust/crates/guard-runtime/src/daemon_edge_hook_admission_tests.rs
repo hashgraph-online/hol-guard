@@ -99,17 +99,6 @@ fn only_exec_command_names_a_workdir() {
 }
 
 #[test]
-fn paths_normalize_as_python_does() {
-    assert_eq!(normpath("/a/./b/../c/"), "/a/c");
-    assert_eq!(normpath("/.."), "/");
-    assert_eq!(normpath("a/../.."), "..");
-    assert_eq!(normpath(""), ".");
-    assert_eq!(expanduser("~/g", "/h/"), "/h/g");
-    assert_eq!(expanduser("~", "/h"), "/h");
-    assert_eq!(expanduser("x~", "/h"), "x~");
-}
-
-#[test]
 fn truthiness_follows_python() {
     assert!(!truthy(None));
     assert!(!truthy(Some(&json!(""))));

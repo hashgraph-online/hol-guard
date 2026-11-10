@@ -424,11 +424,60 @@ pub(super) fn answer(
             super::http::fold_header_bytes(&mut read[..head_len]);
         }
         let Some(head_len) = whole_request(&read) else {
+            if let Some(response) = oversized_body(client, &read, config, reads) {
+                return write_answer(client, &response, reads, stalled_write);
+            }
             return Outcome::Relay(read);
         };
         return answer_request(client, read, head_len, config, reads, stalled_write);
     };
     answer_request(client, bytes, head_len, config, reads, stalled_write)
+}
+
+/// `do_POST`'s answer to a body declared past what the handler reads: the
+/// caller check first on a guarded route, then `413`.
+fn oversized_body(
+    client: &TcpStream,
+    read: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    let head_len = super::replay::find_head_end(read)?;
+    let request = parse_request(&read[..head_len])?;
+    let declared = super::replay::content_length(&read[..head_len])?;
+    if request.method != "POST" || declared <= super::replay::MAX_REPLAYED_BODY_BYTES {
+        return None;
+    }
+    let token = &config.token;
+    let refused = refusals::refusal(&request, &[], token).or_else(|| {
+        refusals::post_checks_caller_first(&request)
+            .then(|| refusals::credential_refusal(&request, token))
+            .flatten()
+    });
+    if let Some(refusal) = refused {
+        let (status, body, cors_origin) =
+            refusals::respond(&request, &refusal, client.local_addr().ok(), config, reads);
+        return Some(json_response(
+            status,
+            &body,
+            config.dashboard_build.as_deref(),
+            cors_origin.as_deref(),
+            false,
+        ));
+    }
+    let error = if refusals::post_checks_caller_first(&request) {
+        "body_too_large"
+    } else {
+        "request_body_too_large"
+    };
+    let cors_origin = authorize_origin(&request).and_then(|caller| caller.cors_origin);
+    Some(json_response(
+        413,
+        &serde_json::json!({ "error": error }),
+        config.dashboard_build.as_deref(),
+        cors_origin.as_deref(),
+        false,
+    ))
 }
 
 /// How long a client still sending its request has to finish it.

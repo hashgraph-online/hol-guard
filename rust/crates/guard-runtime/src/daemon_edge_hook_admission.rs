@@ -214,42 +214,6 @@ pub(super) fn truthy(value: Option<&Value>) -> bool {
     }
 }
 
-/// `os.path.normpath` for a POSIX path.
-pub(super) fn normpath(path: &str) -> String {
-    if path.is_empty() {
-        return ".".to_owned();
-    }
-    let absolute = path.starts_with('/');
-    let mut parts: Vec<&str> = Vec::new();
-    for part in path.split('/') {
-        match part {
-            "" | "." => {}
-            ".." if parts.last().is_some_and(|last| *last != "..") => {
-                parts.pop();
-            }
-            ".." if absolute => {}
-            part => parts.push(part),
-        }
-    }
-    let joined = parts.join("/");
-    match (absolute, joined.is_empty()) {
-        (true, _) => format!("/{joined}"),
-        (false, true) => ".".to_owned(),
-        (false, false) => joined,
-    }
-}
-
-/// `os.path.expanduser` for `~` and `~/...`.
-pub(super) fn expanduser(path: &str, home: &str) -> String {
-    if path == "~" {
-        return home.to_owned();
-    }
-    match path.strip_prefix("~/") {
-        Some(rest) => format!("{}/{rest}", home.trim_end_matches('/')),
-        None => path.to_owned(),
-    }
-}
-
 /// Why a directory the hook named was refused, under the parameter the
 /// route reports it as.
 #[derive(Debug, PartialEq)]

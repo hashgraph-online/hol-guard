@@ -21,7 +21,7 @@ use serde_json::{Map, Value};
 use sha2::Sha256;
 
 use super::http::Request;
-use crate::daemon_route_paths::session_path;
+use crate::daemon_route_paths::{session_path, supply_chain_claim_action};
 use crate::daemon_route_session::{origin_decision, session_authorize, SessionRequest};
 use crate::guard_store_json::{aware_epoch_micros, py_strip};
 use crate::hook_env_stamp::json_string;
@@ -388,7 +388,17 @@ pub(super) fn authorize_write_with(
 /// Whether a `POST` that failed the header check may still be admitted by a
 /// session verdict that reads its body.
 pub(super) fn session_may_read_payload(request: &Request<'_>) -> bool {
-    request.method == "POST" && session_path(request.method, request.path)
+    // An action-scoped session (a supply-chain action or a cloud app action)
+    // is decided on the body's workspace, location and origin.
+    request.method == "POST"
+        && (session_path(request.method, request.path)
+            || supply_chain_claim_action(request.path).is_some()
+            || cloud_app_action_path(request.path))
+}
+
+fn cloud_app_action_path(path: &str) -> bool {
+    let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    parts.len() == 3 && parts[..2] == ["v1", "apps"]
 }
 
 /// The body fields a session verdict reads, as `native_session_authorize`

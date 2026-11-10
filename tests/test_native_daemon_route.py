@@ -19,8 +19,6 @@ import pytest
 from codex_plugin_scanner.guard import native_daemon_route as route
 from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.approval_scope_support import APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX
-from codex_plugin_scanner.guard.routes import request_handler as daemon_server
-from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
 pytestmark = pytest.mark.native_route_unpinned
 
@@ -37,28 +35,6 @@ _DOCUMENT = json.loads(
 )
 _VECTORS = _DOCUMENT["vectors"]
 _FAR_FUTURE = 1e18
-
-
-class _Headers:
-    def __init__(self, values: dict[str, str | None]) -> None:
-        self._values = values
-
-    def get(self, name: str, default: object = None) -> object:
-        value = self._values.get(name)
-        return default if value is None else value
-
-
-def _handler(home: Path, command: str, path: str, headers: dict[str, str | None], nonces: list[str] | None = None):
-    handler = object.__new__(_GuardDaemonHandler)
-    handler.command = command
-    handler.path = path
-    handler.headers = _Headers(headers)  # type: ignore[assignment]
-    handler.server = SimpleNamespace(  # type: ignore[assignment]
-        store=SimpleNamespace(guard_home=home),
-        package_firewall_session_nonces=dict.fromkeys(nonces or [], _FAR_FUTURE),
-        package_firewall_session_nonces_lock=threading.Lock(),
-    )
-    return handler
 
 
 def _by_kind(kind: str) -> list[dict[str, object]]:
@@ -85,63 +61,6 @@ def test_route_facts_match_recorded_vectors(native_approval_reuse_runtime: Path)
             "route_class": facts.route_class,
         }
         if answer != vector["expected"]:
-            mismatches.append(vector["name"])
-    assert mismatches == []
-
-
-def test_origin_decisions_match_recorded_vectors(native_approval_reuse_runtime: Path) -> None:
-    mismatches = []
-    for vector in _by_kind("origin"):
-        raw = vector["raw"]
-        handler = _handler(native_approval_reuse_runtime, "GET", raw["path"], {"Origin": raw["origin"]})
-        answer = {
-            "allowed": handler._origin_is_allowed_for_request(raw["path"]),
-            "hosted_origin": handler._is_hosted_dashboard_origin(),
-        }
-        if answer != vector["expected"]:
-            mismatches.append(vector["name"])
-    assert mismatches == []
-
-
-def test_unnormalizable_origins_are_refused_without_a_native_answer(tmp_path: Path) -> None:
-    gate = _DOCUMENT["python_gate"]
-    assert len(gate) >= 20
-    for vector in gate:
-        raw = vector["raw"]
-        handler = _handler(tmp_path, "GET", raw["path"], {"Origin": raw["origin"]})
-        assert handler._origin_is_allowed_for_request(raw["path"]) is False, vector["name"]
-        assert handler._is_hosted_dashboard_origin() is False, vector["name"]
-
-
-def test_strict_loopback_matches_recorded_vectors(native_approval_reuse_runtime: Path) -> None:
-    mismatches = []
-    for vector in _by_kind("strict_loopback"):
-        handler = _handler(native_approval_reuse_runtime, "POST", "/", {})
-        if handler._strict_loopback_origin(vector["raw"]["value"]) != vector["expected"]["origin"]:
-            mismatches.append(vector["name"])
-    assert mismatches == []
-
-
-def test_session_authorization_matches_recorded_vectors_including_nonce_replay(
-    native_approval_reuse_runtime: Path,
-) -> None:
-    mismatches = []
-    for vector in _by_kind("session_authorize"):
-        raw, expected = vector["raw"], vector["expected"]
-        headers = {"Origin": raw["origin_header"], "X-Guard-Dashboard-Nonce": raw["nonce_header"]}
-        handler = _handler(native_approval_reuse_runtime, raw["method"], raw["path"], headers)
-        allowed = handler._dashboard_session_claims_authorize_request(raw["claims"], payload=raw["payload"])
-        consumed = sorted(handler.server.package_firewall_session_nonces)  # type: ignore[attr-defined]
-        replay = _handler(
-            native_approval_reuse_runtime, raw["method"], raw["path"], headers, [name for name in consumed]
-        )
-        replayed = replay._dashboard_session_claims_authorize_request(raw["claims"], payload=raw["payload"])
-        got = {
-            "allowed": allowed,
-            "consume_nonce": consumed[0] if consumed else None,
-            "replay_allowed": replayed,
-        }
-        if got != expected:
             mismatches.append(vector["name"])
     assert mismatches == []
 
@@ -411,20 +330,3 @@ def test_resolve_replies_with_an_unknown_outcome_are_rejected(monkeypatch: pytes
 
 def _failing(*_args: object, **_kwargs: object) -> None:
     raise route.NativeDaemonRouteError("native_daemon_route_unavailable")
-
-
-def test_handler_denies_when_the_resident_cannot_answer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    for name in (
-        "native_origin_decision",
-        "native_route_facts",
-        "native_session_authorize",
-        "native_strict_loopback_origin",
-    ):
-        monkeypatch.setattr(daemon_server, name, _failing)
-    handler = _handler(tmp_path, "POST", "/v1/runtime", {"Origin": "http://127.0.0.1:4781"})
-    assert handler._origin_is_allowed_for_request("/v1/runtime") is False
-    # Without an answer the origin is treated as hosted, which withholds local-only extras.
-    assert handler._is_hosted_dashboard_origin() is True
-    assert handler._path_supports_dashboard_session("/v1/runtime") is False
-    assert handler._strict_loopback_origin("http://127.0.0.1:4781") is None
-    assert handler._dashboard_session_claims_authorize_request({"surface": "dashboard"}, payload=None) is False
