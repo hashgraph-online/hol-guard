@@ -6,7 +6,7 @@ import json
 import threading
 import time
 from collections.abc import Callable, Mapping
-from typing import cast
+from typing import Any, cast
 
 _STATUS_TIMEOUT_SECONDS = 10.0
 
@@ -64,15 +64,19 @@ def runtime_answer(
         timeout_seconds = deadline - time.monotonic()
     if timeout_seconds is None or timeout_seconds <= 0:
         return None
+    options: dict[str, Any] = {}
+    if stop_event is not None:
+        options["stop_event"] = stop_event
+    if allow_windows_breakaway:
+        # A daemon it launches must outlive the job that contains this call.
+        options["allow_windows_breakaway"] = True
     output = _run_native_process(
         status.identity.path,
         (command, "--stdin"),
         input_text=input_text,
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
-        **({"stop_event": stop_event} if stop_event is not None else {}),
-        # A daemon it launches must outlive the job that contains this call.
-        **({"allow_windows_breakaway": True} if allow_windows_breakaway else {}),
+        **options,
     )
     try:
         answer = cast(object, json.loads(output)) if output is not None else None

@@ -729,7 +729,7 @@ def _daemon_manage(
         request,
         output_limit=_DAEMON_MANAGE_OUTPUT_LIMIT,
         deadline=manage_deadline + 1.0,
-        **({"allow_windows_breakaway": True} if allow_windows_breakaway else {}),
+        allow_windows_breakaway=allow_windows_breakaway,
     )
 
 
