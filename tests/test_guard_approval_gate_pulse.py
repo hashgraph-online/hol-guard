@@ -567,3 +567,36 @@ def test_the_cli_and_the_dashboard_turn_pulse_off_under_the_binding_the_resident
         approval_pulse_commands._disable(tmp_path)
     # The resident binds this change to what its disable_pulse consumer requires.
     assert asked == [_PULSE_DISABLE]
+
+
+# Links to Yanez from the CLI (#7490).
+
+
+@pytest.mark.parametrize("command", [[], ["status"], ["enroll"], ["disable"], ["recover"]])
+def test_every_pulse_command_help_says_where_to_get_the_app_and_read_more(
+    command: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+
+    root = argparse.ArgumentParser()
+    settings = root.add_subparsers(dest="settings_command")
+    add_approval_pulse_parser(settings, lambda parser, **_: None, argparse.ArgumentParser)
+    with pytest.raises(SystemExit):
+        root.parse_args(["approval-pulse", *command, "--help"])
+    shown = capsys.readouterr().out
+    assert "Get the YID app:  https://pulse.yanez.ai/?referrer_id=holguard\n" in shown
+    assert "How Pulse works:  https://docs.yanez.ai/pulse/\n" in shown
+
+
+def test_cli_setup_sends_new_users_to_the_yid_app_page() -> None:
+    from urllib.parse import parse_qs, urlsplit
+
+    from codex_plugin_scanner.guard.cli.approval_pulse_commands import _SETUP_STEPS, PULSE_SITE_URL
+
+    link = urlsplit(PULSE_SITE_URL)
+    assert (link.scheme, link.netloc) == ("https", "pulse.yanez.ai")
+    assert parse_qs(link.query) == {"referrer_id": ["holguard"]}, "only the HOL Guard referrer, nothing about the user"
+    assert any(PULSE_SITE_URL in line for line in _SETUP_STEPS), "setup shows the app link"
+    assert not any("docs.yanez.ai" in line for line in _SETUP_STEPS), "setup does not send new users to developer docs"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniCheckCircle,
@@ -71,6 +71,7 @@ export {
   TotpEnrollmentQrPanel,
 } from "./totp-enrollment-qr-panel";
 import { TotpEnrollmentQrPanel } from "./totp-enrollment-qr-panel";
+import { PulseSettingsPanel } from "./pulse-settings-panel";
 import {
   SettingsSaveProofModal,
   resolveSettingsSaveProofKind,
@@ -1319,6 +1320,10 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
     }
   }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
 
+  const handlePulseSettingsPayload = useCallback((payload: GuardSettingsPayload) => {
+    applyLoadedSettingsPayload(normalizeSettingsPayload(payload));
+  }, [applyLoadedSettingsPayload]);
+
   const handleDisableTotp = useCallback(async () => {
     handleRequestDisableTotp();
   }, [handleRequestDisableTotp]);
@@ -1843,6 +1848,13 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
               onVerifyTotpEnrollment={handleVerifyTotpEnrollment}
               onDisableTotp={handleDisableTotp}
               onRevokeCooldown={handleRequestRevokeCooldown}
+              pulseSettings={
+                <PulseSettingsPanel
+                  gateConfig={draft.approval_gate ?? null}
+                  savedGateConfig={savedSettingsRef.current?.approval_gate ?? null}
+                  onSettingsPayload={handlePulseSettingsPayload}
+                />
+              }
             />
             </div>
             <SettingsFormSection
@@ -2438,6 +2450,8 @@ type ApprovalGateCardProps = {
   onVerifyTotpEnrollment: () => void;
   onDisableTotp: () => void;
   onRevokeCooldown: () => void;
+  /** The Yanez Pulse card, shown below the authenticator card. */
+  pulseSettings?: ReactNode;
 };
 
 function ApprovalGateCard(props: ApprovalGateCardProps) {
@@ -2447,6 +2461,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
   const totpPending = props.gateConfig?.totp_pending === true;
+  // Pulse pauses the authenticator: its secret is kept, but no codes are accepted.
+  const totpPausedByPulse = props.gateConfig?.pulse_enabled === true;
   const failClosed = props.gateConfig?.fail_closed === true;
   const effectiveCooldownSeconds = effectiveApprovalGateCooldownSeconds(props.cooldownSeconds, totpEnabled);
   const cooldownLabel = cooldownExpiresAt
@@ -2526,8 +2542,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               </p>
             </div>
             <div className="px-4">
-              <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
-                {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
+              <Tag tone={totpPausedByPulse ? "slate" : totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
+                {totpPausedByPulse ? "Paused" : totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
               </Tag>
             </div>
           </div>
@@ -2539,7 +2555,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                   : "Set an approval password first, then connect an authenticator app for high-risk approvals."}
               </p>
             )}
-            {gateActiveOnDevice && !totpEnabled && !totpPending && (
+            {gateActiveOnDevice && totpPausedByPulse && (
+              <p className="max-w-xl text-xs leading-5 text-slate-500">
+                Yanez Pulse is on, so Guard does not accept authenticator codes. An authenticator you already set up is kept and works again when you turn Pulse off.
+              </p>
+            )}
+            {gateActiveOnDevice && !totpPausedByPulse && !totpEnabled && !totpPending && (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="max-w-xl space-y-1">
                   <p className="text-sm font-medium text-brand-dark">Add a second factor for high-risk approvals.</p>
@@ -2556,7 +2577,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                 </ActionButton>
               </div>
             )}
-            {gateActiveOnDevice && totpPending && (
+            {gateActiveOnDevice && !totpPausedByPulse && totpPending && (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="max-w-xl space-y-1">
                   <p className="text-sm font-medium text-brand-dark">Finish connecting your authenticator app.</p>
@@ -2611,6 +2632,8 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
             />
           )}
         </div>
+
+        {props.pulseSettings}
 
         {cooldownActive && cooldownLabel !== null && (
           <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
