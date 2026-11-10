@@ -83,14 +83,14 @@ impl Repo {
         let shown = [Span::new(path, start as u64, start as u64 + 3, "")];
         let stub = first_stub(&shown, &[(path.to_owned(), text)])?;
         let git = Git::find(self.root.path(), self.home.path()).expect("a trusted git");
-        removed(&git, &stub, Instant::now() + Duration::from_secs(10))
+        before(&git, &stub, Instant::now() + Duration::from_secs(10))
     }
 }
 
 /// Asked to write a body again after a refactor, an agent searched the
-/// history for the old one. The note shows what the stub's commit took out.
+/// history for the old one. The note shows the definition before the stub.
 #[test]
-fn a_stub_shows_what_its_commit_took_out() {
+fn a_stub_shows_its_definition_before() {
     let repo = Repo::new();
     repo.commit("src/core.py", BEFORE, "first");
     repo.commit(
@@ -106,10 +106,25 @@ fn a_stub_shows_what_its_commit_took_out() {
         "{note}"
     );
     assert!(
-        note.contains("\n-    doubled = value * 2\n-    return doubled\n"),
+        note.ends_with(
+            "the definition read:\ndef convert(value):\n    \"\"\"Double the value.\"\"\"\n    \
+doubled = value * 2\n    return doubled"
+        ),
         "{note}"
     );
-    assert!(note.contains("+    raise NotImplementedError"), "{note}");
+}
+
+/// Code the same commit took out elsewhere is not the definition's.
+#[test]
+fn another_definition_removed_with_it_is_not_shown() {
+    let repo = Repo::new();
+    let gone = "def gone():\n    return 0\n\n\ndef convert(value):";
+    let before = BEFORE.replace("def convert(value):", gone);
+    repo.commit("src/core.py", &before, "first");
+    repo.commit("src/core.py", STUBBED, "Drop old convert");
+    let note = repo.note("src/core.py").expect("a note");
+    assert!(note.contains("doubled = value * 2"), "{note}");
+    assert!(!note.contains("gone"), "{note}");
     assert!(!note.contains("def other"), "{note}");
 }
 
@@ -125,36 +140,52 @@ fn a_new_or_uncommitted_stub_gives_nothing() {
     assert_eq!(repo.note("src/core.py"), None);
 }
 
-/// A change too long to show is named with the command that shows it.
+/// A definition too long to show is named with a command that shows it,
+/// its path quoted.
 #[test]
-fn a_long_change_is_named() {
+fn a_long_definition_is_named() {
     let repo = Repo::new();
     let long: String = (0..120)
         .map(|n| format!("    step_{n} = value + {n}\n"))
         .collect();
     let before = BEFORE.replace("    doubled = value * 2\n", &long);
-    repo.commit("src/core.py", &before, "first");
-    repo.commit("src/core.py", STUBBED, "Drop old convert");
-    let note = repo.note("src/core.py").expect("a note");
-    assert!(note.contains("took 121 lines out"), "{note}");
-    assert!(note.contains("`git show "), "{note}");
+    repo.commit("src dir/core.py", &before, "first");
+    repo.commit("src dir/core.py", STUBBED, "Drop old convert");
+    let note = repo.note("src dir/core.py").expect("a note");
+    assert!(note.contains("The definition ran 123 lines"), "{note}");
+    assert!(note.contains(":src dir/core.py'` shows"), "{note}");
     assert!(!note.contains("step_1 "), "{note}");
 }
 
-/// The removed lines are no file's any more, so a secret in them is not
-/// shown.
+/// The old definition is no file's any more, so a secret in it is not shown.
 #[test]
-fn a_secret_in_the_removed_lines_is_not_shown() {
+fn a_secret_in_the_old_definition_is_not_shown() {
     let repo = Repo::new();
     let key = format!(
         "{d}BEGIN PRIVATE KEY{d}\nprivate test material\n{d}END PRIVATE KEY{d}",
         d = "-".repeat(5)
     );
+    let key = key.replace('\n', "\n    ");
     let before = BEFORE.replace(
         "    doubled = value * 2\n",
-        &format!("    doubled = value * 2\n{key}\n"),
+        &format!("    doubled = value * 2\n    {key}\n"),
     );
     repo.commit("src/core.py", &before, "first");
     repo.commit("src/core.py", STUBBED, "Drop old convert");
+    assert_eq!(repo.note("src/core.py"), None);
+}
+
+/// The subject is scanned whole: a password whose host falls past the
+/// shortened subject still keeps the note back.
+#[test]
+fn a_secret_in_the_whole_subject_is_not_shown() {
+    let repo = Repo::new();
+    let password = ["Kq7Xr2", "mWp9Lq4z"].concat();
+    let subject = format!(
+        "Drop old convert{} https://alice:{password}@git.lan/alice/notes.git",
+        " now".repeat(15)
+    );
+    repo.commit("src/core.py", BEFORE, "first");
+    repo.commit("src/core.py", STUBBED, &subject);
     assert_eq!(repo.note("src/core.py"), None);
 }
