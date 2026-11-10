@@ -19,9 +19,8 @@
   "homepage": "https://github.com/calasdan-sketch/monomem",
   "license": "MIT",
   "launch": {
-    "kind": "package-launcher",
-    "command": "npx",
-    "package": "monomem"
+    "kind": "direct-command",
+    "command": "monomem-mcp"
   },
   "riskClasses": [
     "local-sqlite-write",
@@ -71,12 +70,13 @@
     "https://www.npmjs.com/package/monomem"
   ],
   "saferAlternatives": [
-    "Tools use only local SQLite; no model is called. Semantic search may send notes and queries to MONOMEM_EMBED_URL (default: local Ollama at localhost:11434); Monomem warns if remote. HTTP binds 127.0.0.1 by default and ships no tunnel.",
-    "A default install registers only nine tools (state_write, state_read, state_search, state_list, state_delete, catch_up and the supersede preview/confirm/undo trio). The rest appear only when MONOMEM_TOOLS opts them in.",
-    "Stdio is a tokenless local operator (written_by=stdio); clients are indistinguishable. memory_quarantine, trust_policy, memory_history_purge, memory_consolidate, task_approve need MONOMEM_STDIO_ADMIN_TOOLS=1. Per-agent scoped HTTP tokens stamp written_by.",
-    "Default MONOMEM_LINT: every write rejects known secret formats, quarantines suspected prompt injection for operator review and warns on bare high-entropy strings. It can be loosened (e.g. warn), limiting these guarantees to default.",
-    "Supersede preview/confirm; undo reverses it. state_delete hides notes from all agents, drops vectors; operators can restore. monomem delete is permanent. SQLite secure_delete is on; WAL/backups may retain copies. Review required: hides shared memory.",
-    "task_put can queue a command task for the separately run, unpublished command runner, and task_approve lets it run; both stay on review.",
-    "Use npx -y monomem@<version> mcp (monomem setup); mcp is required. The package-launcher schema example omits the subcommand. node <path>/cli.js mcp or Windows cmd /c npx preserves Guard's normal handling."
+    "No model is called and data stays in the local SQLite file. Semantic search is off by default; if MONOMEM_EMBEDDINGS is turned on and MONOMEM_EMBED_URL points at a remote host, note and search text are sent there.",
+    "A default install registers nine tools (state_write, state_read, state_search, state_list, state_delete, catch_up and the supersede preview/confirm/undo trio). The rest appear only when MONOMEM_TOOLS opts them in.",
+    "This stdio launch runs as the local operator with no token: every write is stamped written_by \"stdio\" and clients sharing it are not told apart. Scoped per-agent tokens apply only to the HTTP server (monomem serve), not here.",
+    "Over stdio the operator tools (memory_quarantine, trust_policy, memory_history_purge, memory_consolidate, task_approve) are refused unless MONOMEM_STDIO_ADMIN_TOOLS=1.",
+    "Under the default MONOMEM_LINT policy, known secret formats are refused and injection-like text is held for review; bare high-entropy strings are stored with a warning. MONOMEM_LINT=warn stores all of these, so this holds only by default.",
+    "state_delete is a logical delete: the note is hidden from every agent read and can be restored. Its text can remain in the database file, the WAL and backups; permanent removal is the operator CLI (monomem delete). It stays on review.",
+    "Replacing a note is preview then confirm, and memory_supersede_undo reverses it. task_put can queue a command task for a separately run, unpublished runner and task_approve lets it run; both stay on review.",
+    "This entry matches the monomem-mcp command (npm i -g monomem, 1.3.1 or later), which starts only the stdio MCP server. Launches such as npx -y monomem mcp, node <path>/cli.js mcp or cmd /c npx keep Guard normal handling."
   ]
 }
