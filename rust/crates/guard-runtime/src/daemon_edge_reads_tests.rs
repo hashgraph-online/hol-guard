@@ -86,13 +86,27 @@ fn query_values_decode_as_parse_qs_does() {
         query_value("har%6Eess=a+b%21", "harness"),
         Ok(Some("a b!".into()))
     );
-    assert_eq!(query_value("harness=%zz", "harness"), Err(()));
-    assert_eq!(query_value("harness=%ff", "harness"), Err(()));
+    assert_eq!(
+        query_value("harness=%zz", "harness"),
+        Ok(Some("%zz".into()))
+    );
+    assert_eq!(
+        query_value("harness=%ff", "harness"),
+        Ok(Some("\u{fffd}".into()))
+    );
     assert_eq!(query_int("", "limit", 200), Ok(200));
     assert_eq!(query_int("limit=-3", "limit", 200), Ok(-3));
     assert_eq!(query_int("limit=007", "limit", 200), Ok(7));
-    for spelling in ["limit=%2B5", "limit=%205", "limit=5_0", "limit=five"] {
-        assert_eq!(query_int(spelling, "limit", 200), Err(()), "{spelling}");
+    for (spelling, value) in [
+        ("limit=%2B5", 5),
+        ("limit=%205", 5),
+        ("limit=5_0", 50),
+        ("limit=five", 200),
+        ("limit=5__0", 200),
+        ("limit=_5", 200),
+        ("limit=99999999999999999999999", i64::MAX),
+    ] {
+        assert_eq!(query_int(spelling, "limit", 200), Ok(value), "{spelling}");
     }
 }
 
@@ -286,11 +300,7 @@ fn replays_everything_else_to_the_daemon_byte_for_byte() {
         ),
         "GET /v1/read-state HTTP/1.1\r\nX-Guard-Dashboard-Session: gld1.e30.x\r\n\r\n".to_owned(),
         format!("GET /v1/requests HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
-        format!("GET /v1/receipts/analytics HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
         format!("POST /v1/read-state HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
-        // The store has no receipts table, so the read fails and the daemon
-        // answers it instead.
-        format!("GET /v1/receipts HTTP/1.1\r\nX-Guard-Token: {TOKEN}\r\n\r\n"),
     ] {
         assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
         let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();

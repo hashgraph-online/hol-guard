@@ -49,10 +49,24 @@ fn rejects_list_queries_with_the_code_the_daemon_raises_first() {
 }
 
 #[test]
-fn relays_list_queries_the_daemon_reads_its_own_way() {
-    for query in ["limit=%zz", "limit=%C3%A9", "occurred_through=9999-12-31"] {
-        assert!(list_query(query, TOKEN).is_none(), "{query}");
+fn reads_list_queries_the_way_the_daemon_does() {
+    for query in ["limit=%zz", "limit=%C3%A9", "limit=1__0"] {
+        assert_eq!(
+            rejected(list_query(query, TOKEN)),
+            "invalid_integer",
+            "{query}"
+        );
     }
+    let (filters, _) = list_query("limit=%D9%A3&occurred_through=9999-12-31", TOKEN)
+        .unwrap()
+        .unwrap();
+    assert_eq!(filters.limit, 3);
+    let store = filters.store_filters();
+    assert_eq!(
+        store["occurred_until"],
+        json!("9999-12-31T23:59:59.999999+00:00")
+    );
+    assert_eq!(store["until_inclusive"], json!(true));
 }
 
 #[test]
@@ -208,8 +222,8 @@ fn reads_integers_as_python_int_reads_them() {
         ("_1", Some(Err("invalid_integer"))),
         ("1.5", Some(Err("invalid_integer"))),
         ("+", Some(Err("invalid_integer"))),
-        ("\u{0661}", None),
-        ("99999999999999999999", None),
+        ("\u{0661}", Some(Ok(1))),
+        ("99999999999999999999", Some(Ok(i64::MAX))),
     ] {
         assert_eq!(bounded_int(Some(text.to_owned()), 1), expected, "{text}");
     }

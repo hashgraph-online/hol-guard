@@ -30,7 +30,6 @@ from .command_activity_api import handle_command_activity_feedback
 from .extension_control_api import ExtensionControlApiError
 from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
-from .plugin_updates_http import handle_plugin_updates_dismiss
 from .server_common import _now
 
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
@@ -209,9 +208,6 @@ class _ControlPostRoutes:
             return
         if parsed.path == "/v1/update/reconnect/prepare":
             self._handle_dashboard_reconnect_prepare()
-            return
-        if parsed.path == "/v1/plugins/updates/dismiss":
-            handle_plugin_updates_dismiss(self, payload)
             return
         if parsed.path == "/v1/update/channel":
             self._handle_update_channel(payload)

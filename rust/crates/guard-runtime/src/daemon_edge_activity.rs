@@ -204,8 +204,13 @@ impl ListFilters {
             "extension_id": self.extension_id,
             "rule_id": self.rule_id,
             "occurred_from": self.occurred_from.and_then(midnight),
-            "occurred_until": self.occurred_through.and_then(|day| midnight(day + 1)),
-            "until_inclusive": false,
+            "occurred_until": match self.occurred_through {
+                Some(day) if day == days_from_civil(9999, 12, 31) => {
+                    Some("9999-12-31T23:59:59.999999+00:00".to_owned())
+                }
+                through => through.and_then(|day| midnight(day + 1)),
+            },
+            "until_inclusive": self.occurred_through == Some(days_from_civil(9999, 12, 31)),
         })
     }
 }
@@ -229,10 +234,6 @@ fn list_query(query: &str, token: &[u8]) -> Parsed<(ListFilters, Option<(String,
         values.remove("occurred_through"),
         "invalid_occurred_through"
     ));
-    // `date.max` reads as an inclusive bound the edge does not reproduce.
-    if occurred_through == Some(days_from_civil(9999, 12, 31)) {
-        return None;
-    }
     let filters = ListFilters {
         limit,
         harness: values.remove("harness"),
@@ -338,39 +339,7 @@ fn bounded_int(value: Option<String>, default: i64) -> Parsed<i64> {
     let Some(value) = value else {
         return Some(Ok(default));
     };
-    // `int()` also strips the separators U+001C..U+001F; leave those to it.
-    if !value.is_ascii() || value.bytes().any(|byte| (0x1c..=0x1f).contains(&byte)) {
-        return None;
-    }
-    let trimmed =
-        value.trim_matches(|c: char| c.is_ascii_whitespace() || c == '\x0b' || c == '\x0c');
-    let (negative, body) = match trimmed.as_bytes().first() {
-        Some(b'-') => (true, &trimmed[1..]),
-        Some(b'+') => (false, &trimmed[1..]),
-        _ => (false, trimmed),
-    };
-    let well_formed = !body.is_empty()
-        && !body.starts_with('_')
-        && !body.ends_with('_')
-        && !body.contains("__")
-        && body
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || byte == b'_');
-    if !well_formed {
-        return Some(Err("invalid_integer"));
-    }
-    let digits: String = body.chars().filter(|c| *c != '_').collect();
-    let digits = digits.trim_start_matches('0');
-    if digits.len() > 18 {
-        // Larger than any page bound; the daemon reports it out of range.
-        return None;
-    }
-    let magnitude: i64 = if digits.is_empty() {
-        0
-    } else {
-        digits.parse().ok()?
-    };
-    Some(Ok(if negative { -magnitude } else { magnitude }))
+    Some(crate::daemon_edge::http::python_int(&value).ok_or("invalid_integer"))
 }
 
 /// `_optional_date`: the canonical `YYYY-MM-DD` spelling of a real date, as

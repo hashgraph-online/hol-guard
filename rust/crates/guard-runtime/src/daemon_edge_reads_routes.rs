@@ -81,15 +81,15 @@ pub(super) fn respond(
     if !dispatch::get_routed(request.path) {
         return None;
     }
-    let answer = dispatch::answer(
-        "GET",
-        request.path,
-        request.query,
-        &serde_json::Map::new(),
-        dispatch::call_library(config),
-    );
+    // A route the edge owns whose store read could not be answered: the
+    // store is unavailable, never a reason to hand the read elsewhere.
     reads.report_activity();
-    answer.map(|(status, body, no_store)| (status, body, caller.cors_origin, no_store))
+    Some((
+        503,
+        json!({"error": "daemon_route_unavailable"}),
+        caller.cors_origin,
+        true,
+    ))
 }
 
 /// The answer the daemon's Python route gives for the same path and query, or

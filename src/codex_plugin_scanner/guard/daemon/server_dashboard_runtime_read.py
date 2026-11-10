@@ -23,7 +23,6 @@ from .command_activity_health_repair import auto_repair_command_activity_health_
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
 from .local_cli_http import handle_local_cli_list
-from .plugin_updates_http import handle_plugin_updates_read
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
 
@@ -204,9 +203,6 @@ class _DashboardRuntimeReadRoutes:
                 write_cloud_actions_unavailable(self)
                 return True
             self._write_json(status, extra_headers={"Cache-Control": "no-store"})
-            return True
-        if parsed.path == "/v1/plugins/updates":
-            handle_plugin_updates_read(self)
             return True
         if parsed.path == "/v1/update/status":
             self._write_json(
