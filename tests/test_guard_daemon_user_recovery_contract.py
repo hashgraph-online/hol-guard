@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.user_recovery_contract import (
+from codex_plugin_scanner.guard.native_recovery_store import (
     MAX_EVENT_BYTES,
     RecoveryContractError,
     encode_recovery_event,

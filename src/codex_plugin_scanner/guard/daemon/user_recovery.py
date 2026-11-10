@@ -20,10 +20,11 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, cast
 
-from .user_recovery_contract import (
+from ..native_recovery_store import (
     CHECK_IDS,
     REASON_CODES,
     RecoveryContractError,
+    recovery_runtime_path,
     validate_recovery_snapshot,
 )
 
@@ -516,7 +517,7 @@ class UserRecoveryCoordinator:
             if snapshot is None:
                 raise KeyError(str(parsed))
             events = [dict(snapshot)]
-        from .recovery_diagnostics import build_recovery_diagnostics
+        from ..native_recovery_store import build_recovery_diagnostics
 
         return build_recovery_diagnostics(events)
 
@@ -1086,18 +1087,7 @@ def _raise_kind(error: Exception) -> str:
 
 
 def _recovery_runtime_path() -> str:
-    from ..native_runtime import native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + 10.0)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or _RECOVERY_FEATURE not in status.capabilities.features
-    ):
-        raise RuntimeError("Guard daemon recovery needs the native runtime.")
-    return str(status.identity.path)
+    return recovery_runtime_path(_RECOVERY_FEATURE)
 
 
 class _EffectServer:

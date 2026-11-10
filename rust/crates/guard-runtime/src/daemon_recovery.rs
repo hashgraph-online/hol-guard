@@ -22,10 +22,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 const SCHEMA: &str = "daemon-recovery.v1";
-const SNAPSHOT_SCHEMA: &str = "hol-guard-recovery.v1";
-const MAX_EVENT_BYTES: usize = 16 * 1024;
-const CAPABILITIES: [&str; 4] = ["diagnostics", "inspect", "restart", "status"];
-const PHASES: [&str; 11] = [
+pub(crate) const SNAPSHOT_SCHEMA: &str = "hol-guard-recovery.v1";
+pub(crate) const MAX_EVENT_BYTES: usize = 16 * 1024;
+pub(crate) const CAPABILITIES: [&str; 4] = ["diagnostics", "inspect", "restart", "status"];
+pub(crate) const PHASES: [&str; 11] = [
     "checking",
     "awaiting_approval",
     "waiting_for_owner",
@@ -38,14 +38,14 @@ const PHASES: [&str; 11] = [
     "failed",
     "timed_out_waiting",
 ];
-const OUTCOMES: [&str; 5] = [
+pub(crate) const OUTCOMES: [&str; 5] = [
     "pending",
     "reconnected",
     "started",
     "restarted",
     "not_recovered",
 ];
-const CHECK_IDS: [&str; 7] = [
+pub(crate) const CHECK_IDS: [&str; 7] = [
     "update_idle",
     "protection_posture",
     "process_identity",
@@ -54,7 +54,7 @@ const CHECK_IDS: [&str; 7] = [
     "dashboard_ready",
     "protection_health",
 ];
-const REASON_CODES: [&str; 19] = [
+pub(crate) const REASON_CODES: [&str; 19] = [
     "healthy",
     "service_missing",
     "service_unresponsive",
@@ -105,6 +105,20 @@ pub(crate) fn run_session(mut reader: impl BufRead, writer: impl Write) -> Resul
     if request.schema != SCHEMA {
         return Err("daemon-recovery: unsupported schema".to_owned());
     }
+    if request.mode == "store" {
+        let store = request.store.unwrap_or(Value::Null);
+        let reply = match crate::daemon_recovery_store::answer(&request.guard_home, &store) {
+            Ok(value) => json!({"done": value}),
+            Err(fail) => json!({"error": fail.code, "kind": fail.kind}),
+        };
+        let mut writer = writer;
+        let mut line = serde_json::to_vec(&reply).map_err(|error| error.to_string())?;
+        line.push(b'\n');
+        return writer
+            .write_all(&line)
+            .and_then(|()| writer.flush())
+            .map_err(|error| format!("daemon-recovery: {error}"));
+    }
     let mut session = Session {
         reader,
         writer,
@@ -148,6 +162,9 @@ struct Request {
     operation: Option<Operation>,
     #[serde(default)]
     fields: Option<Map<String, Value>>,
+    /// Mode `store`: one request for `daemon_recovery_store::answer`.
+    #[serde(default)]
+    store: Option<Value>,
 }
 
 fn default_budget() -> f64 {

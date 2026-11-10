@@ -1092,6 +1092,14 @@
   },
   {
    "verdict": "other-platform",
+   "note": "Windows has no process-group signal; the worker is started detached and `Child::kill` terminates it directly, then the shared wait bound and final kill apply on every platform.",
+   "file": "rust/crates/guard-runtime/src/daemon_manage_recover.rs",
+   "item": "fn stop_worker -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "32995ef46736"
+  },
+  {
+   "verdict": "other-platform",
    "note": "Windows reads the file through its own private-open arm; elsewhere `None` refuses the read rather than reading a file whose privacy is unproven.",
    "file": "rust/crates/guard-runtime/src/daemon_policy_authority.rs",
    "item": "fn read_private_regular_bytes(_p: &Path, _m: u64, _r: bool) -> Option<Vec<u8>>",
