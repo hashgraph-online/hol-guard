@@ -480,8 +480,8 @@ fn environment() -> Vec<(String, String)> {
 }
 
 #[cfg(test)]
-#[path = "contained_workspace_sink_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "contained_workspace_sink_authorization_tests.rs"]
 mod authorization_tests;
+#[cfg(test)]
+#[path = "contained_workspace_sink_tests.rs"]
+mod tests;
