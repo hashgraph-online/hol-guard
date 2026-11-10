@@ -216,7 +216,7 @@ fn attach(
     }
     let searched = walk(&root, &words, &quoted, &named(prompt), budget);
     let found = searched.found(&words);
-    let names = held_names(prompt, &words, &searched.spelled);
+    let held = held_names(prompt, &words, &searched.spelled);
     if found.is_empty() {
         return;
     }
@@ -263,7 +263,7 @@ fn attach(
         words: words.clone(),
         found: found.clone(),
         earlier: earlier.clone(),
-        names: names.clone(),
+        names: held.clone(),
     };
     let until = deadline + HOOK_MARGIN / 2;
     // CIGAR still starting, busy with another prompt, or still loading the
@@ -274,7 +274,7 @@ fn attach(
     let own_read = || {
         service
             .prompt_context_chosen()
-            .then(|| read_matched(home, &root, harness, (&found, &names), &words, &earlier, until))
+            .then(|| read_matched(home, &root, harness, &found, &words, &earlier, &held, until))
             .flatten()
             .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness))
     };
@@ -303,13 +303,15 @@ fn answered(
 /// Guard's own read of the matched files CIGAR would accept: their best
 /// parts, or the names of the files it checked when no part fits or none
 /// holds the project code the prompt `named`.
+#[allow(clippy::too_many_arguments)]
 fn read_matched(
     home: &Path,
     root: &Path,
     harness: &str,
-    (found, named): (&[String], &[String]),
+    found: &[String],
     words: &[String],
     earlier: &[Span],
+    named: &[String],
     until: Instant,
 ) -> Option<Rendered> {
     let (picked, names) = quick_excerpts(home, root, harness, found, words, MAX_OTHER_FILES, until);

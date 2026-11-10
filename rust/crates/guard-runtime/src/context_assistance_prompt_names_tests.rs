@@ -17,7 +17,10 @@ const FILTERS: &str = "def do_filter(value, block):\n    \
 \"\"\"Apply a filter to a block of text before it renders.\"\"\"\n    return value\n";
 
 fn terms(prompt: &str) -> Vec<String> {
-    marked_terms(prompt).into_iter().map(|(term, _)| term).collect()
+    marked_terms(prompt)
+        .into_iter()
+        .map(|(term, _)| term)
+        .collect()
 }
 
 fn excerpt(path: &str, text: &str) -> PickedExcerpt {
@@ -87,9 +90,10 @@ fn a_read_without_the_named_code_names_the_files() {
     assert!(found.contains(&"src/parser.py".to_owned()), "{found:?}");
     let names = held_names(PROMPT, &words, &searched.spelled);
     assert_eq!(names, ["parsefilterblock"]);
-    let read = |found: &[String], names: &[String]| {
+    let read = |found: &[String], held: &[String]| {
         let later = Instant::now() + Duration::from_secs(5);
-        super::super::read_matched(home.path(), &root, "codex", (found, names), &words, &[], later)
+        let read = super::super::read_matched;
+        read(home.path(), &root, "codex", found, &words, &[], held, later)
             .unwrap()
             .text
     };
