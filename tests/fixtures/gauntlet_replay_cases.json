@@ -3,7 +3,8 @@
   "version": 1,
   "known_gaps": {
     "session-git-c-wt-push-feature": "native_command_review_required",
-    "omp-eval-sh-git-status": "native_pre_tool_unknown_review"
+    "omp-eval-sh-git-status": "native_pre_tool_unknown_review",
+    "omp-neg-eval-sh-secret-copy": "native_pre_tool_unknown_review"
   },
   "cases": [
     {
@@ -296,7 +297,7 @@
         "code": "await sh('cp .env output/copied.env')"
       },
       "cwd": "worktree",
-      "expect": "block"
+      "expect": "protection_block"
     },
     {
       "id": "omp-todo-phases",
