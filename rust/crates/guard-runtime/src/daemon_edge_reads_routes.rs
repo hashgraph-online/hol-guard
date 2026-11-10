@@ -172,6 +172,18 @@ pub(super) fn route(
             if let Some(operation_id) = single_segment(path, "/v1/operations/", "") {
                 return records::operation(operation_id, config, reads);
             }
+            if let Some(request_id) = single_segment(path, "/v1/mcp-policy/requests/", "") {
+                return mcp_policy_request(request_id, config, reads);
+            }
+            if single_segment(path, "/v1/apps/", "/cloud").is_some() {
+                return Some((
+                    410,
+                    json!({
+                        "error": "legacy_cloud_handoff_disabled",
+                        "message": "Use hol-guard connect for browser OAuth.",
+                    }),
+                ));
+            }
             // The daemon serves `/v1/receipts/analytics` itself, ahead of its
             // receipt lookup.
             if let Some(receipt_id) =
@@ -206,6 +218,84 @@ pub(super) fn route(
     }
 }
 
+/// `GET /v1/mcp-policy/requests/<id>`: the request's status, digests and
+/// write-plan counts, never its policy text.
+fn mcp_policy_request(
+    request_id: &str,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value)> {
+    let now = records::now_isoformat()?;
+    let row = reads.store_call(
+        config,
+        "get_mcp_policy_request",
+        json!({"request_id": request_id, "now": now}),
+    )?;
+    let Value::Object(row) = row else {
+        return Some((404, json!({"error": "not_found"})));
+    };
+    Some((200, mcp_policy_request_body(&row)))
+}
+
+pub(super) fn mcp_policy_request_body(row: &serde_json::Map<String, Value>) -> Value {
+    let text = |key: &str| row.get(key).cloned().unwrap_or(Value::Null);
+    let object = |key: &str| {
+        row.get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .and_then(|value| serde_json::from_str::<Value>(value).ok())
+            .and_then(|value| match value {
+                Value::Object(map) => Some(map),
+                _ => None,
+            })
+            .unwrap_or_default()
+    };
+    let result = object("result_json");
+    let plan = object("plan_json");
+    // `_safe_int`: a boolean counts as 0 or 1, a negative or other value as 0.
+    let count = |key: &str| match result.get(key) {
+        Some(Value::Bool(flag)) => i64::from(*flag),
+        Some(Value::Number(number)) => number.as_i64().filter(|value| *value >= 0).unwrap_or(0),
+        _ => 0,
+    };
+    let list = |key: &str| match plan.get(key) {
+        Some(Value::Array(items)) => items.clone(),
+        _ => Vec::new(),
+    };
+    let (additions, replacements, removals) =
+        (list("additions"), list("replacements"), list("removals"));
+    let status = row.get("status").and_then(Value::as_str).unwrap_or("");
+    json!({
+        "requestId": text("request_id"),
+        "status": status,
+        "documentId": text("policy_document_id"),
+        "candidateDigest": text("policy_document_digest"),
+        "expectedCurrentDigest": text("expected_current_digest"),
+        "expectedPolicyGeneration": text("expected_policy_generation"),
+        "mode": text("mode"),
+        "createdAt": text("created_at"),
+        "expiresAt": text("expires_at"),
+        "resolvedAt": text("resolved_at"),
+        "failureCode": text("failure_code"),
+        "isTerminal": matches!(status, "applied" | "declined" | "expired" | "failed"),
+        // The read marks a request past its expiry expired, so none reads as
+        // pending and expired at once.
+        "isExpired": false,
+        "result": {"inserted": count("inserted"), "replaced": count("replaced")},
+        "writePlan": {
+            "additions": additions.clone(),
+            "replacements": replacements.clone(),
+            "removals": removals.clone(),
+        },
+        "semanticDiff": {
+            "additionCount": additions.len(),
+            "replacementCount": replacements.len(),
+            "removalCount": removals.len(),
+        },
+        "activeEnforcementWarning": status == "pending",
+    })
+}
+
 /// The one path segment between `prefix` and `suffix`.
 pub(super) fn single_segment<'a>(path: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
     let segment = path.strip_prefix(prefix)?.strip_suffix(suffix)?;
@@ -235,4 +325,31 @@ pub(super) fn read_state(config: &ReadConfig, reads: &NativeReads) -> Option<Vec
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::mcp_policy_request_body;
+
+    #[test]
+    fn a_policy_request_reads_as_the_dashboard_summary() {
+        let row = json!({
+            "request_id": "r1", "status": "applied", "policy_document_id": "d",
+            "policy_document_digest": "g", "expected_current_digest": null,
+            "expected_policy_generation": 3, "mode": "merge",
+            "plan_json": "{\"additions\": [{\"id\": 1}], \"removals\": \"bad\"}",
+            "created_at": "c", "expires_at": "e", "resolved_at": "r",
+            "result_json": "{\"inserted\": true, \"replaced\": -2}", "failure_code": null,
+        });
+        let body = mcp_policy_request_body(row.as_object().unwrap());
+        assert_eq!(body["isTerminal"], true);
+        assert_eq!(body["activeEnforcementWarning"], false);
+        assert_eq!(body["result"], json!({"inserted": 1, "replaced": 0}));
+        assert_eq!(body["writePlan"]["removals"], json!([]));
+        assert_eq!(body["semanticDiff"]["additionCount"], 1);
+        assert_eq!(body["expectedCurrentDigest"], serde_json::Value::Null);
+        assert_eq!(body["expectedPolicyGeneration"], 3);
+    }
 }

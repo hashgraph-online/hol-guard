@@ -11,7 +11,7 @@ use super::super::library::{self, CallError};
 use super::writes::DROPPED;
 use super::ReadConfig;
 
-const GET_ROUTES: [&str; 26] = [
+const GET_ROUTES: [&str; 20] = [
     "/v1/command-activity",
     "/v1/command-activity/analytics",
     "/v1/command-activity/diagnostics",
@@ -32,12 +32,6 @@ const GET_ROUTES: [&str; 26] = [
     "/v1/plugins/updates",
     "/v1/network/status",
     "/v1/runtime/containment-health",
-    "/v1/update/status",
-    "/v1/cloud/connect",
-    "/v1/local-clis",
-    "/v1/runtime",
-    "/v1/supply-chain/entitlement",
-    "/v1/supply-chain/package-shims",
 ];
 
 /// `GET` paths whose reply forbids revalidation as well as storage.
@@ -58,7 +52,6 @@ pub(super) fn get_routed(path: &str) -> bool {
             ["v1", "operations", _]
                 | ["v1", "mcp-policy", "requests", _]
                 | ["v1", "receipts", _]
-                | ["v1", "apps", _, "cloud"]
                 | ["v1", "sessions", _, "resume"]
         )
 }
@@ -124,8 +117,8 @@ mod tests {
         assert!(get_routed("/v1/operations/op-1"));
         assert!(get_routed("/v1/mcp-policy/requests/r1"));
         assert!(!get_routed("/v1/mcp-policy/requests"));
-        assert!(get_routed("/v1/local-clis"));
-        assert!(get_routed("/v1/apps/codex/cloud"));
+        assert!(!get_routed("/v1/local-clis"));
+        assert!(!get_routed("/v1/apps/codex/cloud"));
         assert!(get_routed("/v1/sessions/s1/resume"));
         assert!(!get_routed("/v1/sessions/s1/other"));
         assert!(post_routed("/v1/policy/sync"));

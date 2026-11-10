@@ -533,6 +533,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "clear_evidence"
         | "upsert_guard_session"
         | "upsert_guard_operation"
+        | "get_mcp_policy_request"
         | "link_codex_live_wait"
         | "add_guard_operation_item"
         | "attach_guard_client"
@@ -762,6 +763,9 @@ fn dispatch(
         "upsert_guard_operation" => sessions::upsert_operation(connection, args),
         "link_codex_live_wait" => sessions::link_codex_live_wait(connection, args),
         "get_guard_operation" => sessions::get_operation(connection, args),
+        "get_mcp_policy_request" => {
+            crate::guard_store_mcp_policy_requests::get_request(connection, args)
+        }
         "list_guard_operations" => sessions::list_operations(connection, args),
         "get_guard_operation_for_approval_request" => {
             sessions::operation_for_approval_request(connection, args)

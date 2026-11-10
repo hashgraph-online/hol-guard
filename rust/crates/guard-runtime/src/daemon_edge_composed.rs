@@ -55,9 +55,21 @@ const EXTENSION_CONTROL_READS: [&str; 3] = [
     "/v1/extension-controls/history",
 ];
 
+/// `GET` paths whose Guard library handler reads the server state the
+/// daemon keeps on disk: its address, runtime identity and connect state.
+const CONTROL_READS: [&str; 6] = [
+    "/v1/cloud/connect",
+    "/v1/local-clis",
+    "/v1/runtime",
+    "/v1/supply-chain/entitlement",
+    "/v1/supply-chain/package-shims",
+    "/v1/update/status",
+];
+
 /// Whether the daemon composes `path` itself.
 pub(super) fn routed(path: &str) -> bool {
     HANDLER_READS.contains(&path)
+        || CONTROL_READS.contains(&path)
         || EXTENSION_CONTROL_READS.contains(&path)
         || path == FIX_PROPOSALS
         || matches!(
@@ -132,6 +144,20 @@ pub(super) fn respond(
             "route.handler_get",
             json!({ "path": path, "query": request.query }),
         )),
+        path if CONTROL_READS.contains(&path) => {
+            let port = reads.published_state()?.get("port")?.as_u64()?;
+            whole_reply(library::call_resident(
+                config,
+                "route.control_get",
+                json!({
+                    "path": path,
+                    "query": request.query,
+                    "port": port,
+                    "daemon_pid": reads.daemon_pid(),
+                    "home_dir": config.user_home.as_deref(),
+                }),
+            ))
+        }
         path if EXTENSION_CONTROL_READS.contains(&path) => whole_reply(library::call_resident(
             config,
             "route.extension_control",

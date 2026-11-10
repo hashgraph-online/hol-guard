@@ -9,7 +9,7 @@ dispatch wrote: ``{"status": int, "body": {...}, "no_store": bool}``.
 A handler that reaches for state only a running daemon holds (its locks, rate
 limits, extension-control service or listening address) raises
 ``LiveDaemonStateError``; the call then answers ``{"relay": true}`` so the
-request is relayed instead of answered. The reads in ``_PUBLISHED_READS`` run
+request is relayed instead of answered. A session resume read runs
 on the server state the daemon's request replay builds from the published
 daemon state instead: its listening address, its runtime identity and the
 connect state it keeps on disk.
@@ -30,15 +30,6 @@ _NO_STORE = {"Cache-Control": "no-store"}
 # The update status read forbids revalidation too; the native daemon writes
 # that header for its path.
 _NO_STORE_MAX_AGE_ZERO = {"Cache-Control": "no-store, max-age=0"}
-_PUBLISHED_READS = frozenset(
-    {
-        "/v1/cloud/connect",
-        "/v1/local-clis",
-        "/v1/runtime",
-        "/v1/supply-chain/entitlement",
-        "/v1/supply-chain/package-shims",
-    }
-)
 _STATE_LIMIT_BYTES = 64 * 1024
 _IGNORED_HEADERS = frozenset({"X-Content-Type-Options"})
 
@@ -171,10 +162,7 @@ def dispatch(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     target = f"{path}?{query}" if query else path
     parsed = urlparse(target)
     parts = [part for part in parsed.path.split("/") if part]
-    published = method == "GET" and (
-        parsed.path in _PUBLISHED_READS
-        or (len(parts) == 4 and parts[0:2] == ["v1", "sessions"] and parts[3] == "resume")
-    )
+    published = method == "GET" and len(parts) == 4 and parts[0:2] == ["v1", "sessions"] and parts[3] == "resume"
     try:
         server = _published_server(store) if published else _OfflineServer(store)
     except LiveDaemonStateError:

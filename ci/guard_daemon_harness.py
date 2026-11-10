@@ -250,8 +250,62 @@ def _start_policy_publication(store: GuardStore, home_dir: Path) -> Any:
     )
 
 
+class _NativeServerView:
+    """The few server attributes tests read, from the native daemon."""
+
+    def __init__(self, daemon: Any) -> None:
+        self._daemon = daemon
+        self.store = daemon.store
+
+    @property
+    def auth_token(self) -> str:
+        return str(self._daemon.auth_token)
+
+
+class _NativeDaemonServer:
+    """``GuardDaemonServer`` served by the native daemon process."""
+
+    def __init__(
+        self,
+        store: GuardStore,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        *,
+        home_dir: Path | None = None,
+        **_retired: object,
+    ) -> None:
+        from ci.native_daemon_harness import NativeGuardDaemon
+
+        self.store = store
+        self._daemon = NativeGuardDaemon(store, host, port, home_dir=home_dir)
+        self.port = port
+        self._server = _NativeServerView(self._daemon)
+
+    @property
+    def auth_token(self) -> str:
+        return str(self._daemon.auth_token)
+
+    def start(self) -> None:
+        self._daemon.start()
+        self.port = self._daemon.port
+
+    def stop(self) -> None:
+        self._daemon.stop()
+
+    def _finish_service(self) -> bool:
+        return self._daemon._process is None
+
+    def _is_quarantined(self) -> bool:
+        return False
+
+
 class GuardDaemonServer:
     """Starts and stops the handlers on ``host:port`` (0 picks a free port)."""
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+        if os.environ.get("HOL_GUARD_HARNESS_NATIVE") == "1":
+            return _NativeDaemonServer(*args, **kwargs)
+        return super().__new__(cls)
 
     def __init__(
         self,

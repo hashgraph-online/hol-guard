@@ -210,4 +210,113 @@ def control_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
         server.server_close()
 
 
-CONTROL_HOST_CALLS = {"route.control_post": control_post}
+CONTROL_GET_PATHS = frozenset(
+    {
+        "/v1/cloud/connect",
+        "/v1/local-clis",
+        "/v1/runtime",
+        "/v1/supply-chain/entitlement",
+        "/v1/supply-chain/package-shims",
+        "/v1/update/status",
+    }
+)
+
+
+def _runtime_read(host: Any, query: str) -> None:
+    from ..approvals import build_runtime_snapshot
+    from ..config import load_guard_config
+    from ..daemon.command_activity_health_repair import auto_repair_command_activity_health_if_degraded
+    from ..daemon.server_common import _now
+    from ..daemon.server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
+    from ..models import format_local_http_origin
+
+    server = host.server
+    store = server.store
+    _maybe_queue_first_cloud_sync(store=store, managed_controls_publish=_managed_controls_publish_for(server))
+    auto_repair_command_activity_health_if_degraded(store)
+    config = load_guard_config(store.guard_home)
+    include_receipts = host._query_bool(query, "include_receipts", default=True)
+    snapshot = build_runtime_snapshot(
+        store=store,
+        approval_center_url=format_local_http_origin(server.daemon_host(), server.daemon_port()),
+        active_request_id=host._query_string(query, "active_request_id"),
+        include_items=host._query_bool(query, "include_items", default=True),
+        receipt_limit=25 if include_receipts else 0,
+        containment_health=host._containment_health_payload(),
+        serving_runtime={
+            "session_id": server.runtime_session_id,
+            "daemon_host": server.runtime_host,
+            "daemon_port": server.daemon_port(),
+            "started_at": server.runtime_started_at,
+            "last_heartbeat_at": _now(),
+        },
+    )
+    host._write_json(
+        {**snapshot, "security_level": config.security_level, "operator_health": host._operator_health_payload()}
+    )
+
+
+def _dispatch_control_get(host: Any, path: str, query: str) -> None:
+    from ..cli.update_commands import build_guard_update_status_payload
+    from ..daemon.dashboard_update import merge_dashboard_update_progress
+    from ..daemon.local_cli_http import handle_local_cli_list
+
+    if path == "/v1/runtime":
+        _runtime_read(host, query)
+    elif path == "/v1/local-clis":
+        handle_local_cli_list(host, query)
+    elif path == "/v1/supply-chain/package-shims":
+        host._handle_supply_chain_package_firewall_status()
+    elif path == "/v1/cloud/connect":
+        host._handle_guard_cloud_connect_status()
+    elif path == "/v1/supply-chain/entitlement":
+        host._write_json(host._supply_chain_entitlement())
+    else:
+        guard_home = host.server.store.guard_home
+        host._write_json(
+            merge_dashboard_update_progress(guard_home, build_guard_update_status_payload(guard_home=guard_home)),
+            extra_headers={"Cache-Control": "no-store, max-age=0"},
+        )
+
+
+def control_get(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Answers a dashboard ``GET`` whose handler reads the daemon's server state."""
+
+    from ..daemon.auth_token import load_guard_daemon_auth_token
+    from ..library_calls import LibraryCallError
+    from .request_host import _replay_server_class
+
+    path = args.get("path")
+    query = args.get("query", "")
+    port = args.get("port")
+    home_dir = args.get("home_dir")
+    if (
+        not isinstance(path, str)
+        or path not in CONTROL_GET_PATHS
+        or not isinstance(query, str)
+        or not isinstance(port, int)
+        or not (home_dir is None or isinstance(home_dir, str))
+    ):
+        raise LibraryCallError("invalid_arguments")
+    host_class = _HOST_CLASSES.get("control")
+    if host_class is None:
+        host_class = _HOST_CLASSES.setdefault("control", _host_class())
+    server = _replay_server_class()(
+        store,
+        port,
+        "127.0.0.1",
+        Path(home_dir) if home_dir else Path.home(),
+        load_guard_daemon_auth_token(store.guard_home) or "",
+        args.get("daemon_pid") if isinstance(args.get("daemon_pid"), int) else None,
+        False,
+    )
+    try:
+        host = host_class(server, path, args)
+        host.command = "GET"
+        _dispatch_control_get(host, path, query)
+        return host.reply()
+    finally:
+        server.server_close()
+
+
+CONTROL_HOST_CALLS = {"route.control_post": control_post, "route.control_get": control_get}
