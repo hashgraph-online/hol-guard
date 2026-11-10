@@ -25,6 +25,7 @@
   "riskClasses": [
     "workspace-file-write",
     "local-data-deletion",
+    "workspace-file-delete",
     "agent-transcript-read",
     "external-repository-read",
     "untrusted-shared-content",
