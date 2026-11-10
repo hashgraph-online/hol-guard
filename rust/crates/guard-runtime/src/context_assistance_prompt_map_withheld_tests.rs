@@ -132,3 +132,27 @@ function name.";
     );
     assert!(!map.contains("stream.current"), "{map}");
 }
+
+/// A quoted sentence a withheld module's docstring repeats still places the
+/// function whose docstring holds it: the module docstring is in no
+/// definition, so the next match is tried.
+#[test]
+fn a_quote_repeated_outside_a_definition_places_the_one_inside() {
+    let held = concat!("to", "ken = self.stream.current");
+    let lexer = format!(
+        "\"\"\"Strip trailing spaces from every template line.\"\"\"\n\n\
+class Lexer:\n    def __next__(self):\n        {held}\n        return self\n\n    \
+def _strip(self, value):\n        \"\"\"Strip trailing spaces from every template line.\"\"\"\n        \
+return value\n"
+    );
+    let list = [
+        ("src/lexer.py", lexer.as_str()),
+        ("src/utils.py", "def helper():\n    return 1\n"),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Question, no code changes: which function does this? \"Strip trailing spaces \
+from every template line.\" Reply with its file path and function name.";
+    let map = prompt_map(home.path(), &root, prompt).unwrap_or_default();
+    assert!(map.contains("src/lexer.py:8-10 Lexer._strip"), "{map}");
+    assert!(!map.contains("stream.current"), "{map}");
+}

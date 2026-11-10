@@ -70,8 +70,10 @@ pub(super) fn added(
         // A quote only a withheld file holds: without its place, the map
         // falls back to the quote's words, which point somewhere else.
         for phrase in &phrases {
-            let held = quote_line(&file.lines, phrase).and_then(|line| holding(file, line));
-            found.extend(held);
+            // The first match inside a definition: a module docstring that
+            // repeats the sentence holds no definition to open.
+            let lines = quote_lines(&file.lines, phrase);
+            found.extend(lines.into_iter().find_map(|line| holding(file, line)));
         }
         for at in found {
             let section = &file.sections[at];
@@ -107,14 +109,15 @@ pub(super) fn added(
     })
 }
 
-/// The line, from 1, where `phrase` starts in `lines`: on one line, or
-/// wrapped over several as the walk's quote check reads them. The walk
-/// lowercases both, so the phrase arrives lowercased.
-fn quote_line(lines: &[&str], phrase: &str) -> Option<usize> {
+/// The lines, from 1 and in order, where `phrase` starts in `lines`: on one
+/// line, or wrapped over several as the walk's quote check reads them. The
+/// walk lowercases both, so the phrase arrives lowercased.
+fn quote_lines(lines: &[&str], phrase: &str) -> Vec<usize> {
     let lower: Vec<String> = lines.iter().map(|line| line.to_lowercase()).collect();
-    if let Some(at) = lower.iter().position(|line| line.contains(phrase)) {
-        return Some(at + 1);
-    }
+    let mut found: Vec<usize> = (lower.iter().enumerate())
+        .filter(|(_, line)| line.contains(phrase))
+        .map(|(at, _)| at + 1)
+        .collect();
     let mut joined = String::new();
     let mut starts: Vec<(usize, usize)> = Vec::new();
     for (at, line) in lower.iter().enumerate() {
@@ -124,9 +127,14 @@ fn quote_line(lines: &[&str], phrase: &str) -> Option<usize> {
             joined.push_str(&piece);
         }
     }
-    let offset = joined.find(phrase)?;
-    let (_, at) = starts.iter().rev().find(|(start, _)| *start <= offset)?;
-    Some(at + 1)
+    for (offset, _) in joined.match_indices(phrase) {
+        if let Some((_, at)) = starts.iter().rev().find(|(start, _)| *start <= offset) {
+            found.push(at + 1);
+        }
+    }
+    found.sort_unstable();
+    found.dedup();
+    found
 }
 
 /// The smallest definition holding `line`.
