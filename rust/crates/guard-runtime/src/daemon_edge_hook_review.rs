@@ -9,6 +9,7 @@
 //! cannot run answers the harness's fail-safe instead, so a hook is never
 //! left without a decision.
 
+use std::path::Path;
 use std::time::Duration;
 
 use serde_json::{json, Map, Value};
@@ -226,6 +227,31 @@ impl Hook<'_> {
         }
     }
 
+    /// The app this hook route belongs to, as the managed-install table names it.
+    fn managed_harness(&self) -> String {
+        guard_command::harness_identity::canonical_harness_id(self.harness).map_or_else(
+            || self.harness.trim().to_lowercase().replace('_', "-"),
+            str::to_owned,
+        )
+    }
+
+    /// Whether the hook belongs to an app Guard is not protecting: its own
+    /// managed-install row is inactive or, with no row, another app's is
+    /// active. A store that cannot be read keeps the hook reviewed.
+    fn unmanaged(&self, harness: &str) -> bool {
+        crate::local_store_read::hook_store_probe(Path::new(&self.config.guard_home), harness, None)
+            .is_ok_and(|probe| probe.harness_unmanaged)
+    }
+
+    /// Audits a directory the request named and the daemon refused.
+    fn audit_rejection(&self, rejection: &Value, expires: Option<f64>) {
+        let extra = json!({ "rejection": rejection });
+        let _ = match expires {
+            Some(expires) => self.call_by("hook.path_rejected", extra, expires),
+            None => self.call("hook.path_rejected", extra),
+        };
+    }
+
     /// Settles the directories a request named against this daemon's homes.
     fn settle(&self, candidates: &[(&str, Option<String>, Option<&str>)]) -> Directories {
         Directories::settle(&self.config.guard_home, &self.home(), candidates)
@@ -251,7 +277,7 @@ impl Hook<'_> {
         };
         let guard_home = self.settle(&[("guard-home", self.param("guard-home"), None)]);
         if let Err(rejection) = guard_home.require("guard-home") {
-            let _ = self.call("hook.ready", json!({ "rejection": rejection.to_value() }));
+            self.audit_rejection(&rejection.to_value(), None);
             return invalid(&rejection);
         }
         let candidate = self.raw_param("workspace").or_else(|| {
@@ -269,16 +295,9 @@ impl Hook<'_> {
             Ok(workspace) => (workspace, None),
             Err(rejection) => (None, Some(rejection)),
         };
-        let Some(ready) = self.call(
-            "hook.ready",
-            json!({
-                "workspace": workspace,
-                "late_rejection": rejection.as_ref().map(Rejection::to_value),
-            }),
-        ) else {
-            return not_ready;
-        };
-        if ready.get("unmanaged") == Some(&Value::Bool(true)) {
+        // An unmanaged app's hooks never reach a workspace, so its refused
+        // workspace is not audited.
+        if self.unmanaged(&self.managed_harness()) {
             return (
                 200,
                 json!({
@@ -291,15 +310,19 @@ impl Hook<'_> {
             );
         }
         if let Some(rejection) = rejection {
+            self.audit_rejection(&rejection.to_value(), None);
             return invalid(&rejection);
         }
-        if workspace.is_none() {
+        let Some(workspace) = workspace else {
             return (
                 400,
                 json!({ "ready": false, "reason_code": "workspace_required" }),
                 true,
             );
-        }
+        };
+        let Some(ready) = self.call("hook.ready", json!({ "workspace": workspace })) else {
+            return not_ready;
+        };
         if ready.get("prepared") != Some(&Value::Bool(true)) {
             return not_ready;
         }
@@ -415,21 +438,24 @@ impl Hook<'_> {
             ),
         };
 
+        if let Some(rejection) = &rejection {
+            self.audit_rejection(rejection, Some(expires));
+        }
+        // Leftover hooks of an app Guard is not protecting pass through.
+        let managed_harness = self.managed_harness();
+        if self.unmanaged(&managed_harness) {
+            return envelope("unmanaged", &managed_harness, &[]);
+        }
         let Some(prepared) = self.call_by(
             "hook.prepare",
             json!({
-                "payload": payload,
                 "workspace": workspace,
                 "remaining_seconds": remaining(),
-                "rejection": rejection,
             }),
             expires,
         ) else {
             return unavailable();
         };
-        if let Some(answer) = prepared.get("answer").filter(|answer| answer.is_object()) {
-            return answer.clone();
-        }
         if let Some(refused) = prepared.get("fail_safe") {
             return refusal(refused).map_or_else(unavailable, |(reason, code)| fail(reason, code));
         }
@@ -524,21 +550,29 @@ fn fail_safe(harness: &str, event: &str, reason: &str, code: &str) -> Value {
     } else {
         reason
     };
-    let table = &contract["envelopes"][kind.as_str()];
-    let harness = harness.trim().to_lowercase().replace('_', "-");
-    let template = table
-        .get(harness.as_str())
-        .or_else(|| table.get("*"))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    fill(
-        template,
+    envelope(
+        &kind,
+        harness,
         &[
             ("$reason", reason),
             ("$reason_code", code),
             ("$event_name", event),
         ],
     )
+}
+
+/// `_envelope`: the contract's reply of `kind` for the harness, else its
+/// default, with the placeholders filled.
+fn envelope(kind: &str, harness: &str, values: &[(&str, &str)]) -> Value {
+    let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
+    let table = &contract["envelopes"][kind];
+    let harness = harness.trim().to_lowercase().replace('_', "-");
+    let template = table
+        .get(harness.as_str())
+        .or_else(|| table.get("*"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    fill(template, values)
 }
 
 /// `_event_kind`: the envelope family an event name belongs to.

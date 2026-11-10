@@ -117,22 +117,22 @@ def hook_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     return {"answer": answer, "capacity_harness": capacity_harness}
 
 
+def hook_path_rejected(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Audits a directory the daemon refused to take from a hook request."""
+
+    _record_path_rejection(_server(store, args), args)
+    return {}
+
+
 def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Applies the native-policy barrier before the daemon admits the hook."""
 
-    from ..daemon.hook_fail_closed import unmanaged_passthrough
-    from ..daemon.hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
     from ..daemon.hook_policy_admission import _native_policy_not_ready_reason
 
     server = _server(store, args)
-    _record_path_rejection(server, args)
-    harness = _canonical_managed_harness(_text(args.get("harness")) or "")
-    if _hook_harness_is_unmanaged(server, harness):
-        return {"answer": unmanaged_passthrough(harness)}
     workspace = _text(args.get("workspace"))
-    deadline = _deadline(args)
     worker = server.hook_worker
-    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=deadline)
+    prepared = worker.prepare_workspace_policy(Path(workspace) if workspace else None, deadline=_deadline(args))
     if prepared is None:
         worker.metrics.record_route("native_fail_safe")
         return {
@@ -145,26 +145,14 @@ def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
 
 
 def hook_ready(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Readiness: whether the harness is managed and the workspace's policy is published.
+    """Readiness: whether the workspace's policy is published within the readiness window."""
 
-    A `rejection` is a refused Guard home: it is audited and nothing else is
-    asked. A `late_rejection` is a refused workspace, which an unmanaged
-    harness never reaches, so it is audited only for a managed one.
-    """
-
-    from ..daemon.hook_managed_install_state import _hook_harness_is_unmanaged
     from ..daemon.hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 
     server = _server(store, args)
-    _record_path_rejection(server, args)
-    if args.get("rejection") is not None:
-        return {}
-    if _hook_harness_is_unmanaged(server, _text(args.get("harness")) or ""):
-        return {"unmanaged": True}
-    _record_path_rejection(server, {**args, "rejection": args.get("late_rejection")})
     workspace = _text(args.get("workspace"))
-    if workspace is None or args.get("late_rejection") is not None:
-        return {"unmanaged": False}
+    if workspace is None:
+        return {"prepared": False}
     try:
         prepared = server.hook_worker.prepare_workspace_policy(
             Path(workspace), deadline=time.monotonic() + WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
@@ -172,7 +160,7 @@ def hook_ready(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     except Exception:
         server.diagnostics.record_exception("native_workspace_readiness_failed")
         prepared = None
-    return {"unmanaged": False, "prepared": isinstance(prepared, dict)}
+    return {"prepared": isinstance(prepared, dict)}
 
 
 def hook_review(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
@@ -212,6 +200,7 @@ def hook_review(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 
 HOOK_CALLS = {
     "hook.begin": hook_begin,
+    "hook.path_rejected": hook_path_rejected,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.review": hook_review,

@@ -92,3 +92,16 @@ fn a_step_refusal_needs_a_reason_and_a_code() {
     );
     assert_eq!(refusal(&json!({"reason": "r"})), None);
 }
+
+#[test]
+fn an_unmanaged_app_passes_through_in_its_own_envelope() {
+    assert_eq!(
+        envelope("unmanaged", "PI", &[]),
+        json!({"decision": "allow", "reason_code": "harness_not_managed"})
+    );
+    assert_eq!(envelope("unmanaged", "grok", &[]), json!({}));
+    assert_eq!(
+        envelope("unmanaged", "codex", &[]),
+        json!({"continue": true, "reason_code": "harness_not_managed"})
+    );
+}
