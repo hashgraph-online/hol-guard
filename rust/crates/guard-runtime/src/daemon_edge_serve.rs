@@ -256,10 +256,8 @@ pub(crate) fn run(args: &[String]) -> i32 {
     };
     let reads = Arc::new(NativeReads::new(None));
     reads.mark_standalone();
-    if let Some(state_id) = crate::daemon_policy_authority::load_authenticated_daemon_state(&home)
-        .and_then(|state| state.get("state_id")?.as_str().map(str::to_owned))
-    {
-        reads.set_state_id(state_id);
+    if let Some(state) = crate::daemon_policy_authority::load_authenticated_daemon_state(&home) {
+        reads.set_published_state(state);
     }
     if config.launcher_pid.is_some_and(|pid| pid != 0) {
         reads.set_launcher_pid(pid);

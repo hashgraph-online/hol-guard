@@ -283,7 +283,7 @@ fn prune_quarantine(guard_home: &Path, policy: &Retention) -> u64 {
     removed
 }
 
-fn quarantine_summary(guard_home: &Path) -> Value {
+pub(crate) fn quarantine_summary(guard_home: &Path) -> Value {
     let mut total_bytes: u64 = 0;
     let mut forensic_record_count: u64 = 0;
     let mut events: Vec<(String, f64)> = Vec::new();

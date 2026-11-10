@@ -7,7 +7,7 @@ use guard_contracts::DaemonRoutePayloadV1;
 
 use super::super::http::{query_int, query_value, Request};
 use super::{activity, evidence, inventory, records, settings};
-use super::{authorize, composed, dispatch, network, plugin_updates, requests};
+use super::{authorize, composed, dispatch, health_details, network, plugin_updates, requests};
 use super::{NativeReads, ReadConfig, MAX_READ_STATE_PAGES};
 use crate::daemon_route_session::origin_decision;
 
@@ -51,6 +51,12 @@ pub(super) fn respond(
     if request.path == "/v1/plugins/updates" {
         return plugin_updates::read(config)
             .map(|(status, body)| (status, body, caller.cors_origin, true));
+    }
+    if request.path == "/v1/healthz/details" && reads.is_standalone() {
+        // Only the daemon's token reads the details, as `_header_token_is_valid`.
+        super::authorize_token(request, &config.token)?;
+        return health_details::respond(config, reads)
+            .map(|body| (200, body, caller.cors_origin, false));
     }
     if request.path == "/v1/network/status" {
         return network::status().map(|(status, body)| (status, body, caller.cors_origin, true));

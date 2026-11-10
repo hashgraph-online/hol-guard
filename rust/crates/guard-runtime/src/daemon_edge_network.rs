@@ -69,7 +69,7 @@ fn default_profiles() -> Value {
 }
 
 /// `project_network_supervisor_health(NetworkSupervisor().health(...))`.
-fn supervisor_health() -> Value {
+pub(in crate::daemon_edge) fn supervisor_health() -> Value {
     json!({
         "phase": "unavailable",
         "backend_id": null,

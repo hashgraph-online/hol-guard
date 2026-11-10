@@ -459,6 +459,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         "complete_codex_live_decision" | "record_codex_live_completion" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
+        | "get_command_activity_persistence_health"
+        | "list_table_names"
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
         | "list_evidence"
@@ -678,6 +680,8 @@ fn dispatch(
         }
         "list_command_activity_page" => api::list_page(connection, args),
         "command_activity_analytics" => api::analytics(connection, args),
+        "get_command_activity_persistence_health" => api::persistence_health(connection, args),
+        "list_table_names" => api::table_names(connection, args),
         "record_command_activity_feedback" => feedback::record_feedback(connection, args),
         "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
         "clear_command_activity_evidence" => privacy::clear_evidence(connection),

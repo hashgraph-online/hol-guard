@@ -178,6 +178,11 @@ pub(super) struct NativeReads {
     /// of becoming it (Windows has no exec); zero otherwise.
     launcher_pid: AtomicU32,
     state_id: std::sync::OnceLock<String>,
+    /// The daemon state this process published, which names its release and
+    /// install for the health details.
+    published: std::sync::OnceLock<serde_json::Map<String, Value>>,
+    /// When this process began serving, for the health details' uptime.
+    started: Instant,
     /// Connections being served, and when the last one began or ended: what
     /// the standalone daemon's idle shutdown reads.
     connections: AtomicUsize,
@@ -201,6 +206,8 @@ impl NativeReads {
             standalone: AtomicBool::new(false),
             launcher_pid: AtomicU32::new(0),
             state_id: std::sync::OnceLock::new(),
+            published: std::sync::OnceLock::new(),
+            started: Instant::now(),
             connections: AtomicUsize::new(0),
             touched: Mutex::new(Instant::now()),
         }
@@ -252,6 +259,24 @@ impl NativeReads {
     /// The `state_id` this process published, when it serves on its own.
     pub(super) fn state_id(&self) -> Option<&str> {
         self.state_id.get().map(String::as_str)
+    }
+
+    /// Records the daemon state this process published.
+    pub(super) fn set_published_state(&self, state: serde_json::Map<String, Value>) {
+        if let Some(state_id) = state.get("state_id").and_then(Value::as_str) {
+            self.set_state_id(state_id.to_owned());
+        }
+        let _ = self.published.set(state);
+    }
+
+    /// The daemon state this process published, when it serves on its own.
+    pub(super) fn published_state(&self) -> Option<&serde_json::Map<String, Value>> {
+        self.published.get()
+    }
+
+    /// How long this process has served.
+    pub(super) fn uptime(&self) -> Duration {
+        self.started.elapsed()
     }
 
     fn is_standalone(&self) -> bool {
@@ -806,6 +831,8 @@ mod releases;
 mod composed;
 #[path = "daemon_edge_dispatch.rs"]
 mod dispatch;
+#[path = "daemon_edge_health_details.rs"]
+mod health_details;
 #[path = "daemon_edge_streams.rs"]
 mod streams;
 #[path = "daemon_edge_writes.rs"]
