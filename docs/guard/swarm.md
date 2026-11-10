@@ -6,13 +6,13 @@ Swarm is the place to see and direct AI agents working on this computer. A
 person can follow one agent, coordinate several agents in one project, or move
 between projects without losing track of work, approvals, and context access.
 
-Base: `main` at `4a0b5ab5a1f2b4f18818056b6116ad98035bf42e`.
+Base: `main` at `274261c0ef28b3d33c36e06a77599c4d02e68685`.
 Branch: `feat/swarm-agent-workspace`.
 
 Rebased on 2026-11-10. This main includes the newest alpha,
-`alpha/v3.60.0a65` (`5539f65caee09098a62dd9b814041efb5e1a493a`), plus two
-subsequent MCP integration commits. The three Swarm commits retain their source
-changes; generated dashboard assets were rebuilt to resolve bundle conflicts.
+`alpha/v3.60.0a66` (`274261c0ef28b3d33c36e06a77599c4d02e68685`).
+The Swarm feature and CIGAR handoff are retained; generated dashboard assets were
+rebuilt to resolve bundle conflicts. Navigation identifies Swarm as Alpha.
 Validation uses upstream's pinned Rust 1.89.0 toolchain and locked dependencies.
 
 ### Experience

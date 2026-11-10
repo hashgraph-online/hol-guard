@@ -46,8 +46,12 @@ assert(
   "The Context entry carries a Beta status chip",
 );
 assert(
-  SHELL_NAV_ITEMS.every((item) => item.badge === undefined || item.view === "cigar"),
-  "Only the beta workspace carries a navigation status chip",
+  navigationItemForView("swarm").badge === "Alpha",
+  "The Swarm entry carries an Alpha status chip",
+);
+assert(
+  SHELL_NAV_ITEMS.every((item) => item.badge === undefined || item.view === "cigar" || item.view === "swarm"),
+  "Only prerelease workspaces carry navigation status chips",
 );
 assert(
   SHELL_NAV_ITEMS.find((item) => item.view === "extensions")?.group === "primary" &&

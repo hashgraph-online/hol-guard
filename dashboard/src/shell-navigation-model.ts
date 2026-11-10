@@ -92,6 +92,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     view: "swarm",
     group: "primary",
     icon: HiMiniSquares2X2,
+    badge: "Alpha",
   },
   {
     href: "/cigar",

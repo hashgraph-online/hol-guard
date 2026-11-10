@@ -21960,7 +21960,8 @@ const SHELL_NAV_ITEMS = [
     description: "Launch, follow, and direct local agents across projects",
     view: "swarm",
     group: "primary",
-    icon: HiMiniSquares2X2
+    icon: HiMiniSquares2X2,
+    badge: "Alpha"
   },
   {
     href: "/cigar",
