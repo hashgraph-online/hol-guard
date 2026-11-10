@@ -39,6 +39,9 @@ const OPTED_OUT: &str = "discovery_opted_out";
 
 /// `DISCOVERY_CLOUD_ORIGIN`: the only host these routes ever reach.
 const ORIGIN: &str = "https://hol.org";
+/// A loopback stand-in for [`ORIGIN`], for integration runs that fixture the
+/// discovery service. Only `http://127.0.0.1:<port>` is honoured.
+const FIXTURE_ORIGIN_ENV: &str = "HOL_GUARD_DISCOVERY_FIXTURE_ORIGIN";
 const PLACEMENTS_PATH: &str = "/api/guard/extensions/discovery/v1/placements";
 const RENDERS_PATH: &str = "/api/guard/extensions/discovery/v1/renders";
 const EVENTS_PATH: &str = "/api/guard/extensions/discovery/v1/events";
@@ -64,7 +67,7 @@ const FRESH_RESULT: Duration = Duration::from_secs(10);
 const DISCOVERY_RESULT_SCHEMA: &str = "guard-discovery-project-result.v1";
 const DISCOVERY_REQUEST_SCHEMA: &str = "guard-discovery-project-request.v1";
 
-/// `_SETTINGS_KEY` and `_MANAGED_KEY` in `sponsored_discovery_settings`.
+/// The store keys holding the user's and the managed discovery settings.
 const SETTINGS_KEY: &str = "guard_sponsored_discovery_settings_v1";
 const MANAGED_KEY: &str = "guard_sponsored_discovery_managed_policy_v1";
 const DISCOVERY_ENABLED: &str = "sponsored_discovery_enabled";
@@ -105,6 +108,26 @@ pub(in crate::daemon_edge) fn rollout_enabled(value: Option<&str>) -> bool {
             .as_deref(),
         Some("0" | "off" | "false" | "disabled")
     )
+}
+
+/// The origin these routes reach: [`ORIGIN`], or a loopback fixture origin.
+fn origin() -> String {
+    std::env::var(FIXTURE_ORIGIN_ENV)
+        .ok()
+        .filter(|value| fixture_origin(value))
+        .unwrap_or_else(|| ORIGIN.to_owned())
+}
+
+/// Whether `value` is `http://127.0.0.1:<port>` and nothing else.
+pub(in crate::daemon_edge) fn fixture_origin(value: &str) -> bool {
+    value
+        .strip_prefix("http://127.0.0.1:")
+        .and_then(|port| {
+            (!port.is_empty() && port.len() <= 5 && port.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| port.parse::<u16>().ok())
+                .flatten()
+        })
+        .is_some_and(|port| port != 0)
 }
 
 fn rollout() -> bool {
@@ -224,7 +247,7 @@ fn load_mapping(config: &ReadConfig, reads: &NativeReads, key: &str) -> Option<M
     })
 }
 
-/// `sponsored_discovery_settings`: the user's preferences with the managed
+/// The user's discovery preferences with the managed
 /// policy applied.
 fn settings(config: &ReadConfig, reads: &NativeReads) -> Option<Map<String, Value>> {
     let record = load_mapping(config, reads, SETTINGS_KEY)?;
@@ -406,7 +429,7 @@ fn fetch_placements(etag: Option<&str>) -> Exchange {
         .collect();
     match policy_send(
         "GET",
-        &format!("{ORIGIN}{PLACEMENTS_PATH}"),
+        &format!("{}{PLACEMENTS_PATH}", origin()),
         headers(&extra),
         None,
         IO_DEADLINE_SECONDS,
@@ -458,7 +481,7 @@ fn send_relay(upstream: &str, raw: String) -> RelayExchange {
         .map_err(|_| TRANSPORT_FAILED)?;
     match policy_send(
         "POST",
-        &format!("{ORIGIN}{upstream}"),
+        &format!("{}{upstream}", origin()),
         headers(&[("Content-Type", "application/json")]),
         Some(raw),
         IO_DEADLINE_SECONDS,

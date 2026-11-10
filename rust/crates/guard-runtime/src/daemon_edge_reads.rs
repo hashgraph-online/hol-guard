@@ -524,18 +524,27 @@ fn answer_request(
         .as_ref()
         .filter(|request| matches!(request.method, "GET" | "POST") && discovery::owns(request.path))
     {
-        let Some(response) = discovery_response(request, body, config, reads) else {
-            return Outcome::Relay(bytes);
-        };
+        let response = discovery_response(request, body, config, reads);
         return write_answer(client, &response, reads, stalled_write);
     }
     if let Some(request) = request
         .as_ref()
         .filter(|request| request.method == "GET" && releases::owns(request.path))
     {
-        let Some(response) = releases_response(request, config, reads) else {
-            return Outcome::Relay(bytes);
-        };
+        let response = releases_response(request, config, reads).unwrap_or_else(|| {
+            // `do_GET` refuses a caller without the token before the route.
+            let refusal = refusals::refusal(request, body, &config.token)
+                .unwrap_or(refusals::Refusal::Unauthorized);
+            let (status, body, cors_origin) =
+                refusals::respond(request, &refusal, client.local_addr().ok(), config, reads);
+            json_response(
+                status,
+                &body,
+                config.dashboard_build.as_deref(),
+                cors_origin.as_deref(),
+                false,
+            )
+        });
         return write_answer(client, &response, reads, stalled_write);
     }
     let answer = request.as_ref().and_then(|request| match request.method {
@@ -672,21 +681,18 @@ fn export_response(
     )
 }
 
-/// `_serve_release_feed_read` behind the daemon's token check: the
+/// The release feed behind the daemon's token check: the
 /// projector's body verbatim and uncached, or the daemon's JSON error.
 fn releases_response(
     request: &Request<'_>,
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<Vec<u8>> {
-    if request.has_header("Content-Length") || request.has_header("Transfer-Encoding") {
-        return None;
-    }
     let caller = authorize(request, &config.token)?;
     reads.report_activity();
     let build = config.dashboard_build.as_deref();
     let cors_origin = caller.cors_origin.as_deref();
-    Some(match releases::read(request)? {
+    Some(match releases::read(request) {
         releases::Answer::Error(status, body) => {
             json_response(status, &body, build, cors_origin, false)
         }
@@ -704,11 +710,19 @@ fn verify_response(
     config: &ReadConfig,
 ) -> Option<Vec<u8>> {
     use hmac::{Hmac, Mac};
-    if request.has_header("Transfer-Encoding") {
-        return None;
-    }
-    let caller = authorize_origin(request)?;
-    let payload = writes::py_payload(request, body)?;
+    let build = config.dashboard_build.as_deref();
+    let Some(caller) = authorize_origin(request) else {
+        let body = serde_json::json!({"error": "forbidden_origin"});
+        return Some(json_response(403, &body, build, None, false));
+    };
+    let cors_origin = caller.cors_origin.as_deref();
+    let payload = match writes::py_payload(request, body) {
+        Ok(payload) => payload,
+        Err(error) => {
+            let (status, body) = error.answer();
+            return Some(json_response(status, &body, build, cors_origin, false));
+        }
+    };
     let nonce = payload
         .iter()
         .rev()
@@ -716,8 +730,6 @@ fn verify_response(
         .and_then(|(_, value)| value.as_str())
         .map(str::trim)
         .filter(|nonce| !nonce.is_empty());
-    let build = config.dashboard_build.as_deref();
-    let cors_origin = caller.cors_origin.as_deref();
     let Some(nonce) = nonce else {
         let body = serde_json::json!({"error": "missing_nonce"});
         return Some(json_response(400, &body, build, cors_origin, false));
@@ -736,32 +748,59 @@ fn discovery_response(
     body: &[u8],
     config: &ReadConfig,
     reads: &NativeReads,
-) -> Option<Vec<u8>> {
-    if request.has_header("Transfer-Encoding") || discovery::query_names_token(request.query) {
-        return None;
-    }
-    let caller = authorize_token(request, &config.token)?;
-    let answer = if request.method == "GET" {
-        if request.has_header("Content-Length") {
-            return None;
-        }
-        reads.report_activity();
-        discovery::read(request, config, reads)?
-    } else {
-        let payload = writes::py_payload(request, body)?;
-        reads.report_activity();
-        discovery::write(request, Some(&payload), config, reads)?
-    };
+) -> Vec<u8> {
     let build = config.dashboard_build.as_deref();
+    let refused = |refusal: refusals::Refusal| {
+        let (status, body, cors_origin) = refusals::respond(request, &refusal, None, config, reads);
+        json_response(status, &body, build, cors_origin.as_deref(), false)
+    };
+    if request.method == "POST" && authorize_origin(request).is_none() {
+        return json_response(
+            403,
+            &serde_json::json!({"error": "forbidden_origin"}),
+            build,
+            None,
+            false,
+        );
+    }
+    if discovery::query_names_token(request.query) {
+        return refused(refusals::Refusal::QueryToken);
+    }
+    let Some(caller) = authorize_token(request, &config.token) else {
+        return refused(refusals::Refusal::Unauthorized);
+    };
     let cors_origin = caller.cors_origin.as_deref();
-    Some(match answer {
-        discovery::Answer::Json(status, body) => {
+    let answer = if request.method == "GET" {
+        reads.report_activity();
+        discovery::read(request, config, reads)
+    } else {
+        let payload = match writes::py_payload(request, body) {
+            Ok(payload) => payload,
+            Err(error) => {
+                let (status, body) = error.answer();
+                return json_response(status, &body, build, cors_origin, false);
+            }
+        };
+        reads.report_activity();
+        discovery::write(request, Some(&payload), config, reads)
+    };
+    match answer {
+        Some(discovery::Answer::Json(status, body)) => {
             json_response(status, &body, build, cors_origin, false)
         }
-        discovery::Answer::Raw(status, body) => {
+        Some(discovery::Answer::Raw(status, body)) => {
             encoded_response(status, body, build, cors_origin, true)
         }
-    })
+        // The preference store did not answer, which the daemon's handler
+        // raised on.
+        None => json_response(
+            503,
+            &serde_json::json!({"error": "daemon_route_unavailable"}),
+            build,
+            cors_origin,
+            false,
+        ),
+    }
 }
 
 /// The response the daemon's `_write_json` writes: HTML-safe JSON, `nosniff`,

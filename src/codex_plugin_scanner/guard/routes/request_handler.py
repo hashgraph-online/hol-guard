@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, TypeAlias, TypedDict, cast
-from urllib.parse import ParseResult, parse_qs, parse_qsl, urlparse
+from urllib.parse import parse_qs, parse_qsl, urlparse
 
 from ...version import __version__
 from ..adapters import get_adapter
@@ -40,16 +40,6 @@ from ..daemon.command_activity_api import (
 )
 from ..daemon.dashboard_bundle import DASHBOARD_BUILD_HEADER, dashboard_build_id
 from ..daemon.diagnostics import DaemonDiagnostics
-from ..daemon.extension_discovery_read import (
-    DISCOVERY_EVENTS_PATH,
-    DISCOVERY_OPTED_OUT,
-    DISCOVERY_RENDERS_PATH,
-    DISCOVERY_UNAVAILABLE,
-    DiscoveryReadError,
-    discovery_placement_projection,
-    discovery_rollout_enabled,
-    relay_discovery_measurement,
-)
 from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
 from ..daemon.hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from ..daemon.manager import (
@@ -57,13 +47,6 @@ from ..daemon.manager import (
     current_guard_daemon_runtime_fingerprint,
     current_guard_daemon_source_root,
     write_guard_daemon_state,
-)
-from ..daemon.release_feed_read import (
-    MAX_RELEASE_FEED_PAGE_SIZE,
-    RELEASE_FEED_REQUEST_INVALID,
-    RELEASE_FEED_UNAVAILABLE,
-    release_feed_projection,
-    release_feed_rollout_enabled,
 )
 from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
 from ..daemon.runtime_hook_scheduler import RuntimeHookScheduler
@@ -87,12 +70,6 @@ from ..daemon.server_dashboard_records_read import _DashboardRecordsReadRoutes
 from ..daemon.server_dashboard_runtime_read import _DashboardRuntimeReadRoutes
 from ..daemon.server_dashboard_support import _DashboardSupportRoutes
 from ..daemon.server_runtime_hook import _RuntimeHookRoutes
-from ..daemon.sponsored_discovery_settings import (
-    sponsored_discovery_allowed,
-    sponsored_discovery_measurement_allowed,
-    sponsored_discovery_settings,
-    update_sponsored_discovery_settings,
-)
 from ..json_transport import escape_json_for_html
 from ..local_dashboard_session import (
     DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS,
@@ -126,37 +103,6 @@ from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..storage_retention import quarantined_store_summary
 from ..store import GuardStore
-
-
-# Local daemon routes. The Cloud paths stay in the read module and are the
-# only paths relayed upstream.
-def _release_feed_number(values: list[str] | None, *, default: int) -> int | None:
-    """Read one bounded positive integer from a query parameter.
-
-    A parameter that is present but unreadable is a caller mistake, not a
-    reason to silently serve a different page.
-    """
-
-    if not values:
-        return default
-    # ``str.isdigit`` is true for characters such as "²" that ``int`` refuses,
-    # so the page parameter is read as ASCII digits and nothing else.
-    if len(values) != 1 or len(values[0]) > 6 or not values[0].isascii() or not values[0].isdigit():
-        return None
-    parsed = int(values[0])
-    return parsed if parsed >= 1 else None
-
-
-_LOCAL_RELEASES_PREFIX = "/v1/releases/"
-_LOCAL_RELEASES_INDEX = "/v1/releases/index"
-_LOCAL_RELEASES_DETAIL = "/v1/releases/release"
-_LOCAL_DISCOVERY_PREFIX = "/v1/discovery/extensions/"
-_LOCAL_DISCOVERY_PLACEMENTS = "/v1/discovery/extensions/placements"
-_LOCAL_DISCOVERY_SETTINGS = "/v1/discovery/extensions/settings"
-_LOCAL_DISCOVERY_MEASUREMENT = {
-    "/v1/discovery/extensions/renders": DISCOVERY_RENDERS_PATH,
-    "/v1/discovery/extensions/events": DISCOVERY_EVENTS_PATH,
-}
 
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
@@ -574,59 +520,8 @@ class _GuardDaemonHandler(
                 return
             self._write_json({"error": "not_found"}, status=404)
             return
-        if parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX):
-            if self._query_has_guard_token(parsed.query):
-                self._record_query_token_rejection()
-                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
-                return
-            if not self._header_token_is_valid():
-                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
-                return
-            # A device whose user or administrator turned sponsored discovery
-            # off answers that before anything that can fail. The rollout gate,
-            # the native capability and the upstream read all have failure
-            # modes, and a failure must never read as "no preference stated" on
-            # a device that already stated one.
-            if parsed.path == _LOCAL_DISCOVERY_PLACEMENTS and not sponsored_discovery_allowed(
-                self.server.store  # type: ignore[attr-defined]
-            ):
-                self._write_json({"error": DISCOVERY_OPTED_OUT}, status=403)
-                return
-            if not discovery_rollout_enabled():
-                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
-                return
-            if parsed.path == _LOCAL_DISCOVERY_SETTINGS:
-                store = self.server.store  # type: ignore[attr-defined]
-                self._write_json(sponsored_discovery_settings(store))
-                return
-            if parsed.path != _LOCAL_DISCOVERY_PLACEMENTS:
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            # Sponsored discovery is user/managed gated; a disabled preference
-            # still answers a valid policy-blocked projection rather than an
-            # error, so the dashboard can distinguish opt-out from failure.
-            store = self.server.store  # type: ignore[attr-defined]
-            allowed = sponsored_discovery_allowed(store)
-            result = discovery_placement_projection(
-                guard_home=store.guard_home,
-                policy_allowed=allowed,
-            )
-            if result is None:
-                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=501)
-                return
-            if result.error_code is not None:
-                self._write_json({"error": result.error_code}, status=result.status)
-                return
-            if result.body is None:
-                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
-                return
-            self._write_discovery_body(result.body)
-            return
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
-            return
-        if parsed.path.startswith(_LOCAL_RELEASES_PREFIX):
-            self._serve_release_feed_read(parsed)
             return
         if self._serve_dashboard_runtime_read(parsed, path_parts, store):
             return
@@ -651,15 +546,10 @@ class _GuardDaemonHandler(
         except NativeDaemonRouteError:
             self._write_json(native_route_unavailable_body(), status=503)
             return
-        discovery_post = parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX)
-        if discovery_post and self._query_has_guard_token(parsed.query):
-            self._record_query_token_rejection()
+        if route.route_class != "none" and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if (route.route_class != "none" or discovery_post) and not self._header_token_is_valid():
-            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
-            return
-        if route.route_class != "none" or discovery_post:
+        if route.route_class != "none":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -675,55 +565,6 @@ class _GuardDaemonHandler(
                 "request_body_too_large": 413,
             }.get(body_error, 400)
             self._write_json({"error": body_error}, status=status)
-            return
-        if parsed.path.startswith(_LOCAL_DISCOVERY_PREFIX):
-            if not discovery_rollout_enabled():
-                self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
-                return
-            store = self.server.store  # type: ignore[attr-defined]
-            upstream = _LOCAL_DISCOVERY_MEASUREMENT.get(parsed.path)
-            if upstream is not None:
-                # Consent-gated relay: measurement off still allows discovery
-                # but emits no render/event POSTs and no persistent identity.
-                if not sponsored_discovery_measurement_allowed(store):
-                    self._write_json({"error": "measurement_disabled"}, status=403)
-                    return
-                if not isinstance(payload, dict):
-                    self._write_json({"error": "invalid_request"}, status=400)
-                    return
-                # Only the strictly parsed, bounded JSON moves upstream: no
-                # local credential, identifier, or inventory is attached.
-                raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-                try:
-                    status, body = relay_discovery_measurement(path=upstream, payload=raw)
-                except DiscoveryReadError as error:
-                    self._write_json({"error": error.code}, status=error.status)
-                    return
-                self._write_json_bytes(
-                    escape_json_for_html(body),
-                    status=status,
-                    extra_headers={"Cache-Control": "no-store"},
-                )
-                return
-            if parsed.path == _LOCAL_DISCOVERY_SETTINGS:
-                update = payload if isinstance(payload, dict) else {}
-                enabled = update.get("sponsored_discovery_enabled")
-                measurement = update.get("sponsored_discovery_measurement_enabled")
-                if enabled is not None and not isinstance(enabled, bool):
-                    self._write_json({"error": "invalid_request"}, status=400)
-                    return
-                if measurement is not None and not isinstance(measurement, bool):
-                    self._write_json({"error": "invalid_request"}, status=400)
-                    return
-                settings = update_sponsored_discovery_settings(
-                    store,
-                    sponsored_discovery_enabled=enabled if isinstance(enabled, bool) else None,
-                    sponsored_discovery_measurement_enabled=measurement if isinstance(measurement, bool) else None,
-                    now=datetime.now(timezone.utc).isoformat(),
-                )
-                self._write_json(settings)
-                return
-            self._write_json({"error": "not_found"}, status=404)
             return
         if parsed.path == "/v1/healthz/verify":
             nonce = self._optional_string(payload.get("nonce")) if payload else None
@@ -1483,72 +1324,6 @@ class _GuardDaemonHandler(
             payload, status = native_route_unavailable_body(), 503
         body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
         self._write_json_bytes(body, status=status, extra_headers=extra_headers)
-
-    def _serve_release_feed_read(self, parsed: ParseResult) -> None:
-        """Serve one published release document through the native projector.
-
-        The dashboard cannot reach the portal itself (`connect-src 'self'`),
-        so this route is its only transport. The server moves bytes: it never
-        reads, filters, or reorders a release.
-        """
-
-        if not release_feed_rollout_enabled():
-            self._write_json({"error": RELEASE_FEED_UNAVAILABLE}, status=503)
-            return
-        if parsed.path == _LOCAL_RELEASES_INDEX:
-            kind, slug = "index", None
-        elif parsed.path == _LOCAL_RELEASES_DETAIL:
-            kind, slug = "detail", None
-        else:
-            self._write_json({"error": "not_found"}, status=404)
-            return
-        params = parse_qs(parsed.query, keep_blank_values=False)
-        if kind == "detail":
-            slugs = params.get("slug", [])
-            if len(slugs) != 1:
-                self._write_json({"error": RELEASE_FEED_REQUEST_INVALID}, status=400)
-                return
-            slug = slugs[0]
-        page = _release_feed_number(params.get("page"), default=1)
-        page_size = _release_feed_number(params.get("pageSize"), default=MAX_RELEASE_FEED_PAGE_SIZE)
-        if page is None or page_size is None:
-            self._write_json({"error": RELEASE_FEED_REQUEST_INVALID}, status=400)
-            return
-        store = self.server.store  # type: ignore[attr-defined]
-        result = release_feed_projection(
-            guard_home=store.guard_home,
-            kind=kind,
-            slug=slug,
-            page=page,
-            page_size=page_size,
-        )
-        if result is None:
-            self._write_json({"error": RELEASE_FEED_UNAVAILABLE}, status=501)
-            return
-        if result.error_code is not None:
-            self._write_json({"error": result.error_code}, status=result.status)
-            return
-        if result.body is None:
-            self._write_json({"error": RELEASE_FEED_UNAVAILABLE}, status=503)
-            return
-        self._write_json_bytes(
-            escape_json_for_html(result.body),
-            status=200,
-            extra_headers={"Cache-Control": "no-store"},
-        )
-
-    def _write_discovery_body(self, body: bytes) -> None:
-        """Write the native discovery projection verbatim, uncached.
-
-        The bytes are exactly what the native validator produced: this server
-        never interprets, filters, or reorders placements.
-        """
-
-        self._write_json_bytes(
-            escape_json_for_html(body),
-            status=200,
-            extra_headers={"Cache-Control": "no-store"},
-        )
 
     def _write_json_bytes(
         self,

@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import IO
 
@@ -56,15 +57,18 @@ class NativeGuardDaemon:
         *,
         home_dir: Path | None = None,
         workers: bool = False,
+        environment: Mapping[str, str] | None = None,
     ) -> None:
-        # The daemon binds loopback on a port it picks; the arguments mirror
-        # ``GuardDaemonServer`` so a test can swap one for the other.
-        if host != "127.0.0.1" or port != 0:
-            raise ValueError("The native daemon harness serves 127.0.0.1 on a free port.")
+        # The daemon binds loopback, on a free port unless one is named; the
+        # arguments mirror ``GuardDaemonServer`` so a test can swap one for the
+        # other.
+        if host != "127.0.0.1" or not 0 <= port <= 65535:
+            raise ValueError("The native daemon harness serves 127.0.0.1.")
         self.store = store
         self.home_dir = home_dir
         self.workers = workers
-        self.port = 0
+        self.environment = dict(environment or {})
+        self.port = port
         self.pid = 0
         self._process: subprocess.Popen[bytes] | None = None
         self._log: IO[bytes] | None = None
@@ -88,7 +92,7 @@ class NativeGuardDaemon:
         if self._process is not None:
             return
         guard_home = self.store.guard_home
-        config = launch_configuration(guard_home, 0, user_home=self.home_dir)
+        config = launch_configuration(guard_home, self.port, user_home=self.home_dir)
         config["workers"] = self.workers
         if os.name == "nt":
             # As on an installed Windows Guard, the daemon names its launcher
@@ -101,9 +105,10 @@ class NativeGuardDaemon:
             "--guard-home",
             str(config["guard_home"]),
             "--port",
-            "0",
+            str(self.port),
         ]
         environment = dict(os.environ)
+        environment.update(self.environment)
         if self.home_dir is not None:
             # The daemon runs as the user whose home it serves; the resident
             # binds its direct lane to that home.

@@ -42,6 +42,14 @@ impl<'a> Request<'a> {
         values.next().is_none().then_some(first)
     }
 
+    /// The first value of a header, as `email.message.Message.get` reads it.
+    pub(super) fn first_header(&self, name: &str) -> Option<&'a str> {
+        self.headers
+            .iter()
+            .find(|(header, _)| header.eq_ignore_ascii_case(name))
+            .map(|(_, value)| *value)
+    }
+
     pub(super) fn has_header(&self, name: &str) -> bool {
         self.headers
             .iter()
@@ -160,6 +168,45 @@ pub(super) fn query_pairs(query: &str) -> Result<Vec<(String, String)>, ()> {
             Ok((decode_component(name)?, decode_component(value)?))
         })
         .collect()
+}
+
+/// `parse_qs(text)` without blank values, in order: an escape that does not
+/// decode stays as written and bytes that are not UTF-8 become U+FFFD, as
+/// `unquote` leaves them.
+pub(super) fn parse_qs(text: &str) -> Vec<(String, String)> {
+    text.split('&')
+        .filter(|field| !field.is_empty())
+        .filter_map(|field| {
+            let (name, value) = field.split_once('=')?;
+            let value = unquote_plus(value);
+            (!value.is_empty()).then(|| (unquote_plus(name), value))
+        })
+        .collect()
+}
+
+fn unquote_plus(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let escaped = (bytes[index] == b'%')
+            .then(|| bytes.get(index + 1..index + 3))
+            .flatten()
+            .filter(|pair| pair.iter().all(u8::is_ascii_hexdigit))
+            .and_then(|pair| std::str::from_utf8(pair).ok())
+            .and_then(|pair| u8::from_str_radix(pair, 16).ok());
+        match escaped {
+            Some(value) => {
+                decoded.push(value);
+                index += 3;
+                continue;
+            }
+            None if bytes[index] == b'+' => decoded.push(b' '),
+            None => decoded.push(bytes[index]),
+        }
+        index += 1;
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
 }
 
 fn decode_component(text: &str) -> Result<String, ()> {

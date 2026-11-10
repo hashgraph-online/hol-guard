@@ -10,7 +10,7 @@ use super::*;
 static SERIAL: Mutex<()> = Mutex::new(());
 
 fn params(query: &str) -> BTreeMap<String, Vec<String>> {
-    parse_params(query).expect("decodable query")
+    parse_params(query)
 }
 
 fn index_document() -> Vec<u8> {
@@ -24,6 +24,26 @@ fn index_document() -> Vec<u8> {
         "releases": [],
     }))
     .unwrap()
+}
+
+#[test]
+fn a_query_decodes_as_parse_qs_decodes_it() {
+    assert_eq!(params("slug=a%zz")["slug"], ["a%zz"]);
+    assert_eq!(params("slug=a%2")["slug"], ["a%2"]);
+    assert_eq!(params("slug=%ff")["slug"], ["\u{fffd}"]);
+    assert_eq!(params("slug=a+b%2Fc")["slug"], ["a b/c"]);
+    assert!(!params("slug=&page").contains_key("slug"));
+}
+
+#[test]
+fn a_digit_int_refuses_is_an_invalid_request() {
+    for query in ["page=%C2%B2", "pageSize=%C2%B2", "page=\u{661}\u{662}"] {
+        assert_eq!(
+            target_for(Kind::Index, &params(query)).err(),
+            Some(REQUEST_INVALID),
+            "{query}"
+        );
+    }
 }
 
 #[test]

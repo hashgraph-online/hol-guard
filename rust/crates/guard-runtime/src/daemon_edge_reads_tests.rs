@@ -382,11 +382,7 @@ fn relays_every_post_it_does_not_read_as_the_daemon_does() {
     let body = r#"{"request_id":"x"}"#;
     for request in [
         post(body, "").replace(TOKEN, "wrong"),
-        post(body, "").replace("application/json", "application/x-www-form-urlencoded"),
-        post(body, "Content-Type: application/json\r\n"),
-        post(body, "Transfer-Encoding: chunked\r\n"),
         post(body, "Origin: http://x\r\n"),
-        post(r#"{"request_id":NaN}"#, ""),
         post(body, "").replace("/v1/read-state", "/v1/policy/clear"),
         format!("{}GET /v1/read-state HTTP/1.1\r\n\r\n", post(body, "")),
         post(body, "").replace(
@@ -397,6 +393,31 @@ fn relays_every_post_it_does_not_read_as_the_daemon_does() {
         assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
         let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();
         assert!(request.as_bytes().starts_with(&relayed), "{request}");
+    }
+}
+
+#[test]
+fn reads_every_body_the_daemon_reads() {
+    let edge = spawn_configured_edge();
+    let body = r#"{"request_id":"x"}"#;
+    for (request, status) in [
+        (
+            post(body, "").replace("application/json", "application/x-www-form-urlencoded"),
+            "400",
+        ),
+        (post(body, "Transfer-Encoding: chunked\r\n"), "400"),
+        (
+            post("request_id=x", "").replace("application/json", "text/plain"),
+            "200",
+        ),
+        (post(body, "Content-Type: text/plain\r\n"), "200"),
+        (post("{", ""), "400"),
+    ] {
+        let response = exchange(edge.address, &request);
+        assert!(
+            response.starts_with(&format!("HTTP/1.0 {status}")),
+            "{request}: {response}"
+        );
     }
 }
 

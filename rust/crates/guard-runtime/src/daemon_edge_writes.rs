@@ -46,6 +46,19 @@ mod sessions;
 #[path = "daemon_edge_settings_write.rs"]
 mod settings_write;
 
+/// The value a body read, or the daemon's answer for a body it cannot read.
+macro_rules! read_body {
+    ($read:expr, $cors_origin:expr) => {
+        match $read {
+            Ok(payload) => payload,
+            Err(error) => {
+                let (status, body) = error.answer();
+                return Some((status, body, $cors_origin, false));
+            }
+        }
+    };
+}
+
 pub(super) fn respond(
     request: &Request<'_>,
     body: &[u8],
@@ -67,23 +80,17 @@ pub(super) fn respond(
         return Some((410, body, None, false));
     }
     if request.method == "POST" && resolve::owns(request.path) {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let local = local?;
         let caller = authorize_write(request, &config.token)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let (status, body, no_store) =
             resolve::respond(request.path, &payload, local, resolve::call_library(config))?;
         return Some((status, body, caller.cors_origin, no_store));
     }
     if request.method == "POST" && route_calls::EXTENSION_CONTROL_WRITES.contains(&request.path) {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_write(request, &config.token)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let args = route_calls::extension_control_args("POST", request.path);
         let (status, body, no_store) =
@@ -94,11 +101,8 @@ pub(super) fn respond(
         .then(|| route_calls::resident_route(request.path))
         .flatten()
     {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_write(request, &config.token)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let (status, body, no_store) =
             route_calls::respond(args, &payload, route_calls::call_resident(config, name))?;
@@ -108,11 +112,8 @@ pub(super) fn respond(
         .then(|| route_calls::route(request.path))
         .flatten()
     {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_write(request, &config.token)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let (status, body, no_store) =
             route_calls::respond(args, &payload, route_calls::call_library(config, name))?;
@@ -134,7 +135,7 @@ pub(super) fn respond(
         }
         let local = local?;
         let caller = super::super::auth::authorize_origin(request)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let daemon = reconnect::Daemon {
             guard_home: &config.guard_home,
@@ -150,22 +151,16 @@ pub(super) fn respond(
         return Some((status, body, caller.cors_origin, true));
     }
     if request.method == "POST" && request.path == "/v1/update/reconnect/prepare" {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_write(request, &config.token)?;
-        json_payload(request, body)?;
+        read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let (status, body) = reconnect_prepare(&config.guard_home);
         return Some((status, body, caller.cors_origin, true));
     }
     if request.method == "POST" && request.path == "/v1/notifications/setup" {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let local = local?;
         let caller = authorize_write(request, &config.token)?;
-        json_payload(request, body)?;
+        read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let host = match local.ip() {
             std::net::IpAddr::V6(ip) => format!("[{ip}]"),
@@ -182,11 +177,8 @@ pub(super) fn respond(
         return Some((200, body, caller.cors_origin, false));
     }
     if request.method == "POST" && legacy_cloud_handoff(request.path) {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_write(request, &config.token)?;
-        json_payload(request, body)?;
+        read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let body = serde_json::json!({
             "error": "legacy_cloud_handoff_disabled",
@@ -195,11 +187,8 @@ pub(super) fn respond(
         return Some((410, body, caller.cors_origin, false));
     }
     if request.method == "POST" && super::dispatch::post_routed(request.path) {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_write(request, &config.token)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let (status, body, no_store) = super::dispatch::answer(
             "POST",
@@ -221,17 +210,14 @@ pub(super) fn respond(
             return None;
         }
         let caller = authorize_token(request, &config.token)?;
-        let payload = py_payload(request, body)?;
+        let payload = read_body!(py_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         return sessions::respond(&route, &payload, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
     if let Some(route) = gate_config::Route::parse(request.method, request.path) {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_token(request, &config.token)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         return gate_config::respond(&route, &payload, config)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
@@ -242,16 +228,13 @@ pub(super) fn respond(
             "/v1/settings" | "/v1/settings/import" | "/v1/settings/reset"
         )
     {
-        if request.has_header("Transfer-Encoding") {
-            return None;
-        }
         let caller = authorize_token(request, &config.token)?;
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         let answer = if request.path == "/v1/settings/reset" {
             reads.report_activity();
             settings_write::reset(&payload, config, reads)
         } else {
-            let entries = py_payload(request, body)?;
+            let entries = read_body!(py_payload(request, body), caller.cors_origin.clone());
             reads.report_activity();
             let missing_error = if request.path == "/v1/settings/import" {
                 "invalid_settings_import"
@@ -265,9 +248,6 @@ pub(super) fn respond(
     let route = (request.method, request.path);
     if request.method == "DELETE" {
         return delete(request, body, config, reads);
-    }
-    if request.has_header("Transfer-Encoding") {
-        return None;
     }
     if !matches!(
         route,
@@ -283,24 +263,24 @@ pub(super) fn respond(
     }
     let caller = authorize_token(request, &config.token)?;
     if route.1 == "/v1/plugins/updates/dismiss" {
-        let payload = json_payload(request, body)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let (status, body) = plugin_update_dismiss(&payload, config);
         return Some((status, body, caller.cors_origin, true));
     }
     let answer = match route {
         ("POST", "/v1/read-state") => {
-            let payload = json_payload(request, body)?;
+            let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
             reads.report_activity();
             update_read_state(&payload, config, reads)
         }
         ("POST", "/v1/requests/clear") => {
-            let payload = json_payload(request, body)?;
+            let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
             reads.report_activity();
             requests_clear(&payload, config, reads)
         }
         _ => {
-            let payload = json_payload(request, body)?;
+            let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
             reads.report_activity();
             command_activity_feedback(&payload, config, reads)
         }
@@ -322,7 +302,7 @@ fn control_post(
         return None;
     }
     let caller = authorize_write(request, &config.token)?;
-    let payload = json_payload(request, body)?;
+    let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
     let port = reads.published_state()?.get("port")?.as_u64()?;
     reads.report_activity();
     let mut args = serde_json::Map::new();
@@ -657,47 +637,65 @@ fn truthy(value: &Value) -> bool {
     }
 }
 
-/// `_load_request_body` for a JSON body: `{}` for an empty body or JSON that
-/// is not an object. `None` for any body the edge does not read as the daemon
-/// does, including one that is not declared JSON.
-fn json_payload(request: &Request<'_>, body: &[u8]) -> Option<Map<String, Value>> {
-    if body.is_empty() {
-        return Some(Map::new());
-    }
-    if !request
-        .single_header("Content-Type")?
-        .contains("application/json")
-    {
-        return None;
-    }
-    // A body serde rejects, such as `NaN` or a lone surrogate escape, may
-    // still be one `json.loads` reads, so the daemon reads it.
-    match serde_json::from_slice(body).ok()? {
-        Value::Object(payload) => Some(payload),
-        _ => Some(Map::new()),
+/// `_load_request_body` read into JSON values: `{}` for an empty body or
+/// JSON that is not an object, a form body's last value per name, and the
+/// daemon's 400 for a body it cannot read.
+fn json_payload(request: &Request<'_>, body: &[u8]) -> Result<Map<String, Value>, BodyError> {
+    let entries = py_payload(request, body)?;
+    match PyVal::Dict(entries).to_json() {
+        Some(Value::Object(payload)) => Ok(payload),
+        _ => Err(BodyError("invalid_request_body")),
     }
 }
 
-/// [`json_payload`] read into Python's values, key order included. A lone
-/// surrogate escape, which Python keeps and the edge cannot, goes to the
-/// daemon.
-pub(super) fn py_payload(request: &Request<'_>, body: &[u8]) -> Option<Vec<(String, PyVal)>> {
+/// The error `_load_request_body` names for a body it cannot read, answered
+/// with status 400.
+#[derive(Debug, PartialEq)]
+pub(super) struct BodyError(pub(super) &'static str);
+
+impl BodyError {
+    /// The daemon's answer for this error.
+    pub(super) fn answer(&self) -> (u16, Value) {
+        (400, json!({ "error": self.0 }))
+    }
+}
+
+/// `_load_request_body` read into Python's values, key order included: a
+/// JSON object, `{}` for other JSON, or a form body's last value per name. A
+/// lone surrogate escape keeps a distinct private-use character, as Python
+/// keeps a distinct surrogate.
+pub(super) fn py_payload(
+    request: &Request<'_>,
+    body: &[u8],
+) -> Result<Vec<(String, PyVal)>, BodyError> {
+    if request.has_header("Transfer-Encoding") {
+        return Err(BodyError("unsupported_transfer_encoding"));
+    }
     if body.is_empty() {
-        return Some(Vec::new());
+        return Ok(Vec::new());
     }
-    if !request
-        .single_header("Content-Type")?
-        .contains("application/json")
-    {
-        return None;
+    let Ok(text) = std::str::from_utf8(body) else {
+        return Err(BodyError("invalid_request_body"));
+    };
+    let json = request
+        .first_header("Content-Type")
+        .is_some_and(|value| value.contains("application/json"));
+    if !json {
+        let mut entries: Vec<(String, PyVal)> = Vec::new();
+        for (name, value) in super::super::http::parse_qs(text) {
+            match entries.iter_mut().find(|(key, _)| *key == name) {
+                Some(entry) => entry.1 = PyVal::Str(value),
+                None => entries.push((name, PyVal::Str(value))),
+            }
+        }
+        return Ok(entries);
     }
-    let parsed = pyjson::parse_mapping_lone_surrogates(std::str::from_utf8(body).ok()?).ok()?;
-    if parsed.mapped || parsed.collision {
-        return None;
-    }
-    match parsed.value {
-        PyVal::Dict(entries) => Some(entries),
-        _ => Some(Vec::new()),
+    match pyjson::parse_mapping_lone_surrogates(text) {
+        Ok(parsed) => Ok(match parsed.value {
+            PyVal::Dict(entries) => entries,
+            _ => Vec::new(),
+        }),
+        Err(_) => Err(BodyError("invalid_request_body")),
     }
 }
 

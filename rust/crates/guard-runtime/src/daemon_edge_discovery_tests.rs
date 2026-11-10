@@ -182,3 +182,20 @@ fn relay_maps_statuses_like_python() {
         Answer::Json(503, json!({"error": "discovery_transport_failed"}))
     );
 }
+
+#[test]
+fn only_a_loopback_http_origin_stands_in_for_the_service() {
+    assert!(fixture_origin("http://127.0.0.1:4792"));
+    for value in [
+        "http://127.0.0.1:0",
+        "http://127.0.0.1:",
+        "http://127.0.0.1:99999",
+        "http://127.0.0.1:80/x",
+        "http://localhost:80",
+        "https://127.0.0.1:443",
+        "http://127.0.0.1:80@evil.example",
+        "http://127.0.0.10:80",
+    ] {
+        assert!(!fixture_origin(value), "{value}");
+    }
+}

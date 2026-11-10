@@ -1,5 +1,5 @@
-//! `GET /v1/releases/index` and `GET /v1/releases/release`, answered as
-//! `_serve_release_feed_read` answers them: one fixed-origin document from the
+//! `GET /v1/releases/index` and `GET /v1/releases/release`: one fixed-origin
+//! document from the
 //! public release archive, fetched under the machine's managed network policy
 //! and projected by the native release-feed projector before the dashboard
 //! sees a byte of it.
@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use guard_command::egress_caller::policy_get_with_headers;
 use serde_json::{json, Value};
 
-use super::super::http::{query_pairs, Request};
+use super::super::http::{parse_qs, Request};
 use crate::managed_policy_load::ManagedPolicySource;
 use crate::release_feed_op::{
     evaluate_release_feed_project, ReleaseFeedProjectRequest, RELEASE_FEED_REQUEST_SCHEMA,
@@ -79,21 +79,21 @@ pub(in crate::daemon_edge) fn owns(path: &str) -> bool {
 
 /// The route's answer, or `None` for a query the edge will not read the way
 /// Python's `parse_qs` would.
-pub(in crate::daemon_edge) fn read(request: &Request<'_>) -> Option<Answer> {
+pub(in crate::daemon_edge) fn read(request: &Request<'_>) -> Answer {
     if !rollout_enabled(std::env::var(ROLLOUT_ENV).ok().as_deref()) {
-        return Some(error(503, UNAVAILABLE));
+        return error(503, UNAVAILABLE);
     }
     let target = match request.path {
         LOCAL_INDEX => Kind::Index,
         LOCAL_DETAIL => Kind::Detail,
-        _ => return Some(error(404, "not_found")),
+        _ => return error(404, "not_found"),
     };
-    let params = parse_params(request.query)?;
+    let params = parse_params(request.query);
     let target = match target_for(target, &params) {
         Ok(target) => target,
-        Err(code) => return Some(error(400, code)),
+        Err(code) => return error(400, code),
     };
-    Some(project(&target, fetch))
+    project(&target, fetch)
 }
 
 /// `release_feed_rollout_enabled`.
@@ -129,16 +129,13 @@ pub(in crate::daemon_edge) struct Target {
     pub(in crate::daemon_edge) query: String,
 }
 
-/// `parse_qs(query, keep_blank_values=False)`.
-pub(in crate::daemon_edge) fn parse_params(query: &str) -> Option<BTreeMap<String, Vec<String>>> {
+/// `parse_qs(query, keep_blank_values=False)` grouped by name.
+pub(in crate::daemon_edge) fn parse_params(query: &str) -> BTreeMap<String, Vec<String>> {
     let mut params: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (name, value) in query_pairs(query).ok()? {
-        if value.is_empty() {
-            continue;
-        }
+    for (name, value) in parse_qs(query) {
         params.entry(name).or_default().push(value);
     }
-    Some(params)
+    params
 }
 
 /// The route's query checks and `release_feed_target`.
