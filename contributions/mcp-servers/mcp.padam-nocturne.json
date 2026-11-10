@@ -75,7 +75,7 @@
     "https://github.com/MaksimGalatin/padam-nocturne/blob/main/padam/mcp_server.py"
   ],
   "saferAlternatives": [
-    "Tools read and write only the local SQLite file; none sends memory off the machine. Vectors come from a built-in method, an optional local Ollama, or the optional [embed] model fetched once from Hugging Face.",
+    "Tools read and write only the local SQLite file. Memory text leaves the machine only if OLLAMA_URL is set to another host (default: localhost) for embeddings; the optional [embed] model is fetched once from Hugging Face and gets no memory.",
     "No erase tool over MCP: forgetting, Arweave anchoring and inheritance are owner-only CLI commands (padam forget, l3, legacy, panic).",
     "padam_write stays on review: command recognition is a help, not the wall, and injected commands can still pass it. Sealed Red Team results with every failure: docs/SECURITY_REVIEW.md.",
     "PADAM holds command-like text and identity changes for the owner (padam review); outside text is held only when the agent labels it external, which PADAM cannot verify. PADAM_STRICT=1 holds every agent write.",
