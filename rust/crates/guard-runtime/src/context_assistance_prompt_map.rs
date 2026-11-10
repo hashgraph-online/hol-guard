@@ -37,6 +37,7 @@ mod pick;
 use pick::{named_definitions, Pick};
 #[path = "context_assistance_prompt_map_rename.rs"]
 mod rename;
+pub(super) use rename::STUB_MARKS;
 #[path = "context_assistance_prompt_map_uses.rs"]
 mod uses;
 use uses::sought;

@@ -22,7 +22,7 @@ const MAX_STUB_CHARS: usize = 2_200;
 const MAX_LINE_CHARS: usize = 160;
 const MAX_INDENT_CHARS: usize = 48;
 /// What a body left to be written holds.
-const STUB_MARKS: [&str; 4] = [
+pub(in super::super) const STUB_MARKS: [&str; 4] = [
     "NotImplementedError",
     "todo!(",
     "unimplemented!(",
