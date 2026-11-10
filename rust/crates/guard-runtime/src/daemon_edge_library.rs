@@ -1,10 +1,10 @@
-//! Guard library calls the daemon makes through a short-lived Guard CLI
-//! process (`desktop library-call`).
+//! Guard library calls the daemon makes through the resident Guard CLI
+//! process (`desktop library-serve`).
 //!
 //! The daemon owns every route; work that still lives in the Python library
 //! (approval resolution, scope contracts, continuations) runs as one call:
-//! `{"call": name, "args": {...}}` on standard input, and `{"ok": value}` or
-//! `{"error": {"kind": ..., ...}}` on standard output. The daemon writes the
+//! `{"id": n, "call": name, "args": {...}}` on one line of standard input, and
+//! `{"ok": value}` or `{"error": {"kind": ..., ...}}` on standard output. The daemon writes the
 //! status and body from that answer.
 
 use std::collections::HashMap;
@@ -52,10 +52,7 @@ pub(in crate::daemon_edge) fn call(
     name: &str,
     args: Value,
 ) -> Result<Value, CallError> {
-    let request = serde_json::to_vec(&json!({"call": name, "args": args}))
-        .map_err(|_| CallError::Unavailable)?;
-    let answer = run(config, request).ok_or(CallError::Unavailable)?;
-    decode(&answer)
+    call_resident(config, name, args)
 }
 
 /// The value or error one answer carries.
@@ -69,61 +66,6 @@ pub(in crate::daemon_edge) fn decode(answer: &[u8]) -> Result<Value, CallError> 
     match answer.remove("error") {
         Some(Value::Object(error)) => Err(CallError::Raised(error)),
         _ => Err(CallError::Unavailable),
-    }
-}
-
-/// The CLI arguments for one call.
-pub(in crate::daemon_edge) fn call_args(guard_home: &str) -> [String; 4] {
-    [
-        "desktop".to_owned(),
-        "library-call".to_owned(),
-        "--guard-home".to_owned(),
-        guard_home.to_owned(),
-    ]
-}
-
-fn run(config: &ReadConfig, request: Vec<u8>) -> Option<Vec<u8>> {
-    let (argv, guard_home, cwd) = config.cli()?;
-    let (program, prefix) = argv.split_first()?;
-    let mut command = Command::new(program);
-    command
-        .args(prefix)
-        .args(call_args(guard_home))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    if let Some(cwd) = cwd {
-        command.current_dir(cwd);
-    }
-    isolate_group(&mut command);
-    let mut child = command.spawn().ok()?;
-    let (Some(mut stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
-        stop(child);
-        return None;
-    };
-    thread::spawn(move || {
-        let _ = stdin.write_all(&request);
-    });
-    let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let read = stdout
-            .take(MAX_ANSWER_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .is_ok();
-        let _ = sender.send(read.then_some(bytes));
-    });
-    match receiver.recv_timeout(CALL_TIMEOUT) {
-        Ok(Some(bytes)) if bytes.len() as u64 <= MAX_ANSWER_BYTES => {
-            thread::spawn(move || {
-                let _ = child.wait();
-            });
-            Some(bytes)
-        }
-        _ => {
-            stop(child);
-            None
-        }
     }
 }
 
