@@ -24,7 +24,8 @@
   },
   "riskClasses": [
     "local-data-access",
-    "local-source-read"
+    "local-source-read",
+    "local-sqlite-write"
   ],
   "tools": [
     {
