@@ -37,7 +37,8 @@ fn excerpt(path: &str, text: &str) -> PickedExcerpt {
 /// code counts, beside its singular form, without the class it is read on:
 /// a search cut short may not reach the file holding `list_entries`, and a
 /// new helper such as `make_slug` holds nothing to drop. With no name held,
-/// none count, and a name as short as `id` never does.
+/// none count, and a name as short as `id` never does. A class written
+/// apart from the dotted name it qualifies counts.
 #[test]
 fn named_code_counts_once_the_project_holds_some() {
     let prompt = "Fix `Parser.parse_filter_block` and add a `make_slug` helper for `list_entries`.";
@@ -59,6 +60,10 @@ fn named_code_counts_once_the_project_holds_some() {
     let words = terms(short);
     let names = held_names(short, &words, &vec![1; words.len()]);
     assert!(!holds("valid = True", &names), "{names:?}");
+    let apart = "Fix `Widget.render` and how `Widget` is built.";
+    let words = terms(apart);
+    let names = held_names(apart, &words, &vec![1; words.len()]);
+    assert_eq!(names, ["render", "widget"], "{words:?}");
 }
 
 /// The excerpts that are shown must hold a name, written either way: the
