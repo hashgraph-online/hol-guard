@@ -683,11 +683,9 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/client.py",
           "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
           "src/codex_plugin_scanner/guard/daemon/live_identity.py",
           "src/codex_plugin_scanner/guard/daemon/policy_authority_client.py",
-          "src/codex_plugin_scanner/guard/daemon/response_bounds.py",
           "src/codex_plugin_scanner/guard/daemon/runtime_peer.py"
         ],
         "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
@@ -1914,19 +1912,6 @@
         "entry_points": [],
         "reason": "Resolving queued approval requests (approve, deny, bulk allow-once) and building the dashboard runtime snapshot. These run when a person acts in the approval center, the dashboard or the guard approvals command; no hook or MCP proxy call reaches them.",
         "evidence": "Every caller of apply_approval_resolution, build_runtime_snapshot and bulk_allow_read_only_once is outside runtime scope: the daemon control-plane routes (server_control_routes_post.py, server_control_policy.py), the dashboard read routes (server_dashboard_runtime_read.py) and the guard approvals command (cli/approval_commands.py). The remaining symbols are reached only from apply_approval_resolution, build_runtime_snapshot and bulk_allow_read_only_once. The retained in-scope part of approvals.py (request queueing, build_approval_request_url, primary_approval_request, silent_review_center_url) does not reference them, and the report validates this reference closure on every run."
-      },
-      {
-        "id": "daemon-health-details-probe",
-        "category": "control_plane",
-        "path": "src/codex_plugin_scanner/guard/daemon/client.py",
-        "symbols": [
-          "_HEALTH_PROBE_DEADLINE_SECONDS",
-          "_interrupt_health_socket",
-          "read_guard_health_details"
-        ],
-        "entry_points": [],
-        "reason": "Reading the daemon's authenticated health details to confirm a live daemon's identity. Only daemon identity checks during start, update and doctor flows call it; hook and MCP proxy requests use the surface client instead.",
-        "evidence": "The only caller of read_guard_health_details is daemon/live_identity.py, which is outside runtime scope. _interrupt_health_socket and _HEALTH_PROBE_DEADLINE_SECONDS are reached only from read_guard_health_details. The retained client (GuardSurfaceDaemonClient, the loaders and the error classes) does not reference them, and the report validates this reference closure on every run."
       },
       {
         "id": "codex-hook-health-intercept-check",

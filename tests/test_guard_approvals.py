@@ -15,6 +15,7 @@ import pytest
 from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard.approval_scope_support import (
     StaleApprovalScopeContractError,
     package_request_portable_workspace_scope,
@@ -28,7 +29,6 @@ from codex_plugin_scanner.guard.approvals import (
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
     GuardArtifact,

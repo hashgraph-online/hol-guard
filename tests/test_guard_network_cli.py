@@ -12,7 +12,7 @@ from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.cli import commands_dispatch_local, network_status_command
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_parser
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.client import (
+from codex_plugin_scanner.guard.native_daemon_client import (
     GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTimeoutError,
@@ -103,8 +103,8 @@ def test_network_status_reads_live_authenticated_daemon(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    from codex_plugin_scanner.guard import native_daemon_client as client
     from codex_plugin_scanner.guard.cli import network_status_command
-    from codex_plugin_scanner.guard.daemon import client
 
     # This checks authenticated response content. Shared CI load must not turn
     # its quarter-second production deadline into a scheduling assertion.

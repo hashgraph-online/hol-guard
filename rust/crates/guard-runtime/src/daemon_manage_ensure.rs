@@ -805,10 +805,23 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         })
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    detach(&mut command, native, request.allow_windows_job_breakaway);
-    let mut child = command
-        .spawn()
-        .map_err(|_| runtime("Guard daemon process could not be started."))?;
+    // Breakaway first on Windows: the launcher's own job is closed when the
+    // call returns and must not take the handed-off daemon with it. A job
+    // that forbids breakaway refuses the spawn, so retry inside it.
+    detach(
+        &mut command,
+        native,
+        cfg!(windows) || request.allow_windows_job_breakaway,
+    );
+    let spawned = match command.spawn() {
+        Ok(child) => Ok(child),
+        Err(_) if cfg!(windows) && !request.allow_windows_job_breakaway => {
+            detach(&mut command, native, false);
+            command.spawn()
+        }
+        Err(error) => Err(error),
+    };
+    let mut child = spawned.map_err(|_| runtime("Guard daemon process could not be started."))?;
     match supervise(context, &mut child, port, &nonce, config_line) {
         // Handed off: the process belongs to the daemon lifecycle now.
         Ok(Handoff::Done(outcome)) => outcome.map(Some),

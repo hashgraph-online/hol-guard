@@ -10,7 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import client, live_identity
+from codex_plugin_scanner.guard import native_daemon_client as client
+from codex_plugin_scanner.guard.daemon import live_identity
 
 
 def _authenticated_state(guard_home) -> dict[str, object]:
@@ -417,14 +418,12 @@ def test_live_identity_rejects_invalid_deadlines_before_loading_state(
         "http://[::1]:1234#fragment",
     ],
 )
-def test_health_probe_rejects_invalid_authorities_before_connecting(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
-    """Malformed and non-loopback URLs must not open a socket with the daemon token."""
+def test_health_probe_rejects_invalid_authorities_before_connecting(url: str) -> None:
+    """Malformed and non-loopback URLs must not open a socket with the daemon key.
 
-    def unexpected_connection(*args: object, **kwargs: object) -> None:
-        """Fail immediately if URL validation allows a network connection."""
-        pytest.fail("Invalid daemon authority reached the network transport")
+    The native client refuses them before connecting (`only_loopback_daemon_urls_are_reached`).
+    """
 
-    monkeypatch.setattr(client, "HTTPConnection", unexpected_connection)
     assert client.read_guard_health_details(url, "test-token") is None
 
 
@@ -480,7 +479,7 @@ def test_health_probe_invalid_or_expired_operation_deadline_never_connects(monke
     def unexpected_connection(*args, **kwargs):
         pytest.fail("expired or invalid operation opened a connection")
 
-    monkeypatch.setattr(client, "HTTPConnection", unexpected_connection)
+    monkeypatch.setattr(client, "_exchange", unexpected_connection)
     assert (
         client.read_guard_health_details(
             "http://127.0.0.1:1234",

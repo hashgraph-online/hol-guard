@@ -9,14 +9,14 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client
+from codex_plugin_scanner.guard import native_daemon_client as timeouts
 from codex_plugin_scanner.guard import (
     native_extension_control,
     native_extension_control_authority,
     store_extension_control_authority_commit,
     store_extension_control_authority_reads,
 )
-from codex_plugin_scanner.guard.daemon import client as daemon_client
-from codex_plugin_scanner.guard.daemon import extension_control_timeouts as timeouts
 from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from codex_plugin_scanner.guard.daemon.extension_control_semantic_preview import (
     SEMANTIC_PREVIEW_SCHEMA,

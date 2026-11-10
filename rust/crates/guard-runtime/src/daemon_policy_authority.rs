@@ -2,7 +2,7 @@
 //!
 //! Rust port of
 //! `src/codex_plugin_scanner/guard/daemon/policy_authority_client.py`
-//! (:17-:57), `src/codex_plugin_scanner/guard/daemon/client.py`
+//! (:17-:57), `src/codex_plugin_scanner/guard/native_daemon_client.py`
 //! (`GuardSurfaceDaemonClient` :184-:343, `_post` :434-:455,
 //! `resolve_policy_decision` :337, `claim_policy_decision` :340,
 //! `load_running_guard_surface_daemon_client` :538-:551), and

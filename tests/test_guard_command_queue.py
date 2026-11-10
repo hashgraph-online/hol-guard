@@ -12,10 +12,10 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon.command_queue_worker import (
     CommandQueueWorker,
     start_command_queue_worker,

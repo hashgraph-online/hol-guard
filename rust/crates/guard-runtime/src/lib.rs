@@ -343,6 +343,7 @@ mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
+mod daemon_client;
 mod daemon_edge;
 mod daemon_handler_digits;
 mod daemon_handler_fields;

@@ -260,7 +260,7 @@ def _run_guard_command_inspection_command(
 
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
-    from ..daemon.client import GuardDaemonRequestError
+    from ..native_daemon_client import GuardDaemonRequestError
     from ..runtime.command_inspection import unavailable_command_inspection
     from .extension_controls_commands import _client
 

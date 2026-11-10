@@ -16,8 +16,8 @@ from ..approval_gate import (
     public_config,
     require_extension_control,
 )
-from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
 from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..native_daemon_client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
 from ..native_extension_control import NativeExtensionControlError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY

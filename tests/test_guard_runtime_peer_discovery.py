@@ -21,8 +21,8 @@ from codex_plugin_scanner.guard.cli import (
 from codex_plugin_scanner.guard.cli import product as product_module
 from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError
 from codex_plugin_scanner.guard.daemon.runtime_peer import load_guard_daemon_endpoint
+from codex_plugin_scanner.guard.native_daemon_client import GuardDaemonRequestError
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_daemon_state_signing import authenticate_daemon_state, ensure_daemon_discovery_key
 

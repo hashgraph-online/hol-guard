@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.daemon.catalog_v2_client import (
     CatalogV2Client,
     CatalogV2UnsupportedError,
 )
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
+from codex_plugin_scanner.guard.native_daemon_client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore

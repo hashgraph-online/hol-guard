@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .client import GuardSurfaceDaemonClient, load_running_guard_surface_daemon_client
+from ..native_daemon_client import GuardSurfaceDaemonClient, load_running_guard_surface_daemon_client
 
 
 @dataclass(frozen=True)

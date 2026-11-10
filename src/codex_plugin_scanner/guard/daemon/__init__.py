@@ -29,7 +29,7 @@ def __getattr__(name: str) -> Any:
         globals()[name] = repair_guard_daemon_runtime
         return repair_guard_daemon_runtime
     if name in {"GuardSurfaceDaemonClient", "load_guard_surface_daemon_client"}:
-        from .client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
+        from ..native_daemon_client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
 
         return {
             "GuardSurfaceDaemonClient": GuardSurfaceDaemonClient,

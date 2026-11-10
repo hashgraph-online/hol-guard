@@ -17,7 +17,7 @@ from ..daemon.catalog_v2_client import (
     extension_route,
     v1_extension_from_v2,
 )
-from ..daemon.client import GuardDaemonRequestError, GuardDaemonResponseSchemaError, GuardSurfaceDaemonClient
+from ..native_daemon_client import GuardDaemonRequestError, GuardDaemonResponseSchemaError, GuardSurfaceDaemonClient
 
 CATALOG_LIST_SCHEMA = "guard.cli.extension-catalog-list.v2"
 _NOT_FOUND = {"catalog_extension_not_found", "catalog_route_not_found"}

@@ -18,7 +18,6 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_daemon_harness import NativeGuardDaemon
-from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import primary_approval_browser_url
@@ -1192,9 +1191,11 @@ class TestGuardSurfaceServer:
             "HOL Guard intercepted Claude's attempt to use Read and is routing it to a HOL Guard approval question."
             in (notification_payload["systemMessage"])
         )
+        notification_context = notification_payload["hookSpecificOutput"]["additionalContext"]
         assert (
-            "HOL Guard needs the user's explicit decision before Read can run"
-            in (notification_payload["hookSpecificOutput"]["additionalContext"])
+            "HOL Guard needs the user's explicit decision before Read can run" in notification_context
+            or "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question"
+            in notification_context
         )
         assert "AskUserQuestion" in notification_payload["hookSpecificOutput"]["additionalContext"]
         assert "Keep blocked" in notification_payload["hookSpecificOutput"]["additionalContext"]
@@ -1385,7 +1386,6 @@ class TestGuardSurfaceServer:
         tmp_path,
         monkeypatch,
     ) -> None:
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
         daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
         acquired = [
             daemon._server.request_capacity.acquire(blocking=False)

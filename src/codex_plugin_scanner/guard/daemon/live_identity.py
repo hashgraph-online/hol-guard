@@ -154,7 +154,7 @@ def _proxy_disabled_health_details(
     deadline_monotonic: float | None = None,
 ) -> dict[str, object] | None:
     """Use the bounded loopback client without changing authenticated identity checks."""
-    from .client import read_guard_health_details
+    from ..native_daemon_client import read_guard_health_details
 
     if deadline_monotonic is None:
         return read_guard_health_details(url, auth_token, timeout=timeout)
@@ -170,7 +170,7 @@ def _proxy_dashboard_session_capabilities(
     timeout: float,
 ) -> dict[str, object] | None:
     """Prove the normal dashboard session path without exposing its tokens."""
-    from .client import GuardSurfaceDaemonClient
+    from ..native_daemon_client import GuardSurfaceDaemonClient
 
     try:
         return GuardSurfaceDaemonClient(url, auth_token).dashboard_session_capabilities(timeout=timeout)

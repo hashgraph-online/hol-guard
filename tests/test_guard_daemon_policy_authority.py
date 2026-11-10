@@ -10,10 +10,10 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_daemon_harness import NativeGuardDaemon
-from codex_plugin_scanner.guard.daemon import client as daemon_client_module
-from codex_plugin_scanner.guard.daemon.client import load_running_guard_surface_daemon_client
+from codex_plugin_scanner.guard import native_daemon_client as daemon_client_module
 from codex_plugin_scanner.guard.local_supply_chain import _resolve_stored_package_policy_override
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.native_daemon_client import load_running_guard_surface_daemon_client
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
 from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,

@@ -276,6 +276,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = desktop_foreign_remove::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if daemon_client::is_command(command) && flag == "--stdin" => {
+            let response = daemon_client::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if daemon_recovery::is_command(command) && flag == "--stdin" => {
             daemon_recovery::run_session(io::stdin().lock(), io::stdout().lock())
         }

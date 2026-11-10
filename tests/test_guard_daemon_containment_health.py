@@ -11,7 +11,7 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_daemon_harness import NativeGuardDaemon
-from codex_plugin_scanner.guard.daemon.client import GuardSurfaceDaemonClient
+from codex_plugin_scanner.guard.native_daemon_client import GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.native_daemon_manage import (
     current_guard_daemon_runtime_fingerprint,
     load_guard_daemon_auth_token,

@@ -10,18 +10,13 @@ searches catalog content itself.
 from __future__ import annotations
 
 import hashlib
-import http.client
-import time
-import urllib.error
 from collections import OrderedDict
 from dataclasses import dataclass
 from urllib.parse import quote, urlencode
 
-from .client import (
+from ..native_daemon_client import (
     GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
-    GuardDaemonTimeoutError,
-    GuardDaemonTransportError,
     GuardSurfaceDaemonClient,
 )
 
@@ -160,42 +155,21 @@ class CatalogV2Client:
         raise CatalogTraversalError("Guard daemon catalog traversal exceeded its page budget")
 
     def _request(self, route: str, query: str, *, if_none_match: str | None) -> CatalogV2Response:
-        client = self._client
-        deadline = time.monotonic() + self._timeout
-        headers = {"X-Guard-Token": client.auth_token}
-        if if_none_match is not None:
-            headers["If-None-Match"] = if_none_match
         path = f"{CATALOG_V2_PATH}{route}" + (f"?{query}" if query else "")
         try:
-            with client.open_get(path, headers, timeout=self._timeout) as response:
-                raw = client._read_response_with_deadline(
-                    response, deadline=deadline, max_bytes=MAX_CATALOG_V2_PAGE_BYTES
-                )
-                etag = response.headers.get("ETag")
-                return CatalogV2Response(200, etag, client._decode_json_response(raw.decode("utf-8")), len(raw))
-        except urllib.error.HTTPError as error:
-            if error.code == 304:
-                etag = error.headers.get("ETag")
-                error.close()
-                return CatalogV2Response(304, etag, None, 0)
-            failure = client._http_request_error(error, deadline=deadline)
-            if (failure.status, failure.code) in _UNSUPPORTED:
+            response = self._client.conditional_get(
+                path,
+                if_none_match=if_none_match,
+                timeout=self._timeout,
+                max_bytes=MAX_CATALOG_V2_PAGE_BYTES,
+            )
+        except GuardDaemonRequestError as failure:
+            if failure.status is not None and (failure.status, failure.code) in _UNSUPPORTED:
                 raise CatalogV2UnsupportedError(
                     "Guard daemon does not serve the v2 catalog", status=failure.status, code=failure.code
-                ) from error
-            raise failure from error
-        except GuardDaemonRequestError:
+                ) from failure
             raise
-        except UnicodeDecodeError as error:
-            raise GuardDaemonResponseSchemaError("Guard daemon response schema is invalid") from error
-        except TimeoutError as error:
-            raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
-        except urllib.error.URLError as error:
-            if isinstance(error.reason, TimeoutError):
-                raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
-            raise GuardDaemonTransportError("Guard daemon request failed") from error
-        except (OSError, http.client.HTTPException) as error:
-            raise GuardDaemonTransportError("Guard daemon request failed") from error
+        return CatalogV2Response(response.status, response.etag, response.payload, response.size)
 
 
 def _page_fields(page: dict[str, object]) -> tuple[str, str, int, list[dict[str, object]], str | None]:
