@@ -1043,6 +1043,14 @@
    "body": "6705cc5014e0"
   },
   {
+   "verdict": "other-platform",
+   "note": "Unix detaches with a new process group and Windows with detached-process creation flags; elsewhere the child is spawned as is, on no platform Guard ships for.",
+   "file": "rust/crates/guard-runtime/src/daemon_manage_ensure.rs",
+   "item": "fn detach -- non-Unix block",
+   "cfg": "not(any(unix, windows))",
+   "body": "73bcf5b45715"
+  },
+  {
    "verdict": "windows-equivalent",
    "note": "Windows liveness comes from the process-handle probe the Python manager used; an unknown answer counts as running, so retirement never assumes a live daemon is gone.",
    "file": "rust/crates/guard-runtime/src/daemon_manage_host.rs",
