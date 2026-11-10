@@ -19,9 +19,8 @@ use super::super::library;
 use super::{authorize_token, hook_scheduler, json_response, refusals, NativeReads, ReadConfig};
 use crate::claude_hook_bridge_render::py_strip;
 use admission::{
-    client_key, exec_workdir, expanduser, expires_at, lane, normpath, payload_reference,
-    reply_event, runtime_event, take_hint, truthy, Directories, Rejection,
-    MAX_PAYLOAD_REFERENCE_BYTES,
+    client_key, exec_workdir, expires_at, lane, payload_reference, reply_event, runtime_event,
+    take_hint, truthy, Directories, Rejection, MAX_PAYLOAD_REFERENCE_BYTES,
 };
 
 #[path = "daemon_edge_hook_admission.rs"]
@@ -359,31 +358,20 @@ impl Hook<'_> {
         let fail = |reason: &str, code: &str| fail_safe(&reply_harness, &reply_event, reason, code);
         let unavailable = || fail(WORKER_UNAVAILABLE_REASON, WORKER_UNAVAILABLE_CODE);
 
-        // Oh My Pi has no bridge to ask the resident first, so its direct
-        // lane is asked here, unless the request claims another Guard home:
-        // the lane answers out of the home it bound.
+        // The daemon's direct lane (`direct_hook`) already asked the resident
+        // before this route ran; what reaches here is the daemon's own review.
         let guard_home_query = self.param("guard-home");
-        let try_direct = guard_home_query.as_deref().is_none_or(|claimed| {
-            let user = std::env::var("HOME").unwrap_or_else(|_| self.home());
-            normpath(&expanduser(claimed, &user)) == normpath(&self.config.guard_home)
-        });
         let Some(begin) = self.call_by(
             "hook.begin",
             json!({
                 "count_harness": runtime_harness.as_deref().unwrap_or(self.harness),
                 "direct_miss": direct_miss,
-                "payload": payload,
-                "remaining_seconds": remaining(),
-                "try_direct": try_direct,
                 "capacity_harness": reply_harness,
             }),
             expires,
         ) else {
             return unavailable();
         };
-        if let Some(answer) = begin.get("answer").filter(|answer| answer.is_object()) {
-            return answer.clone();
-        }
         let capacity_harness = begin
             .get("capacity_harness")
             .and_then(Value::as_str)

@@ -88,33 +88,23 @@ def _record_path_rejection(server: Any, args: Mapping[str, Any]) -> None:
 
 
 def hook_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Counts the hook and, for Oh My Pi, asks the resident's direct lane first."""
+    """Counts the hook the daemon received and names the harness its capacity counts under."""
 
     from ..adapters import get_adapter
     from ..daemon.hook_direct_counters import note_hook_received
-    from ..daemon.hook_direct_pi_transport import pi_direct_answer
 
     server = _server(store, args)
-    worker = getattr(server, "hook_worker", None)
     harness = _text(args.get("harness")) or ""
-    note_hook_received(worker, _text(args.get("count_harness")) or harness, _text(args.get("direct_miss")))
-    answer = None
-    if args.get("try_direct") is True:
-        params = _params(args)
-        home = params.get("home", [None])[-1]
-        answer = pi_direct_answer(
-            worker,
-            default_harness=harness,
-            params=params,
-            payload=_payload(args),
-            home_dir=home.strip() if isinstance(home, str) and home.strip() else None,
-            deadline=_deadline(args),
-        )
+    note_hook_received(
+        getattr(server, "hook_worker", None),
+        _text(args.get("count_harness")) or harness,
+        _text(args.get("direct_miss")),
+    )
     try:
         capacity_harness = get_adapter(_text(args.get("capacity_harness")) or harness).harness
     except ValueError:
         capacity_harness = "other"
-    return {"answer": answer, "capacity_harness": capacity_harness}
+    return {"capacity_harness": capacity_harness}
 
 
 def hook_path_rejected(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:

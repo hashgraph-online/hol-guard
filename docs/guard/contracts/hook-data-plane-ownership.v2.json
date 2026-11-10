@@ -316,8 +316,7 @@
     "src/codex_plugin_scanner/guard/routes/request_handler.py",
     "src/codex_plugin_scanner/guard/routes/hook_calls.py",
     "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
-    "src/codex_plugin_scanner/guard/hook_deadline.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_direct_pi_transport.py"
+    "src/codex_plugin_scanner/guard/hook_deadline.py"
    ],
    "current": "HTTP authentication, JSON envelope interpretation, fast-path selection, and fallback routing",
    "target": "authentication and byte transport only"
