@@ -527,7 +527,7 @@ fn daemon_state_matches_current_runtime(payload: &Map<String, Value>) -> bool {
 }
 
 /// `_healthz_payload_is_current` (manager.py:3696-:3709).
-fn healthz_payload_is_current(payload: &Value) -> bool {
+pub(crate) fn healthz_payload_is_current(payload: &Value) -> bool {
     let map = payload.as_object();
     let Some(map) = map else {
         return false;
@@ -592,7 +592,7 @@ fn healthz_details_match_state_identity(
 }
 
 /// `_healthz_payload_matches_guard_home` (manager.py:3712-:3727).
-fn healthz_payload_matches_guard_home(payload: &Value, guard_home: &Path) -> bool {
+pub(crate) fn healthz_payload_matches_guard_home(payload: &Value, guard_home: &Path) -> bool {
     let reported = payload.get("guard_home").and_then(Value::as_str);
     let Some(reported) = reported else {
         return false;
@@ -760,7 +760,7 @@ fn daemon_pid_is_running(_pid: i64) -> bool {
 }
 
 /// `_guard_daemon_pid_matches_command` (manager.py:3275-:3300).
-fn daemon_pid_matches_command(pid: i64, guard_home: &Path) -> bool {
+pub(crate) fn daemon_pid_matches_command(pid: i64, guard_home: &Path) -> bool {
     let Some(command) = daemon_command_for_pid(pid) else {
         return false;
     };
@@ -1127,7 +1127,7 @@ fn path_basename_lower(raw: &str) -> String {
 // never sent elsewhere. `Connection: close` lets us bound the body read.
 // ---------------------------------------------------------------------------
 
-fn http_get_json(url: &str, headers: &[(&str, &str)]) -> Option<Value> {
+pub(crate) fn http_get_json(url: &str, headers: &[(&str, &str)]) -> Option<Value> {
     let (host, port, path) = parse_loopback_url(url)?;
     let response = http_request("GET", &host, port, &path, headers, None, HEALTH_TIMEOUT)?;
     serde_json::from_slice(&response).ok()

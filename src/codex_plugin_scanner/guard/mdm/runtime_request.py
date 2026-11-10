@@ -22,6 +22,7 @@ def runtime_answer(
     status_timeout_seconds: float = _STATUS_TIMEOUT_SECONDS,
     extra_features: tuple[str, ...] = (),
     stop_event: threading.Event | None = None,
+    allow_windows_breakaway: bool = False,
 ) -> dict[str, object] | None:
     """The runtime's JSON object answer to one request.
 
@@ -70,6 +71,8 @@ def runtime_answer(
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
         **({"stop_event": stop_event} if stop_event is not None else {}),
+        # A daemon it launches must outlive the job that contains this call.
+        **({"allow_windows_breakaway": True} if allow_windows_breakaway else {}),
     )
     try:
         answer = cast(object, json.loads(output)) if output is not None else None

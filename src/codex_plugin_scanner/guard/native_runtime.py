@@ -249,6 +249,7 @@ def _run_native_process_result(
     timeout_seconds: float,
     output_limit: int = _MAX_RESPONSE_BYTES,
     stop_event: threading.Event | None = None,
+    allow_windows_breakaway: bool = False,
 ) -> BoundedHookProcessResult:
     """Run one bounded native invocation and keep its whole result.
 
@@ -267,6 +268,7 @@ def _run_native_process_result(
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
         stop_event=stop_event,
+        allow_windows_breakaway=allow_windows_breakaway,
     )
 
 
@@ -278,6 +280,7 @@ def _run_native_process(
     timeout_seconds: float,
     output_limit: int = _MAX_RESPONSE_BYTES,
     stop_event: threading.Event | None = None,
+    allow_windows_breakaway: bool = False,
 ) -> str | None:
     result = _run_native_process_result(
         path,
@@ -285,6 +288,7 @@ def _run_native_process(
         input_text=input_text,
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
+        allow_windows_breakaway=allow_windows_breakaway,
         stop_event=stop_event,
     )
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:

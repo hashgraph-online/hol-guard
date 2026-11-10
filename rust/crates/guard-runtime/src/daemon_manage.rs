@@ -8,17 +8,22 @@
 //!   remains; answers `{"complete": bool}`.
 //! - `repair_locator`: remove the locator and any untrusted daemon state;
 //!   answers `{"repaired": true, "cleared": [...]}` or `{"error": code}`.
+//! - `ensure`: reuse, adopt or launch the home's daemon; answers
+//!   `{"url": url}` or `{"error": message, "kind": "timeout"|"runtime"}`.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::daemon_policy_authority::load_authenticated_daemon_identity;
 
+#[path = "daemon_manage_ensure.rs"]
+mod ensure;
 #[path = "daemon_manage_host.rs"]
 mod host;
 #[path = "daemon_manage_records.rs"]
@@ -54,6 +59,28 @@ struct Request {
     frozen_parent_trusted: bool,
     #[serde(default)]
     executable_name: Option<String>,
+    #[serde(default)]
+    launch: Map<String, Value>,
+    #[serde(default)]
+    serve_executable: Option<String>,
+    #[serde(default)]
+    executable: Option<String>,
+    #[serde(default)]
+    home_dir: Option<String>,
+    #[serde(default)]
+    launch_cwd: Option<String>,
+    #[serde(default)]
+    preferred_port: Option<i64>,
+    #[serde(default)]
+    background_maintenance: bool,
+    #[serde(default)]
+    allow_windows_job_breakaway: bool,
+    #[serde(default)]
+    start_lock_held: bool,
+    #[serde(default)]
+    launcher_env: BTreeMap<String, String>,
+    #[serde(default)]
+    env_port: Option<String>,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -114,6 +141,25 @@ fn answer(request: &Request) -> Result<Value, String> {
         }
         "retirement_complete" => Ok(json!({"complete": retire::retirement_is_complete(&caller)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
+        "ensure" => {
+            let ensure = ensure::Ensure {
+                launch: &request.launch,
+                serve_executable: request.serve_executable.as_deref(),
+                executable: request.executable.as_deref(),
+                home_dir: request.home_dir.as_deref(),
+                launch_cwd: request.launch_cwd.as_deref(),
+                preferred_port: request.preferred_port,
+                background_maintenance: request.background_maintenance,
+                allow_windows_job_breakaway: request.allow_windows_job_breakaway,
+                start_lock_held: request.start_lock_held,
+                launcher_env: &request.launcher_env,
+                env_port: request.env_port.as_deref(),
+            };
+            Ok(match ensure::ensure(&caller, &ensure, deadline) {
+                Ok(url) => json!({"url": url}),
+                Err(failure) => failure.reply(),
+            })
+        }
         _ => Err(invalid()),
     }
 }

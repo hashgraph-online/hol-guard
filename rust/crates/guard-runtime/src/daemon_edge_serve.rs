@@ -55,7 +55,7 @@ const EXIT_STATE: i32 = 4;
 /// the daemon adds its own process identity before signing.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct LaunchConfig {
+pub(crate) struct LaunchConfig {
     schema: String,
     guard_home: String,
     #[serde(default = "default_host")]
@@ -98,7 +98,7 @@ fn default_host() -> String {
 }
 
 impl LaunchConfig {
-    pub(super) fn parse(line: &[u8]) -> Option<Self> {
+    pub(crate) fn parse(line: &[u8]) -> Option<Self> {
         let config: Self = serde_json::from_slice(line).ok()?;
         let reserved = [
             "guard_home",
@@ -210,6 +210,10 @@ pub(super) fn parse_args(args: &[String]) -> Option<(String, u16)> {
 }
 
 pub(crate) fn run(args: &[String]) -> i32 {
+    // Leave the launcher's session so its process-group cleanup never
+    // reaches the daemon it handed off. A group leader cannot, and needs not.
+    #[cfg(unix)]
+    let _ = nix::unistd::setsid();
     let Some((arg_home, arg_port)) = parse_args(args) else {
         eprintln!("usage: guard-runtime daemon-serve --guard-home H --port P < launch.json");
         return EXIT_USAGE;
@@ -339,7 +343,7 @@ fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32) {
     }
 }
 
-pub(super) fn publish(
+pub(crate) fn publish(
     home: &Path,
     config: &LaunchConfig,
     port: u16,
@@ -439,7 +443,29 @@ fn now_iso() -> String {
     crate::approval_gate_state::iso_from_epoch(elapsed.as_micros() as f64 / 1_000_000.0)
 }
 
-fn random_hex(bytes: usize) -> String {
+/// Writes `payload`, signed with the discovery key, as one private record of
+/// the Guard home.
+pub(crate) fn write_signed_record(
+    home: &Path,
+    file: &str,
+    payload: Map<String, Value>,
+) -> io::Result<()> {
+    ensure_private_directory(home)?;
+    let _lock = StateWriteLock::acquire(home)?;
+    let key = ensure_discovery_key(home)?;
+    let signed = sign_state(payload, &key)?;
+    let text = serde_json::to_string_pretty(&Value::Object(signed)).map_err(io::Error::other)?;
+    write_private_atomic(&home.join(file), text.as_bytes())
+}
+
+/// Replaces one private record of the Guard home with an empty tombstone.
+pub(crate) fn write_record_tombstone(home: &Path, file: &str) -> io::Result<()> {
+    ensure_private_directory(home)?;
+    let _lock = StateWriteLock::acquire(home)?;
+    write_private_atomic(&home.join(file), b"{}")
+}
+
+pub(crate) fn random_hex(bytes: usize) -> String {
     let mut buffer = vec![0u8; bytes];
     if getrandom::fill(&mut buffer).is_err() {
         // No entropy means no unguessable identity; never publish a fixed one.

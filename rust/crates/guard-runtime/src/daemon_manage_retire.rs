@@ -35,11 +35,11 @@ struct Expected<'a> {
 pub(super) struct Deadline(pub(super) Option<Instant>);
 
 impl Deadline {
-    fn passed(self) -> bool {
+    pub(super) fn passed(self) -> bool {
         self.0.is_some_and(|deadline| Instant::now() >= deadline)
     }
 
-    fn remaining(self) -> Option<Duration> {
+    pub(super) fn remaining(self) -> Option<Duration> {
         self.0
             .map(|deadline| deadline.saturating_duration_since(Instant::now()))
     }
@@ -61,6 +61,23 @@ fn owner_marker_matches(pid: i64, expected: Option<&str>) -> bool {
         (Some(wanted), Some(actual)) => host::same_text(&actual, &wanted),
         _ => false,
     }
+}
+
+/// `_retire_guard_daemon_process`: one recorded generation, by its start
+/// marker and owner.
+pub(super) fn retire_generation(
+    caller: &Caller,
+    pid: i64,
+    start_marker: &str,
+    owner_marker: Option<&str>,
+    deadline: Deadline,
+) -> bool {
+    let expected = Expected {
+        creation_time: None,
+        start_marker: Some(start_marker),
+        owner_marker,
+    };
+    retire_pid(caller, pid, &expected, deadline)
 }
 
 /// `_retire_guard_daemon_pid`.
@@ -160,7 +177,7 @@ fn pending_is_abandoned(pending: Option<&Map<String, Value>>) -> bool {
 }
 
 /// `_guard_daemon_pid_is_spawned_launch`.
-fn is_spawned_launch(caller: &Caller, pid: i64, root: i64) -> bool {
+pub(super) fn is_spawned_launch(caller: &Caller, pid: i64, root: i64) -> bool {
     if root <= 0 {
         return false;
     }
@@ -192,7 +209,7 @@ fn is_spawned_launch(caller: &Caller, pid: i64, root: i64) -> bool {
 }
 
 /// `_guard_daemon_handoff_matches_launch` with `require_same_runtime=False`.
-fn handoff_matches_launch(caller: &Caller, nonce: &str, expected_pid: i64) -> bool {
+pub(super) fn handoff_matches_launch(caller: &Caller, nonce: &str, expected_pid: i64) -> bool {
     let home = &caller.guard_home;
     if !records::nonce_is_valid(Some(&Value::from(nonce))) || expected_pid <= 0 {
         return false;
@@ -285,7 +302,7 @@ fn resolve_handed_off(caller: &Caller, pending: Option<&Map<String, Value>>) -> 
 }
 
 /// `_resolve_abandoned_guard_daemon_pending_launch`.
-fn resolve_abandoned(caller: &Caller, pending: Option<&Map<String, Value>>) -> bool {
+pub(super) fn resolve_abandoned(caller: &Caller, pending: Option<&Map<String, Value>>) -> bool {
     if resolve_handed_off(caller, pending) {
         return true;
     }
@@ -480,7 +497,7 @@ fn retire_state_daemon(
 }
 
 /// `reap_orphaned_daemon_workers`.
-fn reap_orphaned_workers(caller: &Caller, deadline: Deadline) {
+pub(super) fn reap_orphaned_workers(caller: &Caller, deadline: Deadline) {
     if host::nt() {
         return;
     }
