@@ -413,6 +413,26 @@ def _ensure_request_extra(
     }
 
 
+def recovery_host_payload(guard_home: Path, *, home_dir: Path | None) -> dict[str, object]:
+    """The `daemon-manage.v1` request a native recovery session starts the daemon with."""
+
+    frozen = bool(getattr(sys, "frozen", False))
+    payload: dict[str, object] = {
+        "schema": "daemon-manage.v1",
+        "op": "ensure",
+        "guard_home": str(Path(guard_home).absolute()),
+        "implicit_home": str(_implicit_daemon_guard_home()),
+        "caller_pid": os.getpid(),
+        "caller_parent_pid": os.getppid(),
+        "frozen_runtime": frozen,
+        "frozen_parent_trusted": frozen and _trusted_frozen_bootloader_parent_pid(guard_home) == os.getppid(),
+        "executable_name": ntpath.basename(sys.executable).strip().lower() or None,
+    }
+    extra = _ensure_request_extra(guard_home, home_dir=home_dir, recovery=True, background_maintenance=False)
+    payload.update({key: value for key, value in extra.items() if value is not None})
+    return payload
+
+
 def _daemon_url_from_answer(answer: Mapping[str, object] | None, deadline: float) -> str:
     if answer is None:
         if time.monotonic() >= deadline:

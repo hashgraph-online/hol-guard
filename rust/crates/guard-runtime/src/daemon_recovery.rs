@@ -1,12 +1,12 @@
-//! `daemon-recovery --stdin`: the user-requested daemon recovery sequence, in
-//! place of the coordinator in `guard/daemon/user_recovery.py`.
+//! `daemon-recovery --stdin`: the user-requested daemon recovery sequence.
 //!
 //! The session is a line protocol. The caller writes one request line; the
 //! runtime then asks for each effect it needs (`{"need", "args", "state"}`)
 //! and reads one answer line per ask (`{"ok": value}` or `{"raise": kind}`).
-//! The caller owns the effects only: hooks, locks, the process-local
-//! operation registry and the durable receipts. Every decision, deadline,
-//! phase and public snapshot is made here. The session ends with
+//! With a `host` request the runtime answers its own effects (locks,
+//! identity probes, stop and start, the durable receipts) and asks the
+//! caller only for lifecycle approval, protection health and output. Every
+//! decision, deadline, phase and public snapshot is made here. The session ends with
 //! `{"done": snapshot, "state"}`, or `{"reraise": true, "state"}` when an
 //! effect failed where the caller must see its own error.
 //!
@@ -20,6 +20,8 @@ use std::io::{BufRead, Write};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+
+use crate::daemon_manage::recovery_host::{RecoveryHost, Served};
 
 const SCHEMA: &str = "daemon-recovery.v1";
 pub(crate) const SNAPSHOT_SCHEMA: &str = "hol-guard-recovery.v1";
@@ -119,7 +121,15 @@ pub(crate) fn run_session(mut reader: impl BufRead, writer: impl Write) -> Resul
             .and_then(|()| writer.flush())
             .map_err(|error| format!("daemon-recovery: {error}"));
     }
+    let host = match request.host {
+        Some(raw) => Some(
+            crate::daemon_manage::recovery_host::recovery_host(raw)
+                .map_err(|error| format!("daemon-recovery: {error}"))?,
+        ),
+        None => None,
+    };
     let mut session = Session {
+        host,
         reader,
         writer,
         guard_home: request.guard_home,
@@ -165,6 +175,10 @@ struct Request {
     /// Mode `store`: one request for `daemon_recovery_store::answer`.
     #[serde(default)]
     store: Option<Value>,
+    /// A `daemon-manage.v1` request: the runtime answers the session's
+    /// effects itself and forwards only what the caller owns.
+    #[serde(default)]
+    host: Option<Map<String, Value>>,
 }
 
 fn default_budget() -> f64 {
@@ -384,6 +398,7 @@ impl Event {
 }
 
 struct Session<R, W> {
+    host: Option<RecoveryHost>,
     reader: R,
     writer: W,
     guard_home: String,
@@ -419,6 +434,12 @@ impl<R: BufRead, W: Write> Session<R, W> {
     }
 
     fn ask(&mut self, need: &str, args: Value) -> Step<Value> {
+        let args = match self.host.as_mut().map(|host| host.serve(need, &args)) {
+            None => args,
+            Some(Served::Answer(value)) => return Ok(value),
+            Some(Served::Raise(kind)) => return Err(Fault::Raise(kind.to_owned())),
+            Some(Served::Forward(args)) => args,
+        };
         let message = json!({"need": need, "args": args, "state": self.state()});
         self.write_line(&message)?;
         let mut line = String::new();

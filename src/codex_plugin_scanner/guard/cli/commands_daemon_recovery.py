@@ -3,20 +3,22 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import uuid
+from collections.abc import Callable, Mapping
+from contextlib import suppress
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
 
-from ..daemon.user_recovery import AuthorizationDecision, RecoveryHooks, UserRecoveryCoordinator
+from ..native_daemon_manage import recovery_host_payload
 from ..native_recovery_store import (
     RecoveryContractError,
     RecoveryDiagnosticsError,
-    load_latest_recovery_snapshot,
-    load_recovery_receipt,
     load_recovery_report,
     load_recovery_status,
-    persist_recovery_snapshot,
+    recovery_runtime_path,
 )
 from .commands_lifecycle_gate import LifecycleGateContext, validate_lifecycle_gate_context
 
@@ -76,6 +78,154 @@ def _recovery_lifecycle_context_matches(
     )
 
 
+def _protection_health(guard_home: Path, args: Mapping[str, object]) -> dict[str, str]:
+    """Classify local protection for a verified daemon from the Guard store."""
+
+    remaining = args.get("remaining")
+    if not isinstance(remaining, (int, float)) or remaining <= 0:
+        return {"state": "unknown", "reason_code": "deadline_exceeded"}
+    if not isinstance(args.get("identity"), dict):
+        return {"state": "unknown", "reason_code": "unknown"}
+    from ..approvals import _canonical_managed_installs_for_health, _live_hook_verification
+    from ..runtime.protection_health_runtime import build_runtime_protection_health
+    from ..store import GuardStore
+
+    store = GuardStore(guard_home, prime_policy_integrity=False)
+    managed_installs = _canonical_managed_installs_for_health(store.list_managed_installs())
+    health = build_runtime_protection_health(
+        store=store,
+        guard_home=guard_home,
+        runtime_state=store.get_runtime_state(),
+        managed_installs=managed_installs,
+        hook_verification=_live_hook_verification(managed_installs, store),
+        trust_status=store.get_cached_policy_trust_status(),
+        now=datetime.now(timezone.utc),
+    )
+    state = health.get("state")
+    if state == "protected":
+        return {"state": "verified", "reason_code": "healthy"}
+    if state in {"partial", "degraded"}:
+        return {"state": "needs_attention", "reason_code": "unknown"}
+    return {"state": "unknown", "reason_code": "unknown"}
+
+
+def _raise_kind(error: Exception) -> str:
+    if isinstance(error, TimeoutError):
+        return "timeout"
+    if isinstance(error, OSError):
+        return "os"
+    if isinstance(error, ImportError):
+        return "import"
+    if isinstance(error, ValueError):
+        return "value"
+    if isinstance(error, TypeError):
+        return "type"
+    if isinstance(error, RuntimeError):
+        return "runtime"
+    return "other"
+
+
+def _native_recovery(
+    guard_home: Path,
+    home_dir: Path | None,
+    mode: str,
+    *,
+    request_id: uuid.UUID | None = None,
+    authorize: Callable[[], dict[str, object]] | None = None,
+    emit: Callable[[dict[str, object]], None] | None = None,
+) -> dict[str, object]:
+    """Run one native recovery session.
+
+    The runtime decides every phase and performs every daemon effect; this
+    side answers only the lifecycle approval, the protection-health read and
+    the output of each snapshot.
+    """
+
+    home = Path(guard_home).expanduser().resolve()
+    request: dict[str, object] = {
+        "schema": "daemon-recovery.v1",
+        "mode": mode,
+        "guard_home": str(home),
+        "active_budget_seconds": 60.0,
+        "lock_timeout_seconds": 0.0,
+        "can_persist": True,
+        "host": recovery_host_payload(home, home_dir=home_dir),
+    }
+    if request_id is not None:
+        request["operation"] = {
+            "operation_id": str(request_id),
+            "request_id": str(request_id),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "started_monotonic": 0.0,
+            "deadline_monotonic": 0.0,
+            "sequence": -1,
+        }
+
+    def serve(need: str, args: Mapping[str, object]) -> object:
+        if need == "authorize":
+            if authorize is None:
+                return {"allowed": False, "requires_human_action": True, "reason_code": "approval_required"}
+            return authorize()
+        if need == "protection_health":
+            return _protection_health(home, args)
+        if need in {"emit", "record"}:
+            snapshot = args.get("snapshot")
+            if emit is not None and isinstance(snapshot, dict):
+                with suppress(Exception):
+                    emit(dict(cast(dict[str, object], snapshot)))
+            return None
+        raise RuntimeError(f"Unknown recovery effect: {need}")
+
+    process = subprocess.Popen(
+        [recovery_runtime_path("daemon-recovery-v1"), "daemon-recovery", "--stdin"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        encoding="utf-8",
+    )
+    stdin, stdout = process.stdin, process.stdout
+    assert stdin is not None and stdout is not None
+    failure: Exception | None = None
+    try:
+        stdin.write(json.dumps(request) + "\n")
+        stdin.flush()
+        while True:
+            line = stdout.readline()
+            if not line:
+                raise RuntimeError("Guard daemon recovery runtime stopped unexpectedly.")
+            message = cast(object, json.loads(line))
+            if not isinstance(message, dict):
+                raise RuntimeError("Guard daemon recovery runtime sent an invalid message.")
+            message = cast(dict[str, object], message)
+            if "need" in message:
+                raw_args = message.get("args")
+                arguments = cast(Mapping[str, object], raw_args) if isinstance(raw_args, Mapping) else {}
+                try:
+                    answer: dict[str, object] = {"ok": serve(str(message["need"]), arguments)}
+                except Exception as error:
+                    failure = error
+                    answer = {"raise": _raise_kind(error)}
+                stdin.write(json.dumps(answer) + "\n")
+                stdin.flush()
+                continue
+            if message.get("reraise") is True:
+                raise failure or RuntimeError("Guard daemon recovery failed.")
+            snapshot = message.get("done")
+            if not isinstance(snapshot, dict):
+                raise RuntimeError("Guard daemon recovery runtime sent no snapshot.")
+            return cast(dict[str, object], snapshot)
+    finally:
+        with suppress(OSError):
+            stdin.close()
+        try:
+            process.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        stdout.close()
+
+
 def dispatch_daemon_recovery(
     args: object,
     *,
@@ -93,7 +243,7 @@ def dispatch_daemon_recovery(
     command = getattr(args, "daemon_recovery_command", None)
     try:
         if command == "inspect":
-            snapshot = UserRecoveryCoordinator(guard_home, home_dir=home_dir).inspect()
+            snapshot = _native_recovery(guard_home, home_dir, "inspect")
             _write_json(snapshot, out)
             return 0
         if command == "status":
@@ -111,25 +261,20 @@ def dispatch_daemon_recovery(
             request_value = getattr(args, "request_id", None)
             request_id = _uuid(request_value, field="request_id") if request_value else uuid.uuid4()
 
-            def authorize(_home: Path) -> AuthorizationDecision:
-                if lifecycle_context is None or not _recovery_lifecycle_context_matches(
-                    lifecycle_context,
-                    guard_home,
-                ):
-                    return AuthorizationDecision(False, True, "approval_required")
-                if validate_lifecycle_gate_context(lifecycle_context):
-                    return AuthorizationDecision(True)
-                return AuthorizationDecision(False, True, "approval_required")
+            def authorize() -> dict[str, object]:
+                allowed = (
+                    lifecycle_context is not None
+                    and _recovery_lifecycle_context_matches(lifecycle_context, guard_home)
+                    and validate_lifecycle_gate_context(lifecycle_context)
+                )
+                if allowed:
+                    return {"allowed": True, "requires_human_action": False, "reason_code": "healthy"}
+                return {"allowed": False, "requires_human_action": True, "reason_code": "approval_required"}
 
-            hooks = RecoveryHooks(
-                authorize=authorize,
-                load_snapshot=load_latest_recovery_snapshot,
-                load_receipt=load_recovery_receipt,
-                persist_snapshot=persist_recovery_snapshot,
-            )
-            coordinator = UserRecoveryCoordinator(guard_home, home_dir=home_dir, hooks=hooks)
             emit = (lambda snapshot: _write_json(snapshot, out)) if getattr(args, "json_lines", False) else None
-            snapshot = coordinator.restart(request_id=request_id, emit=emit)
+            snapshot = _native_recovery(
+                guard_home, home_dir, "run", request_id=request_id, authorize=authorize, emit=emit
+            )
             if emit is None:
                 _write_human(snapshot, out)
             return _restart_exit_code(snapshot)

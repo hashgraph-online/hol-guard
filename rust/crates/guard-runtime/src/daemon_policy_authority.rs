@@ -1133,6 +1133,35 @@ pub(crate) fn http_get_json(url: &str, headers: &[(&str, &str)]) -> Option<Value
     serde_json::from_slice(&response).ok()
 }
 
+/// One JSON request to a loopback daemon port within `timeout`; `None` on
+/// any transport failure, non-2xx status or non-object body.
+pub(crate) fn loopback_json(
+    method: &str,
+    port: u16,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Option<&Value>,
+    timeout: Duration,
+) -> Option<Map<String, Value>> {
+    if timeout.is_zero() {
+        return None;
+    }
+    let bytes = body.map(serde_json::to_vec).transpose().ok()?;
+    let response = http_request(
+        method,
+        "127.0.0.1",
+        port,
+        path,
+        headers,
+        bytes.as_deref(),
+        timeout,
+    )?;
+    match serde_json::from_slice(&response).ok()? {
+        Value::Object(map) => Some(map),
+        _ => None,
+    }
+}
+
 fn post_json(authority: &DaemonAuthority, path: &str, payload: &Value) -> Option<Value> {
     let body = serde_json::to_vec(payload).ok()?;
     let (host, port, _ignored) = parse_loopback_url(&authority.base_url)?;

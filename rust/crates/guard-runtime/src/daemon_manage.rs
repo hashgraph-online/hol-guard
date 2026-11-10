@@ -26,10 +26,14 @@ use crate::daemon_policy_authority::load_authenticated_daemon_identity;
 mod ensure;
 #[path = "daemon_manage_host.rs"]
 mod host;
+#[path = "daemon_manage_live_probe.rs"]
+mod live_probe;
 #[path = "daemon_manage_records.rs"]
 mod records;
 #[path = "daemon_manage_recover.rs"]
 mod recover;
+#[path = "daemon_manage_recovery_host.rs"]
+pub(crate) mod recovery_host;
 #[path = "daemon_manage_retire.rs"]
 mod retire;
 #[path = "daemon_manage_state.rs"]
@@ -135,19 +139,7 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
     {
         return Err(invalid());
     }
-    let own_pid = i64::from(std::process::id());
-    let caller = host::Caller {
-        guard_home: request.guard_home.clone(),
-        implicit_home: request.implicit_home.clone(),
-        own_pid: request.caller_pid.filter(|pid| *pid > 0).unwrap_or(own_pid),
-        parent_pid: request
-            .caller_parent_pid
-            .filter(|pid| *pid > 0)
-            .unwrap_or(0),
-        frozen_runtime: request.frozen_runtime,
-        frozen_parent_trusted: request.frozen_parent_trusted,
-        executable_name: request.executable_name.clone(),
-    };
+    let caller = caller_of(request);
     let deadline = retire::Deadline(
         request
             .budget_ms
@@ -161,19 +153,7 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
         "posture" => Ok(json!({"posture": recover::posture(&caller.guard_home)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
         "ensure" | "recover" | "schedule_recovery" | "schedule_ensure" => {
-            let ensure = ensure::Ensure {
-                launch: &request.launch,
-                serve_executable: request.serve_executable.as_deref(),
-                executable: request.executable.as_deref(),
-                home_dir: request.home_dir.as_deref(),
-                launch_cwd: request.launch_cwd.as_deref(),
-                preferred_port: request.preferred_port,
-                background_maintenance: request.background_maintenance,
-                allow_windows_job_breakaway: request.allow_windows_job_breakaway,
-                start_lock_held: request.start_lock_held,
-                launcher_env: &request.launcher_env,
-                env_port: request.env_port.as_deref(),
-            };
+            let ensure = ensure_of(request);
             let failure_kind = request.failure_kind.as_deref().unwrap_or("");
             Ok(match request.op.as_str() {
                 "recover" => {
@@ -225,6 +205,40 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
             })
         }
         op => state::answer(&caller, op, &request.args, deadline).ok_or_else(invalid),
+    }
+}
+
+/// The caller a request names; an absent PID defaults to this process.
+fn caller_of(request: &Request) -> host::Caller {
+    let own_pid = i64::from(std::process::id());
+    host::Caller {
+        guard_home: request.guard_home.clone(),
+        implicit_home: request.implicit_home.clone(),
+        own_pid: request.caller_pid.filter(|pid| *pid > 0).unwrap_or(own_pid),
+        parent_pid: request
+            .caller_parent_pid
+            .filter(|pid| *pid > 0)
+            .unwrap_or(0),
+        frozen_runtime: request.frozen_runtime,
+        frozen_parent_trusted: request.frozen_parent_trusted,
+        executable_name: request.executable_name.clone(),
+    }
+}
+
+/// The launch configuration an `ensure` request carries.
+fn ensure_of(request: &Request) -> ensure::Ensure<'_> {
+    ensure::Ensure {
+        launch: &request.launch,
+        serve_executable: request.serve_executable.as_deref(),
+        executable: request.executable.as_deref(),
+        home_dir: request.home_dir.as_deref(),
+        launch_cwd: request.launch_cwd.as_deref(),
+        preferred_port: request.preferred_port,
+        background_maintenance: request.background_maintenance,
+        allow_windows_job_breakaway: request.allow_windows_job_breakaway,
+        start_lock_held: request.start_lock_held,
+        launcher_env: &request.launcher_env,
+        env_port: request.env_port.as_deref(),
     }
 }
 

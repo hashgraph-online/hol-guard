@@ -33,7 +33,7 @@ use super::host::{self, Caller};
 use super::records::{self, int, text};
 use super::retire::Deadline;
 
-const RECOVERY_LOCK_FILE: &str = "daemon-recovery.lock";
+pub(super) const RECOVERY_LOCK_FILE: &str = "daemon-recovery.lock";
 const RESERVATION_FILE: &str = "daemon-recovery-reservation.json";
 const STATE_WRITE_LOCK_FILE: &str = "daemon-state-write.lock";
 const FAILURE_KINDS: [&str; 3] = [
@@ -82,7 +82,7 @@ fn disabled_url(caller: &Caller, request: &Ensure<'_>) -> Value {
     }
 }
 
-fn lock_file(home: &Path, name: &str) -> Option<File> {
+pub(super) fn lock_file(home: &Path, name: &str) -> Option<File> {
     fs::create_dir_all(home).ok()?;
     OpenOptions::new()
         .read(true)
