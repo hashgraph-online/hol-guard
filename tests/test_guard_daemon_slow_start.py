@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import ast
-import os
 import shlex
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import recovery_worker, start_classification, start_heartbeat
+from codex_plugin_scanner.guard.daemon import recovery_worker, start_classification
 from codex_plugin_scanner.guard.native_daemon_lifecycle import (
     _DAEMON_LIFECYCLE_DEADLINE,
     native_daemon_lifecycle,
@@ -62,12 +59,6 @@ def _private_home(tmp_path: Path) -> Path:
     return guard_home
 
 
-def _write_heartbeat(guard_home: Path, *, pid: int, ns: int) -> None:
-    path = start_heartbeat.start_heartbeat_path(guard_home)
-    path.write_text(f"{pid} {ns}", encoding="utf-8")
-    path.chmod(0o600)
-
-
 def _deadline_bound_tree_check(pid: int, root_pid: int) -> bool:
     # Process-tree queries run under the lifecycle deadline, like the native inventory.
     deadline = _DAEMON_LIFECYCLE_DEADLINE.get()
@@ -76,93 +67,11 @@ def _deadline_bound_tree_check(pid: int, root_pid: int) -> bool:
     return pid == root_pid
 
 
-def test_heartbeat_stops_counting_after_the_slow_start_window(tmp_path: Path) -> None:
-    guard_home = _private_home(tmp_path)
-    spawned_at_ns = time.time_ns() - int((start_heartbeat.SLOW_START_MAX_SECONDS + 5) * 1_000_000_000)
-    _write_heartbeat(guard_home, pid=os.getpid(), ns=spawned_at_ns + 1_000_000_000)
-
-    assert not start_classification.daemon_start_heartbeat_present(
-        guard_home, root_pid=os.getpid(), spawned_at_ns=spawned_at_ns
-    )
-    assert not start_classification.daemon_still_starting_evidence_present(
-        guard_home, root_pid=os.getpid(), spawned_at_ns=spawned_at_ns
-    )
-
-
-def test_bootstrap_emits_the_heartbeat_before_importing_guard(tmp_path: Path) -> None:
-    guard_home = _private_home(tmp_path)
-    env = {
-        **{k: v for k, v in os.environ.items() if k in {"PATH", "SYSTEMROOT"}},
-        start_heartbeat.START_HEARTBEAT_ENV: str(start_heartbeat.start_heartbeat_path(guard_home)),
-    }
-    before = time.time_ns()
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-I",
-            "-S",
-            "-c",
-            daemon_manager_module._GUARD_DAEMON_BOOTSTRAP,
-            sys.prefix,
-            sys.exec_prefix,
-            "[]",
-            "platform",
-        ],
-        env=env,
-        capture_output=True,
-        timeout=60,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    heartbeat = start_heartbeat.load_start_heartbeat(guard_home)
-    assert heartbeat is not None
-    assert heartbeat[1] >= before
-
-
-def test_launcher_env_never_carries_the_heartbeat_path(tmp_path: Path, monkeypatch) -> None:
-    # Helper and wake-worker launches share this env builder; only the real
-    # daemon spawn may add the heartbeat path, so they cannot overwrite it.
-    guard_home = _private_home(tmp_path)
-    monkeypatch.setattr(daemon_manager_module, "_guard_home_is_ephemeral", lambda _gh: False)
-    monkeypatch.setenv(start_heartbeat.START_HEARTBEAT_ENV, str(tmp_path / "ambient"))
-
-    env = daemon_manager_module._daemon_launcher_env(home_dir=tmp_path, guard_home=guard_home)
-
-    assert start_heartbeat.START_HEARTBEAT_ENV not in env
-
-
 def test_bootstrap_command_line_stays_shell_splittable() -> None:
     # Process inventory shlex-splits the daemon command line; an unbalanced
     # quote makes the inventory unknown and blocks every daemon start.
-    code = start_heartbeat.START_HEARTBEAT_CODE
-    assert "\\" not in code and "\n" not in code and '"' not in code
     bootstrap = daemon_manager_module._GUARD_DAEMON_BOOTSTRAP
     assert shlex.split(f"python -c {bootstrap} a b c m")[-4:] == ["a", "b", "c", "m"]
-
-
-def test_entry_script_heartbeat_code_matches_the_shared_constant() -> None:
-    script = Path(__file__).resolve().parents[1] / "scripts" / "mdm" / "hol-guard-entry.py"
-    module = ast.parse(script.read_text(encoding="utf-8"))
-    literal = next(
-        ast.literal_eval(node.value)
-        for node in module.body
-        if isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "_START_HEARTBEAT_CODE" for t in node.targets)
-    )
-    assert literal == start_heartbeat.START_HEARTBEAT_CODE
-
-
-def test_heartbeat_is_written_atomically_without_leaving_temp_files(tmp_path: Path) -> None:
-    guard_home = _private_home(tmp_path)
-    path = start_heartbeat.start_heartbeat_path(guard_home)
-    env = {**os.environ, start_heartbeat.START_HEARTBEAT_ENV: str(path)}
-    subprocess.run([sys.executable, "-c", start_heartbeat.START_HEARTBEAT_CODE], env=env, check=True, timeout=60)
-
-    assert sorted(p.name for p in guard_home.iterdir()) == [path.name]
-    assert (path.stat().st_mode & 0o777) == 0o600 or os.name == "nt"
-    assert start_heartbeat.load_start_heartbeat(guard_home) is not None
 
 
 def test_recovery_worker_treats_a_still_starting_daemon_as_success(tmp_path: Path, monkeypatch) -> None:

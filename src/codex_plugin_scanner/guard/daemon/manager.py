@@ -67,9 +67,6 @@ from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
 from .handed_off_launch import resolve_handed_off_guard_daemon_pending_launch
 from .lifecycle_journal import record_daemon_lifecycle_event as record_daemon_lifecycle_event
 from .pipx_import_paths import pipx_shared_import_paths
-from .start_heartbeat import (
-    START_HEARTBEAT_CODE,
-)
 from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 from .startup_phase import timed_phase
 
@@ -112,9 +109,6 @@ _WINDOWS_DETACHED_PROCESS = 0x00000008
 _WINDOWS_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 _GUARD_DAEMON_BOOTSTRAP = (
     "import json,runpy,sys; "
-    # Signal liveness before the slow Guard imports so a cold start is not
-    # mistaken for a stuck child.
-    f"exec({START_HEARTBEAT_CODE!r}); "
     "trusted_prefix=sys.argv.pop(1); "
     "trusted_exec_prefix=sys.argv.pop(1); "
     "trusted_paths=json.loads(sys.argv.pop(1)); "
@@ -124,9 +118,6 @@ _GUARD_DAEMON_BOOTSTRAP = (
     "sys.path[:0]=trusted_paths; "
     "sys.argv[0]=module; "
     "runpy.run_module(module,run_name='__main__',alter_sys=True)"
-)
-_GUARD_DAEMON_GATED_BOOTSTRAP = (
-    "import sys; gate=sys.stdin.buffer.read(1); sys.exit(70) if gate != b'1' else None; " + _GUARD_DAEMON_BOOTSTRAP
 )
 _GUARD_DAEMON_ENV_KEYS = frozenset(
     {
@@ -359,21 +350,42 @@ def _isolated_python_module_command(
     module: str,
     import_paths: tuple[Path, ...],
     module_args: list[str],
-    *,
-    gate_on_stdin: bool = False,
 ) -> list[str]:
     return [
         str(_trusted_daemon_interpreter()),
         *_trusted_daemon_python_flags(),
         "-S",
         "-c",
-        _GUARD_DAEMON_GATED_BOOTSTRAP if gate_on_stdin else _GUARD_DAEMON_BOOTSTRAP,
+        _GUARD_DAEMON_BOOTSTRAP,
         str(_trusted_daemon_prefix(sys.prefix)),
         str(_trusted_daemon_prefix(sys.exec_prefix)),
         json.dumps([str(path) for path in import_paths], separators=(",", ":")),
         module,
         *module_args,
     ]
+
+
+_PPID_WALK_LIMIT = 16
+
+
+def _pid_in_process_tree(pid: int, root_pid: int) -> bool:
+    if pid == root_pid:
+        return True
+    if os.name == "nt":
+        from .. import windows_processes
+
+        root_cmd = windows_processes.windows_process_command_line(root_pid)
+        pid_cmd = windows_processes.windows_process_command_line(pid)
+        return root_cmd is not None and pid_cmd is not None and _same_daemon_invocation(root_cmd, pid_cmd)
+    current = pid
+    for _ in range(_PPID_WALK_LIMIT):
+        parent = _guard_daemon_parent_pid(current)
+        if parent is None or parent <= 1:
+            return False
+        if parent == root_pid:
+            return True
+        current = parent
+    return False
 
 
 def _native_int(value: object) -> int | None:
@@ -2019,7 +2031,6 @@ def _guard_daemon_pid_is_spawned_launch(pid: int, expected_pid: int) -> bool:
             and candidate_created < spawned_created
         ):
             return False
-        from .start_classification import _pid_in_process_tree
 
         token = bind_daemon_lifecycle_deadline(time.monotonic() + _SPAWNED_URL_POLL_LIFECYCLE_SECONDS)
         try:
