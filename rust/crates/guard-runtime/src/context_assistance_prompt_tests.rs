@@ -1,4 +1,5 @@
 use super::*;
+use crate::context_assistance_engine::PickedExcerpt;
 use serde_json::json;
 
 fn excerpt(path: &str, text: &str) -> PickedExcerpt {
@@ -16,7 +17,7 @@ fn words(list: &[&str]) -> Vec<String> {
 
 /// The context text for a session's first prompt.
 fn render(picked: &[PickedExcerpt], found: &[String], words: &[String]) -> Option<String> {
-    super::render(picked, found, words, &[]).map(|rendered| rendered.text)
+    super::render(picked, found, words, &[], &[]).map(|rendered| rendered.text)
 }
 
 fn matched(found: &[String]) -> Option<String> {
@@ -40,11 +41,11 @@ fn an_excerpt_the_session_already_has_is_named_instead_of_sent_again() {
     ];
     let found = words(&["src/header.tsx", "src/header-title.ts", "src/theme.css"]);
     let asked = words(&["header"]);
-    let first = super::render(&picked, &found, &asked, &[]).unwrap();
+    let first = super::render(&picked, &found, &asked, &[], &[]).unwrap();
     assert_eq!(first.shown, vec![shown(&picked[0]), shown(&picked[1])]);
 
     let earlier = [shown(&picked[0])];
-    let next = super::render(&picked, &found, &asked, &earlier).unwrap();
+    let next = super::render(&picked, &found, &asked, &earlier, &[]).unwrap();
     assert_eq!(next.shown, vec![shown(&picked[1])]);
     assert!(!next.text.contains("<header />"), "{}", next.text);
     assert!(next.text.starts_with(HEADER), "{}", next.text);
@@ -56,7 +57,7 @@ fn an_excerpt_the_session_already_has_is_named_instead_of_sent_again() {
         next.text
     );
 
-    let repeat = super::render(&picked, &found, &asked, &first.shown).unwrap();
+    let repeat = super::render(&picked, &found, &asked, &first.shown, &[]).unwrap();
     assert!(repeat.shown.is_empty());
     assert!(repeat.text.starts_with(REPEATED_HEADER), "{}", repeat.text);
     assert!(!repeat.text.contains("```"), "{}", repeat.text);
@@ -74,7 +75,7 @@ fn an_excerpt_edited_since_it_was_shown_is_sent_again() {
         3,
         "export const Header = () => <div />;",
     )];
-    let next = super::render(&picked, &[], &words(&["header"]), &before).unwrap();
+    let next = super::render(&picked, &[], &words(&["header"]), &before, &[]).unwrap();
     assert_eq!(next.shown, vec![shown(&picked[0])]);
     assert!(next.text.contains("<header />"), "{}", next.text);
 }
@@ -387,7 +388,7 @@ fn project(
 fn own_read(home: &Path, root: &Path, found: &[&str], terms: &[&str]) -> Option<String> {
     let later = Instant::now() + Duration::from_secs(5);
     let (found, terms) = (words(found), words(terms));
-    read_matched(home, root, "codex", &found, &terms, &[], later).map(|read| read.text)
+    read_matched(home, root, "codex", &found, &terms, &[], &[], later).map(|read| read.text)
 }
 
 /// A prompt sent while CIGAR is busy with another, or still loading the
@@ -458,7 +459,7 @@ fn a_quote_only_a_test_named_module_holds_is_shown() {
     let found = search().found(&words);
     assert!(found.contains(&"src/tests.py".to_owned()), "{found:?}");
     let later = Instant::now() + Duration::from_secs(5);
-    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], &[], later).unwrap();
     assert!(read.text.contains("src/tests.py (lines"), "{}", read.text);
     assert!(read.text.contains("def test_number"), "{}", read.text);
     std::fs::write(root.join("src/env.py"), format!("{env}{module}")).unwrap();
@@ -490,7 +491,7 @@ assert convert('bad') == 'suggest a choice for an invalid value'\n";
     .found(&words);
     assert_eq!(found, ["src/types.py".to_owned()]);
     let later = Instant::now() + Duration::from_secs(5);
-    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], &[], later).unwrap();
     assert!(read.text.contains("src/types.py (lines"), "{}", read.text);
 }
 
