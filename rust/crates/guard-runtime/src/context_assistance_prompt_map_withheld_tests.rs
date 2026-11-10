@@ -85,3 +85,21 @@ fn a_definition_spelled_another_way_is_not_placed() {
         "{map:?}"
     );
 }
+
+/// A file that spells the name another way does not keep the one that spells
+/// it as written from being placed.
+#[test]
+fn a_definition_spelled_as_written_is_placed_beside_one_spelled_another_way() {
+    let list = [
+        ("src/a.py", lexer().replace("get_lexer", "getLexer")),
+        ("src/b.py", lexer()),
+    ];
+    let list: Vec<(&str, &str)> = list
+        .iter()
+        .map(|(path, text)| (*path, text.as_str()))
+        .collect();
+    let (home, _project, root) = project(ON, &list);
+    let map = prompt_map(home.path(), &root, "Where is `get_lexer` defined?").unwrap_or_default();
+    assert!(map.contains("src/b.py:7-9 get_lexer"), "{map}");
+    assert!(!map.contains("getLexer"), "{map}");
+}

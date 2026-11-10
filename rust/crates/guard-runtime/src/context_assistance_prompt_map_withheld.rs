@@ -40,22 +40,28 @@ pub(super) fn added(
     // Only a definition the prompt names: with none found, the picker falls
     // back to a named file's unfinished functions, which may be unrelated.
     // Spelled as the prompt writes it: `getLexer` is not `get_lexer`, though
-    // both read as the same word.
+    // both read as the same word. Each file is picked on its own, so one that
+    // spells the name another way cannot stand in for one that spells it so.
     let named = |file: &File, at: usize| {
         let own = written_name(file.opening(at));
         own.is_some_and(|own| asked.spellings.contains(&own))
             || asked.spellings.contains(&file.qualified(at))
     };
-    let entries: Vec<Entry> = named_definitions(&files, &names, asked, false)
-        .into_iter()
-        .filter(|pick| !pick.base && named(&files[pick.file], pick.at))
-        .map(|pick| {
-            let file = &files[pick.file];
+    let mut entries: Vec<Entry> = Vec::new();
+    for file in &files {
+        if Instant::now() >= until {
+            return mapped;
+        }
+        let picks = named_definitions(std::slice::from_ref(file), &names, asked, false);
+        for pick in picks {
+            if pick.base || !named(file, pick.at) {
+                continue;
+            }
             let section = &file.sections[pick.at];
             let range = format!("{}:{}-{}", file.path, section.start, section.end);
-            Entry::plain(format!("{range} {}", file.qualified(pick.at)))
-        })
-        .collect();
+            entries.push(Entry::plain(format!("{range} {}", file.qualified(pick.at))));
+        }
+    }
     let mut list: Vec<String> = Vec::new();
     let mut chars = WITHHELD_TITLE.chars().count();
     for entry in entries {
