@@ -1,6 +1,10 @@
 //! The words, quoted phrases and file names a typed prompt gives, which the
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
+use paths::without_paths;
+
+#[path = "context_assistance_prompt_paths.rs"]
+mod paths;
 
 pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
@@ -103,8 +107,9 @@ pub(crate) fn terms(prompt: &str) -> Vec<String> {
 
 /// The prompt's `terms`, each marked when the prompt wrote it whole as a
 /// name (`case_sensitive`, `IntRange`), not as a plain word or a piece of a
-/// name.
+/// name. An absolute path such as `/tmp/run-1/out.log` gives none.
 pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
+    let prompt = &without_paths(prompt);
     let mut code: Vec<(String, bool)> = Vec::new();
     let mut plain: Vec<(String, bool)> = Vec::new();
     for (word, shaped) in words(prompt) {
@@ -239,8 +244,9 @@ fn file_name(token: &str) -> Option<(&str, &str)> {
 
 /// The names the prompt writes as code, spelled as written: `_batched`,
 /// which `terms` reads as `batched`, and each dotted name whole as well
-/// (`peekable.prepend`), which names a member.
+/// (`peekable.prepend`), which names a member. An absolute path gives none.
 pub(crate) fn spellings(prompt: &str) -> Vec<String> {
+    let prompt = &without_paths(prompt);
     let dotted = (spans(prompt).into_iter())
         .flat_map(|(span, _)| tokens(span))
         .map(|token| token.trim_matches(['.', '-', '/']))
