@@ -36,10 +36,11 @@ type SetupStep = "confirm" | "connect" | "approve" | "verifying" | "recovery";
  * shown only once, so closing then would lose the code. Not while the code is
  * shown either: only "I saved it" closes the window then.
  */
-export function pulseSetupCanClose(step: SetupStep, requestInFlight = false): boolean {
-  // While setup is talking to Guard (for example, starting the enrollment in
-  // step 2), closing would leave that call running with no window to finish it.
-  if (requestInFlight) return false;
+export function pulseSetupCanClose(step: SetupStep, startingEnrollment = false): boolean {
+  // Not while step 2 is starting the enrollment: that call cannot be stopped
+  // from here. The wait for the YID app that follows can: closing during it
+  // cancels setup.
+  if (startingEnrollment) return false;
   return step !== "verifying" && step !== "recovery";
 }
 
@@ -147,6 +148,7 @@ export function PulseSetupModal(props: {
   const [enrollment, setEnrollment] = useState<GuardPulseEnrollment | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [startingEnrollment, setStartingEnrollment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancelWait = useRef<AbortController | null>(null);
   const open = useRef(true);
@@ -187,10 +189,15 @@ export function PulseSetupModal(props: {
     try {
       const code = await runPulseEnrollment({
         begin: async () => {
-          const response = await beginApprovalGatePulseEnrollment({ pulse_agent_key: agentKey.trim(), min_tier: minTier });
-          // The key is now in Guard's secret store; drop it from page memory.
-          setAgentKey("");
-          return response.pulse_enrollment;
+          setStartingEnrollment(true);
+          try {
+            const response = await beginApprovalGatePulseEnrollment({ pulse_agent_key: agentKey.trim(), min_tier: minTier });
+            // The key is now in Guard's secret store; drop it from page memory.
+            setAgentKey("");
+            return response.pulse_enrollment;
+          } finally {
+            setStartingEnrollment(false);
+          }
         },
         isOpen: () => open.current,
         started: (started) => {
@@ -237,7 +244,7 @@ export function PulseSetupModal(props: {
   const connectReady = agentKey.trim().length > 0;
 
   const closeUnlessShowingCode = () => {
-    if (pulseSetupCanClose(step, pending)) props.onClose();
+    if (pulseSetupCanClose(step, startingEnrollment)) props.onClose();
   };
 
   return (
@@ -257,7 +264,7 @@ export function PulseSetupModal(props: {
           <button
             type="button"
             onClick={closeUnlessShowingCode}
-            hidden={!pulseSetupCanClose(step, pending)}
+            hidden={!pulseSetupCanClose(step, startingEnrollment)}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-dark"
             aria-label="Close Pulse setup"
           >

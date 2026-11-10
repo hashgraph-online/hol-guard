@@ -376,6 +376,8 @@ async function closingSetupWhileItStartsNeverTurnsPulseOn(): Promise<void> {
 
   assert(!pulseSetupCanClose("connect", true), "PULSE-15: setup cannot close while starting the enrollment");
   assert(pulseSetupCanClose("connect", false), "PULSE-15: setup can close on step 2 when nothing is in flight");
+  assert(pulseSetupCanClose("approve", false),
+    "PULSE-15: setup can close while it waits for the YID app; closing cancels the wait");
 }
 
 function theSetupLinkTellsYanezItCameFromGuard(): void {
