@@ -2,9 +2,11 @@
 //! names. A long function is not shown whole, but such an edit needs only its
 //! signature and docstring, so the map shows those lines. A docstring that is
 //! not a raw string turns `\n` in an example into a newline, so the map says
-//! to write a backslash twice. `python -m doctest` loads a file outside its
-//! package, so a module with relative imports fails there; the map names a
-//! command that runs its doctests.
+//! to write a backslash twice. The map names the command that runs just that
+//! function's doctest: shown none, agents guessed a pytest node id, then ran
+//! the whole module, its tests, and read the file again after the edit.
+//! `python -m doctest` loads a file outside its package, so a module with
+//! relative imports fails there.
 use super::super::seen::Span;
 use super::more::{prompt_words, whole};
 use super::{Asked, File};
@@ -16,6 +18,10 @@ const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in
 twice (`\\\\n` shows as `\\n`).";
 const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modules {path}`: \
 `python -m doctest` loads the file outside its package, so its relative imports fail.";
+const DOCTEST: &str = "\nRun just its doctest with `{command}`. That run is the check an added \
+example needs, and the edit's own reply confirms the edit, so the file need not be read again.";
+const OUTSIDE: &str = " `python -m doctest` would load the file outside its package, where its \
+relative imports fail.";
 
 /// True when the prompt asks about docstrings or doctests.
 pub(super) fn asks_for_docstring(prompt: &str) -> bool {
@@ -33,8 +39,17 @@ pub(super) fn shown(file: &File, at: usize, asked: &Asked) -> Option<(Span, Stri
     if head.is_some_and(|(_, raw)| raw == Some(false)) {
         note.push_str(NOT_RAW);
     }
-    if python && relative(file) {
-        note.push_str(&DOCTESTS.replace("{path}", file.path));
+    match python.then(|| command(file, at)).flatten() {
+        Some(command) => {
+            note.push_str(&DOCTEST.replace("{command}", &command));
+            if relative(file) {
+                note.push_str(OUTSIDE);
+            }
+        }
+        None if python && plain(file.path) && relative(file) => {
+            note.push_str(&DOCTESTS.replace("{path}", file.path));
+        }
+        None => {}
     }
     if let Some((span, code)) = whole(file, at) {
         return Some((span, code, note));
@@ -144,11 +159,45 @@ fn scanned(line: &str) -> (&str, i32) {
     (line, depth)
 }
 
-/// Whether a Python file imports from its own package by a relative import,
-/// and its path can be named in a command as it is.
+/// The command running just the doctest of the function at `at`: pytest
+/// names it `<module>.<qualified name>`, and `-k` picks it by that name, which
+/// no test function in the file has. None for a path or name a shell would
+/// read as more than itself, a function inside another, whose doctest
+/// pytest does not collect, or one inside a member, whose doctest name holds
+/// more classes than the map knows.
+fn command(file: &File, at: usize) -> Option<String> {
+    let outer = file.parent[at];
+    let nested = outer.is_some_and(|outer| !file.container(outer) || file.parent[outer].is_some());
+    if !plain(file.path) || nested {
+        return None;
+    }
+    let mut parts = file.path.rsplit('/');
+    let stem = parts.next()?.strip_suffix(".py")?;
+    // A package's `__init__.py` is the module named for its directory.
+    let module = if stem == "__init__" {
+        parts.next()?
+    } else {
+        stem
+    };
+    let qualified = file.qualified(at);
+    let words = (std::iter::once(module).chain(qualified.split('.'))).all(|name| {
+        name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    });
+    (words && !qualified.is_empty()).then(|| {
+        format!(
+            "python -m pytest -q --doctest-modules {} -k {module}.{qualified}",
+            file.path
+        )
+    })
+}
+
+/// Whether a path can be named in a command as it is.
+fn plain(path: &str) -> bool {
+    !path.starts_with('-') && (path.chars()).all(|c| c.is_alphanumeric() || "/._-".contains(c))
+}
+
+/// Whether a Python file imports from its own package by a relative import.
 fn relative(file: &File) -> bool {
-    let plain = (file.path.chars()).all(|c| c.is_alphanumeric() || "/._-".contains(c));
-    plain
-        && !file.path.starts_with('-')
-        && (file.lines.iter()).any(|line| line.trim_start().starts_with("from ."))
+    (file.lines.iter()).any(|line| line.trim_start().starts_with("from ."))
 }
