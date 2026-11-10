@@ -58,17 +58,6 @@ def test_replacement_start_reaps_orphaned_workers_before_choosing_a_port(
     assert order == ["clear", "reap", "ports"]
 
 
-def test_daemon_retirement_reaps_orphaned_workers(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[bool] = []
-    monkeypatch.setattr(manager, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-    monkeypatch.setattr(manager, "load_authenticated_daemon_state", lambda _home: None)
-    monkeypatch.setattr(manager, "load_authenticated_guard_daemon_pending_launch", lambda _home: None)
-    monkeypatch.setattr(manager, "reap_orphaned_daemon_workers", lambda **_kwargs: seen.append(True))
-
-    assert manager.retire_all_guard_daemons_for_home(tmp_path / "guard-home") == []
-    assert seen == [True]
-
-
 @pytest.mark.skipif(os.name == "nt", reason="hook workers are reaped on POSIX only")
 def test_reap_asks_the_runtime_with_the_caller_pid(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _record_requests(monkeypatch)

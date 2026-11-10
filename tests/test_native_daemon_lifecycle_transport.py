@@ -231,7 +231,7 @@ def test_resident_outage_is_not_a_value_error(monkeypatch: pytest.MonkeyPatch) -
         manager._healthz_payload_is_current("{}")
 
 
-def test_startup_and_retirement_bind_the_lifecycle_deadline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_startup_binds_the_lifecycle_deadline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.daemon import manager
 
     clock = {"now": 1000.0}
@@ -255,16 +255,6 @@ def test_startup_and_retirement_bind_the_lifecycle_deadline(monkeypatch: pytest.
     )
     assert url == "http://127.0.0.1:9"
     assert seen == [("start_timeouts", 1010.0), ("live", 1004.0)]
-    assert transport._DAEMON_LIFECYCLE_DEADLINE.get() is None
-
-    def inventory(_home: Path) -> list[tuple[int, int]]:
-        seen.append(("inventory", transport._DAEMON_LIFECYCLE_DEADLINE.get()))
-        return []
-
-    monkeypatch.setattr(manager, "_guard_daemon_process_inventory_for_guard_home", inventory)
-    monkeypatch.setattr(manager, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
-    assert manager.retire_all_guard_daemons_for_home(tmp_path, deadline=50.0) == []
-    assert seen[-1] == ("inventory", 50.0)
     assert transport._DAEMON_LIFECYCLE_DEADLINE.get() is None
 
 

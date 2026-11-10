@@ -280,6 +280,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = desktop_foreign_remove::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if daemon_manage::is_command(command) && flag == "--stdin" => {
+            let response = daemon_manage::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {
             let response = posix_processes::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

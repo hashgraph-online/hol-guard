@@ -363,6 +363,7 @@ mod daemon_lifecycle_text;
 mod daemon_lifecycle_unit_tests;
 #[cfg(test)]
 mod daemon_lifecycle_vectors_tests;
+mod daemon_manage;
 mod daemon_policy_authority;
 mod daemon_route_op;
 mod daemon_route_paths;

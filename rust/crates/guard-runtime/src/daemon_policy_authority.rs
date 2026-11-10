@@ -314,7 +314,9 @@ fn load_running_guard_daemon_identity(guard_home: &Path) -> Option<DaemonIdentit
 
 /// `_load_authenticated_daemon_identity` (manager.py:1263-:1281): the
 /// HMAC-verified state payload plus the `auth_token_id`-pinned token.
-fn load_authenticated_daemon_identity(guard_home: &Path) -> Option<(Map<String, Value>, String)> {
+pub(crate) fn load_authenticated_daemon_identity(
+    guard_home: &Path,
+) -> Option<(Map<String, Value>, String)> {
     let payload = load_authenticated_daemon_state(guard_home)?;
     let auth_token = load_guard_daemon_auth_token(guard_home)?;
     let expected_token_id = payload.get("auth_token_id")?.as_str()?;
@@ -377,7 +379,7 @@ pub(crate) fn load_guard_daemon_auth_token(guard_home: &Path) -> Option<String> 
 /// `verify_daemon_state` (discovery.py:97-:107): the `state_signature`
 /// must equal `HMAC(key, canonical(unsigned))` and the embedded
 /// `discovery_key_id`/`discovery_protocol_version` must match.
-fn verify_daemon_state(payload: &Map<String, Value>, discovery_key: &str) -> bool {
+pub(crate) fn verify_daemon_state(payload: &Map<String, Value>, discovery_key: &str) -> bool {
     let signature = payload
         .get(DAEMON_STATE_SIGNATURE_FIELD)
         .and_then(Value::as_str);

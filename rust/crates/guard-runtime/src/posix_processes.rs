@@ -113,6 +113,12 @@ fn answer(request: &Request, host: &Host) -> Result<Value, String> {
                 .filter(|parent| *parent > 0);
             Ok(json!({ "parent_pid": parent }))
         }
+        ("state", Some(pid)) if pid > 0 => {
+            let state = ps(host, &["-p", &pid.to_string(), "-o", "stat="])
+                .map(|output| py_strip(&output).to_owned())
+                .filter(|state| !state.is_empty());
+            Ok(json!({ "state": state }))
+        }
         ("command", Some(pid)) if pid > 0 => {
             let command = ps(host, &["-p", &pid.to_string(), "-o", "command="])
                 .map(|output| py_strip(&output).to_owned())

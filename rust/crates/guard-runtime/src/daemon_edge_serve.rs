@@ -478,10 +478,10 @@ fn is_private_file(metadata: &fs::Metadata) -> bool {
 
 /// The process-wide lock every daemon state writer takes
 /// (`_guard_daemon_state_write_lock`).
-struct StateWriteLock(File);
+pub(crate) struct StateWriteLock(File);
 
 impl StateWriteLock {
-    fn acquire(home: &Path) -> io::Result<Self> {
+    pub(crate) fn acquire(home: &Path) -> io::Result<Self> {
         let file = OpenOptions::new()
             .read(true)
             .append(true)
@@ -564,7 +564,7 @@ fn ensure_auth_secret(home: &Path) -> io::Result<String> {
 
 /// `_write_private_atomic_text`: a private temporary file beside `path`,
 /// synced, then renamed over it.
-pub(super) fn write_private_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn write_private_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let parent = path.parent().unwrap_or(Path::new("."));
     let name = path
         .file_name()

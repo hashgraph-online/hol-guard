@@ -20,11 +20,33 @@ pub(super) fn record(
     session_id: Option<&str>,
     port: Option<u16>,
 ) {
-    let _ = write(guard_home, event, reason, session_id, port);
+    let _ = write(
+        guard_home,
+        std::process::id(),
+        event,
+        reason,
+        session_id,
+        port,
+    );
+}
+
+/// Records `event` on behalf of another process, such as a daemon being
+/// retired; failures are ignored.
+pub(crate) fn record_for_pid(
+    guard_home: &Path,
+    pid: u32,
+    event: &str,
+    reason: Option<&str>,
+    session_id: Option<&str>,
+) {
+    if pid > 0 {
+        let _ = write(guard_home, pid, event, reason, session_id, None);
+    }
 }
 
 fn write(
     guard_home: &Path,
+    pid: u32,
     event: &str,
     reason: Option<&str>,
     session_id: Option<&str>,
@@ -49,7 +71,6 @@ fn write(
         .duration_since(UNIX_EPOCH)
         .ok()?
         .as_nanos();
-    let pid = std::process::id();
     // Keys sorted, as `json.dumps(..., sort_keys=True)` wrote them.
     let mut payload = Map::new();
     payload.insert("event".into(), event.into());

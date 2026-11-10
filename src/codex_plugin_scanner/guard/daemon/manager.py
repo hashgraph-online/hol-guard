@@ -25,7 +25,6 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
-from functools import partial
 from pathlib import Path
 from typing import Any, BinaryIO, Literal, TypedDict, cast
 
@@ -68,7 +67,7 @@ from .discovery import (
 from .file_locking import lock_daemon_file as _lock_daemon_start_file
 from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
 from .handed_off_launch import resolve_handed_off_guard_daemon_pending_launch
-from .lifecycle_journal import record_daemon_lifecycle_event
+from .lifecycle_journal import record_daemon_lifecycle_event as record_daemon_lifecycle_event
 from .pipx_import_paths import pipx_shared_import_paths
 from .start_classification import (
     GuardDaemonStillStartingError,
@@ -964,166 +963,58 @@ def retire_all_guard_daemons_for_home(
 ) -> list[int]:
     """Stop Guard daemon processes for one guard home, optionally keeping one port alive."""
 
-    token = bind_daemon_lifecycle_deadline(deadline)
-    try:
-        return _retire_guard_daemons_for_home(guard_home, keep_port=keep_port, deadline=deadline)
-    finally:
-        reset_daemon_lifecycle_deadline(token)
+    answer = _daemon_manage("retire", guard_home, keep_port=keep_port, deadline=deadline)
+    retired = None if answer is None else answer.get("retired")
+    if not isinstance(retired, list):
+        return []
+    return [pid for pid in retired if type(pid) is int]
 
 
-def _retire_guard_daemons_for_home(
+_DAEMON_MANAGE_DEFAULT_SECONDS = 30.0
+_DAEMON_MANAGE_OUTPUT_LIMIT = 64 * 1024
+
+
+def _daemon_manage(
+    op: str,
     guard_home: Path,
     *,
-    keep_port: int | None,
-    deadline: float | None,
-) -> list[int]:
-    retire_pid = (
-        _retire_guard_daemon_pid if deadline is None else partial(_retire_guard_daemon_pid, deadline_monotonic=deadline)
+    keep_port: int | None = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """One `daemon-manage` answer from the native runtime, or `None`."""
+
+    from ..frozen_daemon_runtime import _trusted_frozen_bootloader_parent_pid
+    from ..mdm.runtime_request import runtime_answer
+
+    manage_deadline = time.monotonic() + _DAEMON_MANAGE_DEFAULT_SECONDS if deadline is None else deadline
+
+    def request() -> dict[str, object] | None:
+        budget = manage_deadline - time.monotonic()
+        if budget <= 0:
+            return None
+        payload: dict[str, object] = {
+            "schema": "daemon-manage.v1",
+            "op": op,
+            "guard_home": str(Path(guard_home).absolute()),
+            "implicit_home": str(_implicit_daemon_guard_home()),
+            "caller_pid": os.getpid(),
+            "caller_parent_pid": os.getppid(),
+            "frozen_runtime": bool(getattr(sys, "frozen", False)),
+            "frozen_parent_trusted": _trusted_frozen_bootloader_parent_pid(guard_home) == os.getppid(),
+            "executable_name": ntpath.basename(sys.executable).strip().lower() or None,
+            "budget_ms": min(int(budget * 1000), 600_000),
+        }
+        if keep_port is not None:
+            payload["keep_port"] = keep_port
+        return payload
+
+    return runtime_answer(
+        "daemon-manage-v1",
+        "daemon-manage",
+        request,
+        output_limit=_DAEMON_MANAGE_OUTPUT_LIMIT,
+        deadline=manage_deadline + 1.0,
     )
-    retired: list[int] = []
-    handled_pids: set[int] = set()
-    pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
-    handed_off_launch_nonce: object = None
-    if (
-        _guard_daemon_pending_launch_is_generation_bound(pending_launch)
-        and not _guard_daemon_pending_launch_state_is_resolved(guard_home)
-        and not _guard_daemon_pending_launch_is_abandoned(pending_launch)
-    ):
-        # A launch-specific receipt is deliberately unresolved until its
-        # owner publishes the matching handoff or its root is gone. Inventory
-        # cannot prove that a same-home process is one of a live launch's
-        # descendants.
-        if not resolve_handed_off_guard_daemon_pending_launch(guard_home, pending_launch):
-            return retired
-        assert pending_launch is not None
-        handed_off_launch_nonce = pending_launch["launch_nonce"]
-    if isinstance(pending_launch, dict):
-        pending_pid = pending_launch.get("pid")
-        pending_port = pending_launch.get("port")
-        pending_creation_time = pending_launch.get("process_creation_time")
-        if type(pending_pid) is int and type(pending_creation_time) is int:
-            if keep_port is not None and pending_port == keep_port:
-                handled_pids.add(pending_pid)
-            else:
-                actual_creation_time = windows_process_creation_time(pending_pid)
-                if actual_creation_time == pending_creation_time:
-                    handled_pids.add(pending_pid)
-                    if retire_pid(
-                        pending_pid,
-                        expected_guard_home=guard_home,
-                        expected_creation_time=pending_creation_time,
-                    ) and _guard_daemon_pid_is_proven_dead(pending_pid):
-                        retired.append(pending_pid)
-                        _clear_guard_daemon_pending_launch_if_current(
-                            guard_home,
-                            pid=pending_pid,
-                            creation_time=pending_creation_time,
-                        )
-                elif actual_creation_time is not None or _guard_daemon_pid_is_proven_dead(pending_pid):
-                    _clear_guard_daemon_pending_launch_if_current(
-                        guard_home,
-                        pid=pending_pid,
-                        creation_time=pending_creation_time,
-                    )
-                else:
-                    handled_pids.add(pending_pid)
-
-    authenticated_state = load_authenticated_daemon_state(guard_home)
-    if handed_off_launch_nonce is not None and (
-        not _guard_daemon_pending_launch_state_is_resolved(guard_home)
-        or (
-            isinstance(authenticated_state, dict) and authenticated_state.get("launch_nonce") != handed_off_launch_nonce
-        )
-    ):
-        # A start replaced the handed-off daemon after its receipt cleared.
-        # That launch owns the home now, so this retirement leaves it alone.
-        return retired
-    if isinstance(authenticated_state, dict):
-        state_pid = authenticated_state.get("pid")
-        state_port = authenticated_state.get("port")
-        if type(state_pid) is int and state_pid > 0 and type(state_port) is int:
-            if keep_port is not None and state_port == keep_port:
-                handled_pids.add(state_pid)
-            elif state_pid in handled_pids and _guard_daemon_pid_is_proven_dead(state_pid):
-                _clear_authenticated_guard_daemon_state_if_current(
-                    guard_home,
-                    expected_state=authenticated_state,
-                )
-            elif state_pid not in handled_pids:
-                handled_pids.add(state_pid)
-                state_id = authenticated_state.get("state_id")
-                with suppress(Exception):
-                    record_daemon_lifecycle_event(
-                        guard_home,
-                        event="retirement_requested",
-                        reason="managed_retirement",
-                        pid=state_pid,
-                        session_id=state_id if isinstance(state_id, str) else None,
-                    )
-                expected_start_marker = authenticated_state.get("process_start_marker")
-                expected_owner_marker = authenticated_state.get("user")
-                if isinstance(expected_start_marker, str) and expected_start_marker.strip():
-                    retirement_succeeded = retire_pid(
-                        state_pid,
-                        expected_guard_home=guard_home,
-                        expected_start_marker=expected_start_marker,
-                        expected_owner_marker=(
-                            expected_owner_marker
-                            if isinstance(expected_owner_marker, str) and expected_owner_marker
-                            else None
-                        ),
-                    )
-                else:
-                    # Markerless live state cannot identify a PID generation: only a proven-dead
-                    # PID may be treated as retired, and no signal is ever sent to it.
-                    retirement_succeeded = _guard_daemon_pid_is_proven_dead(state_pid)
-                if retirement_succeeded:
-                    if _guard_daemon_pid_is_proven_dead(state_pid):
-                        _clear_authenticated_guard_daemon_state_if_current(
-                            guard_home,
-                            expected_state=authenticated_state,
-                        )
-                        if state_pid not in retired:
-                            retired.append(state_pid)
-                    elif (
-                        _guard_daemon_pid_command_identity(
-                            state_pid,
-                            expected_guard_home=guard_home,
-                        )
-                        is False
-                    ):
-                        _clear_authenticated_guard_daemon_state_if_current(
-                            guard_home,
-                            expected_state=authenticated_state,
-                        )
-
-    inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
-    if inventory is not None:
-        for pid, port in inventory:
-            if pid in handled_pids or (keep_port is not None and port == keep_port):
-                continue
-            retirement_identity = _guard_daemon_pid_identity_for_retirement(pid)
-            if retirement_identity is None:
-                continue
-            expected_start_marker, expected_owner_marker = retirement_identity
-            if retire_pid(
-                pid,
-                expected_guard_home=guard_home,
-                expected_start_marker=expected_start_marker,
-                expected_owner_marker=expected_owner_marker,
-            ) and _guard_daemon_pid_is_proven_dead(pid):
-                handled_pids.add(pid)
-                if pid not in retired:
-                    retired.append(pid)
-        remaining = _guard_daemon_process_inventory_for_guard_home(guard_home)
-        empty_inventory_confirmed = inventory == [] and remaining == []
-        if inventory != [] and remaining == []:
-            empty_inventory_confirmed = _guard_daemon_process_inventory_for_guard_home(guard_home) == []
-        if empty_inventory_confirmed and keep_port is None:
-            _reconcile_invalid_daemon_lifecycle_artifacts(guard_home)
-            _resolve_abandoned_guard_daemon_pending_launch(guard_home, pending_launch)
-    reap_orphaned_daemon_workers(deadline=deadline)
-    return retired
 
 
 _ORPHAN_REAP_TIMEOUT_SECONDS = 15.0
@@ -1173,24 +1064,8 @@ def reap_orphaned_daemon_workers(*, deadline: float | None = None) -> None:
 def guard_daemon_retirement_is_complete(guard_home: Path) -> bool:
     """Prove no authenticated, pending, or enumerable daemon remains for a home."""
 
-    authenticated_state = load_authenticated_daemon_state(guard_home)
-    if isinstance(authenticated_state, dict):
-        state_pid = authenticated_state.get("pid")
-        if type(state_pid) is not int or state_pid <= 0:
-            return False
-        if not _guard_daemon_pid_is_proven_dead(state_pid):
-            return False
-    elif _state_path(guard_home).is_file():
-        if not _daemon_lifecycle_artifact_is_exact_tombstone(_state_path(guard_home)):
-            return False
-    if not _guard_daemon_pending_launch_state_is_resolved(
-        guard_home
-    ) and not _resolve_abandoned_guard_daemon_pending_launch(
-        guard_home, load_authenticated_guard_daemon_pending_launch(guard_home)
-    ):
-        return False
-    inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
-    return inventory == []
+    answer = _daemon_manage("retirement_complete", guard_home)
+    return answer is not None and answer.get("complete") is True
 
 
 def guard_daemon_process_count(guard_home: Path) -> int | None:
@@ -1813,48 +1688,20 @@ def _daemon_state_points_to(guard_home: Path, *, pid: int, port: int) -> bool:
 def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:
     """Repair stale locator and authenticated daemon-discovery state.
 
-    A healthy live daemon is preserved.  A live daemon with an invalid identity
-    bundle is retired before its state is cleared, and an invalid discovery key
-    is removed so the next daemon start can regenerate it.  Raises OSError if a
-    required write fails so callers can detect incomplete repair.
-
-    Safe to call while the database is live.  Returns a dict describing what was cleared.
+    A healthy live daemon is preserved. A live daemon with an invalid identity
+    bundle is retired before its state is cleared, and an invalid discovery
+    file is removed so the next daemon start can regenerate it. Raises
+    RuntimeError when the repair cannot finish safely.
     """
-    cleared: list[str] = []
-    locator = _locator_path(guard_home)
-    if locator.is_file():
-        locator.unlink()
-        cleared.append("locator")
-    state = _state_path(guard_home)
-    state_payload = _load_state(guard_home) if state.is_file() else None
-    identity_is_invalid = _load_authenticated_daemon_identity(guard_home) is None
-    discovery_key_path = daemon_discovery_key_path(guard_home)
-    invalid_discovery_key_existed = discovery_key_path.is_file() and load_daemon_discovery_key(guard_home) is None
-    if state.is_file():
-        identity_payload = state_payload if isinstance(state_payload, dict) else {}
-        pid = identity_payload.get("pid")
-        pid_is_live = type(pid) is int and pid > 0 and _guard_daemon_pid_is_running(pid)
-        command_identity: bool | None = False
-        if type(pid) is int and pid_is_live:
-            command_identity = _guard_daemon_pid_command_identity(pid, expected_guard_home=guard_home)
-        if pid_is_live and command_identity is None:
-            raise RuntimeError("Live Guard daemon process identity could not be resolved safely.")
-        daemon_is_live = pid_is_live and command_identity is True
-        if identity_is_invalid:
-            retire_all_guard_daemons_for_home(guard_home)
-            if not _daemon_lifecycle_artifact_is_exact_tombstone(state):
-                raise RuntimeError("Untrusted Guard daemon state could not be retired safely.")
-            if daemon_is_live:
-                cleared.append("daemon_process")
-            daemon_is_live = False
-        if not daemon_is_live:
-            clear_guard_daemon_state(guard_home)
-            cleared.append("daemon_state")
-    if identity_is_invalid:
-        discovery_key_removed = _remove_invalid_daemon_discovery_key(guard_home)
-        if discovery_key_removed or (invalid_discovery_key_existed and not discovery_key_path.exists()):
-            cleared.append("daemon_discovery_key")
-    return {"repaired": True, "cleared": cleared}
+
+    answer = _daemon_manage("repair_locator", guard_home)
+    if answer is None:
+        raise RuntimeError("Guard could not repair the daemon locator: the native runtime did not answer.")
+    error = answer.get("error")
+    if error is not None or answer.get("repaired") is not True:
+        raise RuntimeError(f"Guard daemon locator repair stopped safely: {error}.")
+    cleared = answer.get("cleared")
+    return {"repaired": True, "cleared": list(cleared) if isinstance(cleared, list) else []}
 
 
 def _locator_path(guard_home: Path) -> Path:
@@ -2006,79 +1853,6 @@ def _daemon_lifecycle_artifact_is_exact_tombstone(path: Path) -> bool:
     identity_opened = (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
     identity_after = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
     return raw == b"{}" and identity_before == identity_opened == identity_after
-
-
-def _reconcile_invalid_daemon_lifecycle_artifacts(guard_home: Path) -> bool:
-    """Quarantine invalid records only after callers prove process inventory empty."""
-
-    with _guard_daemon_state_write_lock(guard_home):
-        state_path = _state_path(guard_home)
-        if state_path.is_file() and load_authenticated_daemon_state(guard_home) is None:
-            if not _quarantine_daemon_lifecycle_artifact(
-                state_path,
-                quarantine_path=guard_home / "daemon-state.invalid.json",
-                max_preserved_bytes=_GUARD_DAEMON_STATE_MAX_BYTES,
-            ):
-                return False
-            _remove_invalid_daemon_discovery_key(guard_home)
-        pending_path = _pending_launch_path(guard_home)
-        if (
-            os.name == "nt"
-            and pending_path.is_file()
-            and load_authenticated_guard_daemon_pending_launch(guard_home) is None
-            and not _quarantine_daemon_lifecycle_artifact(
-                pending_path,
-                quarantine_path=guard_home / "daemon-launch-pending.invalid.json",
-                max_preserved_bytes=_GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES,
-            )
-        ):
-            return False
-    return True
-
-
-def _quarantine_daemon_lifecycle_artifact(
-    path: Path,
-    *,
-    quarantine_path: Path,
-    max_preserved_bytes: int,
-) -> bool:
-    """Atomically replace one unchanged private invalid record with an exact tombstone."""
-
-    if not _daemon_lifecycle_artifact_is_quarantinable(path):
-        return False
-    try:
-        before = path.stat(follow_symlinks=False)
-        with path.open("rb") as handle:
-            raw = handle.read(max_preserved_bytes + 1)
-            opened = os.fstat(handle.fileno())
-        after = path.stat(follow_symlinks=False)
-    except OSError:
-        return False
-    identity_before = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-    identity_opened = (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
-    identity_after = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-    if identity_before != identity_opened or identity_before != identity_after:
-        return False
-    if raw == b"{}" and before.st_size == 2 and _daemon_lifecycle_artifact_is_exact_tombstone(path):
-        return True
-    try:
-        os.replace(path, quarantine_path)
-        if len(raw) > max_preserved_bytes:
-            _write_private_atomic_text(
-                quarantine_path,
-                json.dumps(
-                    {
-                        "quarantined": True,
-                        "reason": "oversized_invalid_daemon_lifecycle_artifact",
-                        "original_size": before.st_size,
-                    },
-                    sort_keys=True,
-                ),
-            )
-        _write_private_atomic_text(path, "{}")
-    except OSError:
-        return False
-    return True
 
 
 def _daemon_lifecycle_artifact_is_quarantinable(path: Path) -> bool:
