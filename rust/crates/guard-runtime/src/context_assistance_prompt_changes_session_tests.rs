@@ -246,3 +246,39 @@ fn a_note_missing_part_of_the_session_has_no_lead() {
         "{text}"
     );
 }
+
+/// No lead where only `git status` or `git log` shows a change: a staged
+/// edit the working tree then undid, or a merge, which the note's commit
+/// list leaves out.
+#[test]
+fn a_note_has_no_lead_where_git_status_or_git_log_shows_more() {
+    let repo = Repo::new();
+    repo.write("src/two.py", "TWO = 2\n");
+    repo.commit("add two");
+    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    repo.write("src/two.py", "TWO = 3\n");
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(text.contains(LEAD), "{text}");
+    repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
+    repo.git(&["add", "src/core.py"]);
+    repo.write("src/core.py", CORE);
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(
+        text.contains("\n+TWO = 3\n") && !text.contains(LEAD),
+        "{text}"
+    );
+    repo.git(&["reset", "-q"]);
+    repo.commit("two is 3");
+    repo.git(&["checkout", "-q", "-b", "side", &base]);
+    repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
+    repo.commit("other returns 2");
+    repo.git(&["checkout", "-q", "main"]);
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(text.contains(LEAD), "{text}");
+    repo.git(&["merge", "-q", "--no-ff", "-m", "merge side", "side"]);
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(
+        text.contains("other returns 2") && !text.contains(LEAD),
+        "{text}"
+    );
+}

@@ -70,7 +70,7 @@ pub(super) fn whole(
     if shown_files(&diff, texts) {
         let mut whole = small(diff, texts, format!("git diff -U1 {short}"), None)?;
         // Against one commit, the diff compares the working tree.
-        whole.everything = against.len() == 1 && untracked(git, until) == Some(false);
+        whole.everything = against.len() == 1 && unseen(git, against[0], until) == Some(false);
         return Some(whole);
     }
     let changed: BTreeSet<String> = hunks(&diff).into_iter().map(|hunk| hunk.path).collect();
@@ -127,17 +127,22 @@ fn small(
     })
 }
 
-/// Whether the working tree holds a file Git neither tracks nor ignores,
-/// which only `git status` names. Nothing when Git cannot tell.
-fn untracked(git: &Git, until: Instant) -> Option<bool> {
-    let listed = [
-        "ls-files",
-        "--others",
-        "--exclude-standard",
-        "--directory",
-        "--no-empty-directory",
-    ];
-    Some(!git.run(&listed, until)?.trim().is_empty())
+/// Whether `git status` or `git log` would show what a diff of the working
+/// tree against `base` does not: a file Git neither tracks nor ignores, a
+/// staged change the working tree then undid, or a merge, which the commit
+/// list leaves out. Nothing when Git cannot tell.
+fn unseen(git: &Git, base: &str, until: Instant) -> Option<bool> {
+    let others = "--others --exclude-standard --directory --no-empty-directory";
+    let listed: Vec<&str> = ["ls-files"].into_iter().chain(others.split(' ')).collect();
+    let untracked = git.run(&listed, until)?;
+    let staged = git.run(&["diff", "--cached", "--name-only"], until)?;
+    let unstaged = git.run(&["diff", "--name-only"], until)?;
+    let range = format!("{base}..HEAD");
+    let merges = git.run(&["rev-list", "--merges", "--max-count=1", &range], until)?;
+    let both = staged
+        .lines()
+        .any(|path| unstaged.lines().any(|other| other == path));
+    Some(!untracked.trim().is_empty() || both || !merges.trim().is_empty())
 }
 
 /// A path a command can name as it is, with no quoting.
