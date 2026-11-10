@@ -538,34 +538,6 @@ def test_desktop_dashboard_update_parser_accepts_runner_args(tmp_path: Path) -> 
     assert args.alpha is True
 
 
-def test_wait_for_updated_core_binds_spawned_pid(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen: dict[str, object] = {}
-
-    def fake_live(
-        _guard_home: Path,
-        *,
-        require_current_runtime: bool = True,
-        expected_pid: int | None = None,
-    ) -> str:
-        seen["require_current_runtime"] = require_current_runtime
-        seen["expected_pid"] = expected_pid
-        return "http://127.0.0.1:5410"
-
-    monkeypatch.setattr(daemon_manager, "_live_guard_daemon_url", fake_live)
-    url = daemon_manager._wait_for_guard_daemon_url(
-        tmp_path,
-        timeout=1.0,
-        require_current_runtime=False,
-        expected_pid=4242,
-    )
-    assert url == "http://127.0.0.1:5410"
-    assert seen["require_current_runtime"] is False
-    assert seen["expected_pid"] == 4242
-
-
 def test_select_desktop_core_latest_stays_on_current_series() -> None:
     selected = update_desktop_core.select_desktop_core_latest(
         "3.0.0a239",

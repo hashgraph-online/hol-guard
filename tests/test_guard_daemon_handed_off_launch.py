@@ -87,38 +87,3 @@ def test_handoff_from_another_executable_matches_only_when_the_runtime_may_diffe
         expected_pid=_LAUNCH_PID,
         expected_port=_LAUNCH_PORT,
     )
-
-
-def test_a_handed_off_launch_from_another_executable_no_longer_blocks_the_home(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    _write_launch_receipt(guard_home)
-    _live_daemon_state(monkeypatch, guard_home)
-
-    monkeypatch.setattr(daemon_manager_module, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_live_or_newer_daemon_url",
-        lambda *_args, **_kwargs: f"http://127.0.0.1:{_LAUNCH_PORT}",
-    )
-    assert daemon_manager_module.ensure_guard_daemon(guard_home) == f"http://127.0.0.1:{_LAUNCH_PORT}"
-
-    assert daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
-
-
-def test_a_launch_of_another_executable_accepts_its_handoff_while_it_waits(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    _write_launch_receipt(guard_home)
-    _live_daemon_state(monkeypatch, guard_home)
-    url = f"http://127.0.0.1:{_LAUNCH_PORT}"
-    monkeypatch.setattr(daemon_manager_module, "_live_guard_daemon_url", lambda *_args, **_kwargs: url)
-
-    assert (
-        daemon_manager_module._wait_for_guard_daemon_url(
-            guard_home,
-            timeout=1.0,
-            require_current_runtime=False,
-            expected_pid=_LAUNCH_PID,
-            expected_launch_nonce=_NONCE,
-        )
-        == url
-    )

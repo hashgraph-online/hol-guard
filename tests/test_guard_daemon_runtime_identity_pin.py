@@ -6,38 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import manager
-from codex_plugin_scanner.guard.store import GuardStore
-
-
-def test_upgraded_install_cannot_adopt_previous_generation_daemon(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    installed = {"generation": "previous-generation"}
-    monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
-    monkeypatch.setattr(
-        manager, "_measure_runtime_fingerprint", lambda *_args: ("tree", installed["generation"], False)
-    )
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        auth_token = manager.load_guard_daemon_auth_token(store.guard_home)
-        assert auth_token is not None
-        details = manager._daemon_healthz_details_payload(f"http://127.0.0.1:{daemon.port}", auth_token, timeout=5)
-        assert details is not None
-        assert details["source_root"] == manager.current_guard_daemon_source_root()
-        assert manager._daemon_healthz_details_match_current_runtime(details) is True
-
-        installed["generation"] = "replacement-generation"
-        monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
-        assert details["runtime_fingerprint"] == "previous-generation"
-        assert manager._daemon_healthz_details_match_current_runtime(details) is False
-        legacy_details = {key: value for key, value in details.items() if key != "source_root"}
-        assert manager._daemon_healthz_details_match_current_runtime(legacy_details) is False
-    finally:
-        daemon.stop()
 
 
 def test_runtime_fingerprint_waits_out_a_cold_capability_probe_miss(

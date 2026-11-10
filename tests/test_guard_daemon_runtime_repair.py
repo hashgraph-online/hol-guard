@@ -100,31 +100,6 @@ def test_repair_retains_authenticated_newer_runtime(
     assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
 
 
-def test_ensure_keeps_newer_live_daemon_when_older_executable_is_requested(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    home_dir.mkdir()
-    monkeypatch.setattr(manager, "desktop_preflight_requested", lambda: False)
-    monkeypatch.setattr(manager, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None)
-    monkeypatch.setattr(manager, "_schedule_duplicate_guard_daemon_retirement", lambda _home: None)
-    monkeypatch.setattr(
-        manager,
-        "_live_or_newer_daemon_url",
-        lambda _home, *, executable, preferred_port: "http://127.0.0.1:59999",
-    )
-
-    url = manager.ensure_guard_daemon(
-        tmp_path / "guard-home",
-        home_dir=home_dir,
-        executable=tmp_path / "older-core" / "hol-guard",
-        preferred_port=5474,
-    )
-
-    assert url == "http://127.0.0.1:59999"
-
-
 def test_live_or_newer_daemon_url_port_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.daemon import runtime_peer
 

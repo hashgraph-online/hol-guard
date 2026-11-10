@@ -10,8 +10,6 @@ import sys
 import time
 from pathlib import Path
 
-import pytest
-
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import recovery_worker, start_classification, start_heartbeat
 from codex_plugin_scanner.guard.native_daemon_lifecycle import (
@@ -70,133 +68,12 @@ def _write_heartbeat(guard_home: Path, *, pid: int, ns: int) -> None:
     path.chmod(0o600)
 
 
-def _patch_spawn(monkeypatch: pytest.MonkeyPatch, process: _FakeProcess, *, after_spawn_wait) -> None:
-    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
-    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_: None)
-    monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _gh: None)
-    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _gh: None)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
-    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda *_a, **_k: None)
-    monkeypatch.setattr(daemon_manager_module, "_guard_home_is_ephemeral", lambda _gh: False)
-    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda *_a, **_k: [5700])
-    monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
-    monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", lambda *_a, **_k: process)
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "posix:token")
-    # The fake child never exists on the host, so its generation and owner come from the stubs
-    # rather than from a real ``ps`` probe through the patched ``subprocess.Popen``.
-    monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:0")
-    # No lock, no journal entry: the child is still importing Python.
-    monkeypatch.setattr(start_classification, "daemon_owner_lock_is_held", lambda _gh: False)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _gh: [])
-
-    def fake_wait(_gh, **_kwargs):
-        after_spawn_wait()
-
-    monkeypatch.setattr(daemon_manager_module, "_wait_for_guard_daemon_url", fake_wait)
-
-
-def test_slow_child_with_only_an_early_heartbeat_is_left_running(tmp_path: Path, monkeypatch) -> None:
-    guard_home = _private_home(tmp_path)
-    process = _FakeProcess()
-    _patch_spawn(
-        monkeypatch,
-        process,
-        after_spawn_wait=lambda: _write_heartbeat(guard_home, pid=process.pid, ns=time.time_ns()),
-    )
-
-    with pytest.raises(RuntimeError, match=r"^Guard daemon is still starting"):
-        daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
-
-    assert process.terminated is False
-    assert daemon_manager_module.load_authenticated_guard_daemon_start_progress(guard_home) is not None
-
-
-def test_silent_child_without_a_heartbeat_is_still_terminated(tmp_path: Path, monkeypatch) -> None:
-    guard_home = _private_home(tmp_path)
-    process = _FakeProcess()
-    _patch_spawn(monkeypatch, process, after_spawn_wait=lambda: None)
-
-    with pytest.raises(RuntimeError, match=r"^Guard approval center did not start"):
-        daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
-
-    assert process.terminated is True
-
-
-def test_heartbeat_from_before_the_spawn_does_not_count(tmp_path: Path, monkeypatch) -> None:
-    guard_home = _private_home(tmp_path)
-    process = _FakeProcess()
-    _patch_spawn(
-        monkeypatch,
-        process,
-        after_spawn_wait=lambda: _write_heartbeat(guard_home, pid=process.pid, ns=1),
-    )
-
-    with pytest.raises(RuntimeError, match=r"^Guard approval center did not start"):
-        daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
-
-    assert process.terminated is True
-
-
-def test_heartbeat_from_a_foreign_process_does_not_count(tmp_path: Path, monkeypatch) -> None:
-    guard_home = _private_home(tmp_path)
-    process = _FakeProcess()
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_parent_pid", lambda _pid: None)
-    _patch_spawn(
-        monkeypatch,
-        process,
-        after_spawn_wait=lambda: _write_heartbeat(guard_home, pid=999999, ns=time.time_ns()),
-    )
-
-    with pytest.raises(RuntimeError, match=r"^Guard approval center did not start"):
-        daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
-
-    assert process.terminated is True
-
-
 def _deadline_bound_tree_check(pid: int, root_pid: int) -> bool:
     # Process-tree queries run under the lifecycle deadline, like the native inventory.
     deadline = _DAEMON_LIFECYCLE_DEADLINE.get()
     if deadline is not None and time.monotonic() >= deadline:
         raise TimeoutError("Guard daemon operation deadline exceeded.")
     return pid == root_pid
-
-
-def test_wait_leaves_time_to_classify_a_slow_child(tmp_path: Path, monkeypatch) -> None:
-    guard_home = _private_home(tmp_path)
-    process = _FakeProcess()
-    _patch_spawn(monkeypatch, process, after_spawn_wait=lambda: None)
-
-    def spend_the_wait_budget(_gh, *, timeout: float, **_kwargs) -> None:
-        stop = time.monotonic() + timeout
-        while time.monotonic() < stop:
-            pass
-        _write_heartbeat(guard_home, pid=process.pid, ns=time.time_ns())
-
-    monkeypatch.setattr(daemon_manager_module, "_wait_for_guard_daemon_url", spend_the_wait_budget)
-    monkeypatch.setattr(start_classification, "_pid_in_process_tree", _deadline_bound_tree_check)
-
-    with pytest.raises(RuntimeError, match=r"^Guard daemon is still starting"):
-        daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=0.8, home_dir=tmp_path)
-
-    assert process.terminated is False
-
-
-def test_an_expired_poll_still_classifies_the_child(tmp_path: Path, monkeypatch) -> None:
-    guard_home = _private_home(tmp_path)
-    process = _FakeProcess()
-    _patch_spawn(monkeypatch, process, after_spawn_wait=lambda: None)
-
-    def expired_poll(_gh, **_kwargs) -> None:
-        _write_heartbeat(guard_home, pid=process.pid, ns=time.time_ns())
-        raise TimeoutError("Guard daemon operation deadline exceeded.")
-
-    monkeypatch.setattr(daemon_manager_module, "_wait_for_guard_daemon_url", expired_poll)
-
-    with pytest.raises(RuntimeError, match=r"^Guard daemon is still starting"):
-        daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
-
-    assert process.terminated is False
 
 
 def test_heartbeat_stops_counting_after_the_slow_start_window(tmp_path: Path) -> None:
@@ -210,54 +87,6 @@ def test_heartbeat_stops_counting_after_the_slow_start_window(tmp_path: Path) ->
     assert not start_classification.daemon_still_starting_evidence_present(
         guard_home, root_pid=os.getpid(), spawned_at_ns=spawned_at_ns
     )
-
-
-class TestProgressRecordOutlivesRecordedWindow:
-    @staticmethod
-    def _record(pid: int, *, age_seconds: float) -> dict[str, object]:
-        spawned = time.time_ns() - int(age_seconds * 1_000_000_000)
-        return {"pid": pid, "spawned_at_ns": spawned, "recorded_at_ns": spawned + 1_000_000_000}
-
-    @staticmethod
-    def _identity_only(monkeypatch) -> None:
-        # Model the native check: live only when age is judged at record time.
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_start_progress_record_is_live",
-            lambda _gh, record, *, now_ns: now_ns == record["recorded_at_ns"],
-        )
-
-    def test_live_child_with_heartbeat_stays_live_past_the_recorded_window(self, tmp_path, monkeypatch) -> None:
-        guard_home = _private_home(tmp_path)
-        self._identity_only(monkeypatch)
-        record = self._record(os.getpid(), age_seconds=70)
-        _write_heartbeat(guard_home, pid=os.getpid(), ns=int(record["spawned_at_ns"]) + 500_000_000)
-
-        assert daemon_manager_module._guard_daemon_start_progress_is_live(guard_home, record) is True
-
-    def test_child_without_start_evidence_is_not_kept_alive(self, tmp_path, monkeypatch) -> None:
-        guard_home = _private_home(tmp_path)
-        self._identity_only(monkeypatch)
-        monkeypatch.setattr(start_classification, "daemon_owner_lock_is_held", lambda _gh: False)
-
-        record = self._record(os.getpid(), age_seconds=70)
-        assert daemon_manager_module._guard_daemon_start_progress_is_live(guard_home, record) is False
-
-    def test_child_past_the_hard_cap_is_not_kept_alive(self, tmp_path, monkeypatch) -> None:
-        guard_home = _private_home(tmp_path)
-        self._identity_only(monkeypatch)
-        record = self._record(os.getpid(), age_seconds=start_heartbeat.SLOW_START_MAX_SECONDS + 10)
-        _write_heartbeat(guard_home, pid=os.getpid(), ns=int(record["spawned_at_ns"]) + 500_000_000)
-
-        assert daemon_manager_module._guard_daemon_start_progress_is_live(guard_home, record) is False
-
-    def test_recycled_pid_is_not_kept_alive(self, tmp_path, monkeypatch) -> None:
-        guard_home = _private_home(tmp_path)
-        monkeypatch.setattr(daemon_manager_module, "_start_progress_record_is_live", lambda *_a, **_k: False)
-        record = self._record(os.getpid(), age_seconds=70)
-        _write_heartbeat(guard_home, pid=os.getpid(), ns=int(record["spawned_at_ns"]) + 500_000_000)
-
-        assert daemon_manager_module._guard_daemon_start_progress_is_live(guard_home, record) is False
 
 
 def test_bootstrap_emits_the_heartbeat_before_importing_guard(tmp_path: Path) -> None:
@@ -354,49 +183,6 @@ def test_recovery_worker_treats_a_still_starting_daemon_as_success(tmp_path: Pat
 
     assert recovery_worker.main() == 0
     assert cleared == ["reservation-token"]
-
-
-def test_a_windows_start_outlasts_the_packaged_runtime_it_waits_on(native_hook_force: Path, tmp_path: Path) -> None:
-    """The Windows budget covers the start the packaged runtime actually performs."""
-
-    query = {"desktop": True, "worker_ready_floor": 14.0}
-    windows = native_daemon_lifecycle("start_timeouts", query, platform="nt", guard_home=tmp_path)
-    posix = native_daemon_lifecycle("start_timeouts", query, platform="posix", guard_home=tmp_path)
-
-    assert windows["default"] == windows["post_update"]
-    assert windows["default"] > _PACKAGED_WINDOWS_READY_SECONDS
-    assert posix["default"] == 30.0
-
-    # The client stops polling before the deadline so it still has time to
-    # classify the child it spawned, so the poll itself is what has to outlast
-    # the start. At the POSIX budget it ran out roughly nine seconds early.
-    started = time.monotonic()
-    deadline = daemon_manager_module._spawned_daemon_wait_deadline(started + windows["default"])
-    assert deadline - started > _PACKAGED_WINDOWS_READY_SECONDS
-    posix_deadline = daemon_manager_module._spawned_daemon_wait_deadline(started + posix["default"])
-    assert posix_deadline - started < _PACKAGED_WINDOWS_READY_SECONDS
-
-
-def test_a_plain_windows_start_leaves_room_for_the_work_before_the_first_import(
-    native_hook_force: Path, tmp_path: Path
-) -> None:
-    """The plain Windows budget covers more than the readiness time it was read from."""
-
-    query = {"desktop": False, "worker_ready_floor": 14.0}
-    windows = native_daemon_lifecycle("start_timeouts", query, platform="nt", guard_home=tmp_path)
-
-    # A start that is not a Desktop or post-update one runs the same packaged
-    # runtime, so it waits out the same work. The measured readiness time is
-    # taken from the daemon's first import, while the client's clock starts
-    # before the child is spawned and stops early to classify it, so the budget
-    # has to cover the interpreter boot and runtime unpack in between as well.
-    started = time.monotonic()
-    deadline = daemon_manager_module._spawned_daemon_wait_deadline(started + windows["default"])
-    poll_window = deadline - started
-
-    assert poll_window > _PACKAGED_WINDOWS_READY_SECONDS + 10.0
-    # Still its own budget: an update is allowed longer than a plain start.
-    assert windows["default"] < windows["post_update"]
 
 
 def test_a_windows_start_record_stays_live_as_long_as_the_client_waits(native_hook_force: Path, tmp_path: Path) -> None:

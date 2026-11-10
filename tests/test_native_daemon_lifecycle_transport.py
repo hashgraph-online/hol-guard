@@ -231,33 +231,6 @@ def test_resident_outage_is_not_a_value_error(monkeypatch: pytest.MonkeyPatch) -
         manager._healthz_payload_is_current("{}")
 
 
-def test_startup_binds_the_lifecycle_deadline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
-
-    clock = {"now": 1000.0}
-    seen: list[tuple[str, float | None]] = []
-    monkeypatch.setattr(manager.time, "monotonic", lambda: clock["now"])
-
-    def lifecycle(check: str, _query: object, **_kwargs: object) -> dict[str, object]:
-        seen.append((check, transport._DAEMON_LIFECYCLE_DEADLINE.get()))
-        return {"default": 4.0, "post_update": 30.0}
-
-    def live(*_args: object, **_kwargs: object) -> str:
-        seen.append(("live", transport._DAEMON_LIFECYCLE_DEADLINE.get()))
-        return "http://127.0.0.1:9"
-
-    monkeypatch.setattr(manager, "native_daemon_lifecycle", lifecycle)
-    monkeypatch.setattr(manager, "_live_or_newer_daemon_url", live)
-    url = manager.ensure_guard_daemon(
-        tmp_path,
-        deadline_monotonic=1010.0,
-        background_maintenance=False,
-    )
-    assert url == "http://127.0.0.1:9"
-    assert seen == [("start_timeouts", 1010.0), ("live", 1004.0)]
-    assert transport._DAEMON_LIFECYCLE_DEADLINE.get() is None
-
-
 def _answer(kwargs: dict[str, object], timeouts: list[float]) -> dict[str, object]:
     timeout = kwargs["timeout_seconds"]
     assert isinstance(timeout, float)

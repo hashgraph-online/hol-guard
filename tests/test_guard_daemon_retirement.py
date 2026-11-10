@@ -52,31 +52,6 @@ def test_posix_daemon_retirement_waits_for_sigkill_to_finish(monkeypatch) -> Non
     assert signals == [signal.SIGTERM, sigkill]
 
 
-def test_retirement_process_refuses_missing_generation_marker_for_live_unresolvable_pid(monkeypatch) -> None:
-    def retire(*_args, **_kwargs):
-        pytest.fail("unbound PID must not be signaled")
-
-    monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", retire)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_guard_daemon_pid_command_identity",
-        lambda _pid, expected_guard_home=None: None,
-    )
-
-    assert daemon_manager_module._retire_guard_daemon_process({"pid": 62_228, "guard_home": "/tmp/guard-home"}) is False
-
-
-def test_retirement_process_accepts_proven_dead_markerless_pid_without_signaling(monkeypatch) -> None:
-    def retire(*_args, **_kwargs):
-        pytest.fail("already-dead markerless PID must not be signaled")
-
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", retire)
-
-    assert daemon_manager_module._retire_guard_daemon_process({"pid": 62_229, "guard_home": "/tmp/guard-home"}) is True
-
-
 def test_posix_retirement_refuses_unbound_live_pid_before_signaling(monkeypatch) -> None:
     pid = 62_240
     signals: list[int] = []

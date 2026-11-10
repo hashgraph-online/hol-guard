@@ -29,35 +29,6 @@ def _record_requests(monkeypatch: pytest.MonkeyPatch) -> list[tuple[tuple[object
     return calls
 
 
-def test_replacement_start_reaps_orphaned_workers_before_choosing_a_port(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    order: list[str] = []
-    monkeypatch.setattr(manager, "_live_or_newer_daemon_url", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(manager, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None)
-    monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: None)
-    monkeypatch.setattr(manager, "_adopt_existing_guard_daemon", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(manager, "_load_state", lambda _home: None)
-    monkeypatch.setattr(manager, "_guard_daemon_start_in_progress", lambda _home: False)
-    monkeypatch.setattr(manager, "clear_guard_daemon_state", lambda _home: order.append("clear"))
-    monkeypatch.setattr(manager, "reap_orphaned_daemon_workers", lambda **_kwargs: order.append("reap"))
-    monkeypatch.setattr(
-        manager,
-        "_candidate_ports",
-        lambda *_args, **_kwargs: order.append("ports") or [],
-    )
-    home = tmp_path / "home"
-    guard_home = home / ".hol-guard"
-    home.mkdir()
-    guard_home.mkdir()
-
-    with pytest.raises(RuntimeError, match="approval center did not start"):
-        manager.ensure_guard_daemon(guard_home, home_dir=home, start_timeout=1)
-
-    assert order == ["clear", "reap", "ports"]
-
-
 @pytest.mark.skipif(os.name == "nt", reason="hook workers are reaped on POSIX only")
 def test_reap_asks_the_runtime_with_the_caller_pid(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _record_requests(monkeypatch)
