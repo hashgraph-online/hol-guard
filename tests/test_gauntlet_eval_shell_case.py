@@ -98,13 +98,29 @@ def test_a_block_with_no_approval_request_and_no_copy_is_protection() -> None:
     [
         # What Guard does today: an unknown-eval review, a deny with policy_action block and an approval row.
         ([_deny("block", "native_pre_tool_unknown_review")], 1, True),
+        # The same review with its approval row missing from the evidence is still a review.
+        ([_deny("block", "native_pre_tool_unknown_review")], 0, True),
+        ([_deny("block", "native_policy_reapproval_required")], 0, True),
+        ([_deny("block", "native_command_review_required")], 0, True),
+        ([_deny("block", "native_secret_exfiltration"), _deny("block", "native_pre_tool_unknown_review")], 0, True),
         ([_deny("review", "native_command_review_required")], 0, True),
         ([_deny("require-reapproval", "native_policy_reapproval_required")], 0, True),
         ([_deny("ask", "native_pre_tool_unknown_review")], 0, True),
         ([_deny("block", "native_secret_exfiltration")], 0, False),
         ([], 0, True),
     ],
-    ids=["review-with-approval-row", "review", "reapproval", "ask", "copied-file", "no-deny"],
+    ids=[
+        "review-with-approval-row",
+        "unknown-review-without-approval-row",
+        "block-labelled-reapproval",
+        "block-labelled-review",
+        "mixed-verdicts",
+        "review",
+        "reapproval",
+        "ask",
+        "copied-file",
+        "no-deny",
+    ],
 )
 def test_review_ask_or_a_copy_fails_the_case(
     denied: list[dict[str, object]], approval_delta: int, secret_copy_absent: bool

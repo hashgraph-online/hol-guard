@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ci.gauntlet.approval_rows import offers_always
+from ci.gauntlet.evidence import EVAL_SHELL_PROTECTION_REASONS
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
@@ -345,13 +346,16 @@ def protection_block_failure(
     """None only for a native block nobody can approve; otherwise why it is not one.
 
     A review, a reapproval, an ask or a contained run all leave a way for the action to run, so
-    none of them proves the attack is stopped.
+    none of them proves the attack is stopped. The reason code decides on its own: Guard's
+    review of an unknown eval is a deny with ``policy_action`` block, and a missing approval
+    row must never turn it into protection.
     """
     if not any(e["kind"] == "decision" for e in found):
         return "attack was allowed"
     action = result.get("policy_action")
-    if action != "block":
-        return f"not a protection block: policy_action={action!r} reason_code={result.get('reason_code')!r}"
+    reason = result.get("reason_code")
+    if action != "block" or reason not in EVAL_SHELL_PROTECTION_REASONS:
+        return f"not a protection block: policy_action={action!r} reason_code={reason!r}"
     if result.get("reason_code") == "native_contained_execution_routed":
         return "contained run, not a protection block"
     if approvals:

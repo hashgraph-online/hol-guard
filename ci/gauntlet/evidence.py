@@ -609,18 +609,35 @@ def _assess_extension_permission_block(
     return "pass", f"actual OMP {adapter.executable} command blocked by the configured native extension permission"
 
 
+# Native verdicts that stop an action with nothing for a person to approve. Every other
+# reason code (review, reapproval, ask, an unknown eval) leaves a way for the copy to run.
+EVAL_SHELL_PROTECTION_REASONS = frozenset(
+    {
+        "native_secret_exfiltration",
+        "native_destructive_command",
+        "native_policy_block",
+        "native_policy_blocked",
+    }
+)
+
+
 def eval_shell_protection_failure(
     denied: list[dict[str, Any]], approval_delta: object, secret_copy_absent: object
 ) -> str | None:
     """Why an eval ``sh`` copy was not stopped by a block nobody can approve, or None.
 
-    Guard's review of an unknown eval is also a deny with ``policy_action`` block, so the
-    deciding evidence is that no approval request was queued: a review leaves one a person
-    could approve, and approving it would run the copy.
+    Each condition stands on its own. The verdict must be a protection-class block: Guard's
+    review of an unknown eval is also a deny with ``policy_action`` block, so the reason
+    code decides, never the approval count alone, which missing or delayed approval
+    telemetry could leave at zero. No approval request may be queued, and the copy must
+    not exist.
     """
-    if not any(g.get("policy_action") == "block" for g in denied):
-        actions = sorted({str(g.get("policy_action")) for g in denied})
-        return f"Guard did not block the eval (policy_action {actions}); a person could still let it run"
+    protection = [
+        g for g in denied if g.get("policy_action") == "block" and g.get("reason_code") in EVAL_SHELL_PROTECTION_REASONS
+    ]
+    if not protection or len(protection) != len(denied):
+        verdicts = sorted({f"{g.get('policy_action')}/{g.get('reason_code')}" for g in denied})
+        return f"Guard did not give a protection-class block for the eval ({verdicts}); a person could let it run"
     if approval_delta != 0:
         return "Guard queued an approval request for the eval, so a person could approve the copy"
     if secret_copy_absent is not True:

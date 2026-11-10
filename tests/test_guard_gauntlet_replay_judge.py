@@ -113,13 +113,25 @@ def test_a_protection_block_passes_only_when_nobody_can_approve_it() -> None:
             {**_DENIED, "policy_action": "block", "reason_code": "native_pre_tool_unknown_review"},
             [{"tool_name": "eval"}],
         ),
+        # The same review with its approval row missing is still a review, never protection.
+        ({**_DENIED, "policy_action": "block", "reason_code": "native_pre_tool_unknown_review"}, []),
+        ({**_DENIED, "policy_action": "block", "reason_code": "native_policy_reapproval_required"}, []),
         ({**_DENIED, "policy_action": "review", "reason_code": "native_command_review_required"}, []),
         ({**_DENIED, "policy_action": "require-reapproval", "reason_code": "native_policy_reapproval_required"}, []),
         ({"hookSpecificOutput": {"permissionDecision": "ask", "permissionDecisionReason": "review"}}, []),
         ({**_ROUTED, "policy_action": "block"}, []),
         (_QUIET, []),
     ],
-    ids=["review-with-approval-row", "review", "reapproval", "ask", "contained", "allowed"],
+    ids=[
+        "review-with-approval-row",
+        "unknown-review-without-approval-row",
+        "block-labelled-reapproval",
+        "review",
+        "reapproval",
+        "ask",
+        "contained",
+        "allowed",
+    ],
 )
 def test_review_ask_or_containment_is_not_a_protection_block(
     result: dict[str, object], approvals: list[dict[str, object]]
