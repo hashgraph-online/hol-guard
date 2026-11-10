@@ -65,20 +65,12 @@ def test_managed_mode_floor_cannot_fake_watch_only_transition(
         ),
     )
     monkeypatch.setattr(config_module, "load_managed_policy", lambda: managed_state)
-    _store, daemon = _with_daemon(guard_home)
-    try:
-        status, payload = _json_request(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/settings",
-            method="POST",
-            payload={"settings": {"mode": "observe", "sync": True, "desktop_notifications": False}},
+    # The daemon's settings write runs natively against the machine policy;
+    # the managed floor it applies is this config rule.
+    with pytest.raises(ValueError, match=r"Cloud sync requires a paid team plan\."):
+        update_guard_settings(
+            guard_home, {"mode": "observe", "sync": True, "desktop_notifications": False}, cloud_sync_entitled=False
         )
-    finally:
-        daemon.stop()
-
-    assert status == 400
-    assert payload["message"] == "Cloud sync requires a paid team plan."
 
 
 def test_managed_sync_cannot_be_persisted_by_watch_only_transition(
@@ -98,20 +90,10 @@ def test_managed_sync_cannot_be_persisted_by_watch_only_transition(
         ),
     )
     monkeypatch.setattr(config_module, "load_managed_policy", lambda: managed_state)
-    _store, daemon = _with_daemon(guard_home)
-    try:
-        status, payload = _json_request(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/settings",
-            method="POST",
-            payload={"settings": {"mode": "observe", "sync": True}},
-        )
-    finally:
-        daemon.stop()
-
-    assert status == 400
-    assert payload["message"] == "Cloud sync requires a paid team plan."
+    # The daemon's settings write runs natively against the machine policy;
+    # the managed floor it applies is this config rule.
+    with pytest.raises(ValueError, match=r"Cloud sync requires a paid team plan\."):
+        update_guard_settings(guard_home, {"mode": "observe", "sync": True}, cloud_sync_entitled=False)
     assert "sync = true" not in (guard_home / "config.toml").read_text(encoding="utf-8")
 
 
@@ -295,13 +277,17 @@ def test_relaxed_security_level_persists_granular_risk_settings(tmp_path: Path) 
     assert settings["harness_risk_actions"]["codex"]["local_secret_read"] == "block"
 
 
-def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch) -> None:
-    patch_daemon_global(
-        monkeypatch,
-        "package_firewall_entitlement_or_denied",
-        lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
+def _seed_entitlement(store: GuardStore, tier: str) -> None:
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": tier, "workspace_id": "workspace-1"},
+        "2026-06-09T12:00:00.000Z",
     )
+
+
+def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch) -> None:
     _store, daemon = _with_daemon(tmp_path / "guard-home")
+    _seed_entitlement(_store, "team")
     try:
         update_status, _update_payload = _json_request(
             daemon.port,
@@ -364,11 +350,7 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             method="POST",
             payload={"settings": {"billing": True, "sync": True}},
         )
-        patch_daemon_global(
-            monkeypatch,
-            "package_firewall_entitlement_or_denied",
-            lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
-        )
+        _seed_entitlement(_store, "team")
         allowed_status, allowed_payload = _json_request(
             daemon.port,
             daemon._server.auth_token,
@@ -376,11 +358,7 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             method="POST",
             payload={"settings": {"billing": False, "sync": True}},
         )
-        patch_daemon_global(
-            monkeypatch,
-            "package_firewall_entitlement_or_denied",
-            lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
-        )
+        _seed_entitlement(_store, "free")
         _json_request(
             daemon.port,
             daemon._server.auth_token,

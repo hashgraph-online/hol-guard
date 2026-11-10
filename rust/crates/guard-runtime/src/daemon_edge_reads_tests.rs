@@ -46,7 +46,8 @@ fn gives_up_on_heads_it_would_not_read_as_the_daemon_does() {
         b"GET /v1/receipts HTTP/2\r\n\r\n",
         b"GET //v1/receipts HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts/ HTTP/1.1\r\n\r\n",
-        b"GET /v1/receipts/a%2Fb HTTP/1.1\r\n\r\n",
+        b"GET /v1/receipts/a%2 HTTP/1.1\r\n\r\n",
+        b"GET /v1/receipts/a%zz HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts;x HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts#x HTTP/1.1\r\n\r\n",
         b"GET /v1/receipts HTTP/1.1\r\nX-A: 1\r\n folded\r\n\r\n",
@@ -60,6 +61,15 @@ fn gives_up_on_heads_it_would_not_read_as_the_daemon_does() {
             String::from_utf8_lossy(head)
         );
     }
+}
+
+#[test]
+fn reads_complete_escapes_raw_as_the_daemon_did() {
+    let head = b"GET /v1/artifacts/a%3Ab%2Fc:d/diff HTTP/1.1\r\n\r\n";
+    assert_eq!(
+        parse_get(head).unwrap().path,
+        "/v1/artifacts/a%3Ab%2Fc:d/diff"
+    );
 }
 
 #[test]
@@ -395,10 +405,10 @@ fn relays_every_post_it_does_not_read_as_the_daemon_does() {
         post(body, "Origin: http://x\r\n"),
         post(body, "").replace("/v1/read-state", "/v1/policy/clear"),
         format!("{}GET /v1/read-state HTTP/1.1\r\n\r\n", post(body, "")),
-        post(body, "").replace(
-            &format!("Content-Length: {}", body.len()),
-            &format!("Content-Length: {}", MAX_BODY_BYTES + 1),
-        ),
+        {
+            let large = format!(r#"{{"request_id":"{}"}}"#, "x".repeat(MAX_BODY_BYTES + 1));
+            post(&large, "").replace("/v1/read-state", "/v1/policy/clear")
+        },
     ] {
         assert_eq!(exchange(edge.address, &request), "daemon", "{request}");
         let relayed = edge.requests.recv_timeout(Duration::from_secs(20)).unwrap();

@@ -278,6 +278,7 @@ def test_runtime_starts_fail_closed_when_the_resident_cannot_digest(monkeypatch:
     assert runtime.refresh(_view(1)).health is AuthorityHealth.PROTECTED
 
 
+@pytest.mark.python_daemon
 def test_daemon_starts_fail_closed_without_a_resident_digest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

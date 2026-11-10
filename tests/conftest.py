@@ -90,6 +90,14 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _python_daemon_harness(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve ``python_daemon`` tests with the Python handler, whose internals they read."""
+
+    if request.node.get_closest_marker("python_daemon") is not None:
+        monkeypatch.setenv("HOL_GUARD_HARNESS_NATIVE", "0")
+
+
+@pytest.fixture(autouse=True)
 def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
     """Use the compiled authority in native regression jobs.
 

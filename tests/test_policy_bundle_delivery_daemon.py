@@ -11,8 +11,7 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard import policy_bundle_v2
-from codex_plugin_scanner.guard.daemon import server_control_sync
+from codex_plugin_scanner.guard import policy_bundle_delivery, policy_bundle_v2
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
 )
@@ -214,13 +213,13 @@ def test_daemon_builds_the_acknowledgement_on_the_stored_receipt(
     store.set_sync_payload("policy_bundle_ack", stored, "2026-08-25T12:00:00Z")
 
     previous_seen: list[object] = []
-    build = server_control_sync.policy_bundle_acknowledgement_payload
+    build = policy_bundle_delivery.policy_bundle_acknowledgement_payload
 
     def _spy(**kwargs: object) -> dict[str, object]:
         previous_seen.append(kwargs.get("previous"))
         return build(**kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(server_control_sync, "policy_bundle_acknowledgement_payload", _spy)
+    monkeypatch.setattr(policy_bundle_delivery, "policy_bundle_acknowledgement_payload", _spy)
     _sync(store, bundle=bundle, delivery=delivery)
 
     assert previous_seen == [stored]

@@ -267,6 +267,8 @@ def native_daemon(
             reader=functools.partial(transport.native_catalog_read, timeout_seconds=60.0),
         ),
     )
+    # The patched catalog reader runs in the Python handler.
+    monkeypatch.setenv("HOL_GUARD_HARNESS_NATIVE", "0")
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     daemon.start()

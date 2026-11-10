@@ -12,6 +12,7 @@ from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+@pytest.mark.python_daemon
 def test_guard_daemon_query_token_denial_survives_audit_timeout(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

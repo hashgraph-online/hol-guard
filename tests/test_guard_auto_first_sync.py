@@ -438,6 +438,7 @@ def test_queue_headless_cloud_sync_respects_cross_process_sync_lock(tmp_path, mo
     }
 
 
+@pytest.mark.python_daemon
 def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     now = "2026-06-04T12:00:00+00:00"

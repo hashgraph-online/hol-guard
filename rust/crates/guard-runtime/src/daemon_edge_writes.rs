@@ -189,19 +189,6 @@ pub(super) fn respond(
         });
         return Some((410, body, caller.cors_origin, false));
     }
-    if request.method == "POST" && super::dispatch::post_routed(request.path) {
-        let caller = authorize_write(request, &config.token)?;
-        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
-        reads.report_activity();
-        let (status, body, no_store) = super::dispatch::answer(
-            "POST",
-            request.path,
-            request.query,
-            &payload,
-            super::dispatch::call_library(config),
-        )?;
-        return Some((status, body, caller.cors_origin, no_store));
-    }
     if let Some(route) = sessions::Route::parse(request.method, request.path) {
         if request.has_header("Transfer-Encoding") {
             return None;
@@ -318,6 +305,17 @@ fn control_post(
     }
     let caller = authorize_write(request, &config.token)?;
     let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
+    if request.path == "/v1/daemon/repair" {
+        reads.report_activity();
+        let answer = crate::daemon_manage::repair_from_daemon(
+            std::path::Path::new(&config.guard_home),
+            config.user_home.as_deref().unwrap_or_default(),
+        );
+        return Some(match answer {
+            Some(body) => (200, body, caller.cors_origin, false),
+            None => (DROPPED, Value::Null, caller.cors_origin, false),
+        });
+    }
     let port = reads.published_state()?.get("port")?.as_u64()?;
     reads.report_activity();
     let mut args = serde_json::Map::new();

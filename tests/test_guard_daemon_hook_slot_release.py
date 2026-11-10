@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.routes import request_handler as daemon_server_m
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+@pytest.mark.python_daemon
 @pytest.mark.parametrize("decision", [{"decision": "allow"}, None])
 def test_hook_slot_is_free_before_the_answer_is_written(tmp_path, monkeypatch, decision) -> None:
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])

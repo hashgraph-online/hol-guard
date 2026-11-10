@@ -439,6 +439,7 @@ def test_v2_read_model_is_reachable_only_from_read_paths() -> None:
         assert not imported & {"store", "authority", "extension_control_api", "extension_catalog_sync", "policy"}
 
 
+@pytest.mark.python_daemon
 def test_real_native_read_model_traverses_index_and_revalidates(
     native_hook_force: Path, daemon: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:

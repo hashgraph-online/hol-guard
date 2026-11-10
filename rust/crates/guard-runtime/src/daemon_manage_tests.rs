@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
-use super::{records, run_command};
+use super::{records, repair_from_daemon, run_command};
 
 fn private_home() -> tempfile::TempDir {
     let home = tempfile::tempdir().unwrap();
@@ -150,4 +150,19 @@ fn retire_stops_an_inventoried_daemon_of_this_home_only() {
     let _ = theirs.wait();
     assert_eq!(answer, json!({"retired": [pid]}));
     assert!(still_running);
+}
+
+#[test]
+fn the_edge_repairs_a_home_without_retiring_itself() {
+    let home = private_home();
+    write_private(&home.path().join(records::LOCATOR_FILE), "{}");
+    assert_eq!(
+        repair_from_daemon(home.path(), "/nonexistent-user-home"),
+        Some(json!({"repaired": true, "cleared": ["locator"]}))
+    );
+    assert_eq!(
+        repair_from_daemon(home.path(), "/nonexistent-user-home"),
+        Some(json!({"repaired": true, "cleared": []}))
+    );
+    assert_eq!(repair_from_daemon(Path::new("relative"), "/home"), None);
 }

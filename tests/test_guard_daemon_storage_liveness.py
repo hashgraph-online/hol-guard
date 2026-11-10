@@ -45,6 +45,7 @@ def _open_json(
     return raw_payload, time.monotonic() - started
 
 
+@pytest.mark.python_daemon
 @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
 def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     tmp_path: Path,

@@ -173,6 +173,7 @@ def _resident_recommends(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, obje
     return asked
 
 
+@pytest.mark.python_daemon
 def test_daemon_request_detail_includes_recommendation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     asked = _resident_recommends(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
@@ -194,6 +195,7 @@ def test_daemon_request_detail_includes_recommendation(monkeypatch: pytest.Monke
     assert [entry["guard_home"] for entry in recommended] == [store.guard_home]
 
 
+@pytest.mark.python_daemon
 def test_daemon_request_detail_computes_live_recommendation_for_legacy_pending_row(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

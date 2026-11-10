@@ -553,6 +553,7 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
         assert "permissionDecision" not in response.get("hookSpecificOutput", {})
 
 
+@pytest.mark.python_daemon
 @pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     tmp_path: Path,

@@ -105,6 +105,7 @@ def test_catalog_http_body_matches_service_wire_measurement(tmp_path: Path) -> N
         daemon.stop()
 
 
+@pytest.mark.python_daemon
 def test_catalog_http_route_maps_bounded_service_error_to_413(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

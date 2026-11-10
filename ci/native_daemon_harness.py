@@ -22,6 +22,8 @@ from typing import IO
 from codex_plugin_scanner.guard.store import GuardStore
 
 _START_TIMEOUT_SECONDS = 30.0
+# Read once: tests patch ``sys.platform`` while a daemon starts.
+_HOST_IS_LINUX = sys.platform == "linux"
 
 
 def _runtime_binary(guard_home: Path) -> Path:
@@ -128,7 +130,7 @@ class NativeGuardDaemon:
             stdout=subprocess.PIPE,
             stderr=self._log,
             env=environment,
-            preexec_fn=_stop_with_parent if sys.platform == "linux" else None,
+            preexec_fn=_stop_with_parent if _HOST_IS_LINUX else None,
         )
         self._process = process
         assert process.stdin is not None and process.stdout is not None

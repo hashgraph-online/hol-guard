@@ -8,10 +8,10 @@ from ..managed_controls_policy_bundle import (
 )
 from ..managed_controls_policy_fields import ManagedControlsPolicyError, ParsedManagedControlsPolicy
 from ..policy_bundle_delivery import validated_managed_policy_delivery
-from ..runtime.extension_catalog_completion import current_catalog_registry
-from ..runtime.extension_catalog_handshake import runtime_summary_device_id
-from ..runtime.runner import _managed_controls_negotiated_capabilities
 from ..store import GuardStore
+from .extension_catalog_completion import current_catalog_registry
+from .extension_catalog_handshake import runtime_summary_device_id
+from .runner import _managed_controls_negotiated_capabilities
 
 
 def daemon_managed_controls_candidate(

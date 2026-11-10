@@ -1,15 +1,12 @@
-//! Routes the daemon answers by running its own dispatch once behind
-//! `desktop library-call` (`routes/offline.py`): reads and writes whose
-//! handlers need only the Guard store.
+//! Store reads the edge answers natively, and the reply shape the Guard
+//! library's route calls answer: `{"status", "body", "no_store"}`.
 //!
-//! The call answers `{"status", "body", "no_store"}`, or `{"relay": true}`
-//! when the handler reached for state only a running daemon holds.
+//! A read on one of these paths that the edge could not answer is a store
+//! outage, answered `503`, never handed to another process.
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-use super::super::library::{self, CallError};
 use super::writes::DROPPED;
-use super::ReadConfig;
 
 const GET_ROUTES: [&str; 20] = [
     "/v1/command-activity",
@@ -34,17 +31,10 @@ const GET_ROUTES: [&str; 20] = [
     "/v1/runtime/containment-health",
 ];
 
-/// `GET` paths whose reply forbids revalidation as well as storage.
-pub(super) const MAX_AGE_ZERO_READS: [&str; 1] = ["/v1/update/status"];
+/// Paths whose reply forbids revalidation as well as storage.
+pub(super) const MAX_AGE_ZERO_PATHS: [&str; 2] = ["/v1/update/status", "/v1/update/channel"];
 
-const POST_ROUTES: [&str; 4] = [
-    "/v1/policy/sync",
-    "/v1/protection/repair/approval-gate/setup",
-    "/v1/update/channel",
-    "/v1/daemon/repair",
-];
-
-/// Whether `GET path` runs the daemon's dispatch when no native read answers it.
+/// Whether `GET path` is a store read the edge owns: one it cannot answer is `503`.
 pub(super) fn get_routed(path: &str) -> bool {
     GET_ROUTES.contains(&path)
         || matches!(
@@ -56,33 +46,8 @@ pub(super) fn get_routed(path: &str) -> bool {
         )
 }
 
-/// Whether `POST path` runs the daemon's dispatch.
-pub(super) fn post_routed(path: &str) -> bool {
-    POST_ROUTES.contains(&path)
-}
-
-/// The reply, or `None` to relay the request untouched.
-pub(super) fn answer(
-    method: &str,
-    path: &str,
-    query: &str,
-    payload: &Map<String, Value>,
-    call: impl FnOnce(Value) -> Result<Value, CallError>,
-) -> Option<(u16, Value, bool)> {
-    let mut args = Map::new();
-    args.insert("method".to_owned(), Value::String(method.to_owned()));
-    args.insert("path".to_owned(), Value::String(path.to_owned()));
-    args.insert("query".to_owned(), Value::String(query.to_owned()));
-    args.insert("payload".to_owned(), Value::Object(payload.clone()));
-    match call(Value::Object(args)) {
-        Ok(answer) if answer.get("relay") == Some(&Value::Bool(true)) => None,
-        Ok(answer) => Some(reply(&answer)),
-        Err(CallError::Unavailable) => None,
-        // The daemon's handler raised: the connection closes unanswered.
-        Err(CallError::Raised(_)) => Some((DROPPED, Value::Null, false)),
-    }
-}
-
+/// `(status, body, no_store)` from a route call's answer, or a dropped
+/// connection when the answer is malformed.
 pub(super) fn reply(answer: &Value) -> (u16, Value, bool) {
     let status = answer
         .get("status")
@@ -98,13 +63,6 @@ pub(super) fn reply(answer: &Value) -> (u16, Value, bool) {
     }
 }
 
-/// Runs `route.dispatch` through the Guard CLI.
-pub(super) fn call_library(
-    config: &ReadConfig,
-) -> impl FnOnce(Value) -> Result<Value, CallError> + '_ {
-    move |args| library::call(config, "route.dispatch", args)
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -112,7 +70,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn store_only_routes_run_the_dispatch() {
+    fn store_reads_are_owned_by_the_edge() {
         assert!(!get_routed("/v1/policy"));
         assert!(get_routed("/v1/operations/op-1"));
         assert!(get_routed("/v1/mcp-policy/requests/r1"));
@@ -121,65 +79,21 @@ mod tests {
         assert!(!get_routed("/v1/apps/codex/cloud"));
         assert!(get_routed("/v1/sessions/s1/resume"));
         assert!(!get_routed("/v1/sessions/s1/other"));
-        assert!(post_routed("/v1/policy/sync"));
-        assert!(!post_routed("/v1/operations/block"));
-        assert!(!post_routed("/v1/update"));
     }
 
     #[test]
-    fn replies_relays_and_raised_handlers() {
-        let ok = |value: Value| move |_args: Value| Ok::<Value, CallError>(value);
-        let payload = Map::new();
+    fn replies_keep_well_formed_answers_only() {
         assert_eq!(
-            answer(
-                "GET",
-                "/v1/policy",
-                "",
-                &payload,
-                ok(json!({"status": 200, "body": {"a": 1}, "no_store": true}))
-            ),
-            Some((200, json!({"a": 1}), true))
+            reply(&json!({"status": 200, "body": {"a": 1}, "no_store": true})),
+            (200, json!({"a": 1}), true)
         );
         assert_eq!(
-            answer(
-                "GET",
-                "/v1/policy",
-                "",
-                &payload,
-                ok(json!({"relay": true}))
-            ),
-            None
+            reply(&json!({"status": 200, "body": []})),
+            (DROPPED, Value::Null, false)
         );
         assert_eq!(
-            answer(
-                "GET",
-                "/v1/policy",
-                "",
-                &payload,
-                ok(json!({"status": 200, "body": []}))
-            ),
-            Some((DROPPED, Value::Null, false))
-        );
-        assert_eq!(
-            answer("GET", "/v1/policy", "", &payload, |_| Err(
-                CallError::Unavailable
-            )),
-            None
-        );
-        assert_eq!(
-            answer("POST", "/v1/policy/sync", "", &payload, |_| Err(
-                CallError::Raised(Map::new())
-            )),
-            Some((DROPPED, Value::Null, false))
-        );
-        let mut seen = Value::Null;
-        answer("GET", "/v1/policy", "a=1", &payload, |args| {
-            seen = args;
-            Err(CallError::Unavailable)
-        });
-        assert_eq!(
-            seen,
-            json!({"method": "GET", "path": "/v1/policy", "query": "a=1", "payload": {}})
+            reply(&json!({"status": 700, "body": {}, "no_store": false})),
+            (DROPPED, Value::Null, false)
         );
     }
 }

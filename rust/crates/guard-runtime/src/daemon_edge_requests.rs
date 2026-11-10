@@ -239,7 +239,7 @@ pub(super) fn detail(
     let Value::Object(mut approval) = approval else {
         return None;
     };
-    if request_id.contains('%') || may_carry_grant_offer(&approval) {
+    if may_carry_grant_offer(&approval) {
         return None;
     }
     if !hosted {

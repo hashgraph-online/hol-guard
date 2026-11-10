@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
@@ -129,6 +131,7 @@ def test_configured_discovery_failure_reaches_the_daemon_log(tmp_path: Path, mon
     assert set(recorded) == {("local_cli_configured_discovery_failed", "RuntimeError")}
 
 
+@pytest.mark.python_daemon
 def test_the_daemon_wires_its_log_recorder_into_discovery(tmp_path: Path) -> None:
     from ci.guard_daemon_harness import GuardDaemonServer
 

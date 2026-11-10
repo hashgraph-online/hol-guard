@@ -18,6 +18,7 @@ def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict) and all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
+@pytest.mark.python_daemon
 def test_omp_post_tool_read_burst_uses_resident_scanner(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

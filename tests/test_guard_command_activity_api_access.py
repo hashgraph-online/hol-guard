@@ -229,6 +229,7 @@ def test_analytics_and_extensions_are_paginated_bounded_contracts(tmp_path: Path
     assert "project_markers" not in serialized
 
 
+@pytest.mark.python_daemon
 def test_sse_emits_only_invalidation_type_and_activity_id(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     seed(store, occurred_on=recent_day())
@@ -323,6 +324,7 @@ def test_sse_retention_gap_emits_reset_before_retained_events(tmp_path: Path) ->
     assert reset_payload == {"event": "command_activity_reset", "reset_required": True}
 
 
+@pytest.mark.python_daemon
 def test_sse_admission_is_capped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The handler's own cap, used when the daemon serves its public port
     # itself; the native edge enforces the same limit for streams it serves.

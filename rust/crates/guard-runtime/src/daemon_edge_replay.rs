@@ -21,7 +21,7 @@ use super::reads::ReadConfig;
 const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(10);
 /// The handler refuses bodies past 1,000,000 bytes; past this the edge sends
 /// the head alone and lets it say so.
-const MAX_REPLAYED_BODY_BYTES: usize = 1_000_000;
+pub(in crate::daemon_edge) const MAX_REPLAYED_BODY_BYTES: usize = 1_000_000;
 const MAX_REPLAYED_HEAD_BYTES: usize = 64 * 1024;
 
 const UNAVAILABLE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 38\r\nConnection: close\r\n\r\n{\"error\": \"daemon_route_unavailable\"}\n";

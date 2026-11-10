@@ -38,6 +38,7 @@ def edge_handshake(
     session_signals: list[str] | None = None,
     daemon_fingerprint: str | None = None,
     cli_command: list[str] | None = None,
+    dashboard_dir: Path | None = None,
 ) -> bytes:
     """The line that lets the edge answer token-authenticated store reads."""
 
@@ -54,6 +55,9 @@ def edge_handshake(
     }
     if dashboard_build is not None:
         payload["dashboard_build"] = dashboard_build
+    if dashboard_dir is not None:
+        # The edge serves the dashboard shell and bundled files from here.
+        payload["dashboard_dir"] = str(Path(dashboard_dir).resolve())
     if user_home is not None:
         # Evidence reads shorten this home to ``~`` as ``redact_local_path`` does.
         payload["user_home"] = user_home
@@ -86,6 +90,7 @@ def daemon_edge_callbacks(server: Any, static_dir: Path) -> tuple[Callable[[], b
             session_signals=session_signals(),
             daemon_fingerprint=_daemon_fingerprint(),
             cli_command=guard_cli_command(),
+            dashboard_dir=static_dir,
         )
 
     def on_activity(kinds: bytes = b"a") -> None:

@@ -28,7 +28,7 @@ use std::net::TcpStream as ActivitySocket;
 use std::net::{Shutdown, TcpStream};
 #[cfg(unix)]
 use std::os::unix::net::UnixStream as ActivitySocket;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -76,6 +76,8 @@ struct Handshake {
     daemon_fingerprint: Option<String>,
     #[serde(default)]
     cli_command: Option<Vec<String>>,
+    #[serde(default)]
+    dashboard_dir: Option<String>,
 }
 
 impl ReadConfig {
@@ -116,6 +118,9 @@ pub(super) struct ReadConfig {
     /// The argv prefix that runs the daemon's own Guard CLI, for the answers
     /// that depend on how Guard was installed.
     cli_command: Option<Vec<String>>,
+    /// The packaged dashboard's static directory, which the edge serves the
+    /// shell and bundled files from.
+    dashboard_dir: Option<PathBuf>,
 }
 
 impl ReadConfig {
@@ -164,6 +169,10 @@ impl ReadConfig {
                     && argv.len() <= 16
                     && argv.iter().all(|arg| arg.len() <= 16 * 1024)
             }),
+            dashboard_dir: handshake
+                .dashboard_dir
+                .map(PathBuf::from)
+                .filter(|dir| dir.is_absolute()),
         })
     }
 }
@@ -399,15 +408,23 @@ pub(super) fn answer(
         if let Some(response) = early_delete_refusal(client, config, reads) {
             return write_answer(client, &response, reads, stalled_write);
         }
-        if !reads.is_standalone() {
+        // Beside the daemon, only a body larger than the peek holds is read
+        // here; standalone, so is a request still arriving when the peek
+        // window closed. Either is read the way the daemon's handler would,
+        // then answered here as well.
+        if !reads.is_standalone()
+            && !super::http::waiting_head(client)
+                .is_some_and(|head| super::http::declares_large_body(&head))
+        {
             return Outcome::Relay(Vec::new());
         }
-        // A request still arriving when the peek window closed: read it the
-        // way the daemon's handler would, then answer it here as well.
-        let Some(read) = super::replay::read_request(client, SLOW_REQUEST_READ_TIMEOUT) else {
+        let Some(mut read) = super::replay::read_request(client, SLOW_REQUEST_READ_TIMEOUT) else {
             let _ = client.shutdown(std::net::Shutdown::Both);
             return Outcome::Answered;
         };
+        if let Some(head_len) = super::replay::find_head_end(&read) {
+            super::http::fold_header_bytes(&mut read[..head_len]);
+        }
         let Some(head_len) = whole_request(&read) else {
             return Outcome::Relay(read);
         };
@@ -547,6 +564,34 @@ fn answer_request(
         });
         return write_answer(client, &response, reads, stalled_write);
     }
+    if let Some(request) = request
+        .as_ref()
+        .filter(|request| request.method == "GET" && dashboard::owns(request.path))
+    {
+        let refused = (!dashboard::is_public_static(request.path))
+            .then(|| refusals::refusal(request, body, &config.token))
+            .flatten();
+        if let Some(refusal) = refused {
+            let (status, body, cors_origin) =
+                refusals::respond(request, &refusal, client.local_addr().ok(), config, reads);
+            let response = json_response(
+                status,
+                &body,
+                config.dashboard_build.as_deref(),
+                cors_origin.as_deref(),
+                false,
+            );
+            return write_answer(client, &response, reads, stalled_write);
+        }
+        if let Some(response) = dashboard::respond(
+            request,
+            config.dashboard_dir.as_deref(),
+            &config.token,
+            config.dashboard_build.as_deref(),
+        ) {
+            return write_answer(client, &response, reads, stalled_write);
+        }
+    }
     let answer = request.as_ref().and_then(|request| match request.method {
         // The daemon has no `DELETE` handler behind the edge, so every one is
         // answered here.
@@ -583,9 +628,9 @@ fn answer_request(
         no_store,
     );
     if no_store
-        && request.as_ref().is_some_and(|request| {
-            request.method == "GET" && dispatch::MAX_AGE_ZERO_READS.contains(&request.path)
-        })
+        && request
+            .as_ref()
+            .is_some_and(|request| dispatch::MAX_AGE_ZERO_PATHS.contains(&request.path))
     {
         response = max_age_zero(response);
     }
@@ -936,6 +981,8 @@ mod recommend;
 #[path = "daemon_edge_settings.rs"]
 mod settings;
 
+#[path = "daemon_edge_dashboard.rs"]
+mod dashboard;
 #[path = "daemon_edge_discovery.rs"]
 mod discovery;
 #[path = "daemon_edge_network.rs"]

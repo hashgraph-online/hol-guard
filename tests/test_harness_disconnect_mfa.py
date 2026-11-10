@@ -117,6 +117,7 @@ def test_require_harness_disconnect_gate_accepts_fresh_totp(tmp_path: Path) -> N
     assert grant.purpose == "protection_lifecycle"
 
 
+@pytest.mark.python_daemon
 def test_daemon_uninstall_requires_totp_when_authenticator_is_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

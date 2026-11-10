@@ -124,7 +124,7 @@ pub(super) fn operate(
         Gate::Refused(status, body) => Err((status, body)),
         Gate::Passed(_) => Ok(Map::new()),
     };
-    let Some(Value::Object(envelope)) = send(&encoded, config) else {
+    let Ok(Value::Object(envelope)) = send(&encoded, config) else {
         return Some(refusal(unavailable()));
     };
     if envelope.get("schema").and_then(Value::as_str) != Some(APPROVAL_GATE_RESULT_SCHEMA)
@@ -229,13 +229,18 @@ fn build(
     Some((request, digest, encoded))
 }
 
-fn send(encoded: &[u8], config: &ReadConfig) -> Option<Value> {
-    std::fs::canonicalize(Path::new(&config.guard_home).join("native-runtime"))
+/// The resident's answer. `Err(true)` when this home has no native runtime
+/// state at all, which the daemon's client reads as no native authority;
+/// `Err(false)` when a provisioned resident did not answer.
+fn send(encoded: &[u8], config: &ReadConfig) -> Result<Value, bool> {
+    let Ok(state_dir) = std::fs::canonicalize(Path::new(&config.guard_home).join("native-runtime"))
+    else {
+        return Err(true);
+    };
+    crate::managed_resident::client_request(&state_dir, encoded, GATE_TIMEOUT)
         .ok()
-        .and_then(|state_dir| {
-            crate::managed_resident::client_request(&state_dir, encoded, GATE_TIMEOUT).ok()
-        })
         .and_then(|output| serde_json::from_slice::<Value>(&output).ok())
+        .ok_or(false)
 }
 
 fn call(
@@ -263,19 +268,18 @@ fn call(
         None,
         config,
     )?;
-    let envelope = send(&encoded, config);
-    match envelope {
-        Some(envelope) => answer(
+    match send(&encoded, config) {
+        Ok(envelope) => answer(
             &envelope,
             &request.request_id,
             &digest,
             configured,
             grant_expected,
         ),
-        // Without an answer a home that never set the gate up goes to the
-        // daemon, and a configured one fails closed as the daemon would.
-        None if configured => Some(unavailable()),
-        None => None,
+        // `_native_or_unconfigured`: with no native authority a home that
+        // never set the gate up passes, and a configured one fails closed.
+        Err(true) if !configured => Some(Gate::Passed(None)),
+        Err(_) => Some(unavailable()),
     }
 }
 
@@ -295,9 +299,13 @@ fn answer(
         && envelope.contains_key("retryable")
         && error.is_some_and(|error| UNPROVISIONED.contains(&error))
     {
-        // No authority here: an unset gate passes, and a configured home goes
-        // to the daemon, whose client may provision the verifier key first.
-        return (!configured).then_some(Gate::Passed(None));
+        // No authority here: an unset gate passes, and a configured home
+        // fails closed.
+        return Some(if configured {
+            unavailable()
+        } else {
+            Gate::Passed(None)
+        });
     }
     if envelope.get("schema").and_then(Value::as_str) != Some(APPROVAL_GATE_RESULT_SCHEMA)
         || envelope.get("request_id").and_then(Value::as_str) != Some(request_id)

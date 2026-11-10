@@ -31,7 +31,6 @@ def _host_class() -> type:
     from ..daemon.server_control_repair import _RepairSettingsRoutes
     from ..daemon.server_control_routes_post import _ControlPostRoutes
     from ..daemon.server_control_supply_chain import _SupplyChainRoutes
-    from ..daemon.server_control_sync import _ControlSyncRoutes
     from ..daemon.server_dashboard_support import _DashboardSupportRoutes
 
     class ControlHost(
@@ -43,7 +42,6 @@ def _host_class() -> type:
         _ControlMiscRoutes,
         _RepairSettingsRoutes,
         _ControlPolicyRoutes,
-        _ControlSyncRoutes,
         _ControlHealthRoutes,
     ):
         """Stands in for the daemon's request handler and keeps the reply."""

@@ -231,24 +231,19 @@ def test_handler_get_refuses_paths_it_does_not_run(tmp_path: Path) -> None:
     assert "error" in _call(tmp_path, "route.handler_get", {"path": "/v1/context-assistance", "query": 1})
 
 
-def _dispatch(home: Path, method: str, path: str, payload: object = None) -> dict[str, object]:
-    args: dict[str, object] = {"method": method, "path": path}
-    if payload is not None:
-        args["payload"] = payload
-    return _call(home, "route.dispatch", args)
+def test_settings_calls_answer_without_a_daemon(tmp_path: Path) -> None:
+    setup = _call(tmp_path, "route.approval_gate_setup", {"payload": {"settings": {}}})["ok"]
+    assert setup["status"] == 400  # type: ignore[index]
+    channel = _call(tmp_path, "route.update_channel", {"payload": {"update_channel": "nightly-unknown"}})["ok"]
+    assert channel["status"] == 400 and channel["body"]["error"] == "invalid_update_channel"  # type: ignore[index]
 
 
-def test_dispatch_answers_store_reads_with_the_daemon_reply(tmp_path: Path) -> None:
-    answer = _dispatch(tmp_path, "GET", "/v1/policy")
-    assert answer["ok"]["status"] == 200  # type: ignore[index]
-    assert isinstance(answer["ok"]["body"], dict)  # type: ignore[index]
-    missing = _dispatch(tmp_path, "GET", "/v1/operations/op-missing")
-    assert missing["ok"]["status"] == 404  # type: ignore[index]
-
-
-def test_dispatch_relays_routes_that_need_a_running_daemon(tmp_path: Path) -> None:
-    assert _dispatch(tmp_path, "GET", "/v1/local-clis") == {"ok": {"relay": True}}
-    assert _dispatch(tmp_path, "GET", "/v1/no-such-route") == {"ok": {"relay": True}}
+def test_policy_sync_refuses_a_request_without_a_bundle(tmp_path: Path) -> None:
+    harness = _call(tmp_path, "route.policy_sync", {"payload": {}})["ok"]
+    assert harness == {"status": 400, "body": {"error": "missing_harness"}, "no_store": False}
+    unknown = _call(tmp_path, "route.policy_sync", {"payload": {"harness": "no-such-harness"}})["ok"]
+    assert unknown["status"] == 404  # type: ignore[index]
+    assert _call(tmp_path, "route.policy_sync", {"payload": []})["error"]["kind"] == "library_call"  # type: ignore[index]
 
 
 def test_control_get_answers_live_reads_from_the_daemon_state(tmp_path: Path) -> None:
@@ -262,11 +257,6 @@ def test_control_get_answers_live_reads_from_the_daemon_state(tmp_path: Path) ->
     assert update["status"] == 200 and update["no_store"] is True  # type: ignore[index]
     assert "error" in control_get("/v1/settings")
     assert "error" in control_get("/v1/cloud/connect", query=1)
-
-
-def test_dispatch_refuses_malformed_arguments(tmp_path: Path) -> None:
-    assert _dispatch(tmp_path, "PUT", "/v1/policy")["error"]["kind"] == "library_call"  # type: ignore[index]
-    assert _dispatch(tmp_path, "POST", "/v1/policy/sync", [])["error"]["kind"] == "library_call"  # type: ignore[index]
 
 
 def test_worker_passes_answer_ok(tmp_path: Path) -> None:

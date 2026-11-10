@@ -131,35 +131,25 @@ def test_the_refresh_route_recaptures_the_activation_rather_than_its_own_registr
     catalog digests has to reach the daemon-wide refresh instead.
     """
 
-    from codex_plugin_scanner.guard.daemon.server_control_routes_post import _ControlPostRoutes
+    from codex_plugin_scanner.guard.extension_control_host import REFRESH_PATH, ExtensionControlHost
 
     calls: list[str] = []
-    daemon = SimpleNamespace(
-        refresh_extension_control_runtime=lambda: calls.append("daemon"),
-        extension_control_api=SimpleNamespace(
-            effective=lambda *, reread=True: {"health": "protected", "reread": reread},
-            refresh=lambda: calls.append("service"),
-        ),
-    )
-    written: list[dict[str, object]] = []
-    handler = cast(
-        _ControlPostRoutes,
+    host = cast(
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
-                _daemon_server=lambda: daemon,
-                _write_json=lambda payload, **_kwargs: written.append(payload),
+                refresh=lambda: calls.append("daemon"),
+                api=SimpleNamespace(
+                    effective=lambda *, reread=True: {"health": "protected", "reread": reread},
+                    refresh=lambda: calls.append("service"),
+                ),
             ),
         ),
     )
 
-    _ControlPostRoutes._dispatch_control_post(
-        handler,
-        SimpleNamespace(path="/v1/extension-controls/refresh"),
-        ["v1", "extension-controls", "refresh"],
-        {},
-        SimpleNamespace(route_class="extension_control"),
-    )
+    reply = ExtensionControlHost.respond(host, "POST", REFRESH_PATH, {})
+    written = [reply["body"]]
 
     assert calls == ["daemon"]
     # The daemon refresh above already re-read durable authority under the
@@ -177,26 +167,22 @@ def test_the_refresh_route_still_answers_when_the_daemon_refresh_fails() -> None
     """
 
     from codex_plugin_scanner.guard.daemon import background_diagnostics
-    from codex_plugin_scanner.guard.daemon.server_control_routes_post import _ControlPostRoutes
+    from codex_plugin_scanner.guard.extension_control_host import REFRESH_PATH, ExtensionControlHost
 
     def unavailable() -> None:
         raise ValueError("native command control authority is unavailable")
 
-    daemon = SimpleNamespace(
-        refresh_extension_control_runtime=unavailable,
-        extension_control_api=SimpleNamespace(effective=lambda *, reread=True: {"health": "protected"}),
-    )
-    written: list[dict[str, object]] = []
-    handler = cast(
-        _ControlPostRoutes,
+    host = cast(
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
-                _daemon_server=lambda: daemon,
-                _write_json=lambda payload, **_kwargs: written.append(payload),
+                refresh=unavailable,
+                api=SimpleNamespace(effective=lambda *, reread=True: {"health": "protected"}),
             ),
         ),
     )
+    written: list[object] = []
     recorded: list[tuple[str, str]] = []
 
     def sink(event: str, detail: str) -> None:
@@ -204,13 +190,7 @@ def test_the_refresh_route_still_answers_when_the_daemon_refresh_fails() -> None
 
     background_diagnostics.install_sink(sink)
     try:
-        _ControlPostRoutes._dispatch_control_post(
-            handler,
-            SimpleNamespace(path="/v1/extension-controls/refresh"),
-            ["v1", "extension-controls", "refresh"],
-            {},
-            SimpleNamespace(route_class="extension_control"),
-        )
+        written.append(ExtensionControlHost.respond(host, "POST", REFRESH_PATH, {})["body"])
     finally:
         background_diagnostics.release_sink(sink)
 

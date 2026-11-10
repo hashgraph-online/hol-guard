@@ -29,7 +29,6 @@ _MODULES = (
     "codex_plugin_scanner.guard.daemon.server_dashboard_records_read",
     "codex_plugin_scanner.guard.daemon.server_dashboard_runtime_read",
     "codex_plugin_scanner.guard.daemon.server_dashboard_support",
-    "codex_plugin_scanner.guard.daemon.server_control_sync",
 )
 
 

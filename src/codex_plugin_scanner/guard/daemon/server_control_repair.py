@@ -1,4 +1,4 @@
-"""Protection repair and settings route handlers for the daemon."""
+"""Protection repair route handler for the daemon."""
 
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
 
@@ -6,40 +6,13 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Mapping
-from contextlib import suppress
 from datetime import datetime, timezone
-from pathlib import Path
 
-from .. import native_context_assistance, repair_api
-from ..approval_gate import (
-    ApprovalGateError,
-    require_high_risk,
-)
-from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
-from ..approval_gate import public_config as approval_gate_public_config
-from ..approval_gate import (
-    update_settings as update_approval_gate_settings,
-)
-from ..approval_gate import (
-    validate_settings_update as validate_approval_gate_settings,
-)
-from ..cli.update_commands import build_guard_update_status_payload
 from ..config import (
-    editable_guard_settings,
     load_guard_config,
-    reset_guard_settings,
-    update_guard_settings,
-    update_guard_update_channel,
 )
 from ..models import (
     GuardRuntimeRegistration,
-)
-from ..native_context_assistance import ContextAssistanceError
-from ..package_firewall_entitlement import (
-    package_firewall_entitlement_or_denied,
-)
-from ..runtime.runner import (
-    _requeue_cloud_review_privacy_projection,
 )
 from ..runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
@@ -53,7 +26,6 @@ from .protection_repair_stages import (
 )
 from .server_common import (
     _now,
-    _settings_response_payload,
 )
 from .server_control_connect_flow import (
     _repair_command_activity_persistence_health,
@@ -65,22 +37,6 @@ class _RepairSettingsRoutes:
 
     def _record_incomplete_protection_repair(self, check_reasons: Mapping[str, str]) -> None:
         record_incomplete_protection_repair(self._daemon_server().diagnostics, check_reasons)
-
-    def _handle_repair_api(self, path: str, payload: dict[str, object]) -> None:
-        server = self._daemon_server()
-        handler = repair_api.repair_request if path == "/v1/repair" else repair_api.removal_request
-        try:
-            result = handler(server.store, payload, home_dir=server.home_dir, workspace_dir=server.workspace_dir)
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except repair_api.RemovalConfirmationError:
-            self._write_json(
-                {"error": "confirmation_required", "confirm": repair_api.REMOVE_CONFIRMATION},
-                status=400,
-            )
-            return
-        self._write_json(result, extra_headers={"Cache-Control": "no-store, max-age=0"})
 
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
@@ -282,166 +238,3 @@ class _RepairSettingsRoutes:
             )
             return
         self._write_json({"error": "unsupported_protection_check"}, status=400)
-
-    def _handle_settings_update(self, payload: dict[str, object]) -> None:
-        self._apply_settings_payload(payload, missing_error="invalid_settings")
-
-    def _handle_protection_repair_approval_gate_setup(self, payload: dict[str, object]) -> None:
-        if not self._protection_repair_approval_gate_setup_payload_is_allowed(payload):
-            self._write_json({"error": "invalid_settings"}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        gate_config = approval_gate_public_config(guard_home)
-        if gate_config.configured or gate_config.enabled:
-            self._write_json({"error": "approval_gate_setup_unavailable"}, status=409)
-            return
-        self._apply_settings_payload(payload, missing_error="invalid_settings")
-
-    def _protection_repair_approval_gate_setup_payload_is_allowed(self, payload: object) -> bool:
-        if not isinstance(payload, dict) or set(payload) != {"settings"}:
-            return False
-        settings = payload.get("settings")
-        if not isinstance(settings, dict) or set(settings) != {"approval_gate"}:
-            return False
-        gate_payload = settings.get("approval_gate")
-        return (
-            isinstance(gate_payload, dict)
-            and set(gate_payload) == {"enabled", "new_password", "confirm_password"}
-            and gate_payload.get("enabled") is True
-        )
-
-    def _apply_settings_payload(self, payload: dict[str, object], *, missing_error: str) -> None:
-        settings = payload.get("settings")
-        if not isinstance(settings, dict):
-            self._write_json({"error": missing_error}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
-        gate_payload = settings.get("approval_gate")
-        gate_input = (
-            approval_gate_input_from_mapping({"approval_gate": gate_payload})
-            if isinstance(gate_payload, dict)
-            else None
-        )
-        if payload.get("approval_password") or payload.get("approval_totp_code"):
-            proof_input = approval_gate_input_from_mapping(payload)
-            if proof_input is not None:
-                gate_input = proof_input
-        presentation_only_keys = {
-            "presentation_mode",
-            "presentation_mode_explicit",
-            "presentation_schema_version",
-            "presentation_revision",
-        }
-        presentation_only = gate_payload is None and bool(settings) and set(settings).issubset(presentation_only_keys)
-        try:
-            approval_gate_grant = (
-                None
-                if presentation_only
-                else require_high_risk(
-                    guard_home,
-                    purpose="settings_write",
-                    approval_gate_input=gate_input,
-                )
-            )
-            if isinstance(gate_payload, dict):
-                validate_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-            config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            entitlement = package_firewall_entitlement_or_denied(self.server.store)  # type: ignore[attr-defined]
-            config = update_guard_settings(
-                guard_home,
-                config_settings,
-                approval_gate_grant=approval_gate_grant,
-                cloud_sync_entitled=bool(entitlement.get("allowed")),
-                skip_approval_gate=presentation_only,
-            )
-            if isinstance(gate_payload, dict):
-                update_approval_gate_settings(
-                    guard_home,
-                    gate_payload,
-                    approval_gate_grant=approval_gate_grant,
-                )
-                config = load_guard_config(guard_home)
-            if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
-                    self.server.store,
-                    level=config.receipt_redaction_level,
-                    changed_at=_now(),
-                )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
-            return
-        if "context_assistance" in config_settings:
-            _hand_settings_to_cigar(guard_home)
-        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
-
-    def _handle_update_channel(self, payload: dict[str, object]) -> None:
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            update_guard_update_channel(
-                guard_home,
-                payload.get("update_channel"),
-                approval_gate_grant=approval_gate_grant,
-            )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        except ValueError as error:
-            self._write_json({"error": "invalid_update_channel", "message": str(error)}, status=400)
-            return
-        self._write_json(
-            build_guard_update_status_payload(guard_home=guard_home),
-            extra_headers={"Cache-Control": "no-store, max-age=0"},
-        )
-
-    def _handle_settings_import(self, payload: dict[str, object]) -> None:
-        self._apply_settings_payload(payload, missing_error="invalid_settings_import")
-
-    def _handle_settings_reset(self, payload: dict[str, object]) -> None:
-        confirm = payload.get("confirm")
-        if confirm != "reset-local-settings":
-            self._write_json({"error": "confirmation_required", "confirm": "reset-local-settings"}, status=400)
-            return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        previous_redaction_level = load_guard_config(guard_home).receipt_redaction_level
-        try:
-            approval_gate_grant = require_high_risk(
-                guard_home,
-                purpose="settings_write",
-                approval_gate_input=approval_gate_input_from_mapping(payload),
-            )
-            config = reset_guard_settings(guard_home, approval_gate_grant=approval_gate_grant)
-            if config.receipt_redaction_level != previous_redaction_level:
-                _requeue_cloud_review_privacy_projection(  # type: ignore[arg-type]
-                    self.server.store,
-                    level=config.receipt_redaction_level,
-                    changed_at=_now(),
-                )
-        except ApprovalGateError as error:
-            self._write_approval_gate_error(error)
-            return
-        _hand_settings_to_cigar(guard_home)
-        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
-
-
-def _hand_settings_to_cigar(guard_home: Path) -> None:
-    """Give saved CIGAR settings to the native service right away.
-
-    Prompt hooks read the native copy, which otherwise refreshes only on the
-    next context call. Without this, turning project context back on leaves
-    every prompt without context until something asks for CIGAR's status.
-    """
-    with suppress(ContextAssistanceError):
-        native_context_assistance.control("status", guard_home=guard_home)

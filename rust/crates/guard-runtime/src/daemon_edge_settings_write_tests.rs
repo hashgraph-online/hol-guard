@@ -124,19 +124,19 @@ fn a_payload_without_settings_names_the_route_error() {
 }
 
 #[test]
-fn changes_the_edge_cannot_finish_go_to_the_daemon_untouched() {
+fn an_unset_gate_without_a_resident_still_refuses_unentitled_sync() {
     let edge = edge("relay", "mode = \"prompt\"\n");
-    for settings in [
-        json!({"sync": true}),
-        // No resident answered the gate check for an unset home.
-        json!({"protection_posture": "watch"}),
-    ] {
-        assert_eq!(
-            post(&edge, json!({"settings": settings}), "invalid_settings"),
-            None,
-            "{settings}"
-        );
-    }
+    let answer = post(
+        &edge,
+        json!({"settings": {"sync": true}}),
+        "invalid_settings",
+    );
+    assert_eq!(
+        answer
+            .as_ref()
+            .map(|(status, body)| (*status, body["error"].clone())),
+        Some((400, json!("invalid_settings")))
+    );
     let kept = std::fs::read_to_string(edge.home.join("config.toml")).unwrap();
     assert_eq!(kept, "mode = \"prompt\"\n");
 }

@@ -90,6 +90,7 @@ def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None 
     }
     optional: dict[str, object | None] = {
         "dashboard_build": dashboard_build_id(Path(__file__).with_name("static")),
+        "dashboard_dir": str(Path(__file__).with_name("static").resolve()),
         "user_home": str(user_home) if user_home is not None else _user_home(),
         "session_signals": session_signals() or None,
         "daemon_fingerprint": _daemon_fingerprint(),

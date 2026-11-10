@@ -373,7 +373,7 @@ class GuardDaemonServer:
     """Starts and stops the handlers on ``host:port`` (0 picks a free port)."""
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Any:
-        if os.environ.get("HOL_GUARD_HARNESS_NATIVE") == "1":
+        if os.environ.get("HOL_GUARD_HARNESS_NATIVE", "1") == "1":
             return _NativeDaemonServer(*args, **kwargs)
         return super().__new__(cls)
 

@@ -67,6 +67,8 @@ pub(super) struct LaunchConfig {
     #[serde(default)]
     dashboard_build: Option<String>,
     #[serde(default)]
+    dashboard_dir: Option<String>,
+    #[serde(default)]
     user_home: Option<String>,
     #[serde(default)]
     session_signals: Option<Vec<String>>,
@@ -149,6 +151,7 @@ impl LaunchConfig {
                 "dashboard_build",
                 self.dashboard_build.clone().map(Value::from),
             ),
+            ("dashboard_dir", self.dashboard_dir.clone().map(Value::from)),
             ("user_home", self.user_home.clone().map(Value::from)),
             (
                 "session_signals",

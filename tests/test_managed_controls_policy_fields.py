@@ -8,7 +8,6 @@ from typing import Any, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import managed_policy_delivery as daemon_policy_delivery
 from codex_plugin_scanner.guard.managed_controls_policy_fields import (
     EXTENSION_CONTROL_LAYER_CAPABILITY,
     HOL_EXTENSION_CONTROLS_FIELD,
@@ -21,6 +20,7 @@ from codex_plugin_scanner.guard.managed_controls_policy_fields import (
 from codex_plugin_scanner.guard.policy_bundle_v2 import (
     validate_policy_bundle_v2_transition,
 )
+from codex_plugin_scanner.guard.runtime import managed_policy_delivery as daemon_policy_delivery
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 )

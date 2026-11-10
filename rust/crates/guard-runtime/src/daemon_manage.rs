@@ -118,6 +118,43 @@ fn answer(request: &Request) -> Result<Value, String> {
     }
 }
 
+/// `POST /v1/daemon/repair`, answered by the daemon edge: the edge is the
+/// caller, so it never retires itself or its parent. `None` when the repair
+/// stopped safely, which the daemon answered by closing the connection.
+pub(crate) fn repair_from_daemon(guard_home: &std::path::Path, user_home: &str) -> Option<Value> {
+    if !guard_home.is_absolute() || user_home.is_empty() {
+        return None;
+    }
+    let executable_name = std::env::current_exe().ok().and_then(|path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().trim().to_lowercase())
+            .filter(|name| !name.is_empty())
+    });
+    #[cfg(unix)]
+    let parent_pid = i64::from(nix::unistd::getppid().as_raw());
+    #[cfg(not(unix))]
+    let parent_pid = 0;
+    let caller = host::Caller {
+        guard_home: guard_home.to_path_buf(),
+        implicit_home: std::path::Path::new(user_home)
+            .join(".hol-guard")
+            .to_string_lossy()
+            .into_owned(),
+        own_pid: i64::from(std::process::id()),
+        parent_pid,
+        frozen_runtime: false,
+        frozen_parent_trusted: false,
+        executable_name,
+    };
+    let deadline = retire::Deadline(Some(Instant::now() + Duration::from_secs(30)));
+    let answer = repair_locator(&caller, deadline);
+    if answer.get("repaired") != Some(&Value::Bool(true)) {
+        return None;
+    }
+    let cleared = answer.get("cleared").cloned().unwrap_or_else(|| json!([]));
+    Some(json!({"repaired": true, "cleared": cleared}))
+}
+
 /// `repair_approval_center_locator`: a healthy live daemon is kept; a live
 /// daemon whose identity is untrusted is retired before its state is cleared.
 fn repair_locator(caller: &host::Caller, deadline: retire::Deadline) -> Value {

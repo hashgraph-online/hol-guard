@@ -64,7 +64,6 @@ from ..daemon.server_control_policy import _ControlPolicyRoutes
 from ..daemon.server_control_repair import _RepairSettingsRoutes
 from ..daemon.server_control_routes_post import _ControlPostRoutes
 from ..daemon.server_control_supply_chain import _SupplyChainRoutes
-from ..daemon.server_control_sync import _ControlSyncRoutes
 from ..daemon.server_dashboard_records_read import _DashboardRecordsReadRoutes
 from ..daemon.server_dashboard_runtime_read import _DashboardRuntimeReadRoutes
 from ..daemon.server_dashboard_support import _DashboardSupportRoutes
@@ -362,7 +361,6 @@ class _GuardDaemonHandler(
     _ControlMiscRoutes,
     _RepairSettingsRoutes,
     _ControlPolicyRoutes,
-    _ControlSyncRoutes,
     _ControlHealthRoutes,
     _RuntimeHookRoutes,
     BaseHTTPRequestHandler,

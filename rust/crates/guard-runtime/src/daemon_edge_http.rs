@@ -2,7 +2,7 @@
 //!
 //! The edge answers a request itself only when this module reads it the same
 //! way the daemon's Python server would. Anything it cannot read exactly, such
-//! as a percent-encoded path, a folded header or a body on anything but a
+//! as a malformed escape in the path, a folded header or a body on anything but a
 //! `POST`, makes the parser give up, and the edge then relays the untouched
 //! bytes to the daemon.
 
@@ -120,19 +120,57 @@ pub(super) fn parse_request(head: &[u8]) -> Option<Request<'_>> {
     })
 }
 
+/// Replaces each non-ASCII byte after the request line with `?`. Python
+/// decoded such a header as Latin-1, so the value it compared matched no
+/// ASCII credential, origin or length; `?` matches none either.
+pub(super) fn fold_header_bytes(head: &mut [u8]) {
+    let Some(line_end) = head.windows(2).position(|pair| pair == b"\r\n") else {
+        return;
+    };
+    for byte in &mut head[line_end..] {
+        if !byte.is_ascii() {
+            *byte = b'?';
+        }
+    }
+}
+
+/// Plain bytes, or a complete `%XX` escape that routes decoding a segment
+/// unquote exactly as the daemon's Python handler did; routes matching a
+/// fixed path see the escape raw, as Python's did.
+fn plain_segment(segment: &[u8]) -> bool {
+    let mut index = 0;
+    while index < segment.len() {
+        let byte = segment[index];
+        if byte == b'%' {
+            if !segment
+                .get(index + 1..index + 3)
+                .is_some_and(|hex| hex.iter().all(u8::is_ascii_hexdigit))
+            {
+                return false;
+            }
+            index += 3;
+            continue;
+        }
+        // RFC 3986 path characters, less `;`, which Python's `urlparse`
+        // splits off as parameters.
+        if !(byte.is_ascii_alphanumeric() || b"-_.~:@!$&'()*+,=".contains(&byte)) {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
 /// An absolute path of plain segments: no empty segment, no trailing slash
 /// and nothing a URL parser could decode, split or reinterpret.
 fn plain_path(path: &str) -> bool {
     let Some(rest) = path.strip_prefix('/') else {
         return false;
     };
-    !rest.is_empty()
-        && rest.split('/').all(|segment| {
-            !segment.is_empty()
-                && segment
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-        })
+    rest.is_empty()
+        || rest
+            .split('/')
+            .all(|segment| !segment.is_empty() && plain_segment(segment.as_bytes()))
 }
 
 fn is_token_byte(byte: u8) -> bool {
@@ -280,6 +318,7 @@ pub(super) fn take_request(client: &TcpStream) -> Option<(Vec<u8>, usize)> {
     let (mut bytes, head_len) = peeked?;
     let mut reader = client;
     reader.read_exact(&mut bytes).ok()?;
+    fold_header_bytes(&mut bytes[..head_len]);
     Some((bytes, head_len))
 }
 
@@ -293,6 +332,23 @@ pub(super) fn waiting_head(client: &TcpStream) -> Option<Vec<u8>> {
     let head_len = head_end(&buffer[..peeked.ok()?])?;
     buffer.truncate(head_len);
     Some(buffer)
+}
+
+/// Whether `head` is a `POST` whose declared body is larger than the peek
+/// holds but within what the daemon's handler reads.
+pub(super) fn declares_large_body(head: &[u8]) -> bool {
+    let Some(request) = parse_request(head) else {
+        return false;
+    };
+    request.method == "POST"
+        && !request.has_header("Transfer-Encoding")
+        && request
+            .single_header("Content-Length")
+            .filter(|length| !length.is_empty() && length.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|length| length.parse::<usize>().ok())
+            .is_some_and(|length| {
+                length > MAX_BODY_BYTES && length <= super::replay::MAX_REPLAYED_BODY_BYTES
+            })
 }
 
 /// A zeroed buffer as long as the complete request waiting on `client`, and
@@ -338,7 +394,9 @@ fn peek_request(client: &TcpStream) -> Option<(Vec<u8>, usize)> {
 /// `DELETE` that has one. `None` for any other head, which goes to the daemon
 /// untouched.
 fn declared_body(head: &[u8]) -> Option<usize> {
-    let request = parse_request(head)?;
+    let mut head = head.to_vec();
+    fold_header_bytes(&mut head);
+    let request = parse_request(&head)?;
     match request.method {
         "GET" => return Some(0),
         "DELETE" if !request.has_header("Content-Length") => return Some(0),

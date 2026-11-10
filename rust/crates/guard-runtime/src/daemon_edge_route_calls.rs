@@ -24,6 +24,8 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
         "/v1/cloud-review" => "route.cloud_review_update",
         "/v1/command-queue/worker/refresh" => "route.command_queue_refresh",
         "/v1/cloud-actions/status" => "route.cloud_actions_check",
+        "/v1/protection/repair/approval-gate/setup" => "route.approval_gate_setup",
+        "/v1/update/channel" => "route.update_channel",
         "/v1/repair" | "/v1/protection/remove-hooks" => {
             let mut args = Map::new();
             args.insert("path".to_owned(), Value::String(path.to_owned()));
@@ -45,6 +47,10 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
 pub(in crate::daemon_edge) fn resident_route(
     path: &str,
 ) -> Option<(&'static str, Map<String, Value>)> {
+    if path == "/v1/policy/sync" {
+        // An accepted bundle republishes the resident's extension controls.
+        return Some(("route.policy_sync", Map::new()));
+    }
     if crate::daemon_route_paths::route_class(path) != "local_cli" {
         return None;
     }

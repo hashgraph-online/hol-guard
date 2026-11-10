@@ -18,9 +18,16 @@ from .dashboard_bundle import dashboard_build_id, is_pinned_path, pinned_dashboa
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from .server_common import _NATIVE_HANDLER_UNAVAILABLE, _is_string_object_dict, _ServerProxy
 from .server_control_health import _HEADLESS_OPERATIONS, _headless_safe_failure_reasons
-from .server_control_sync import _safe_int
 
 m = _ServerProxy()
+
+
+def _safe_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value if value >= 0 else 0
+    return 0
 
 
 class _DashboardSupportRoutes:

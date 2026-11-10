@@ -324,7 +324,6 @@ def test_enforcement_never_reads_version_compatibility() -> None:
     allowed = {
         PROJECT_SRC / "harness_version_api.py",
         PROJECT_SRC / "daemon" / "server_dashboard_runtime_read.py",
-        PROJECT_SRC / "daemon" / "server_control_routes_post.py",
         PROJECT_SRC / "daemon" / "server_control_misc.py",
         # The dashboard routes the native daemon answers through a library call.
         PROJECT_SRC / "routes" / "calls.py",
