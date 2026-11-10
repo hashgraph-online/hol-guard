@@ -249,7 +249,8 @@ fn a_note_missing_part_of_the_session_has_no_lead() {
 
 /// No lead where only `git status` or `git log` shows a change: a staged
 /// edit the working tree then undid, a merge, which the note's commit list
-/// leaves out, or a submodule, added or removed, whose changes the diff leaves out.
+/// leaves out, or a submodule, added or removed, even with the removal only
+/// staged, whose changes the diff leaves out.
 #[test]
 fn a_note_has_no_lead_where_git_status_or_git_log_shows_more() {
     let repo = Repo::new();
@@ -296,6 +297,16 @@ fn a_note_has_no_lead_where_git_status_or_git_log_shows_more() {
     let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
     repo.git(&["rm", "-q", "--cached", "vendor/lib"]);
     repo.git(&["commit", "-q", "-m", "drop lib"]);
+    let text = repo.changes(Some(&base)).unwrap();
+    assert!(
+        text.contains("\n+TWO = 4\n") && !text.contains(LEAD),
+        "{text}"
+    );
+    // Added after `base` and its removal only staged: only `HEAD` holds it.
+    let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+    repo.git(&["update-index", "--add", "--cacheinfo", &link]);
+    repo.git(&["commit", "-q", "-m", "add lib again"]);
+    repo.git(&["rm", "-q", "--cached", "vendor/lib"]);
     let text = repo.changes(Some(&base)).unwrap();
     assert!(
         text.contains("\n+TWO = 4\n") && !text.contains(LEAD),

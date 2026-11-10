@@ -130,7 +130,7 @@ fn small(
 /// Whether `git status` or `git log` would show what a diff of the working
 /// tree against `base` does not: a file Git neither tracks nor ignores, a
 /// staged change the working tree then undid, a merge, which the commit
-/// list leaves out, or a submodule at `base` or now, whose changes,
+/// list leaves out, or a submodule at `base`, in `HEAD` or now, whose changes,
 /// removal included, the diff leaves out. Nothing when Git cannot tell.
 fn unseen(git: &Git, base: &str, until: Instant) -> Option<bool> {
     let others = "--others --exclude-standard --directory --no-empty-directory";
@@ -142,7 +142,9 @@ fn unseen(git: &Git, base: &str, until: Instant) -> Option<bool> {
     let merges = git.run(&["rev-list", "--merges", "--max-count=1", &range], until)?;
     let index = git.run(&["ls-files", "--stage"], until)?;
     let before = git.run(&["ls-tree", "-r", base], until)?;
-    let linked = (index.lines().chain(before.lines())).any(|line| line.starts_with("160000 "));
+    let head = git.run(&["ls-tree", "-r", "HEAD"], until)?;
+    let linked = (index.lines().chain(before.lines()).chain(head.lines()))
+        .any(|line| line.starts_with("160000 "));
     let both = staged
         .lines()
         .any(|path| unstaged.lines().any(|other| other == path));
