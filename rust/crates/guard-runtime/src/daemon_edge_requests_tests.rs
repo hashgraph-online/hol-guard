@@ -195,14 +195,15 @@ fn hosted_details_drop_the_private_queue_hint() {
 }
 
 #[test]
-fn local_and_waiting_details_go_to_the_daemon() {
+fn a_local_detail_without_a_resident_view_drops_the_hint_and_waits_go_to_the_daemon() {
     let store = store("page_mixed");
     let (_, page, _) = list("", true, &store.config, &store.reads).unwrap();
     let request_id = page["items"][0]["request_id"].as_str().unwrap().to_owned();
-    assert_eq!(
-        detail(&request_id, "", false, LOCAL, &store.config, &store.reads),
-        None
-    );
+    let (status, body, _) =
+        detail(&request_id, "", false, LOCAL, &store.config, &store.reads).unwrap();
+    assert_eq!(status, 200);
+    assert!(body.get("extension_allow_hint").is_none());
+    assert!(body.get("extension_recommendation").is_none());
     assert_eq!(
         detail(
             &request_id,

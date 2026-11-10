@@ -930,6 +930,9 @@ mod requests;
 #[path = "daemon_edge_business.rs"]
 mod business;
 
+#[path = "daemon_edge_recommend.rs"]
+mod recommend;
+
 #[path = "daemon_edge_settings.rs"]
 mod settings;
 

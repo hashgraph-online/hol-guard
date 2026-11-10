@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use serde_json::{json, Map, Value};
 
 use super::super::http::query_value;
-use super::{business, NativeReads, ReadConfig};
+use super::{business, recommend, NativeReads, ReadConfig};
 use crate::daemon_handler_requests::requests_list;
 
 const MAX_STORE_CHUNKS: usize = 10_000;
@@ -206,10 +206,11 @@ fn base64url_decode(text: &str) -> Option<Vec<u8>> {
 /// local queue link; a local caller's unknown id may name a saved native
 /// business request. The `bool` is whether the answer is `no-store`.
 ///
-/// A local caller's stored row gets read-time extension and connector
-/// recommendations, and a wait asks the daemon to hold the read, so both go
-/// to the daemon. So does a row that may carry a temporary MCP or local tool
-/// grant offer, which only the daemon attaches.
+/// A local caller's stored row gets the read-time extension recommendation
+/// and coverage; one that needs a connector-setup recommendation goes to the
+/// daemon. A wait asks the daemon to hold the read, so it goes there too, as
+/// does a row that may carry a temporary MCP or local tool grant offer, which
+/// only the daemon attaches.
 pub(super) fn detail(
     request_id: &str,
     query: &str,
@@ -238,8 +239,12 @@ pub(super) fn detail(
     let Value::Object(mut approval) = approval else {
         return None;
     };
-    if !hosted || request_id.contains('%') || may_carry_grant_offer(&approval) {
+    if request_id.contains('%') || may_carry_grant_offer(&approval) {
         return None;
+    }
+    if !hosted {
+        let approval = recommend::local_detail(approval, config, reads)?;
+        return Some((200, Value::Object(approval), false));
     }
     approval.remove("extension_allow_hint");
     Some((200, Value::Object(approval), false))
