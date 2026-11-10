@@ -47,11 +47,14 @@ def execute(action: str, payload: dict[str, Any], *, guard_home: Path) -> dict[s
         "events": {"events": list},
     }
 
+    def validate(answer: dict[str, Any]) -> None:
+        shape_fields(answer, fields[action], lambda: SwarmError(_OPERATION.invalid))
+
     answer = resident_decide(
         _OPERATION,
         partial(_resident_request, max_request_bytes=32768),
         {"guard_home": str(home), "cli_path": os.environ.get("PATH", ""), "input": inputs[action]},
         home,
-        lambda payload: shape_fields(payload, fields[action], lambda: SwarmError(_OPERATION.invalid)),
+        validate,
     )
     return answer["snapshot"] if action == "snapshot" else answer
