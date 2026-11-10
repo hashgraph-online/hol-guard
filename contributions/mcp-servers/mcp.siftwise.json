@@ -54,7 +54,7 @@
     "https://github.com/PramodBasavarajMenasi/siftwise/tree/main/src/siftwise/mcp",
     "https://pypi.org/project/siftwise/"
   ],
-   "saferAlternatives": [
+  "saferAlternatives": [
     "Apart from go list (next entry), the tools don't edit project files, execute tests or record runs; select_tests returns a test command for the agent to run. They run git in the checkout and read JUnit files.",
     "In Go repos select_tests runs `go list -deps -test -json ./...`, which can download modules via GOPROXY and write the module cache. Since siftwise 0.3.0 it runs with -mod=readonly (an explicit -mod=vendor is kept), so it doesn't update go.mod or go.sum; on 0.2.x, set GOFLAGS=-mod=readonly or -mod=vendor explicitly.",
     "The tools send data to SIFTWISE_SERVER, the user's self-hosted siftwise server: changed file paths, import edges and parsed JUnit results. Use an https:// server URL; the API token is never returned in tool results.",
