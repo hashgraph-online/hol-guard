@@ -67,7 +67,10 @@ fn shown_excerpts_must_hold_the_named_code() {
     let lexer = "def tokenize(source, line):\n    \
 return lexer(stream, token)  # parse filter block";
     let picked = [
-        excerpt("src/parser.py", "def parse-filter-Block(self):\n    return self.body"),
+        excerpt(
+            "src/parser.py",
+            "def parse-filter-Block(self):\n    return self.body",
+        ),
         excerpt("src/lexer.py", lexer),
     ];
     let names = vec!["parsefilterblock".to_owned()];
