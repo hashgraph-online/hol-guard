@@ -23,7 +23,7 @@ from ..daemon.hook_fail_closed import fail_closed_response
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.hook_worker import HookWorker
 from ..daemon.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
-from ..daemon.runtime_hook_deadline import RuntimeHookDeadline
+from ..hook_deadline import RuntimeHookDeadline
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..native_hook_render import native_cli_hook_emit

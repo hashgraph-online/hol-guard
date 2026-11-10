@@ -22,7 +22,7 @@ from .routes.calls import HANDLER_CALLS
 from .routes.catalog_calls import CATALOG_CALLS
 from .routes.connect_calls import CONNECT_CALLS
 from .routes.headless_calls import HEADLESS_CALLS
-from .routes.hook_host import HOOK_HOST_CALLS
+from .routes.hook_calls import HOOK_CALLS
 from .routes.policy_sync_call import POLICY_SYNC_CALLS
 from .routes.reads import READ_CALLS
 from .routes.repair_calls import REPAIR_CALLS
@@ -226,7 +226,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **SETTINGS_CALLS,
     **POLICY_SYNC_CALLS,
     **HEADLESS_CALLS,
-    **HOOK_HOST_CALLS,
+    **HOOK_CALLS,
     **READ_CALLS,
     **CONNECT_CALLS,
     **REPAIR_CALLS,

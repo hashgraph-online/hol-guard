@@ -24,8 +24,6 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import primary_approval_browser_url
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
-from codex_plugin_scanner.guard.daemon import server_runtime_hook as runtime_hook_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
@@ -1253,9 +1251,7 @@ class TestGuardSurfaceServer:
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
         (home_dir / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
-        monkeypatch.setattr(runtime_hook_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
-        monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
         # This endpoint test owns shutdown; worker readiness can exceed the
         # five-second ephemeral-home idle timeout on a traced runner.
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
@@ -1324,10 +1320,7 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert hook_payload["decision"] == "deny"
-        assert hook_payload["reason_code"] == "native_policy_reapproval_required", {
-            "hook_payload": hook_payload,
-            "scheduler_stats": daemon._server.runtime_hook_scheduler.stats(),
-        }
+        assert hook_payload["reason_code"] == "native_policy_reapproval_required", hook_payload
         assert hook_payload["approval_request_id"]
 
     def test_guard_daemon_claude_hook_endpoint_requires_auth_and_records_audit(self, tmp_path, monkeypatch) -> None:
@@ -1614,94 +1607,6 @@ class TestGuardSurfaceServer:
         assert response.status == 200
         assert payload == {"decision": "allow"}
 
-    def test_guard_daemon_hook_queue_bytes_fail_closed_and_reports_health(
-        self,
-        tmp_path,
-        monkeypatch,
-    ) -> None:
-        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-        store = GuardStore(tmp_path / "guard-home")
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir()
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon._server.runtime_hook_scheduler = daemon_server_module.RuntimeHookScheduler(retained_bytes_limit=1)
-        daemon.start()
-
-        try:
-            hook_request = urllib.request.Request(
-                (
-                    f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?"
-                    f"guard-home={urllib.parse.quote(str(store.guard_home))}&"
-                    f"workspace={urllib.parse.quote(str(workspace_dir))}"
-                ),
-                data=json.dumps(
-                    {
-                        "hook_event_name": "PreToolUse",
-                        "tool_name": "Bash",
-                        "tool_input": {"command": "curl https://example.test"},
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(hook_request, timeout=1) as response:
-                overload = json.loads(response.read().decode("utf-8"))
-            health_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/healthz/details",
-                headers={"X-Guard-Token": daemon._server.auth_token},
-            )
-            with urllib.request.urlopen(health_request, timeout=5) as response:
-                health = json.loads(response.read().decode("utf-8"))
-            runtime_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/runtime?include_items=0&include_receipts=0",
-                headers={"X-Guard-Token": daemon._server.auth_token},
-            )
-            with urllib.request.urlopen(runtime_request, timeout=5) as response:
-                runtime = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        assert overload["decision"] == "deny"
-        assert overload["reason_code"] == "daemon_hook_queue_bytes"
-        assert health["hook_capacity"]["active"] == 0
-        assert health["hook_capacity"]["limit"] == 32
-        assert health["hook_capacity"]["rejected"] == 1
-        assert health["hook_capacity"]["per_harness_rejected"]["pi"] == 1
-        assert health["hook_capacity"]["rejection_reasons"] == {"daemon_hook_queue_bytes": 1}
-        assert health["request_capacity"]["limit"] == 32
-        assert health["request_capacity"]["critical_limit"] == 8
-        operator_health = runtime["operator_health"]
-        assert operator_health["state"] == "healthy"
-        assert operator_health["repairable"] is False
-        assert operator_health["queue_depth"] == health["hook_capacity"]["queued"]
-        assert operator_health["workers_busy"] == health["hook_capacity"]["active"]
-        assert operator_health["workers_ready"] == (
-            health["hook_capacity"]["limit"] - health["hook_capacity"]["active"]
-        )
-        assert "automatically" in operator_health["automatic_recovery"]
-        assert set(health["sqlite_profile"]) == {
-            "connects",
-            "transactions",
-            "commits",
-            "busy_locked",
-            "busy_locked_percent",
-            "connect_ms",
-            "transaction_ms",
-            "commit_ms",
-        }
-        migration_gate = health["sqlite_migration_gate"]
-        assert migration_gate["store_wait_gate_tripped"] is None
-        expected_conclusion = (
-            "sqlite_migration_evaluation_required"
-            if migration_gate["busy_locked_gate_tripped"]
-            else "insufficient_end_to_end_profile"
-        )
-        assert migration_gate["conclusion"] == expected_conclusion
-        assert health["hook_evidence_writer"]["degraded"] is False
-
     def test_guard_daemon_routes_repeated_liveness_after_parsing_under_general_saturation(
         self,
         tmp_path,
@@ -1725,17 +1630,6 @@ class TestGuardSurfaceServer:
                 if held:
                     daemon._server.request_capacity.release()
             daemon.stop()
-
-    def test_guard_daemon_collapses_unknown_harness_capacity_keys(self, tmp_path) -> None:
-        daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
-
-        try:
-            capacity_harnesses = {
-                daemon._server.canonical_hook_capacity_harness(f"untrusted-harness-{index}") for index in range(1_000)
-            }
-            assert capacity_harnesses == {"other"}
-        finally:
-            daemon._server.server_close()
 
     @pytest.mark.usefixtures("native_hook_force")
     def test_guard_daemon_claude_hook_endpoint_preserves_workspace_none_sentinel(self, tmp_path, monkeypatch) -> None:

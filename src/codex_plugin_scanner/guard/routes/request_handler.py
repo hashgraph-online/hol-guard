@@ -17,7 +17,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeAlias, TypedDict
 
-from ..adapters import get_adapter
 from ..daemon.audit_persistence import AuditPersistence
 from ..daemon.diagnostics import DaemonDiagnostics
 from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
@@ -25,7 +24,6 @@ from ..daemon.manager import (
     write_guard_daemon_state,
 )
 from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-from ..daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.network_supervisor import NetworkSupervisor
@@ -56,8 +54,6 @@ class _AuthAuditWindow(TypedDict):
     persisted: bool
 
 
-_MAX_CONCURRENT_RUNTIME_HOOKS = 32
-_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
@@ -124,12 +120,6 @@ class _GuardDaemonHTTPServer:
     containment_health_generation: int
     containment_health_completed_generation: int
     network_supervisor: NetworkSupervisor
-    active_hook_requests: int
-    rejected_hook_requests: int
-    hook_harness_active: dict[str, int]
-    hook_harness_rejected: dict[str, int]
-    hook_capacity_lock: threading.Lock
-    runtime_hook_scheduler: RuntimeHookScheduler
     runtime_hook_evidence_writer: NativeHookEvidenceWriter
     runtime_hook_evidence_dispatch: HookEvidenceDispatch
     request_capacity: threading.BoundedSemaphore
@@ -194,13 +184,6 @@ class _GuardDaemonHTTPServer:
         if path in _DAEMON_CONTROL_PATHS:
             return "control"
         return "general"
-
-    @staticmethod
-    def canonical_hook_capacity_harness(harness: str) -> str:
-        try:
-            return get_adapter(harness).harness
-        except ValueError:
-            return "other"
 
     def daemon_host(self) -> str:
         return str(self.server_address[0])

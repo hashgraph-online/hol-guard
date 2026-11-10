@@ -2,6 +2,15 @@ use serde_json::json;
 
 use super::*;
 
+fn unavailable(harness: &str, event: &str) -> Value {
+    fail_safe(
+        harness,
+        event,
+        WORKER_UNAVAILABLE_REASON,
+        WORKER_UNAVAILABLE_CODE,
+    )
+}
+
 #[test]
 fn routes_name_the_harness_and_the_readiness_check() {
     assert_eq!(route("/v1/hooks/codex"), Some(("codex", false)));
@@ -14,7 +23,7 @@ fn routes_name_the_harness_and_the_readiness_check() {
 
 #[test]
 fn a_tool_event_fails_closed_with_the_worker_reason() {
-    let body = fail_safe("Claude_Code", "PreToolUse");
+    let body = unavailable("Claude_Code", "PreToolUse");
     assert_eq!(body["policy_action"], "block");
     assert_eq!(body["reason_code"], WORKER_UNAVAILABLE_CODE);
     assert_eq!(body["hookSpecificOutput"]["permissionDecision"], "deny");
@@ -26,13 +35,13 @@ fn a_tool_event_fails_closed_with_the_worker_reason() {
 
 #[test]
 fn a_before_event_is_a_tool_event() {
-    let body = fail_safe("codex", "before_tool_call");
+    let body = unavailable("codex", "before_tool_call");
     assert_eq!(body["hookSpecificOutput"]["permissionDecision"], "deny");
 }
 
 #[test]
 fn a_prompt_event_fails_closed_with_the_prompt_reason() {
-    let body = fail_safe("codex", "user_prompt_submit");
+    let body = unavailable("codex", "user_prompt_submit");
     assert_eq!(body["decision"], "block");
     let contract: serde_json::Value = serde_json::from_str(ENVELOPES).unwrap();
     assert_eq!(body["reason"], contract["defaults"]["prompt_reason"]);
@@ -43,7 +52,7 @@ fn a_prompt_event_fails_closed_with_the_prompt_reason() {
 
 #[test]
 fn a_lifecycle_event_carries_no_verdict() {
-    let body = fail_safe("codex", "PostToolUse");
+    let body = unavailable("codex", "PostToolUse");
     assert_eq!(body["continue"], true);
     assert_eq!(body["hookSpecificOutput"]["hookEventName"], "PostToolUse");
     assert_eq!(body["reason_code"], WORKER_UNAVAILABLE_CODE);
@@ -62,18 +71,24 @@ fn placeholders_fill_only_whole_strings() {
 }
 
 #[test]
-fn a_hook_reply_needs_a_status_an_object_body_and_a_cache_rule() {
-    assert_eq!(
-        reply_parts(&json!({"status": 200, "body": {"ok": true}, "no_store": false})),
-        Some((200, json!({"ok": true}), false))
+fn a_capacity_refusal_names_its_cause() {
+    let body = fail_safe(
+        "codex",
+        "PreToolUse",
+        capacity_reason(hook_scheduler::DEADLINE_EXHAUSTED),
+        hook_scheduler::DEADLINE_EXHAUSTED,
     );
+    let text = body.to_string();
+    assert!(text.contains("within the hook deadline"));
+    assert!(text.contains(hook_scheduler::DEADLINE_EXHAUSTED));
+    assert!(capacity_reason(hook_scheduler::QUEUE_CAPACITY).contains("queueing"));
+}
+
+#[test]
+fn a_step_refusal_needs_a_reason_and_a_code() {
     assert_eq!(
-        reply_parts(&json!({"status": 700, "body": {}, "no_store": false})),
-        None
+        refusal(&json!({"reason": "r", "reason_code": "c"})),
+        Some(("r", "c"))
     );
-    assert_eq!(
-        reply_parts(&json!({"status": 200, "body": [], "no_store": false})),
-        None
-    );
-    assert_eq!(reply_parts(&json!({"status": 200, "body": {}})), None);
+    assert_eq!(refusal(&json!({"reason": "r"})), None);
 }

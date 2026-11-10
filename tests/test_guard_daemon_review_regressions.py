@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import recovery_worker
-from codex_plugin_scanner.guard.daemon import server_runtime_hook as hook_module
 from tests.native_runtime_fixtures import patch_popen_past_native_runtime
 
 
@@ -17,48 +16,6 @@ def _patch_worker_popen(monkeypatch: pytest.MonkeyPatch, replacement: Callable[.
     """Replace worker spawns while Guard's own native runtime calls still run."""
 
     patch_popen_past_native_runtime(monkeypatch, replacement)
-
-
-def test_invalid_remaining_seconds_falls_back_to_valid_milliseconds() -> None:
-    payload: dict[str, object] = {
-        "guard_remaining_seconds": "invalid",
-        "guard_remaining_ms": 1250,
-    }
-
-    assert hook_module._runtime_hook_remaining_hint(payload) == 1.25  # pyright: ignore[reportPrivateUsage]
-    assert "guard_remaining_seconds" not in payload
-    assert "guard_remaining_ms" not in payload
-
-
-@pytest.mark.parametrize("invalid_seconds", (float("nan"), float("inf"), float("-inf")))
-def test_nonfinite_remaining_seconds_falls_back_to_valid_milliseconds(invalid_seconds: float) -> None:
-    payload: dict[str, object] = {
-        "guard_remaining_seconds": invalid_seconds,
-        "guard_remaining_ms": 1250,
-    }
-
-    assert hook_module._runtime_hook_remaining_hint(payload) == 1.25  # pyright: ignore[reportPrivateUsage]
-
-
-def test_valid_remaining_seconds_consumes_millisecond_fallback() -> None:
-    payload: dict[str, object] = {
-        "guard_remaining_seconds": 2.0,
-        "guard_remaining_ms": 1250,
-    }
-
-    assert hook_module._runtime_hook_remaining_hint(payload) == 2.0  # pyright: ignore[reportPrivateUsage]
-    assert "guard_remaining_ms" not in payload
-
-
-def test_boolean_deadline_hints_use_default() -> None:
-    payload: dict[str, object] = {
-        "guard_remaining_seconds": True,
-        "guard_remaining_ms": False,
-    }
-
-    assert hook_module._runtime_hook_remaining_hint(payload) == (  # pyright: ignore[reportPrivateUsage]
-        hook_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
-    )
 
 
 def test_recovery_worker_clears_its_claim_when_recovery_fails(

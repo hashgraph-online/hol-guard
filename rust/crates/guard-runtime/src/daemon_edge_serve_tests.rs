@@ -269,8 +269,11 @@ fn a_standalone_daemon_proves_its_identity_on_the_hook_connection() {
         .unwrap();
     let mut response = String::new();
     client.read_to_string(&mut response).unwrap();
+    // The proof admits the hook to review rather than a 401. This echoing
+    // CLI is no resident library, so the review fails safe.
+    assert!(response.starts_with("HTTP/1.0 200 OK\r\n"), "{response}");
     assert!(
-        response.ends_with(r#"{"proof_verified":true}"#),
+        response.contains("native_hook_worker_unavailable"),
         "{response}"
     );
 }

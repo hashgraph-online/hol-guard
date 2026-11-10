@@ -125,25 +125,26 @@ def _keyword_value(call: ast.Call, name: str) -> ast.AST | None:
 
 
 def _server_graph_failures(root: Path) -> list[str]:
+    # The native daemon owns the hook route; the resident library steps it
+    # calls must not hydrate a payload or answer without a fail-safe.
     failures: list[str] = []
-    server = root / "src/codex_plugin_scanner/guard/daemon/server_runtime_hook.py"
-    server_ingress = _function_node_or_none(server, "_handle_runtime_hook", class_name="_RuntimeHookRoutes")
-    server_execute = _function_node_or_none(server, "_execute_runtime_hook", class_name="_RuntimeHookRoutes")
-    server_fast = _function_node_or_none(server, "_handle_runtime_hook_fast", class_name="_RuntimeHookRoutes")
-    if server_ingress is None or server_execute is None or server_fast is None:
-        failures.append("server native hook fallback graph is incomplete")
+    calls = root / "src/codex_plugin_scanner/guard/routes/hook_calls.py"
+    prepare = _function_node_or_none(calls, "hook_prepare")
+    review = _function_node_or_none(calls, "hook_review")
+    if prepare is None or review is None:
+        failures.append("daemon hook library steps are incomplete")
         return failures
-    if _called_node(server_ingress, "hydrate_hook_payload_reference") is not None:
-        failures.append("daemon hook ingress hydrates a payload before native dispatch")
-    if _called_node(server_execute, "hydrate_hook_payload_reference") is not None:
-        failures.append("daemon hook execution hydrates a payload before native dispatch")
-    if _function_node_or_none(server, "_handle_runtime_hook_compatibility_cli", class_name="_RuntimeHookRoutes"):
-        failures.append("server still carries the retired compatibility CLI hook path")
-    if "_native_mode_requires_rust" in function_calls(server_execute):
-        failures.append("server execute path still consults a retired native-mode predicate")
-    generic = _exception_handler(server_fast, "Exception")
-    if generic is None or "_runtime_hook_fail_safe_response" not in function_calls(generic):
-        failures.append("server fast path worker exception has no fail-safe response")
+    if _called_node(prepare, "hydrate_hook_payload_reference") is not None:
+        failures.append("daemon hook admission hydrates a payload before native dispatch")
+    if _called_node(review, "hydrate_hook_payload_reference") is not None:
+        failures.append("daemon hook review hydrates a payload before native dispatch")
+    if (root / "src/codex_plugin_scanner/guard/daemon/server_runtime_hook.py").exists():
+        failures.append("the retired Python hook route is back")
+    generic = _exception_handler(review, "Exception")
+    if generic is None or not any(
+        isinstance(node, ast.Constant) and node.value == "daemon_worker_exception" for node in ast.walk(generic)
+    ):
+        failures.append("daemon hook review worker exception has no fail-safe response")
     return failures
 
 

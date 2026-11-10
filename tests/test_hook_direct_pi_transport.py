@@ -1,37 +1,17 @@
 from __future__ import annotations
 
 import json
-import time
-from contextlib import nullcontext
-from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server_runtime_hook
 from codex_plugin_scanner.guard.daemon.hook_direct_pi_transport import PI_DIRECT_SWITCH, pi_direct_answer
-from tests import daemon_handler_support as server
 
 PAYLOAD = {"tool_name": "bash", "tool_input": {"command": "pwd"}, "cwd": "/work", "guard_remaining_ms": 4000}
 RESPONSE = {"decision": "allow", "policy_action": "allow", "reason_code": "native_allow", "extra": [1, None]}
 ANSWER = {"schema": "guard-hook-direct-result.v1", "outcome": "answer", "edge": {"harness_response": RESPONSE}}
 DEFER = {"schema": "guard-hook-direct-result.v1", "outcome": "defer", "reason": "direct_hook_event_unsupported"}
-
-
-class _SettledDirectories:
-    """Stand in for the directories the runtime settles for one request.
-
-    The handler asks for every candidate at once and reads each verdict back
-    by name. Nothing here is a verdict: these tests are about the transport,
-    so each candidate settles as the string it arrived as.
-    """
-
-    def __init__(self, candidates: tuple[tuple[str, ...], ...]) -> None:
-        self._paths = {candidate[0]: candidate[1] for candidate in candidates}
-
-    def require(self, parameter: str) -> str | None:
-        return self._paths.get(parameter)
 
 
 class _Client:
@@ -152,149 +132,3 @@ def test_the_switch_and_a_missing_resident_keep_the_daemon_path(
     assert client.calls == []
     monkeypatch.setenv(PI_DIRECT_SWITCH, "1")
     assert _ask(_worker(client, tmp_path)) == RESPONSE
-
-
-def _handle(worker: SimpleNamespace, harness: str, query: str = "workspace=/work") -> list[dict[str, object]]:
-    responses: list[dict[str, object]] = []
-    daemon = SimpleNamespace(
-        request_deadline=lambda request, cap: time.monotonic() + cap,
-        home_dir=Path("/home/user"),
-        store=SimpleNamespace(
-            guard_home=worker.guard_home,
-            get_managed_install=lambda _: {"active": True},
-            connection_scope=nullcontext,
-        ),
-        hook_worker=worker,
-    )
-    handler = SimpleNamespace(
-        request=object(),
-        # A real request always carries headers; the direct-miss reason is read
-        # from one.
-        headers={},
-        _daemon_server=lambda: daemon,
-        _optional_string=lambda value: value if isinstance(value, str) else None,
-        _settled_hook_directories=lambda *candidates, **kwargs: _SettledDirectories(candidates),
-        _hook_workspace_spelling=lambda value: value,
-        _runtime_hook_exec_command_workdir=lambda payload: (False, None),
-        _record_hook_path_rejection=lambda **values: None,
-        _runtime_hook_fail_safe_response=lambda *args, **kwargs: {"reason_code": kwargs["reason_code"]},
-        _write_json=responses.append,
-    )
-    # The real check: whether the lane may answer a request that names a Guard
-    # home is the question these tests exercise, not one to stub away.
-    handler._hook_guard_home_query_is_this_home = partial(  # pyright: ignore[reportPrivateUsage]
-        server.GuardDaemonHandler._hook_guard_home_query_is_this_home,  # pyright: ignore[reportPrivateUsage]
-        handler,
-    )
-    server.GuardDaemonHandler._handle_runtime_hook(
-        handler,  # pyright: ignore[reportArgumentType]
-        {**PAYLOAD, "hook_env": {"PATH": "/bin"}},
-        query,
-        default_harness=harness,
-    )
-    return responses
-
-
-def test_a_hook_naming_another_guard_home_is_not_answered_by_the_lane(tmp_path: Path) -> None:
-    # The lane answers out of the home it bound and never sends the query, so a
-    # request claiming another Guard home has to keep the daemon path, where
-    # the claim is settled and refused.
-    client = _Client(ANSWER)
-    worker = _worker(client, tmp_path)
-    assert _handle(worker, "pi", query=f"guard-home={tmp_path / 'elsewhere'}") == [
-        {"reason_code": "native_policy_not_ready"}
-    ]
-    assert client.calls == []
-    assert _handle(worker, "pi", query=f"guard-home={worker.guard_home}") == [RESPONSE]
-
-
-def test_the_daemon_writes_an_answer_without_the_worker(tmp_path: Path) -> None:
-    client = _Client(ANSWER)
-    assert _handle(_worker(client, tmp_path), "omp") == [RESPONSE]
-    request = json.loads(client.calls[0]["payload"])["request"]  # pyright: ignore[reportArgumentType]
-    assert "hook_env" not in request["payload"]
-
-
-@pytest.mark.parametrize("harness", ["pi", "omp"])
-@pytest.mark.parametrize("state", ["missing_accessor", "mismatched_home", "home_oserror", "home_runtimeerror"])
-def test_ineligible_direct_home_skips_rpc_and_runs_daemon_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, state: str
-) -> None:
-    from tests.test_native_policy_snapshot_direct_lane import _publisher
-
-    client = _Client(ANSWER)
-    worker = _worker(client, tmp_path)
-    transport = (Path("/bin/resident"), client)
-    if state == "missing_accessor":
-        worker.policy_snapshot_publisher = SimpleNamespace(direct_evidence_transport=lambda: transport)
-    else:
-        publisher = _publisher(tmp_path)
-        publisher._last_runtime_status = SimpleNamespace(identity=SimpleNamespace(path=str(transport[0])))
-        publisher._client_request = client
-        monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "home"))
-        publisher.bind_direct_lane_daemon_home(tmp_path / "different-home")
-        if state.startswith("home_"):
-
-            def fail_home(_cls):
-                raise OSError() if state == "home_oserror" else RuntimeError()
-
-            monkeypatch.setattr(Path, "home", classmethod(fail_home))
-        worker.policy_snapshot_publisher = publisher
-        assert publisher.direct_evidence_transport() == transport
-    prepared = []
-    worker.prepare_workspace_policy = lambda workspace, *, deadline: prepared.append(workspace)
-    assert _handle(worker, harness) == [{"reason_code": "native_policy_not_ready"}]
-    assert prepared, "ordinary daemon policy preparation still runs"
-    assert client.calls == []
-
-
-@pytest.mark.parametrize(("harness", "output"), [("pi", DEFER), ("pi", None), ("codex", ANSWER)])
-def test_the_daemon_path_continues_after_a_defer(tmp_path: Path, harness: str, output: object) -> None:
-    # The stub worker never prepares a policy, so the daemon path fails safe.
-    assert _handle(_worker(_Client(output), tmp_path), harness) == [{"reason_code": "native_policy_not_ready"}]
-
-
-def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
-    # The direct lane is asked first, with the `home` query as the caller
-    # spelled it, and defers here. Settling the directories is then the
-    # daemon path's own work, and a refused path keeps the request on it.
-    client = _Client(DEFER)
-
-    def reject(*candidates: object, **kwargs: object) -> object:
-        raise server_runtime_hook._HookPathValidationError("workspace", "outside_roots")  # pyright: ignore[reportPrivateUsage]
-
-    worker = _worker(client, tmp_path)
-    responses: list[dict[str, object]] = []
-    rejections: list[tuple[str, str]] = []
-    daemon = SimpleNamespace(
-        request_deadline=lambda request, cap: time.monotonic() + cap,
-        home_dir=Path("/home/user"),
-        store=SimpleNamespace(guard_home=tmp_path, get_managed_install=lambda _: {"active": True}),
-        hook_worker=worker,
-    )
-    handler = SimpleNamespace(
-        request=object(),
-        # A real request always carries headers; the direct-miss reason is read
-        # from one.
-        headers={},
-        _daemon_server=lambda: daemon,
-        _optional_string=lambda value: value if isinstance(value, str) else None,
-        _settled_hook_directories=reject,
-        _hook_workspace_spelling=lambda value: value,
-        # This request names no Guard home, so the lane is asked and defers.
-        _hook_guard_home_query_is_this_home=lambda *_args: True,
-        _normalized_hook_workspace_string=lambda value: value,
-        _runtime_hook_exec_command_workdir=lambda payload: (False, None),
-        _record_hook_path_rejection=lambda **values: rejections.append((values["parameter"], values["reason"])),
-        _runtime_hook_fail_safe_response=lambda *args, **kwargs: {"reason_code": kwargs["reason_code"]},
-        _write_json=responses.append,
-    )
-    server.GuardDaemonHandler._handle_runtime_hook(
-        handler,  # pyright: ignore[reportArgumentType]
-        dict(PAYLOAD),
-        "workspace=/work",
-        default_harness="pi",
-    )
-    assert len(client.calls) == 1
-    assert rejections == [("workspace", "outside_roots")]
-    assert responses == [{"reason_code": "native_policy_not_ready"}]

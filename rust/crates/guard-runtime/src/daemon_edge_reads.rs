@@ -963,6 +963,8 @@ mod identity;
 
 #[path = "daemon_edge_hook_review.rs"]
 mod hook_review;
+#[path = "daemon_edge_hook_scheduler.rs"]
+mod hook_scheduler;
 
 #[path = "daemon_edge_direct_hook.rs"]
 mod direct_hook;

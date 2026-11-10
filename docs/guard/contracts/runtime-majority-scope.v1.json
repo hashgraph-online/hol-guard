@@ -41,10 +41,6 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.daemon.runtime_hook_scheduler",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
         "module": "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge",
         "surface": "hook_http_and_cli_events"
       },
@@ -998,28 +994,6 @@
         "entry_points": [],
         "reason": "Preparing an authenticated Codex hook manifest repair. It runs only from the Codex authority repair flow.",
         "evidence": "PreparedCodexHookRepair and prepare_authenticated_hook_manifest_repair are used only by codex_hook_repair_request.py, codex_hook_repair.py and cli/codex_authority_repair.py (install-uninstall-doctor). The manifest build, publication, baseline and live verification functions that adapters/codex.py imports stay in scope. The report validates this reference closure on every run."
-      },
-      {
-        "id": "native-daemon-handler-control-routes",
-        "category": "control_plane",
-        "path": "src/codex_plugin_scanner/guard/native_daemon_handler.py",
-        "symbols": [
-          "_MAX_LIST_ITEMS",
-          "_BODY_KEYS",
-          "_field",
-          "native_body_handler",
-          "native_requests_list",
-          "native_harness_action",
-          "_fact",
-          "native_headless_action_error",
-          "native_headless_cursor_surface_error",
-          "native_headless_action_state",
-          "native_detection_app_statuses",
-          "native_supply_chain_error"
-        ],
-        "entry_points": [],
-        "reason": "Request-body, request-list, harness-action, headless-action, detection-status and supply-chain helpers for daemon control-plane and dashboard routes.",
-        "evidence": "Each excluded public helper is called only from daemon/server_control_policy.py, server_control_misc.py, server_control_headless.py, routes/supply_chain_calls.py (daemon-control-plane-routes) or daemon/server_dashboard_support.py (daemon-dashboard-read-routes). HandlerDecision, NativeDaemonHandlerError and native_events_cursor, which routes/request_handler.py imports, stay in scope. The report validates this reference closure on every run."
       },
       {
         "id": "store-evidence-dashboard-export",

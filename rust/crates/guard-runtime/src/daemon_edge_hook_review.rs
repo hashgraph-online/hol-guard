@@ -9,12 +9,21 @@
 //! cannot run answers the harness's fail-safe instead, so a hook is never
 //! left without a decision.
 
+use std::time::Duration;
+
 use serde_json::{json, Map, Value};
 
-use super::super::http::Request;
-use super::super::library::{self, CallError};
-use super::{authorize_token, json_response, NativeReads, ReadConfig};
+use super::super::http::{query_value, Request};
+use super::super::library;
+use super::{authorize_token, hook_scheduler, json_response, NativeReads, ReadConfig};
 use crate::claude_hook_bridge_render::py_strip;
+use admission::{
+    client_key, exec_workdir, expanduser, expires_at, lane, normpath, reply_event, runtime_event,
+    take_hint, truthy, Directories, Rejection,
+};
+
+#[path = "daemon_edge_hook_admission.rs"]
+mod admission;
 
 /// The daemon's fixed hook replies, declared once for every harness.
 const ENVELOPES: &str = include_str!(
@@ -24,6 +33,12 @@ const ENVELOPES: &str = include_str!(
 const WORKER_UNAVAILABLE_REASON: &str =
     "HOL Guard could not complete the native hook decision safely.";
 const WORKER_UNAVAILABLE_CODE: &str = "native_hook_worker_unavailable";
+
+/// How long a readiness step may take: it prepares a workspace's policy
+/// under its own setup budget.
+const READINESS_WAIT: Duration = Duration::from_secs(60);
+/// How long past its deadline a hook still waits for a review to finish.
+const LATE_ANSWER_GRACE: Duration = Duration::from_secs(5);
 
 /// `CHALLENGE_HOOK_PATHS`: the hooks only an identity proof admits.
 const CHALLENGE_PATHS: [&str; 2] = ["/v1/hooks/codex", "/v1/hooks/claude-code"];
@@ -114,63 +129,377 @@ pub(in crate::daemon_edge) fn respond(
             ))
         }
     };
-    let event = payload
-        .get("hook_event_name")
-        .or_else(|| payload.get("event"))
-        .and_then(Value::as_str)
-        .map(|event| py_strip(event).to_owned())
-        .filter(|event| !event.is_empty())
-        .unwrap_or_else(|| "PreToolUse".to_owned());
-    let mut args = Map::new();
-    args.insert("path".to_owned(), request.path.into());
-    args.insert("query".to_owned(), request.query.into());
-    args.insert("payload".to_owned(), Value::Object(payload));
-    args.insert("port".to_owned(), port.into());
-    args.insert("daemon_pid".to_owned(), reads.daemon_pid().into());
-    args.insert("home_dir".to_owned(), config.user_home.clone().into());
-    args.insert("proof_verified".to_owned(), proven.into());
-    if let Some(miss) = request.single_header("X-Guard-Direct-Miss") {
-        args.insert("direct_miss".to_owned(), miss.into());
-    }
     reads.report_activity();
-    let reply = library::call(config, "route.hook_post", Value::Object(args));
-    let (status, body, no_store) = match reply.as_ref().map(reply_parts) {
-        Ok(Some(parts)) => parts,
-        Ok(None) | Err(CallError::Raised(_)) | Err(CallError::Unavailable) if readiness => (
-            503,
-            json!({ "ready": false, "reason_code": "native_policy_not_ready" }),
-            true,
-        ),
-        _ => (200, fail_safe(harness, &event), false),
+    let hook = Hook {
+        config,
+        port,
+        daemon_pid: reads.daemon_pid(),
+        path: request.path,
+        query: request.query,
+        harness,
+    };
+    let (status, body, no_store) = if readiness {
+        hook.readiness(&payload)
+    } else {
+        let direct_miss = request.single_header("X-Guard-Direct-Miss");
+        (200, hook.runtime(payload, direct_miss), false)
     };
     Some(answer(status, &body, no_store))
 }
 
-/// The status, body and cache rule a `route.hook_post` answer carries.
-fn reply_parts(answer: &Value) -> Option<(u16, Value, bool)> {
-    let status = answer
-        .get("status")
-        .and_then(Value::as_u64)
-        .and_then(|status| u16::try_from(status).ok())
-        .filter(|status| (100..600).contains(status))?;
-    let body = answer.get("body").filter(|body| body.is_object())?.clone();
-    let no_store = answer.get("no_store").and_then(Value::as_bool)?;
-    Some((status, body, no_store))
+/// One hook request, and the resident library steps it calls.
+struct Hook<'a> {
+    config: &'a ReadConfig,
+    port: u16,
+    daemon_pid: u32,
+    path: &'a str,
+    query: &'a str,
+    harness: &'a str,
+}
+
+impl Hook<'_> {
+    /// `_optional_string` of a query parameter's last value.
+    fn param(&self, key: &str) -> Option<String> {
+        self.raw_param(key)
+            .map(|value| py_strip(&value).to_owned())
+            .filter(|value| !value.is_empty())
+    }
+
+    /// A query parameter's last value as the request spelled it.
+    fn raw_param(&self, key: &str) -> Option<String> {
+        query_value(self.query, key).ok().flatten()
+    }
+
+    /// The home this daemon was configured with.
+    fn home(&self) -> String {
+        self.config
+            .user_home
+            .clone()
+            .or_else(|| std::env::var("HOME").ok())
+            .unwrap_or_default()
+    }
+
+    /// Runs one library step in the resident process.
+    fn call(&self, name: &str, extra: Value) -> Option<Map<String, Value>> {
+        self.call_within(name, extra, READINESS_WAIT)
+    }
+
+    /// A library step bounded by the hook's own deadline, plus the grace a
+    /// review that finishes late is still answered within.
+    fn call_by(&self, name: &str, extra: Value, expires: f64) -> Option<Map<String, Value>> {
+        let remaining = (expires - hook_scheduler::shared().now()).max(0.0);
+        self.call_within(
+            name,
+            extra,
+            Duration::from_secs_f64(remaining) + LATE_ANSWER_GRACE,
+        )
+    }
+
+    fn call_within(&self, name: &str, extra: Value, wait: Duration) -> Option<Map<String, Value>> {
+        let mut args = Map::new();
+        args.insert("port".to_owned(), self.port.into());
+        args.insert("daemon_pid".to_owned(), self.daemon_pid.into());
+        args.insert("home_dir".to_owned(), self.config.user_home.clone().into());
+        args.insert("path".to_owned(), self.path.into());
+        args.insert("query".to_owned(), self.query.into());
+        args.insert("harness".to_owned(), self.harness.into());
+        if let Value::Object(extra) = extra {
+            args.extend(extra);
+        }
+        match library::call_resident_within(self.config, name, Value::Object(args), wait) {
+            Ok(Value::Object(answer)) => Some(answer),
+            _ => None,
+        }
+    }
+
+    /// Settles the directories a request named against this daemon's homes.
+    fn settle(&self, candidates: &[(&str, Option<String>, Option<&str>)]) -> Directories {
+        Directories::settle(&self.config.guard_home, &self.home(), candidates)
+    }
+
+    /// `POST /v1/hooks/<harness>/readiness`: prepares the workspace's policy
+    /// before a host's timed hook starts.
+    fn readiness(&self, payload: &Map<String, Value>) -> (u16, Value, bool) {
+        let not_ready = (
+            503,
+            json!({ "ready": false, "reason_code": "native_policy_not_ready" }),
+            true,
+        );
+        let invalid = |rejection: &Rejection| {
+            (
+                400,
+                json!({
+                    "ready": false,
+                    "reason_code": format!("invalid_{}", rejection.parameter.replace('-', "_")),
+                }),
+                true,
+            )
+        };
+        let guard_home = self.settle(&[("guard-home", self.param("guard-home"), None)]);
+        if let Err(rejection) = guard_home.require("guard-home") {
+            let _ = self.call("hook.ready", json!({ "rejection": rejection.to_value() }));
+            return invalid(&rejection);
+        }
+        let candidate = self.raw_param("workspace").or_else(|| {
+            let named = payload.get("workspace");
+            if truthy(named) {
+                named
+            } else {
+                payload.get("cwd")
+            }
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+        });
+        let directories = self.settle(&[("workspace", candidate, Some("hook-workspace"))]);
+        let (workspace, rejection) = match directories.require("workspace") {
+            Ok(workspace) => (workspace, None),
+            Err(rejection) => (None, Some(rejection)),
+        };
+        let Some(ready) = self.call(
+            "hook.ready",
+            json!({
+                "workspace": workspace,
+                "late_rejection": rejection.as_ref().map(Rejection::to_value),
+            }),
+        ) else {
+            return not_ready;
+        };
+        if ready.get("unmanaged") == Some(&Value::Bool(true)) {
+            return (
+                200,
+                json!({
+                    "ready": true,
+                    "native_required": false,
+                    "workspace_acknowledged": false,
+                    "worker_ready": true,
+                }),
+                true,
+            );
+        }
+        if let Some(rejection) = rejection {
+            return invalid(&rejection);
+        }
+        if workspace.is_none() {
+            return (
+                400,
+                json!({ "ready": false, "reason_code": "workspace_required" }),
+                true,
+            );
+        }
+        if ready.get("prepared") != Some(&Value::Bool(true)) {
+            return not_ready;
+        }
+        (
+            200,
+            json!({
+                "ready": true,
+                "native_required": true,
+                "native_route": "native_resident",
+                "workspace_acknowledged": true,
+                "worker_ready": true,
+            }),
+            true,
+        )
+    }
+
+    /// `POST /v1/hooks/<harness>`: admits the hook under its deadline and the
+    /// scheduler's capacity, and answers the worker's review or a fail-safe.
+    fn runtime(&self, mut payload: Map<String, Value>, direct_miss: Option<&str>) -> Value {
+        let scheduler = hook_scheduler::shared();
+        let event = runtime_event(&payload);
+        let (hint, missing) = take_hint(&mut payload);
+        let expires = expires_at(scheduler.now(), hint, missing, event == "UserPromptSubmit");
+        payload.remove("hook_env");
+        let remaining = || (expires - scheduler.now()).max(0.0);
+        let runtime_harness = self.param("runtime-harness");
+        let reply_harness = runtime_harness
+            .as_deref()
+            .unwrap_or(self.harness)
+            .trim()
+            .to_lowercase()
+            .replace('_', "-");
+        let reply_event = reply_event(&payload);
+        let fail = |reason: &str, code: &str| fail_safe(&reply_harness, &reply_event, reason, code);
+        let unavailable = || fail(WORKER_UNAVAILABLE_REASON, WORKER_UNAVAILABLE_CODE);
+
+        // Oh My Pi has no bridge to ask the resident first, so its direct
+        // lane is asked here, unless the request claims another Guard home:
+        // the lane answers out of the home it bound.
+        let guard_home_query = self.param("guard-home");
+        let try_direct = guard_home_query.as_deref().is_none_or(|claimed| {
+            let user = std::env::var("HOME").unwrap_or_else(|_| self.home());
+            normpath(&expanduser(claimed, &user)) == normpath(&self.config.guard_home)
+        });
+        let Some(begin) = self.call_by(
+            "hook.begin",
+            json!({
+                "count_harness": runtime_harness.as_deref().unwrap_or(self.harness),
+                "direct_miss": direct_miss,
+                "payload": payload,
+                "remaining_seconds": remaining(),
+                "try_direct": try_direct,
+                "capacity_harness": reply_harness,
+            }),
+            expires,
+        ) else {
+            return unavailable();
+        };
+        if let Some(answer) = begin.get("answer").filter(|answer| answer.is_object()) {
+            return answer.clone();
+        }
+        let capacity_harness = begin
+            .get("capacity_harness")
+            .and_then(Value::as_str)
+            .unwrap_or("other")
+            .to_owned();
+
+        let (workdir_named, workdir) = exec_workdir(&payload);
+        let directories = self.settle(&[
+            ("home", self.param("home"), None),
+            ("guard-home", guard_home_query, None),
+            ("exec-workdir", workdir, Some("exec-workdir")),
+            (
+                "workspace-payload",
+                payload
+                    .get("cwd")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                Some("hook-workspace"),
+            ),
+            (
+                "workspace-query",
+                self.raw_param("workspace"),
+                Some("hook-workspace"),
+            ),
+        ]);
+        let settled = (|| {
+            let home_dir = directories.require("home")?;
+            let guard_home = directories.require("guard-home")?;
+            let action = directories.require("exec-workdir")?;
+            if workdir_named && action.is_none() {
+                return Err(Rejection {
+                    parameter: "workspace".to_owned(),
+                    reason: "invalid_action_workdir".to_owned(),
+                });
+            }
+            let workspace = match action {
+                Some(action) => Some(action),
+                None => match directories.require("workspace-payload")? {
+                    Some(workspace) => Some(workspace),
+                    None => directories.require("workspace-query")?,
+                },
+            };
+            Ok((home_dir, guard_home, workspace))
+        })();
+        let (home_dir, guard_home, workspace, rejection) = match settled {
+            Ok((home_dir, guard_home, workspace)) => (home_dir, guard_home, workspace, None),
+            Err(rejection) => (
+                Some(self.home()),
+                Some(self.config.guard_home.clone()),
+                None,
+                Some(rejection.to_value()),
+            ),
+        };
+
+        let Some(prepared) = self.call_by(
+            "hook.prepare",
+            json!({
+                "payload": payload,
+                "workspace": workspace,
+                "remaining_seconds": remaining(),
+                "rejection": rejection,
+            }),
+            expires,
+        ) else {
+            return unavailable();
+        };
+        if let Some(answer) = prepared.get("answer").filter(|answer| answer.is_object()) {
+            return answer.clone();
+        }
+        if let Some(refused) = prepared.get("fail_safe") {
+            return refusal(refused).map_or_else(unavailable, |(reason, code)| fail(reason, code));
+        }
+        let bytes = prepared
+            .get("reference_bytes")
+            .and_then(Value::as_u64)
+            .unwrap_or_else(|| serde_json::to_vec(&payload).map_or(0, |body| body.len() as u64));
+
+        let client = client_key(&payload, workspace.as_deref());
+        let admitted = scheduler
+            .reserve_bytes(bytes, expires)
+            .and_then(|reservation| {
+                scheduler.acquire(
+                    &capacity_harness,
+                    &client,
+                    hook_scheduler::lane_index(lane(&event)),
+                    reservation,
+                    expires,
+                )
+            });
+        let mut permit = match admitted {
+            Ok(permit) => permit,
+            Err(code) => {
+                scheduler.record_harness_rejection(&capacity_harness);
+                return fail(capacity_reason(code), code);
+            }
+        };
+        let review = self.call_by(
+            "hook.review",
+            json!({
+                "payload": payload,
+                "workspace": workspace,
+                "home_dir_effective": home_dir,
+                "guard_home_effective": guard_home,
+                "remaining_seconds": remaining(),
+            }),
+            expires,
+        );
+        // The decision is final: free its slot before the answer is written,
+        // so a slow reader never holds review capacity.
+        permit.release();
+        let Some(review) = review else {
+            return unavailable();
+        };
+        if let Some(answer) = review.get("answer").filter(|answer| answer.is_object()) {
+            return answer.clone();
+        }
+        review
+            .get("fail_safe")
+            .and_then(refusal)
+            .map_or_else(unavailable, |(reason, code)| fail(reason, code))
+    }
+}
+
+/// The reason and code a library step's `fail_safe` carries.
+fn refusal(refused: &Value) -> Option<(&str, &str)> {
+    Some((
+        refused.get("reason")?.as_str()?,
+        refused.get("reason_code")?.as_str()?,
+    ))
+}
+
+/// The message a capacity refusal carries.
+fn capacity_reason(code: &str) -> &'static str {
+    if code == hook_scheduler::DEADLINE_EXHAUSTED {
+        "HOL Guard could not complete local review within the hook deadline. Retry this action."
+    } else {
+        "HOL Guard is safely queueing the maximum local review workload. Retry this action."
+    }
 }
 
 /// The harness's answer when the hook worker could not review the hook:
 /// `fail_closed_response` with `native_hook_worker_unavailable`. Tool,
 /// permission and prompt events get a constant deny in the harness envelope;
 /// other events a constant payload that carries no verdict.
-fn fail_safe(harness: &str, event: &str) -> Value {
+fn fail_safe(harness: &str, event: &str, reason: &str, code: &str) -> Value {
     let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
     let kind = event_kind(&contract, event);
     let reason = if kind == "prompt" {
         contract["defaults"]["prompt_reason"]
             .as_str()
-            .unwrap_or(WORKER_UNAVAILABLE_REASON)
+            .unwrap_or(reason)
     } else {
-        WORKER_UNAVAILABLE_REASON
+        reason
     };
     let table = &contract["envelopes"][kind.as_str()];
     let harness = harness.trim().to_lowercase().replace('_', "-");
@@ -183,7 +512,7 @@ fn fail_safe(harness: &str, event: &str) -> Value {
         template,
         &[
             ("$reason", reason),
-            ("$reason_code", WORKER_UNAVAILABLE_CODE),
+            ("$reason_code", code),
             ("$event_name", event),
         ],
     )

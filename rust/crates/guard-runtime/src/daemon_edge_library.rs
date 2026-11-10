@@ -181,6 +181,19 @@ pub(in crate::daemon_edge) fn call_resident(
     name: &str,
     args: Value,
 ) -> Result<Value, CallError> {
+    call_resident_within(config, name, args, CALL_TIMEOUT)
+}
+
+/// `call_resident` for a caller with its own deadline. A call that outlasts
+/// a wait shorter than the usual one is given up on without stopping the
+/// resident: the hook it served is answered fail-safe, and the process and
+/// its caches stay for the next hook.
+pub(in crate::daemon_edge) fn call_resident_within(
+    config: &ReadConfig,
+    name: &str,
+    args: Value,
+    wait: Duration,
+) -> Result<Value, CallError> {
     let (_, guard_home, _) = config.cli().ok_or(CallError::Unavailable)?;
     let guard_home = guard_home.to_owned();
     let resident = {
@@ -224,7 +237,7 @@ pub(in crate::daemon_edge) fn call_resident(
             .is_ok()
     };
     let answer = if written {
-        receiver.recv_timeout(CALL_TIMEOUT).ok()
+        receiver.recv_timeout(wait.min(CALL_TIMEOUT)).ok()
     } else {
         None
     };
@@ -238,6 +251,9 @@ pub(in crate::daemon_edge) fn call_resident(
                 .as_mut()
             {
                 pending.remove(&id);
+            }
+            if written && wait < CALL_TIMEOUT {
+                return Err(CallError::Unavailable);
             }
             let mut residents = residents()
                 .lock()

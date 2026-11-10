@@ -201,7 +201,6 @@ def runtime_snapshot(store: GuardStore, args: Mapping[str, Any]) -> dict[str, ob
                 "last_heartbeat_at": _now(),
             },
         )
-        scheduler = server.runtime_hook_scheduler.stats()
         try:
             evidence_writer = server.runtime_hook_evidence_writer.stats()
         except Exception:
@@ -210,7 +209,6 @@ def runtime_snapshot(store: GuardStore, args: Mapping[str, Any]) -> dict[str, ob
     return {
         "snapshot": snapshot,
         "security_level": load_guard_config(store.guard_home).security_level,
-        "scheduler": dict(scheduler),
         "evidence_writer": dict(evidence_writer),
         "activity": {
             "persistence_error_count": activity.persistence_error_count,

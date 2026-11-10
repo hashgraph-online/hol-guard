@@ -161,6 +161,21 @@ class GuardDaemonServer:
         self._daemon.stop()
         self._library.close()
 
+    def hook_capacity(self) -> dict[str, Any]:
+        """The daemon's hook scheduler counters, as its health details report them."""
+
+        import json
+        import urllib.request
+
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/v1/healthz/details",
+            headers={"X-Guard-Token": self.auth_token},
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            details = json.loads(response.read().decode("utf-8"))
+        capacity = details.get("hook_capacity") if isinstance(details, dict) else None
+        return capacity if isinstance(capacity, dict) else {}
+
     def _finish_service(self) -> bool:
         return self._daemon._process is None
 

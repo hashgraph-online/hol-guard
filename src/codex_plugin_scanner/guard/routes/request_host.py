@@ -156,11 +156,6 @@ def _replay_server_class() -> type:
             self.containment_health_refresh_event = threading.Event()
             self.containment_health_generation = 0
             self.containment_health_completed_generation = 0
-            self.active_hook_requests = 0
-            self.rejected_hook_requests = 0
-            self.hook_harness_active = {}
-            self.hook_harness_rejected = {}
-            self.hook_capacity_lock = threading.Lock()
             self.request_capacity_limit = daemon_server._MAX_CONCURRENT_DAEMON_REQUESTS
             self.request_capacity = threading.BoundedSemaphore(self.request_capacity_limit)
             self.connection_capacity_limit = daemon_server._MAX_CONCURRENT_DAEMON_CONNECTIONS
@@ -210,15 +205,6 @@ def _replay_server_class() -> type:
             from ..runtime.network_supervisor import NetworkSupervisor
 
             return NetworkSupervisor()
-
-        @cached_property
-        def runtime_hook_scheduler(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from ..daemon.runtime_hook_scheduler import RuntimeHookScheduler
-
-            return RuntimeHookScheduler(
-                active_limit=daemon_server._MAX_CONCURRENT_RUNTIME_HOOKS,
-                per_harness_active_limit=daemon_server._MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS,
-            )
 
         @cached_property
         def runtime_heartbeat(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]

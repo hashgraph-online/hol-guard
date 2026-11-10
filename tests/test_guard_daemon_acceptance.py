@@ -10,8 +10,6 @@ from typing import Protocol, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server_runtime_hook as runtime_hook_module
-from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from tests.coverage_ci import under_coverage_scale
 from tests.guard_daemon_acceptance_fixtures import (
     WorkloadSpec,
@@ -20,7 +18,6 @@ from tests.guard_daemon_acceptance_fixtures import (
     load_soak_workload,
     run_workload,
 )
-from tests.runtime_hook_scheduler_support import set_active_limit
 
 
 def _fixture_id(workload: WorkloadSpec) -> str:
@@ -44,11 +41,6 @@ def test_packaged_correctness_workloads(
     # admission deadline and the latency SLA budgets so the workload verdicts
     # (deny/allow/fairness) stay the assertion target, not tracer overhead.
     coverage_scale = under_coverage_scale(3.0)
-    monkeypatch.setattr(
-        runtime_hook_module,
-        "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS",
-        runtime_hook_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
-    )
     result = run_workload(workload, root=tmp_path)
     reporter = pytestconfig.pluginmanager.get_plugin("terminalreporter")
     if reporter is not None:
@@ -80,139 +72,6 @@ def test_packaged_correctness_workloads(
     if len(result.dispatch_counts) == 4:
         shares = [count / result.requests for count in result.dispatch_counts.values()]
         assert max(shares) - min(shares) <= 0.10
-
-
-def test_twice_capacity_overload_is_typed_bounded_and_recovers() -> None:
-    scheduler = RuntimeHookScheduler(
-        active_limit=0,
-        queued_limit=8,
-        per_harness_queued_limit=8,
-        per_client_queued_limit=8,
-        retained_bytes_limit=128,
-    )
-    deadline = time.monotonic() + 2
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        queued = [
-            executor.submit(
-                scheduler.acquire,
-                harness="pi",
-                client_key=f"client-{index}",
-                lane="decision",
-                payload_bytes=16,
-                deadline=deadline,
-            )
-            for index in range(8)
-        ]
-        wait_deadline = time.monotonic() + 5
-        while scheduler.stats()["queued"] != 8:
-            assert time.monotonic() < wait_deadline, "queued admissions never reached capacity"
-            time.sleep(0.001)
-        rejected = [
-            scheduler.acquire(
-                harness="pi",
-                client_key=f"overload-{index}",
-                lane="decision",
-                payload_bytes=16,
-                deadline=deadline,
-            )
-            for index in range(8)
-        ]
-        assert {item.reason_code for item in rejected} == {"daemon_hook_queue_capacity"}
-        stats = scheduler.stats()
-        assert stats["queued"] == stats["queued_limit"]
-        assert stats["retained_bytes"] == stats["retained_bytes_limit"]
-        set_active_limit(scheduler, 8)
-        admitted = [future.result(timeout=1) for future in queued]
-    for item in admitted:
-        assert item.permit is not None
-        item.permit.release()
-    recovered = scheduler.acquire(
-        harness="pi",
-        client_key="recovered",
-        lane="decision",
-        payload_bytes=8,
-        deadline=time.monotonic() + 1,
-    )
-    assert recovered.permit is not None
-    recovered.permit.release()
-    assert scheduler.stats()["retained_bytes"] == 0
-
-
-def test_worker_crash_releases_capacity_and_recovers() -> None:
-    scheduler = RuntimeHookScheduler(active_limit=1)
-    with pytest.raises(RuntimeError, match="fixture worker crash"):
-        admission = scheduler.acquire(
-            harness="codex",
-            client_key="crashing-worker",
-            lane="decision",
-            payload_bytes=8,
-            deadline=time.monotonic() + 1,
-        )
-        assert admission.permit is not None
-        with admission.permit:
-            raise RuntimeError("fixture worker crash")
-    recovered = scheduler.acquire(
-        harness="codex",
-        client_key="replacement-worker",
-        lane="decision",
-        payload_bytes=8,
-        deadline=time.monotonic() + 1,
-    )
-    assert recovered.permit is not None
-    recovered.permit.release()
-    assert scheduler.stats()["completed"] == 2
-
-
-def test_clock_jump_expires_work_without_corrupting_scheduler() -> None:
-    clock = {"now": 10.0}
-    scheduler = RuntimeHookScheduler(active_limit=0, monotonic=lambda: clock["now"])
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        waiting = executor.submit(
-            scheduler.acquire,
-            harness="opencode",
-            client_key="clock-jump",
-            lane="decision",
-            payload_bytes=8,
-            deadline=20.0,
-        )
-        wait_deadline = time.monotonic() + 5
-        while scheduler.stats()["queued"] != 1:
-            assert time.monotonic() < wait_deadline, "clock-jump admission was never queued"
-            time.sleep(0.001)
-        clock["now"] = 21.0
-        set_active_limit(scheduler, 1)
-        result = waiting.result(timeout=1)
-    assert result.reason_code == "daemon_hook_deadline_exhausted"
-    assert scheduler.stats()["queued"] == 0
-    assert scheduler.stats()["retained_bytes"] == 0
-
-
-def test_shutdown_restart_starts_with_clean_capacity() -> None:
-    first = RuntimeHookScheduler(active_limit=1)
-    admission = first.acquire(
-        harness="claude-code",
-        client_key="before-restart",
-        lane="decision",
-        payload_bytes=8,
-        deadline=time.monotonic() + 1,
-    )
-    assert admission.permit is not None
-    admission.permit.release()
-    assert first.stats()["completed"] == 1
-
-    restarted = RuntimeHookScheduler(active_limit=1)
-    assert restarted.stats()["active"] == 0
-    assert restarted.stats()["queued"] == 0
-    after_restart = restarted.acquire(
-        harness="claude-code",
-        client_key="after-restart",
-        lane="decision",
-        payload_bytes=8,
-        deadline=time.monotonic() + 1,
-    )
-    assert after_restart.permit is not None
-    after_restart.permit.release()
-    assert restarted.stats()["completed"] == 1
 
 
 def test_sqlite_lock_is_bounded_and_recovers(tmp_path: Path) -> None:

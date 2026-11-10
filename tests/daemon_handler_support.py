@@ -1,17 +1,14 @@
-"""The Guard library route handlers the native daemon hands requests to.
+"""A stand-in for the request handler the native daemon replaced.
 
-The native daemon owns the socket and answers through library calls; these
-are the hook handler methods those calls run, composed for unit tests that
-call them directly.
+The native daemon owns the socket and every hook route; unit tests that call
+library handler methods directly build them on this bare object.
 """
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.routes.hook_host import _host_class as _hook_host_class
 
-
-class GuardDaemonHandler(_hook_host_class()):  # type: ignore[misc]
-    """Hook handler methods on one object."""
+class GuardDaemonHandler:
+    """A bare handler object tests attach state to."""
 
 
 __all__ = ["GuardDaemonHandler"]

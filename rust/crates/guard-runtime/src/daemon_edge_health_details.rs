@@ -12,16 +12,10 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use super::{network, NativeReads, ReadConfig};
+use super::{hook_scheduler, network, NativeReads, ReadConfig};
 
 /// `GUARD_DAEMON_COMPATIBILITY_VERSION`.
 const COMPATIBILITY_VERSION: i64 = 2;
-/// The review lanes the scheduler reports latency for.
-const HOOK_LANES: [&str; 3] = ["decision", "content-security", "evidence"];
-/// `_MAX_CONCURRENT_RUNTIME_HOOKS` and the scheduler's queue bounds.
-const HOOK_ACTIVE_LIMIT: u64 = 32;
-const HOOK_QUEUED_LIMIT: u64 = 128;
-const HOOK_RETAINED_BYTES_LIMIT: u64 = 32 * 1024 * 1024;
 /// `_MAX_CONCURRENT_DAEMON_*`.
 const REQUEST_LIMIT: u64 = 32;
 const CONNECTION_LIMIT: u64 = 128;
@@ -105,39 +99,45 @@ fn command_activity_evidence(health: &Value) -> Value {
     })
 }
 
-/// The hook scheduler's bounds. Hooks are reviewed as they arrive, so nothing
-/// is queued, expired or rejected for capacity.
+/// The hook scheduler's load and bounds, in the shape the details report.
 fn hook_capacity() -> Value {
-    let lanes = || {
-        Value::Object(
-            HOOK_LANES
-                .iter()
-                .map(|lane| ((*lane).to_owned(), json!(0.0)))
-                .collect::<Map<String, Value>>(),
-        )
-    };
-    json!({
-        "active": 0,
-        "limit": HOOK_ACTIVE_LIMIT,
-        "queued": 0,
-        "queued_limit": HOOK_QUEUED_LIMIT,
-        "retained_bytes": 0,
-        "retained_bytes_limit": HOOK_RETAINED_BYTES_LIMIT,
-        "per_harness_active": {},
-        "per_harness_queued": {},
-        "per_harness_rejected": {},
-        "rejected": 0,
-        "expired": 0,
-        "cancelled": 0,
-        "retries": 0,
-        "completed": 0,
-        "oldest_queued_ms": 0.0,
-        "queue_wait_by_lane_p95_ms": lanes(),
-        "service_time_by_lane_p95_ms": lanes(),
-        "queue_wait_by_lane_p99_ms": lanes(),
-        "service_time_by_lane_p99_ms": lanes(),
-        "rejection_reasons": {},
-    })
+    capacity_details(&hook_scheduler::shared().stats())
+}
+
+/// `daemon_capacity_details`' `hook_capacity` out of the scheduler's stats.
+fn capacity_details(stats: &Value) -> Value {
+    let rejected: u64 = stats["rejected"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, count)| count.as_u64())
+        .sum();
+    let mut details = Map::new();
+    for key in [
+        "active",
+        "queued",
+        "queued_limit",
+        "retained_bytes",
+        "retained_bytes_limit",
+        "per_harness_active",
+        "per_harness_queued",
+        "per_harness_rejected",
+        "expired",
+        "cancelled",
+        "retries",
+        "completed",
+        "oldest_queued_ms",
+        "queue_wait_by_lane_p95_ms",
+        "service_time_by_lane_p95_ms",
+        "queue_wait_by_lane_p99_ms",
+        "service_time_by_lane_p99_ms",
+    ] {
+        details.insert(key.to_owned(), stats[key].clone());
+    }
+    details.insert("limit".to_owned(), stats["active_limit"].clone());
+    details.insert("rejected".to_owned(), json!(rejected));
+    details.insert("rejection_reasons".to_owned(), stats["rejected"].clone());
+    Value::Object(details)
 }
 
 /// The load the details summarize, in the daemon's order of severity.

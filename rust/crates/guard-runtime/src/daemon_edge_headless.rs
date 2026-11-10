@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 
 use super::super::super::http::query_pairs;
 use super::super::super::library::{self, CallError};
-use super::super::ReadConfig;
+use super::super::{hook_scheduler, ReadConfig};
 use super::supply_chain::truthy;
 use super::DROPPED;
 use crate::daemon_handler_fields::{query_bool, query_string};
@@ -300,7 +300,7 @@ fn route_get(
 }
 
 fn runtime(host: &mut Host<'_, '_>, query: &str) -> Result<Reply, Stop> {
-    let answer = host.step(
+    let mut answer = host.step(
         "runtime.snapshot",
         json!({
             "include_receipts": query_bool(query, "include_receipts", true),
@@ -317,6 +317,8 @@ fn runtime(host: &mut Host<'_, '_>, query: &str) -> Result<Reply, Stop> {
         "security_level".to_owned(),
         answer.get("security_level").cloned().unwrap_or(Value::Null),
     );
+    // The edge admits hooks, so its scheduler is the one whose load counts.
+    answer.insert("scheduler".to_owned(), hook_scheduler::shared().stats());
     body.insert("operator_health".to_owned(), operator_health(&answer));
     Ok((200, Value::Object(body)))
 }
