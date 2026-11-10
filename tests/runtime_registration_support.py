@@ -18,7 +18,7 @@ import pytest
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.models import GuardRuntimeRegistration
-from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
+from codex_plugin_scanner.guard.daemon.server_control_health import _ControlHealthRoutes
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     CONTAINMENT_POLICY_VERSION,
     CONTAINMENT_SCHEMA_VERSION,
@@ -138,7 +138,7 @@ def stub_supported_repair(
         lambda self, **_kwargs: {"mode": "protected"},
     )
     monkeypatch.setattr(
-        daemon_server_module._GuardDaemonHandler,  # pyright: ignore[reportPrivateUsage]
+        _ControlHealthRoutes,
         "_containment_health_payload",
         lambda self, **_kwargs: passing_containment_health(),
     )

@@ -10,7 +10,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.daemon.server_control_connect_state import _repair_detected_package_shims
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 from codex_plugin_scanner.guard.runtime import runner as runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncEndpointUntrustedError,

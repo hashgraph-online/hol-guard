@@ -102,7 +102,6 @@ def test_observe_mode_denies_failed_local_review_with_a_fixed_response(
     assert hook_output["permissionDecision"] == "deny"
 
 
-@pytest.mark.python_daemon
 @pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
 @pytest.mark.usefixtures("native_hook_force")
 def test_prompt_mode_still_blocks_failed_local_review(
@@ -184,7 +183,6 @@ def test_prompt_mode_denies_unverified_inspection_when_review_cannot_complete(
     assert payload["reason_code"] == "native_review_deadline_exceeded"
 
 
-@pytest.mark.python_daemon
 def test_hook_overload_denies_unverified_workspace_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

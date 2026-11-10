@@ -13,7 +13,6 @@ import urllib.request
 from pathlib import Path
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.command_activity_api import stream_command_activity_events
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_command_activity_api_support import json_request, raw_request, recent_day, seed
@@ -319,31 +318,3 @@ def test_sse_retention_gap_emits_reset_before_retained_events(tmp_path: Path) ->
     assert reset_id == "id: 1"
     assert reset_event == "event: command_activity_reset"
     assert reset_payload == {"event": "command_activity_reset", "reset_required": True}
-
-
-def test_sse_header_failure_releases_admission_slot() -> None:
-    class FailingHeaderHandler:
-        active: int = 0
-
-        def _try_increment_active_stream_clients(self, maximum: int) -> bool:
-            assert maximum == 8
-            self.active += 1
-            return True
-
-        def _decrement_active_stream_clients(self) -> None:
-            self.active -= 1
-
-        def _write_json(self, payload: dict[str, object], *, status: int = 200) -> None:
-            raise AssertionError((payload, status))
-
-        def send_response(self, code: int, message: str | None = None) -> None:
-            raise ConnectionResetError((code, message))
-
-    handler = FailingHeaderHandler()
-    try:
-        stream_command_activity_events(handler, 0)
-    except ConnectionResetError:
-        pass
-    else:
-        raise AssertionError("header failure did not propagate")
-    assert handler.active == 0

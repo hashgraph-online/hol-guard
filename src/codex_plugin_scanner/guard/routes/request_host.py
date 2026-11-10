@@ -16,14 +16,11 @@ challenge one process consumes is gone for the next.
 
 from __future__ import annotations
 
-import base64
-import binascii
-import io
 import json
 import os
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -68,52 +65,6 @@ def _process_shared(guard_home: Path, name: str, build: Callable[[], Any]) -> An
         if value is None:
             value = _PROCESS_SHARED[key] = build()
         return value
-
-
-class _ReplaySocket:
-    """The connection the handler sees: the request bytes in, the answer out."""
-
-    def __init__(self, request: bytes, response: io.BytesIO) -> None:
-        self._request = request
-        self._response = response
-
-    def makefile(self, mode: str, *args: object, **kwargs: object) -> io.BufferedIOBase:
-        del args, kwargs
-        if "r" in mode:
-            return io.BufferedReader(io.BytesIO(self._request))  # type: ignore[arg-type]
-        return _Unclosable(self._response)
-
-    def sendall(self, data: bytes) -> None:
-        self._response.write(data)
-
-    def settimeout(self, timeout: float | None) -> None:
-        del timeout
-
-    def setsockopt(self, *args: object) -> None:
-        del args
-
-    def getpeername(self) -> tuple[str, int]:
-        return ("127.0.0.1", 0)
-
-    def shutdown(self, how: int) -> None:
-        del how
-
-    def close(self) -> None:
-        return None
-
-
-class _Unclosable(io.BufferedIOBase):
-    def __init__(self, target: io.BytesIO) -> None:
-        self._target = target
-
-    def writable(self) -> bool:
-        return True
-
-    def write(self, data: Any) -> int:
-        return self._target.write(bytes(data))
-
-    def flush(self) -> None:
-        return None
 
 
 def _republish_trust_status(guard_home: Path) -> Callable[[dict[str, object]], None]:
@@ -391,36 +342,6 @@ def load_runtime_identity(guard_home: Path) -> dict[str, str]:
     return {key: value for key, value in identity.items() if isinstance(value, str)}
 
 
-def replay_request(
-    guard_home: Path,
-    request: bytes,
-    *,
-    port: int,
-    host: str = "127.0.0.1",
-    home_dir: Path | None = None,
-    daemon_pid: int | None = None,
-    proof_verified: bool = False,
-) -> bytes:
-    """The raw response the daemon's handler writes for ``request``.
-
-    ``proof_verified`` is the native daemon's word that this hook presented
-    the identity proof it issued on the same connection.
-    """
-
-    from ..daemon.auth_token import load_guard_daemon_auth_token
-    from .request_handler import _GuardDaemonHandler
-
-    auth_key = load_guard_daemon_auth_token(guard_home) or ""
-    store = GuardStore(guard_home)
-    server = _replay_server_class()(store, port, host, home_dir or Path.home(), auth_key, daemon_pid, proof_verified)
-    response = io.BytesIO()
-    try:
-        _GuardDaemonHandler(_ReplaySocket(request, response), ("127.0.0.1", 0), server)  # pyright: ignore[reportArgumentType]
-    finally:
-        server.server_close()
-    return response.getvalue()
-
-
 def wait_for_background_work() -> None:
     """Let work a handler started after answering finish, within a bound."""
 
@@ -434,44 +355,4 @@ def wait_for_background_work() -> None:
         thread.join(max(0.0, deadline - time.monotonic()))
 
 
-def route_request(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """``route.request``: the route handler's raw response to one request.
-
-    The native daemon owns the socket and answers every request it can
-    itself; it hands the rest here as raw bytes and writes back the raw
-    response this returns.
-    """
-
-    from ..library_calls import LibraryCallError
-
-    encoded = args.get("request")
-    port = args.get("port")
-    daemon_pid = args.get("daemon_pid")
-    proof_verified = args.get("proof_verified")
-    if (
-        not isinstance(encoded, str)
-        or not isinstance(port, int)
-        or not 0 < port < 65536
-        or not isinstance(proof_verified, bool)
-    ):
-        raise LibraryCallError("invalid_arguments")
-    try:
-        request = base64.b64decode(encoded, validate=True)
-    except (binascii.Error, ValueError) as error:
-        raise LibraryCallError("invalid_arguments") from error
-    if not request or len(request) > _REQUEST_LIMIT_BYTES:
-        raise LibraryCallError("invalid_arguments")
-    response = replay_request(
-        store.guard_home,
-        request,
-        port=port,
-        daemon_pid=daemon_pid if isinstance(daemon_pid, int) and daemon_pid > 1 else None,
-        proof_verified=proof_verified,
-    )
-    return {"response": base64.b64encode(response).decode("ascii")}
-
-
-REQUEST_HOST_CALLS = {"route.request": route_request}
-
-
-__all__ = ["REQUEST_HOST_CALLS", "replay_request", "route_request", "wait_for_background_work"]
+__all__ = ["load_runtime_identity", "wait_for_background_work"]

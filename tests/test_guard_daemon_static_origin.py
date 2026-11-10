@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_daemon_route as route
 from codex_plugin_scanner.guard.routes import request_handler as daemon_server
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
 
 def _unanswered(*_args: object, **_kwargs: object) -> None:

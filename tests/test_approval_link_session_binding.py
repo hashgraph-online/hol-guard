@@ -13,14 +13,12 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_daemon_route
-from codex_plugin_scanner.guard.daemon.approval_handoff_route import approval_handoff_location
 from codex_plugin_scanner.guard.local_dashboard_session import (
-    build_approval_browser_url,
     build_local_dashboard_session_token,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
 AUTH = "test-daemon-auth-token"
 REQUEST_ID = "0123456789abcdef0123456789abcdef"
@@ -31,18 +29,6 @@ def _claims(location: str) -> dict[str, object]:
     session = location.split("=", 1)[1]
     payload = session.split(".")[1]
     return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-
-
-def test_the_link_session_names_the_request_it_was_handed_for() -> None:
-    url = build_approval_browser_url(REVIEW_URL, auth_token=AUTH)
-    assert url is not None
-
-    location = approval_handoff_location(url.removeprefix("http://127.0.0.1:5474"), auth_token=AUTH)
-
-    assert location is not None
-    claims = _claims(location)
-    assert claims["surface"] == "approval-center"
-    assert claims["request_id"] == REQUEST_ID
 
 
 def test_the_request_claim_reaches_the_native_session_check(monkeypatch: pytest.MonkeyPatch) -> None:

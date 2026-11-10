@@ -52,7 +52,7 @@ def test_daemon_server_import_is_order_independent() -> None:
             sys.executable,
             "-c",
             (
-                "from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler; "
+                "from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler; "
                 "print(_GuardDaemonHandler.__name__)"
             ),
         ],

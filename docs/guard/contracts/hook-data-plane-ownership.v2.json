@@ -315,7 +315,6 @@
    "paths": [
     "src/codex_plugin_scanner/guard/routes/request_handler.py",
     "src/codex_plugin_scanner/guard/daemon/server_runtime_hook.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_request_auth.py",
     "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_deadline.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",

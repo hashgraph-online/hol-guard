@@ -69,7 +69,6 @@ def _pi_hook_request(*, daemon: GuardDaemonServer, guard_home: str, call_id: str
     )
 
 
-@pytest.mark.python_daemon
 @pytest.mark.usefixtures("native_hook_force")
 def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     tmp_path: Path,

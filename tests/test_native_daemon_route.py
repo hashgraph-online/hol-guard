@@ -21,7 +21,7 @@ from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.approval_scope_support import APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX
 from codex_plugin_scanner.guard.daemon.server_control_headless import _HEADLESS_APP_ACTIONS
 from codex_plugin_scanner.guard.routes import request_handler as daemon_server
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
 pytestmark = pytest.mark.native_route_unpinned
 

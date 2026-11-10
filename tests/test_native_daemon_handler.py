@@ -16,7 +16,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_daemon_handler as handler_transport
 from codex_plugin_scanner.guard.native_daemon_handler import NativeDaemonHandlerError
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
 pytestmark = pytest.mark.native_route_unpinned
 

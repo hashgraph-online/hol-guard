@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
 
 @pytest.mark.parametrize("parsed,admitted", [(False, True), (True, True), (True, False)])

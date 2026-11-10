@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.native_approval_scope import (
     ApprovalScopeUnavailableError,
     native_approval_scopes,
 )
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
 
 _CONTRACT_REPLY = {

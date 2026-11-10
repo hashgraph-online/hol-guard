@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     apply_managed_install,
     build_harness_verification,
 )
-from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

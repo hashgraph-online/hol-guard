@@ -26,8 +26,6 @@ _MODULES = (
     "codex_plugin_scanner.guard.daemon.server_control_repair",
     "codex_plugin_scanner.guard.daemon.server_control_routes_post",
     "codex_plugin_scanner.guard.daemon.server_control_supply_chain",
-    "codex_plugin_scanner.guard.daemon.server_dashboard_records_read",
-    "codex_plugin_scanner.guard.daemon.server_dashboard_runtime_read",
     "codex_plugin_scanner.guard.daemon.server_dashboard_support",
     # Library calls import these collaborators where they run.
     "codex_plugin_scanner.guard.cli.update_commands",
