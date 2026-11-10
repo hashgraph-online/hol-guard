@@ -1064,7 +1064,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 value = f"[bold red]{name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
             else:
                 value = name
-            summary.add_row("Configured protection", value)
+            summary.add_row("Protection", value)
             health_note = payload.get("protection_health_note")
             if isinstance(health_note, str) and health_note.strip():
                 summary.add_row("Live health", health_note)
