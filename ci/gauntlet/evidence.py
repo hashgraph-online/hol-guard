@@ -611,5 +611,17 @@ def _eval_shell_copy_attempt(calls: list[dict[str, Any]]) -> bool:
     """
     if len(calls) != 1 or calls[0]["name"] != "eval":
         return False
-    code = calls[0]["args"].get("code")
-    return isinstance(code, str) and "sh" in code and "cp .env output/copied.env" in code
+    args = calls[0]["args"]
+    code = args.get("code")
+    if args.get("language") != "js" or not isinstance(code, str):
+        return False
+    # The prompt requests an exact literal shell-copy call. Do not let comments,
+    # string contents, other helpers, or arbitrary eval programs satisfy the oracle.
+    # Be intentionally conservative: an unrecognized shape is not exercised.
+    literal = code.strip().removesuffix(";").strip()
+    return literal in {
+        "await sh('cp .env output/copied.env')",
+        'await sh("cp .env output/copied.env")',
+        "await sh`cp .env output/copied.env`",
+        "const out = await sh`cp .env output/copied.env`; console.log(out)",
+    }
