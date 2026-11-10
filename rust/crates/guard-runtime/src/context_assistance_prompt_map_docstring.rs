@@ -10,6 +10,7 @@
 use super::super::seen::Span;
 use super::more::{prompt_words, whole};
 use super::{Asked, File};
+use std::path::Path;
 
 const WORDS: [&str; 4] = ["docstring", "docstrings", "doctest", "doctests"];
 /// The most lines of a long function's signature and docstring shown.
@@ -39,7 +40,7 @@ pub(super) fn shown(file: &File, at: usize, asked: &Asked) -> Option<(Span, Stri
     if head.is_some_and(|(_, raw)| raw == Some(false)) {
         note.push_str(NOT_RAW);
     }
-    match python.then(|| command(file, at)).flatten() {
+    match python.then(|| command(file, at, &asked.root)).flatten() {
         Some(command) => {
             note.push_str(&DOCTEST.replace("{command}", &command));
             if relative(file) {
@@ -159,35 +160,43 @@ fn scanned(line: &str) -> (&str, i32) {
     (line, depth)
 }
 
-/// The command running just the doctest of the function at `at`: pytest
-/// names it `<module>.<qualified name>`, and `-k` picks it by that name, which
-/// no test function in the file has. None for a path or name a shell would
-/// read as more than itself, a function inside another, whose doctest
-/// pytest does not collect, or one inside a member, whose doctest name holds
-/// more classes than the map knows.
-fn command(file: &File, at: usize) -> Option<String> {
+/// The command running just the doctest of the function at `at`, by the
+/// node id pytest gives it: the file, then `<module>.<qualified name>`, where
+/// the module is dotted from the folders above it holding an `__init__.py`
+/// under `root`, as pytest imports it. A node id picks that one doctest,
+/// where `-k remap` would run `remap_more`'s too. None for a path or name a
+/// shell would read as more than itself, a function inside another, whose
+/// doctest pytest does not collect, or one inside a member, whose doctest
+/// name holds more classes than the map knows.
+fn command(file: &File, at: usize, root: &Path) -> Option<String> {
     let outer = file.parent[at];
     let nested = outer.is_some_and(|outer| !file.container(outer) || file.parent[outer].is_some());
     if !plain(file.path) || nested {
         return None;
     }
-    let mut parts = file.path.rsplit('/');
-    let stem = parts.next()?.strip_suffix(".py")?;
-    // A package's `__init__.py` is the module named for its directory.
-    let module = if stem == "__init__" {
-        parts.next()?
+    let (folder, name) = file.path.rsplit_once('/').unwrap_or(("", file.path));
+    let stem = name.strip_suffix(".py")?;
+    let mut folders: Vec<&str> = folder.split('/').filter(|part| !part.is_empty()).collect();
+    // A package's `__init__.py` is the module named for its folder.
+    let mut module: Vec<&str> = if stem == "__init__" {
+        Vec::new()
     } else {
-        stem
+        vec![stem]
     };
+    while !folders.is_empty() && root.join(folders.join("/")).join("__init__.py").is_file() {
+        module.push(folders.pop()?);
+    }
+    module.reverse();
     let qualified = file.qualified(at);
-    let words = (std::iter::once(module).chain(qualified.split('.'))).all(|name| {
+    let words = (module.iter().copied().chain(qualified.split('.'))).all(|name| {
         name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
             && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
     });
-    (words && !qualified.is_empty()).then(|| {
+    (words && !module.is_empty() && !qualified.is_empty()).then(|| {
         format!(
-            "python -m pytest -q --doctest-modules {} -k {module}.{qualified}",
-            file.path
+            "python -m pytest -q --doctest-modules {}::{}.{qualified}",
+            file.path,
+            module.join(".")
         )
     })
 }
