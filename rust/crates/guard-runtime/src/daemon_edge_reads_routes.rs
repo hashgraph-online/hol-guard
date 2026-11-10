@@ -1,18 +1,21 @@
 //! The store-backed `GET` routes the edge answers by path, as the daemon's
 //! Python handler answers them.
 
+use std::net::SocketAddr;
+
 use serde_json::{json, Value};
 
 use guard_contracts::DaemonRoutePayloadV1;
 
 use super::super::http::{query_int, query_value, Request};
-use super::{activity, evidence, inventory, records, settings};
+use super::{activity, business, evidence, inventory, records, settings};
 use super::{authorize, composed, dispatch, health_details, network, plugin_updates, requests};
 use super::{NativeReads, ReadConfig, MAX_READ_STATE_PAGES};
 use crate::daemon_route_session::origin_decision;
 
 pub(super) fn respond(
     request: &Request<'_>,
+    local: Option<SocketAddr>,
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value, Option<String>, bool)> {
@@ -40,9 +43,13 @@ pub(super) fn respond(
         return requests::resume(request_id, config, reads)
             .map(|(status, body)| (status, body, caller.cors_origin, false));
     }
+    if let Some(request_id) = single_segment(request.path, "/v1/requests/", "/business-summary") {
+        return business::summary(request_id, config, reads)
+            .map(|(status, body)| (status, body, caller.cors_origin, true));
+    }
     if let Some(request_id) = single_segment(request.path, "/v1/requests/", "") {
-        return requests::detail(request_id, request.query, hosted, config, reads)
-            .map(|(status, body)| (status, body, caller.cors_origin, false));
+        return requests::detail(request_id, request.query, hosted, local, config, reads)
+            .map(|(status, body, no_store)| (status, body, caller.cors_origin, no_store));
     }
     if request.path == "/v1/runtime/containment-health" {
         return network::containment_health(config)

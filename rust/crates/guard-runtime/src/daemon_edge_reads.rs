@@ -558,7 +558,7 @@ fn answer_request(
                 Some((status, body, cors_origin, false))
             }),
         "POST" => writes::respond(request, body, client.local_addr().ok(), config, reads),
-        _ => respond(request, config, reads),
+        _ => respond(request, client.local_addr().ok(), config, reads),
     });
     let answer = answer.or_else(|| {
         // A standalone daemon has no server behind it to refuse a caller
@@ -926,6 +926,9 @@ mod activity;
 
 #[path = "daemon_edge_requests.rs"]
 mod requests;
+
+#[path = "daemon_edge_business.rs"]
+mod business;
 
 #[path = "daemon_edge_settings.rs"]
 mod settings;

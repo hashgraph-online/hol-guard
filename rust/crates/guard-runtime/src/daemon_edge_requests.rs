@@ -2,26 +2,25 @@
 //! it: the same native option check, the same store pages, and the local
 //! dashboard's native business queue check.
 //!
-//! The edge answers the first page only. A cursor, a native business queue
-//! with rows in it, or a queue that cannot be read goes to the daemon, which
-//! merges native rows and writes the recovery bodies.
+//! A local caller's pages merge the saved native business requests the
+//! resident verifies, behind the store's pages.
 
-use std::path::Path;
-use std::time::Duration;
+use std::net::SocketAddr;
 
 use serde_json::{json, Map, Value};
 
 use super::super::http::query_value;
-use super::{NativeReads, ReadConfig};
+use super::{business, NativeReads, ReadConfig};
 use crate::daemon_handler_requests::requests_list;
 
 const MAX_STORE_CHUNKS: usize = 10_000;
-const QUEUE_TIMEOUT: Duration = Duration::from_secs(2);
-const QUEUE_REQUEST: &[u8] = br#"{"operation":"workspace_review_local_queue","request":{}}"#;
-const QUEUE_SCHEMA: &str = "guard-native-local-business-review-queue.v1";
 
 /// The answer, and whether the daemon would send it with
 /// `Cache-Control: no-store`.
+///
+/// A local caller's page also carries the saved native business requests:
+/// appended once the store's pages end, continued by a native cursor, and
+/// counted in the totals, as `local_request_page` merged them.
 pub(super) fn list(
     query: &str,
     hosted: bool,
@@ -32,25 +31,107 @@ pub(super) fn list(
     if !proceed {
         return Some((status, body, false));
     }
-    if !fields.get("cursor")?.is_null() {
-        return None;
-    }
-    let mut page = store_page(&fields, config, reads)?;
-    if hosted {
-        return Some((200, Value::Object(page), true));
-    }
+    let cursor = fields.get("cursor")?.as_str();
+    let native_cursor = !hosted && cursor.is_some_and(|c| c.starts_with(business::CURSOR_PREFIX));
+    let marker = match cursor.filter(|_| !native_cursor) {
+        None => Value::Null,
+        Some(cursor) => match page_marker(cursor) {
+            Some(marker) => marker,
+            None => return Some(invalid_cursor()),
+        },
+    };
+    let limit = fields.get("limit")?.as_u64()?;
     let harness = fields.get("harness")?.as_str();
     let include_totals = fields.get("include_totals")?.as_bool()?;
     let resolved = fields.get("status")?.as_str() == Some("resolved");
-    // Other harnesses cannot hold native rows, and without totals neither
-    // resolved history nor an unfinished SQL page reads the native queue.
-    if harness.is_some_and(|harness| harness != "native-business")
-        || (!include_totals && (resolved || !page.get("next_cursor")?.is_null()))
-    {
-        return Some((200, Value::Object(page), true));
+    let mut page = Map::new();
+    if !native_cursor {
+        page = store_page(&fields, marker, limit, config, reads)?;
+        // Other harnesses cannot hold native rows, and without totals neither
+        // resolved history nor an unfinished SQL page reads the native queue.
+        if hosted
+            || harness.is_some_and(|harness| harness != "native-business")
+            || (!include_totals && (resolved || !page.get("next_cursor")?.is_null()))
+        {
+            return Some((200, Value::Object(page), true));
+        }
     }
-    if !native_queue_empty(config)? {
-        return None;
+    let filters = json!({
+        "status": fields.get("status")?,
+        "harness": fields.get("harness")?,
+        "search": fields.get("search")?,
+    });
+    let with_filters = |extra: Value| {
+        let mut request = filters.clone();
+        for (key, value) in extra.as_object().into_iter().flatten() {
+            request[key] = value.clone();
+        }
+        request
+    };
+    let native = business::summaries(config, reads)
+        .map_err(|_| business::PageError::Read)
+        .and_then(|summaries| {
+            if native_cursor {
+                business::page(
+                    &summaries,
+                    with_filters(json!({"cursor": cursor, "limit": limit})),
+                )
+            } else if !resolved && page.get("next_cursor").is_some_and(Value::is_null) {
+                // Append only after SQL pagination ends, keeping each page bounded.
+                let shown = page
+                    .get("items")
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len);
+                let room = (limit as usize).saturating_sub(shown);
+                business::page(&summaries, with_filters(json!({"room": room})))
+            } else {
+                business::page(&summaries, with_filters(json!({"room": 0}))).map(|mut native| {
+                    native.insert("items".to_owned(), Value::Array(Vec::new()));
+                    native.insert("next_cursor".to_owned(), Value::Null);
+                    native
+                })
+            }
+        });
+    let native = match native {
+        Ok(native) => native,
+        Err(business::PageError::Cursor) => return Some(invalid_cursor()),
+        Err(business::PageError::Read) if native_cursor => return Some(invalid_cursor()),
+        Err(business::PageError::Read) => {
+            page.insert(
+                "native_business_queue_error".to_owned(),
+                Value::from("native_local_business_queue_read_failed"),
+            );
+            page.insert(
+                "native_business_queue_checked".to_owned(),
+                Value::Bool(true),
+            );
+            return Some((200, Value::Object(page), true));
+        }
+    };
+    let native_items = native.get("items")?.clone();
+    let native_next = native.get("next_cursor")?.clone();
+    if native_cursor {
+        page = store_page(&fields, Value::Null, 1, config, reads)?;
+        page.insert("items".to_owned(), native_items);
+        page.insert("next_cursor".to_owned(), native_next);
+    } else if native_items
+        .as_array()
+        .is_some_and(|items| !items.is_empty())
+        || !native_next.is_null()
+    {
+        let Value::Array(mut items) = page.remove("items")? else {
+            return None;
+        };
+        items.extend(native_items.as_array()?.iter().cloned());
+        page.insert("items".to_owned(), Value::Array(items));
+        page.insert("next_cursor".to_owned(), native_next);
+    }
+    let count = native.get("count")?.as_i64()?;
+    if include_totals {
+        add(&mut page, "total_pending_count", count)?;
+        if !resolved {
+            add(&mut page, "total_count", count)?;
+        }
     }
     page.insert(
         "native_business_queue_checked".to_owned(),
@@ -59,37 +140,109 @@ pub(super) fn list(
     Some((200, Value::Object(page), true))
 }
 
-/// `GET /v1/requests/{id}` for the hosted dashboard, which the daemon answers
-/// with the stored row less its private queue hint.
+fn add(page: &mut Map<String, Value>, key: &str, count: i64) -> Option<()> {
+    let total = page.get(key)?.as_i64()?;
+    page.insert(key.to_owned(), Value::from(total.checked_add(count)?));
+    Some(())
+}
+
+/// The daemon's body for a queue position no page can continue.
+fn invalid_cursor() -> (u16, Value, bool) {
+    (
+        400,
+        json!({
+            "error": "invalid_cursor",
+            "recovery": {
+                "code": "refresh_queue",
+                "title": "Refresh the blocked action list.",
+                "body": "The queue position expired. Refresh the Review Queue to continue.",
+            },
+        }),
+        false,
+    )
+}
+
+/// `_cursor_marker`: the `[last_seen_at, request_id]` a store page cursor
+/// names, from its unpadded URL-safe base64 JSON.
+fn page_marker(cursor: &str) -> Option<Value> {
+    let decoded = base64url_decode(cursor.trim_end_matches('='))?;
+    let payload: Value = serde_json::from_slice(&decoded).ok()?;
+    let last_seen_at = payload.get("last_seen_at")?.as_str()?;
+    let request_id = payload.get("request_id")?.as_str()?;
+    Some(json!([last_seen_at, request_id]))
+}
+
+/// URL-safe base64 without padding; a length one past a multiple of four is
+/// refused, and the unused low bits of the last character are ignored, as
+/// `binascii` ignores them.
+fn base64url_decode(text: &str) -> Option<Vec<u8>> {
+    if text.len() % 4 == 1 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(text.len() / 4 * 3 + 2);
+    let (mut buffer, mut bits) = (0_u32, 0_u32);
+    for byte in text.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'-' => 62,
+            b'_' => 63,
+            _ => return None,
+        };
+        buffer = (buffer << 6) | u32::from(value);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
+/// `GET /v1/requests/{id}`. The hosted dashboard gets the stored row less its
+/// private queue hint, and an unknown id gets the not-found body with the
+/// local queue link; a local caller's unknown id may name a saved native
+/// business request. The `bool` is whether the answer is `no-store`.
 ///
-/// A local caller gets read-time extension and connector recommendations, a
-/// wait asks the daemon to hold the read, and an unknown id gets the local
-/// queue link, so all of those go to the daemon. So does a row that may carry
-/// a temporary MCP or local tool grant offer, which only the daemon attaches.
+/// A local caller's stored row gets read-time extension and connector
+/// recommendations, and a wait asks the daemon to hold the read, so both go
+/// to the daemon. So does a row that may carry a temporary MCP or local tool
+/// grant offer, which only the daemon attaches.
 pub(super) fn detail(
     request_id: &str,
     query: &str,
     hosted: bool,
+    local: Option<SocketAddr>,
     config: &ReadConfig,
     reads: &NativeReads,
-) -> Option<(u16, Value)> {
-    if !hosted || request_id.contains('%') || query_value(query, "wait_ms").ok()?.is_some() {
+) -> Option<(u16, Value, bool)> {
+    if query_value(query, "wait_ms").ok()?.is_some() {
         return None;
     }
     let cwd = config.daemon_cwd.as_deref()?;
-    let Value::Object(mut approval) = reads.store_call(
+    let approval = reads.store_call(
         config,
         "get_approval_request",
         json!({"request_id": request_id, "derive_scope": true, "cwd": cwd}),
-    )?
-    else {
+    )?;
+    if approval.is_null() {
+        let local = local?;
+        if hosted {
+            let queue_url = business::local_url(local, "/#/inbox");
+            return Some((404, business::not_found(&queue_url), false));
+        }
+        return business::unknown_detail(request_id, local, config, reads);
+    }
+    let Value::Object(mut approval) = approval else {
         return None;
     };
-    if may_carry_grant_offer(&approval) {
+    if !hosted || request_id.contains('%') || may_carry_grant_offer(&approval) {
         return None;
     }
     approval.remove("extension_allow_hint");
-    Some((200, Value::Object(approval)))
+    Some((200, Value::Object(approval), false))
 }
 
 /// `_with_approval_hints` asks the resident about a filed browser intent, or
@@ -133,6 +286,8 @@ pub(super) fn resume(
 /// `list_approval_request_page`: every chunk of the one page.
 fn store_page(
     fields: &Value,
+    cursor: Value,
+    limit: u64,
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<Map<String, Value>> {
@@ -141,8 +296,8 @@ fn store_page(
     let cwd = config.daemon_cwd.clone()?;
     let mut args = json!({
         "status": fields.get("status")?,
-        "limit": fields.get("limit")?,
-        "cursor": null,
+        "limit": limit,
+        "cursor": cursor,
         "harness": fields.get("harness")?,
         "search": fields.get("search")?,
         "include_totals": fields.get("include_totals")?,
@@ -173,45 +328,6 @@ fn store_page(
         }
     }
     None
-}
-
-/// The daemon's working directory, which the edge inherits; the store
-/// resolves a relative config path from it.
-/// Whether the resident reports no native business rows: an empty queue, or
-/// no installed policy. `None` for rows, a failure, or an answer the daemon's
-/// reader would not accept, all of which the daemon reads itself.
-fn native_queue_empty(config: &ReadConfig) -> Option<bool> {
-    // The daemon's client pins the same directory before it looks for a
-    // resident; a missing one goes to the daemon.
-    let state_dir =
-        std::fs::canonicalize(Path::new(&config.guard_home).join("native-runtime")).ok()?;
-    let encoded =
-        crate::managed_resident::client_request(&state_dir, QUEUE_REQUEST, QUEUE_TIMEOUT).ok()?;
-    queue_answer_empty(&serde_json::from_slice(&encoded).ok()?)
-}
-
-fn queue_answer_empty(response: &Value) -> Option<bool> {
-    let response = response.as_object()?;
-    let keys: Vec<&str> = response.keys().map(String::as_str).collect();
-    if matches!(keys.as_slice(), ["error"] | ["error", "retryable"]) {
-        let missing = matches!(
-            response.get("error")?.as_str()?,
-            "native_policy_snapshot_missing" | "native_policy_snapshot_unavailable"
-        );
-        let retryable_ok = response.get("retryable").is_none_or(Value::is_boolean);
-        return (missing && retryable_ok).then_some(true);
-    }
-    if keys != ["items", "schema", "version"]
-        || response.get("schema")?.as_str()? != QUEUE_SCHEMA
-        || response.get("version")?.as_i64()? != 1
-    {
-        return None;
-    }
-    response
-        .get("items")?
-        .as_array()?
-        .is_empty()
-        .then_some(true)
 }
 
 #[cfg(all(test, unix))]

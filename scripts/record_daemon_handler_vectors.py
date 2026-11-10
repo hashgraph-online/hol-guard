@@ -30,7 +30,6 @@ ABSENT = object()
 
 
 def _oracle(cases: list[dict]) -> list[dict]:
-    from codex_plugin_scanner.guard.daemon import business_review_queue
     from codex_plugin_scanner.guard.daemon import server as srv
 
     calls: dict = {}
@@ -46,12 +45,12 @@ def _oracle(cases: list[dict]) -> list[dict]:
     srv.build_harness_verification = lambda *_a, **_k: calls.setdefault("verify", True) and {"verified": True}
     srv.build_harness_setup_plan = lambda *_a, **kw: calls.update(plan=kw.get("dry_run")) or {"plan": True}
     srv.apply_managed_install = lambda *_a, **_k: calls.update(apply=True) or {}
-    business_review_queue.local_request_page = lambda _store, **opts: calls.update(opts=opts) or {"items": []}
 
     store = SimpleNamespace(guard_home=Path("/tmp/oracle-guard-home"))
     store.clear_policy_decisions = lambda harness, source, **kw: calls.update(clear=(harness, source, kw)) or 7
     store.clear_approval_requests = lambda harness, status: calls.update(requests_clear=(harness, status)) or 7
     store.upsert_policy = lambda decision, _now, approval_gate_grant=None: calls.update(upsert=decision)
+    store.list_approval_request_page = lambda **opts: calls.update(opts=opts) or {"items": []}
 
     out: list[dict] = []
     for case in cases:

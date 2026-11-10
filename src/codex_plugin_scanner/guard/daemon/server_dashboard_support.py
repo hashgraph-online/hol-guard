@@ -31,22 +31,14 @@ class _DashboardSupportRoutes:
             return
         options = verdict.fields
         from ..native_approval_scope import ApprovalScopeUnavailableError
-        from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
 
         try:
-            read_page = (
-                self.server.store.list_approval_request_page
-                if self._is_hosted_dashboard_origin()
-                else (lambda **options: local_request_page(self.server.store, **options))
-            )
-            page = read_page(**options)
-        except NativeBusinessReviewQueueReadError:
-            self._write_json(
-                {"error": "native_local_business_queue_read_failed"},
-                status=503,
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
+            page = self.server.store.list_approval_request_page(**options)
+            if not self._is_hosted_dashboard_origin():
+                # The native edge merges saved native business requests; this
+                # fallback cannot check them.
+                page["native_business_queue_error"] = "native_local_business_queue_read_failed"
+                page["native_business_queue_checked"] = True
         except ApprovalScopeUnavailableError:
             self._write_json(
                 {"error": "native_approval_scope_unavailable"},

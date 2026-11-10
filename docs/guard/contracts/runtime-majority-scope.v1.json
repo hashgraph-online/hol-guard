@@ -236,12 +236,10 @@
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_replay*.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_enrollment.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_queue.py",
-          "src/codex_plugin_scanner/guard/runtime/native_business_review_*.py",
           "src/codex_plugin_scanner/guard/store_review_event_sequence_recovery.py",
           "src/codex_plugin_scanner/guard/cloud_exception_requests.py",
           "src/codex_plugin_scanner/guard/daemon/cloud_review_settings*.py",
           "src/codex_plugin_scanner/guard/daemon/first_cloud_sync.py",
-          "src/codex_plugin_scanner/guard/daemon/business_review_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_review.py",
           "src/codex_plugin_scanner/guard/runtime/exact_cloud_review*.py",
           "src/codex_plugin_scanner/guard/review_oauth_binding.py"
