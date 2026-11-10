@@ -341,7 +341,7 @@ pub(super) fn map(
         entries.into_iter().map(code).collect()
     };
     // A rename lists every line naming the old name instead.
-    let renamed = rename::blocks(&files, sought, asked, until);
+    let (renamed, rewrite) = rename::blocks(&files, sought, asked, until);
     if renamed.is_empty() {
         blocks.push((format!("Where {title} appear in source:"), plain(uses)));
     }
@@ -354,6 +354,10 @@ pub(super) fn map(
     let shown: Vec<Span> = (earlier.iter().cloned())
         .chain(tests.iter().flat_map(|entry| entry.shown.iter().cloned()))
         .collect();
+    // First, so the agent reads it before opening any file to edit.
+    if let Some((title, line)) = rewrite.and_then(|rewrite| rewrite.block(&tests)) {
+        blocks.insert(0, (title, vec![Entry::plain(line)]));
+    }
     blocks.push(("Tests:".to_owned(), tests));
     // A function left to be written: what is defined beside it, for the
     // helpers it can call, and where else it is named, with the text. A line
