@@ -175,8 +175,6 @@ def _add_request(store: GuardStore, request_id: str) -> None:
     store.add_approval_request(_request(request_id), "2026-04-11T00:00:00+00:00")
 
 
-
-
 def _post_daemon_json(
     daemon: GuardDaemonServer,
     path: str,
