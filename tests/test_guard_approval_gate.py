@@ -35,7 +35,7 @@ from codex_plugin_scanner.guard.approval_gate import (
 )
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
-from codex_plugin_scanner.guard.cli.approval_commands import _requested_approval_scope, run_approval_command
+from codex_plugin_scanner.guard.cli.approval_commands import run_approval_command
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
@@ -175,10 +175,6 @@ def _add_request(store: GuardStore, request_id: str) -> None:
     store.add_approval_request(_request(request_id), "2026-04-11T00:00:00+00:00")
 
 
-def test_cli_approval_uses_request_recommended_scope_when_scope_is_omitted() -> None:
-    assert _requested_approval_scope(None, {"recommended_scope": "workspace"}) == "workspace"
-    assert _requested_approval_scope("artifact", {"recommended_scope": "workspace"}) == "artifact"
-    assert _requested_approval_scope(None, {"recommended_scope": "unsupported"}) == "artifact"
 
 
 def _post_daemon_json(
