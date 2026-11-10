@@ -82,10 +82,6 @@ pub(super) fn run() -> Result<(), String> {
         [command, config] if command == cline_hook_worker::WORKER_COMMAND => {
             std::process::exit(cline_hook_worker::run(config))
         }
-        #[cfg(unix)]
-        [command, rest @ ..] if command == daemon_edge::EDGE_COMMAND => {
-            std::process::exit(daemon_edge::run(rest))
-        }
         [command, rest @ ..] if command == daemon_edge::standalone::SERVE_COMMAND => {
             std::process::exit(daemon_edge::standalone::run(rest))
         }

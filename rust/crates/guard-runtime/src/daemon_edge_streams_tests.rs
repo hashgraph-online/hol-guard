@@ -6,24 +6,32 @@ fn pairs(query: &str) -> Vec<(String, String)> {
     query_pairs(query).unwrap()
 }
 
-#[test]
-fn activity_cursor_reads_the_header_before_the_query() {
-    assert_eq!(activity_cursor(&pairs(""), None), Some(0));
-    assert_eq!(activity_cursor(&pairs("cursor=7"), None), Some(7));
-    assert_eq!(activity_cursor(&pairs("cursor=7"), Some(" 9 ")), Some(9));
-    assert_eq!(activity_cursor(&pairs("cursor=7"), Some("  ")), Some(7));
+fn cursor(query: &str, last_event_id: Option<&str>) -> Result<i64, &'static str> {
+    activity_cursor(query, &pairs(query), last_event_id)
 }
 
 #[test]
-fn activity_cursor_leaves_errors_to_the_daemon() {
-    assert_eq!(activity_cursor(&pairs("cursor=-1"), None), None);
-    assert_eq!(activity_cursor(&pairs("cursor="), None), None);
-    assert_eq!(activity_cursor(&pairs("cursor=1&cursor=2"), None), None);
-    assert_eq!(activity_cursor(&pairs("other=1"), None), None);
+fn activity_cursor_reads_the_header_before_the_query() {
+    assert_eq!(cursor("", None), Ok(0));
+    assert_eq!(cursor("cursor=7", None), Ok(7));
+    assert_eq!(cursor("cursor=7", Some(" 9 ")), Ok(9));
+    assert_eq!(cursor("cursor=7", Some("  ")), Ok(7));
+}
+
+#[test]
+fn activity_cursor_names_the_error_the_daemon_answers() {
+    assert_eq!(cursor("cursor=-1", None), Err("invalid_cursor"));
+    assert_eq!(cursor("cursor=", None), Err("invalid_query_parameter"));
     assert_eq!(
-        activity_cursor(&pairs("cursor=99999999999999999999"), None),
-        None
+        cursor("cursor=1&cursor=2", None),
+        Err("invalid_query_parameter")
     );
+    assert_eq!(cursor("other=1", None), Err("unknown_query_parameter"));
+    assert_eq!(
+        cursor("cursor=99999999999999999999", None),
+        Err("invalid_cursor")
+    );
+    assert_eq!(cursor(&"a".repeat(8_193), None), Err("query_too_long"));
 }
 
 #[test]

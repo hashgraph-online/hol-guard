@@ -182,6 +182,27 @@ pub(in crate::daemon_edge) fn refusal(
     (!header_secret_matches(request, secret)).then_some(Refusal::Unauthorized)
 }
 
+/// A request no route answered and [`refusal`] left to the daemon, because it
+/// carries a dashboard session, a bearer credential or a hook proof: with no
+/// daemon behind a standalone edge, a caller that does not authorize a guarded
+/// route is refused here, as `_header_token_is_valid` and `request_auth`
+/// refused it.
+pub(in crate::daemon_edge) fn credential_refusal(
+    request: &Request<'_>,
+    secret: &[u8],
+) -> Option<Refusal> {
+    let authorized = match request.method {
+        "GET" if request.path.starts_with("/v1/") || request.path.starts_with("/v2/") => {
+            super::super::auth::authorize(request, secret).is_some()
+        }
+        "POST" if route_class(request.path) != "none" || requires_header_token(request.path) => {
+            super::super::auth::authorize_write(request, secret).is_some()
+        }
+        _ => return None,
+    };
+    (!authorized).then_some(Refusal::Unauthorized)
+}
+
 /// Whether the daemon checks this `POST`'s caller before it reads the body,
 /// so a refusal can be sent while the body is still arriving.
 pub(in crate::daemon_edge) fn post_checks_caller_first(request: &Request<'_>) -> bool {

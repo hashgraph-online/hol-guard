@@ -151,7 +151,7 @@ fn a_standalone_daemon_answers_the_health_probe_itself() {
     reads.mark_standalone();
     reads.accept_handshake(&config.handshake("0123456789abcdef0123456789abcdef"));
     assert_eq!(reads.daemon_pid(), std::process::id());
-    std::thread::spawn(move || serve(&listener, None, 4, STALLED_WRITE_TIMEOUT, reads));
+    std::thread::spawn(move || serve(&listener, 4, STALLED_WRITE_TIMEOUT, reads));
     let mut client = std::net::TcpStream::connect(address).unwrap();
     client
         .write_all(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
@@ -199,7 +199,7 @@ fn echoing_daemon() -> (tempfile::TempDir, SocketAddr) {
     let reads = Arc::new(NativeReads::new(None));
     reads.mark_standalone();
     reads.accept_handshake(&config.handshake(&pass));
-    std::thread::spawn(move || serve(&listener, None, 4, STALLED_WRITE_TIMEOUT, reads));
+    std::thread::spawn(move || serve(&listener, 4, STALLED_WRITE_TIMEOUT, reads));
     (dir, address)
 }
 
@@ -276,7 +276,7 @@ fn a_standalone_daemon_proves_its_identity_on_the_hook_connection() {
 }
 
 #[test]
-fn a_hook_without_the_issued_proof_reaches_the_handler_unverified() {
+fn a_hook_without_the_issued_proof_is_refused() {
     let (dir, address) = echoing_daemon();
     let nonce = "cd".repeat(32);
     let hook = json!({"hook_event_name": "PreToolUse"}).to_string();
@@ -316,7 +316,14 @@ fn a_hook_without_the_issued_proof_reaches_the_handler_unverified() {
             .unwrap();
         let mut response = String::new();
         client.read_to_string(&mut response).unwrap();
-        assert!(response.starts_with("HTTP/1.0 200 OK"), "{response}");
+        // A proof that does not redeem admits nothing without the daemon
+        // credential, and no route takes a `POST` on a path that is no hook.
+        let status = if path == "/v1/requests" {
+            "HTTP/1.0 404 "
+        } else {
+            "HTTP/1.0 401 "
+        };
+        assert!(response.starts_with(status), "{path} {response}");
         assert!(!response.contains("--daemon-proof-verified"), "{response}");
         assert!(!response.contains(r#""proof_verified":true"#), "{response}");
     }

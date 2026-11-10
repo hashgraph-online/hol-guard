@@ -19,6 +19,7 @@ from typing import Any
 from .control_route_calls import ROUTE_CALLS
 from .extension_control_host import EXTENSION_CONTROL_CALLS
 from .routes.calls import HANDLER_CALLS
+from .routes.catalog_calls import CATALOG_CALLS
 from .routes.control_host import CONTROL_HOST_CALLS
 from .routes.hook_host import HOOK_HOST_CALLS
 from .routes.policy_sync_call import POLICY_SYNC_CALLS
@@ -227,6 +228,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **REQUEST_HOST_CALLS,
     **WORKER_CALLS,
     **EXTENSION_CONTROL_CALLS,
+    **CATALOG_CALLS,
 }
 
 

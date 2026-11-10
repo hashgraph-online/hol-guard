@@ -83,16 +83,36 @@ pub(in crate::daemon_edge) fn serve(
     if let Some(response) = reviewed_answer(client, &request, config, reads, verified) {
         return write_answer(client, &response, reads, stalled_write);
     }
-    replay::replay_with(
-        client,
-        config,
-        request,
-        stalled_write,
-        reads.daemon_pid(),
-        verified,
-    );
+    if let Some(response) = refused_answer(client, &request, config, reads) {
+        return write_answer(client, &response, reads, stalled_write);
+    }
+    replay::replay_with(client, config, request, stalled_write);
     reads.report_activity();
     Outcome::Answered
+}
+
+/// The `401` or `403` for a hook whose proof did not admit it and whose
+/// caller holds no daemon credential either.
+fn refused_answer(
+    client: &TcpStream,
+    request: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    let head_len = replay::find_head_end(request)?;
+    let head = parse_request(&request[..head_len])?;
+    let body = &request[head_len..];
+    let refusal = super::refusals::refusal(&head, body, &config.token)
+        .or_else(|| super::refusals::credential_refusal(&head, &config.token))?;
+    let (status, body, cors_origin) =
+        super::refusals::respond(&head, &refusal, client.local_addr().ok(), config, reads);
+    Some(json_response(
+        status,
+        &body,
+        config.dashboard_build.as_deref(),
+        cors_origin.as_deref(),
+        false,
+    ))
 }
 
 /// The signed challenge answer, or the status and error the daemon refuses

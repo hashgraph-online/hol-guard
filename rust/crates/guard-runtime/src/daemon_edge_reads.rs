@@ -43,8 +43,6 @@ use super::http::{parse_request, take_request, Request};
 use super::http::{HEAD_PEEK_WINDOW, MAX_BODY_BYTES};
 
 pub(super) const HANDSHAKE_SCHEMA: &str = "guard-daemon-edge-handshake.v1";
-#[cfg(unix)]
-pub(super) const MAX_HANDSHAKE_BYTES: usize = 64 * 1024;
 /// The request headers the daemon names in its CORS answer.
 const CORS_ALLOW_HEADERS: &str =
     "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token";
@@ -474,10 +472,14 @@ fn answer_request(
         );
         return write_answer(client, &response, reads, stalled_write);
     }
-    if let Some((stream, cors_origin)) = request
+    if let Some(opened) = request
         .as_ref()
         .and_then(|request| streams::opens(request, config))
     {
+        let (stream, cors_origin) = match opened {
+            Ok(opened) => opened,
+            Err(response) => return write_answer(client, &response, reads, stalled_write),
+        };
         streams::serve(
             client,
             stream,
@@ -609,7 +611,8 @@ fn answer_request(
         // A standalone daemon has no server behind it to refuse a caller
         // without the token or from a disallowed origin.
         let request = request.as_ref().filter(|_| reads.is_standalone())?;
-        let refusal = refusals::refusal(request, body, &config.token)?;
+        let refusal = refusals::refusal(request, body, &config.token)
+            .or_else(|| refusals::credential_refusal(request, &config.token))?;
         let (status, body, cors_origin) =
             refusals::respond(request, &refusal, client.local_addr().ok(), config, reads);
         Some((status, body, cors_origin, false))

@@ -1,21 +1,19 @@
-//! Requests no native route answers: the daemon parses them, answers a
-//! preflight, an unsupported method or a malformed request itself, and runs
-//! the rest through the route handler in the Guard library (the
-//! `route.request` call), which applies every origin, auth and body check it
-//! always has and returns the raw response, written back unchanged.
+//! Requests no other native route answers: a preflight, an unsupported
+//! method, a malformed request, the `/v2/` catalog reads, and a path no route
+//! names, which gets the `404` the daemon's handler ended on.
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine;
-use serde_json::{json, Value};
+use serde_json::json;
 
 use super::auth::{authorize_origin, normalize_origin};
 use super::http::{parse_request, Request};
-use super::library;
 use super::reads::ReadConfig;
+
+#[path = "daemon_edge_replay_catalog.rs"]
+mod catalog;
 
 /// How long the client has to send the rest of its request.
 const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -24,9 +22,7 @@ const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(10);
 pub(in crate::daemon_edge) const MAX_REPLAYED_BODY_BYTES: usize = 1_000_000;
 const MAX_REPLAYED_HEAD_BYTES: usize = 64 * 1024;
 
-const UNAVAILABLE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 38\r\nConnection: close\r\n\r\n{\"error\": \"daemon_route_unavailable\"}\n";
-
-/// Answers the request on `client` through the route handler. `read_ahead` is the
+/// Answers the request on `client`. `read_ahead` is the
 /// request the edge already took off the socket, or empty when it took
 /// nothing.
 pub(in crate::daemon_edge) fn replay(
@@ -34,7 +30,6 @@ pub(in crate::daemon_edge) fn replay(
     config: &ReadConfig,
     read_ahead: Vec<u8>,
     stalled_write: Duration,
-    daemon_pid: u32,
 ) {
     let request = if read_ahead.is_empty() {
         read_request(client, REQUEST_READ_TIMEOUT)
@@ -45,35 +40,33 @@ pub(in crate::daemon_edge) fn replay(
         let _ = client.shutdown(Shutdown::Both);
         return;
     };
-    replay_with(client, config, request, stalled_write, daemon_pid, false);
+    replay_with(client, config, request, stalled_write);
 }
 
-/// Answers `request`, already read off `client`, through the route handler.
-/// `proof_verified` tells the handler the edge checked the daemon identity
-/// proof this hook presents on its connection.
+/// Answers `request`, already read off `client`.
 pub(in crate::daemon_edge) fn replay_with(
     client: &TcpStream,
     config: &ReadConfig,
     request: Vec<u8>,
     stalled_write: Duration,
-    daemon_pid: u32,
-    proof_verified: bool,
 ) {
-    let response = client.local_addr().ok().and_then(|local| {
-        own_answer(&request, config.dashboard_build()).or_else(|| {
-            run(config, local.port(), daemon_pid, proof_verified, &request)
-                .filter(|response| !response.is_empty())
+    let response = own_answer(&request, config.dashboard_build())
+        .or_else(|| {
+            let head = &request[..find_head_end(&request)?];
+            let parsed = parse_request(head)?;
+            (parsed.method == "GET" && parsed.path.starts_with("/v2/"))
+                .then(|| catalog::respond(&parsed, config))
         })
-    });
+        .unwrap_or_else(|| empty_response(404, config.dashboard_build(), &[]));
     let _ = client.set_write_timeout(Some(stalled_write));
     let mut writer = client;
-    let _ = writer.write_all(response.as_deref().unwrap_or(UNAVAILABLE));
+    let _ = writer.write_all(&response);
     let _ = client.shutdown(Shutdown::Both);
 }
 
 /// `do_OPTIONS`, the `501` an unsupported method gets and the `400` a
-/// request line that does not parse gets; `None` for a request the route
-/// handler answers.
+/// request line that does not parse gets; `None` for a request no route
+/// names.
 fn own_answer(request: &[u8], build: Option<&str>) -> Option<Vec<u8>> {
     let head = &request[..find_head_end(request)?];
     let method = head.split(|byte| *byte == b' ').next().unwrap_or_default();
@@ -131,6 +124,7 @@ fn empty_response(status: u16, build: Option<&str>, headers: &[(&str, &str)]) ->
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
+        404 => "Not Found",
         _ => "Forbidden",
     };
     let mut response = format!("HTTP/1.0 {status} {reason}\r\n");
@@ -216,35 +210,6 @@ pub(in crate::daemon_edge) fn content_length(head: &[u8]) -> Option<usize> {
         return None;
     }
     value.parse().ok()
-}
-
-/// The route handler's raw response to `request`, or `None` when the call
-/// could not run or answered nothing usable.
-fn run(
-    config: &ReadConfig,
-    port: u16,
-    daemon_pid: u32,
-    proof_verified: bool,
-    request: &[u8],
-) -> Option<Vec<u8>> {
-    let answer = library::call(
-        config,
-        "route.request",
-        request_args(request, port, daemon_pid, proof_verified),
-    )
-    .ok()?;
-    STANDARD.decode(answer.get("response")?.as_str()?).ok()
-}
-
-/// The `route.request` arguments for one request. `daemon_pid` is the
-/// process the published daemon state names.
-fn request_args(request: &[u8], port: u16, daemon_pid: u32, proof_verified: bool) -> Value {
-    json!({
-        "request": STANDARD.encode(request),
-        "port": port,
-        "daemon_pid": daemon_pid,
-        "proof_verified": proof_verified,
-    })
 }
 
 #[cfg(all(test, unix))]

@@ -63,7 +63,8 @@ def answer_line(guard_home: Path, request: bytes) -> bytes:
         call_id = None
     if isinstance(call_id, int) and not isinstance(call_id, bool):
         result = {"id": call_id, **result}
-    return json.dumps(result, separators=(",", ":"), default=str).encode("utf-8") + b"\n"
+    line = json.dumps(result, separators=(",", ":"), default=str) + "\n"
+    return line.encode("utf-8")
 
 
 def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callable[[bytes], None]) -> int:

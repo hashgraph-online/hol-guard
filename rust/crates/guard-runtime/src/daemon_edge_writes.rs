@@ -184,7 +184,12 @@ pub(super) fn respond(
         );
         return Some((200, body, caller.cors_origin, false));
     }
-    if request.method == "POST" && legacy_cloud_handoff(request.path) {
+    // A wrong daemon credential is refused before any route runs.
+    if request.method == "POST"
+        && legacy_cloud_handoff(request.path)
+        && (super::super::auth::authorize_write(request, &config.token).is_some()
+            || !request.has_header("X-Guard-Token"))
+    {
         // The retired handoff does nothing, so it answers without a token,
         // as the Python daemon did.
         let caller = super::super::auth::authorize_origin(request)?;

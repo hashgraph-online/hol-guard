@@ -20,7 +20,6 @@ from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_catalog_read as transport
 from codex_plugin_scanner.guard.cli import extension_catalog_reads as reads
 from codex_plugin_scanner.guard.cli import extension_controls_commands
-from codex_plugin_scanner.guard.daemon import catalog_read_v2
 from codex_plugin_scanner.guard.daemon.catalog_v2_client import (
     CatalogTraversalError,
     CatalogV2Client,
@@ -28,7 +27,6 @@ from codex_plugin_scanner.guard.daemon.catalog_v2_client import (
 )
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.routes import request_handler as server_module
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -260,15 +258,8 @@ def native_daemon(
     # Debug builds construct the snapshot slowly on the first read; the default
     # 2s native budget is a production bound, not what parity tests measure.
     monkeypatch.setattr(
-        server_module,
-        "serve_catalog_read_v2",
-        functools.partial(
-            catalog_read_v2.serve_catalog_read_v2,
-            reader=functools.partial(transport.native_catalog_read, timeout_seconds=60.0),
-        ),
+        transport, "native_catalog_read", functools.partial(transport.native_catalog_read, timeout_seconds=60.0)
     )
-    # The patched catalog reader runs in the Python handler.
-    monkeypatch.setenv("HOL_GUARD_HARNESS_NATIVE", "0")
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     daemon.start()
@@ -279,20 +270,16 @@ def native_daemon(
             # authenticated fixture seam while exercising real native metadata
             # preparation and transport; production retains its fixed factory.
             from codex_plugin_scanner.guard.catalog_delivery.discovery import prepare_discovery
-            from tests.test_catalog_discovery_backend import prepared_fixture
+            from tests.test_catalog_discovery_backend import prepared_fixture, provision
 
             entries = [extension.to_dict() for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions]
             verified, fetch, _, _ = prepared_fixture(tmp_path, monkeypatch, catalog_entries=entries)
+            provision(store.guard_home)
             handle = prepare_discovery(store.guard_home, verified, fetch=fetch)
             monkeypatch.setattr(
-                server_module,
-                "serve_catalog_read_v2",
-                functools.partial(
-                    catalog_read_v2.serve_catalog_read_v2,
-                    reader=functools.partial(
-                        transport.native_catalog_read, timeout_seconds=60.0, discovery_handle=handle
-                    ),
-                ),
+                transport,
+                "native_catalog_read",
+                functools.partial(transport.native_catalog_read, timeout_seconds=60.0, discovery_handle=handle),
             )
         token = load_guard_daemon_auth_token(store.guard_home)
         assert token is not None

@@ -33,7 +33,6 @@ from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..daemon.audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
 from ..daemon.audit_persistence import WRITTEN as AUDIT_WRITTEN
 from ..daemon.audit_persistence import AuditPersistence
-from ..daemon.catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
 from ..daemon.command_activity_api import (
     parse_command_activity_event_cursor,
     stream_command_activity_events,
@@ -502,17 +501,6 @@ class _GuardDaemonHandler(
                 return
             if not self._header_token_is_valid():
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
-                return
-            if parsed.path.startswith(CATALOG_V2_PREFIX):
-                daemon = self._daemon_server()
-                serve_catalog_read_v2(
-                    self,
-                    path=parsed.path,
-                    query=parsed.query,
-                    if_none_match=self.headers.get("If-None-Match"),
-                    guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
-                    catalog_digest=daemon.extension_control_api.catalog_digest,
-                )
                 return
             self._write_json({"error": "not_found"}, status=404)
             return

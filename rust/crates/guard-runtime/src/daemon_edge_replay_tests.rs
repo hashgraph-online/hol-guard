@@ -18,15 +18,6 @@ fn content_length_needs_exactly_one_number() {
 }
 
 #[test]
-fn a_request_goes_to_the_handler_encoded() {
-    let args = request_args(b"GET / HTTP/1.0\r\n\r\n", 5474, 42, true);
-    assert_eq!(args["request"], "R0VUIC8gSFRUUC8xLjANCg0K");
-    assert_eq!(args["port"], 5474);
-    assert_eq!(args["daemon_pid"], 42);
-    assert_eq!(args["proof_verified"], true);
-}
-
-#[test]
 fn a_garbled_request_is_a_bad_request() {
     let answer = own_answer(b"\x01\x02\r\n\r\n", None).unwrap();
     assert!(answer.starts_with(b"HTTP/1.0 400 "));
@@ -37,6 +28,7 @@ fn an_unsupported_method_is_not_implemented() {
     let answer = own_answer(b"PUT /v1/x HTTP/1.0\r\n\r\n", None).unwrap();
     assert!(answer.starts_with(b"HTTP/1.0 501 "));
     assert!(own_answer(b"GET /v1/x HTTP/1.0\r\n\r\n", None).is_none());
+    assert!(empty_response(404, None, &[]).starts_with(b"HTTP/1.0 404 Not Found\r\n"));
 }
 
 #[test]
@@ -49,13 +41,4 @@ fn a_preflight_needs_an_origin() {
     )
     .unwrap();
     assert!(refused.starts_with(b"HTTP/1.0 403 "));
-}
-
-#[test]
-fn the_unavailable_answer_declares_its_body() {
-    let head_len = find_head_end(UNAVAILABLE).unwrap();
-    assert_eq!(
-        content_length(&UNAVAILABLE[..head_len]),
-        Some(UNAVAILABLE.len() - head_len)
-    );
 }

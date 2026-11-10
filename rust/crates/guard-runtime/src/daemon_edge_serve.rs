@@ -293,7 +293,6 @@ pub(crate) fn run(args: &[String]) -> i32 {
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
     match serve(
         &listener,
-        None,
         MAX_ACTIVE_CONNECTIONS,
         STALLED_WRITE_TIMEOUT,
         reads,

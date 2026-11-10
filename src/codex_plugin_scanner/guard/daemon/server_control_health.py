@@ -172,13 +172,3 @@ class _ControlHealthRoutes:
         if normalized in {"0", "false", "no", "off"}:
             return False
         return default
-
-    def write_catalog_v2_body(self, body: bytes, *, status: int, headers: dict[str, str]) -> None:
-        self._write_json_bytes(body, status=status, extra_headers=headers)
-
-    def write_catalog_v2_empty(self, *, status: int, headers: dict[str, str]) -> None:
-        cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS") or {}
-        self._write_empty(status=status, extra_headers={**cors_headers, **headers})
-
-    def write_catalog_v2_error(self, error_code: str, *, status: int) -> None:
-        self._write_json({"error": error_code}, status=status, extra_headers={"Cache-Control": "no-store"})

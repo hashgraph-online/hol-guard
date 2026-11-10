@@ -37,13 +37,14 @@ pub(super) enum Stream {
     Activity { cursor: i64 },
 }
 
-/// Whether the edge streams this request itself. `None` leaves it to the
-/// daemon: a different path, a query key the daemon audits (`token`), a
-/// caller it would refuse, or a cursor it answers with an error.
-pub(super) fn opens(
-    request: &Request<'_>,
-    config: &ReadConfig,
-) -> Option<(Stream, Option<String>)> {
+/// A stream to serve and the CORS origin to name.
+type Opened = (Stream, Option<String>);
+
+/// The streaming answer for this request: `Ok` to stream, `Err` for the 400
+/// the daemon answers a malformed command-activity query with. `None` leaves
+/// the request to the edge's other routes: a different path, a query key the
+/// refusals audit (`token`), or a caller they refuse.
+pub(super) fn opens(request: &Request<'_>, config: &ReadConfig) -> Option<Result<Opened, Vec<u8>>> {
     if request.method != "GET" || !matches!(request.path, EVENTS_PATH | ACTIVITY_PATH) {
         return None;
     }
@@ -62,37 +63,58 @@ pub(super) fn opens(
             cursor: fields.get("cursor").and_then(Value::as_i64)?,
         }
     } else {
-        Stream::Activity {
-            cursor: activity_cursor(&pairs, request.single_header("Last-Event-ID"))?,
+        match activity_cursor(
+            request.query,
+            &pairs,
+            request.single_header("Last-Event-ID"),
+        ) {
+            Ok(cursor) => Stream::Activity { cursor },
+            Err(code) => {
+                return Some(Err(json_response(
+                    400,
+                    &json!({ "error": code }),
+                    config.dashboard_build.as_deref(),
+                    caller.cors_origin.as_deref(),
+                    false,
+                )))
+            }
         }
     };
-    Some((stream, caller.cors_origin))
+    Some(Ok((stream, caller.cors_origin)))
 }
 
 /// `parse_command_activity_event_cursor`: `Last-Event-ID` wins over a lone
-/// `cursor` field, and the value must be a non-negative 64-bit integer.
+/// `cursor` field, and the value must be a non-negative 64-bit integer. The
+/// error is the code the daemon answers with.
 pub(super) fn activity_cursor(
+    query: &str,
     pairs: &[(String, String)],
     last_event_id: Option<&str>,
-) -> Option<i64> {
-    if pairs.iter().any(|(key, _)| key != "cursor") {
-        return None;
+) -> Result<i64, &'static str> {
+    if query.len() > 8_192 {
+        return Err("query_too_long");
     }
-    let cursors: Vec<&str> = pairs.iter().map(|(_, value)| value.as_str()).collect();
-    if cursors.len() > 1 {
-        return None;
+    let mut cursor = None;
+    for (key, value) in pairs {
+        if key != "cursor" {
+            return Err("unknown_query_parameter");
+        }
+        if cursor.is_some() || value.is_empty() {
+            return Err("invalid_query_parameter");
+        }
+        cursor = Some(value.as_str());
     }
     let candidate = match last_event_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
         Some(value) => value,
-        None => cursors.first().copied().unwrap_or("0"),
+        None => cursor.unwrap_or("0"),
     };
     if candidate.is_empty() || !candidate.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
+        return Err("invalid_cursor");
     }
-    candidate.parse::<i64>().ok()
+    candidate.parse::<i64>().map_err(|_| "invalid_cursor")
 }
 
 pub(super) fn stream_head(cors_origin: Option<&str>) -> Vec<u8> {

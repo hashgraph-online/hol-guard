@@ -21,10 +21,8 @@ import pytest
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_catalog_read as transport
 from codex_plugin_scanner.guard import native_runtime_resilience as resilience
-from codex_plugin_scanner.guard.daemon import catalog_read_v2
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.native_catalog_read import NativeCatalogReadResult
-from codex_plugin_scanner.guard.routes import request_handler as server_module
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -243,11 +241,7 @@ def daemon(tmp_path: Path) -> Iterator[SimpleNamespace]:
 
 
 def _use_reader(monkeypatch: pytest.MonkeyPatch, reader: Callable[..., NativeCatalogReadResult | None]) -> None:
-    monkeypatch.setattr(
-        server_module,
-        "serve_catalog_read_v2",
-        functools.partial(catalog_read_v2.serve_catalog_read_v2, reader=reader),
-    )
+    monkeypatch.setattr(transport, "native_catalog_read", reader)
 
 
 def _get(
@@ -367,7 +361,7 @@ def test_rollback_switch_answers_unavailable_without_native_dispatch(
 ) -> None:
     reader = _Recorder(NativeCatalogReadResult(status=200, etag=ETAG, body=b"{}"))
     _use_reader(monkeypatch, reader)
-    monkeypatch.setenv(catalog_read_v2.CATALOG_V2_ROLLOUT_ENV, value)
+    monkeypatch.setenv(transport.CATALOG_V2_ROLLOUT_ENV, value)
     status, headers, body = _get(daemon, "/v2/extension-controls/catalog/index", {"X-Guard-Token": daemon.token})
     assert status == 501
     assert json.loads(body) == {"error": "catalog_read_model_unavailable"}
@@ -377,8 +371,8 @@ def test_rollback_switch_answers_unavailable_without_native_dispatch(
 
 @pytest.mark.parametrize("value", [None, "", "on", "1"])
 def test_v2_read_path_is_on_unless_switched_off(value: str | None) -> None:
-    environ = {} if value is None else {catalog_read_v2.CATALOG_V2_ROLLOUT_ENV: value}
-    assert catalog_read_v2.catalog_read_v2_enabled(environ)
+    environ = {} if value is None else {transport.CATALOG_V2_ROLLOUT_ENV: value}
+    assert transport.catalog_read_v2_enabled(environ)
 
 
 def test_authenticated_unknown_v2_path_is_not_found(daemon: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -393,7 +387,7 @@ def test_authenticated_unknown_v2_path_is_not_found(daemon: SimpleNamespace, mon
 def test_v2_python_boundary_never_reserializes_the_catalog() -> None:
     """Python must not build v2 content: no registry, ``to_dict`` or body parsing."""
 
-    for module in (transport, catalog_read_v2):
+    for module in (transport,):
         source = Path(module.__file__ or "").read_text(encoding="utf-8")
         names = {node.id for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Name)}
         attributes = {node.attr for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Attribute)}
@@ -405,7 +399,7 @@ def test_v2_python_boundary_never_reserializes_the_catalog() -> None:
     assert transport_source.count("json.loads(") == 1
 
 
-_V2_READ_MODULES = frozenset({"native_catalog_read", "catalog_read_v2", "catalog_v2_client"})
+_V2_READ_MODULES = frozenset({"native_catalog_read", "catalog_v2_client"})
 
 
 def _imported_modules(tree: ast.AST) -> set[str]:
@@ -431,7 +425,7 @@ def test_v2_read_model_is_reachable_only_from_read_paths() -> None:
         and _imported_modules(ast.parse(path.read_text(encoding="utf-8"))) & _V2_READ_MODULES
     }
     # The daemon GET route and the CLI catalog readers are the only callers.
-    assert importers == {"routes/request_handler.py", "cli/extension_catalog_reads.py"}
+    assert importers == {"routes/catalog_calls.py", "cli/extension_catalog_reads.py"}
     # The v2 modules import transport helpers only: no store, authority, policy or sync code.
     for module in _V2_READ_MODULES:
         source = next(package.rglob(f"{module}.py")).read_text(encoding="utf-8")
@@ -439,7 +433,6 @@ def test_v2_read_model_is_reachable_only_from_read_paths() -> None:
         assert not imported & {"store", "authority", "extension_control_api", "extension_catalog_sync", "policy"}
 
 
-@pytest.mark.python_daemon
 def test_real_native_read_model_traverses_index_and_revalidates(
     native_hook_force: Path, daemon: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -456,11 +449,12 @@ def test_real_native_read_model_traverses_index_and_revalidates(
         # prepared publication fixture through the factory-handle interface;
         # production still uses only its fixed installed loader by default.
         from codex_plugin_scanner.guard.catalog_delivery.discovery import prepare_discovery
-        from tests.test_catalog_discovery_backend import prepared_fixture
+        from tests.test_catalog_discovery_backend import prepared_fixture, provision
 
         catalog_path = Path(__file__).parents[1] / "contracts/extensions/command-catalog.v1.json"
         entries = json.loads(catalog_path.read_bytes())["catalog"]
         verified, fetch, _, _ = prepared_fixture(guard_home.parent, monkeypatch, catalog_entries=entries)
+        provision(guard_home)
         handle = prepare_discovery(guard_home, verified, fetch=fetch)
         _use_reader(
             monkeypatch, functools.partial(transport.native_catalog_read, timeout_seconds=60.0, discovery_handle=handle)
