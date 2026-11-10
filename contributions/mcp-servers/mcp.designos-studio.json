@@ -1,0 +1,200 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.designos-studio",
+  "version": "1.0.0",
+  "name": "DESIGN:OS Studio",
+  "description": "Local stdio MCP server for DESIGN:OS Studio, a FREE source-available (PolyForm Shield 1.0.0) interface design tool. Agents inspect and edit a .fig or .designos document in memory over 39 tools, then save or export inside a configured workspace. The server does not listen on a network port. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.jangtrinh",
+    "displayName": "Jang Trinh",
+    "url": "https://github.com/jangtrinh"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://jangtrinh.github.io/design-os-studio/",
+  "license": "PolyForm Shield 1.0.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "designos-mcp"
+  },
+  "riskClasses": [
+    "local-data-access",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "designos_get_document",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_get_libraries",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_get_metadata",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_search_design_system",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_list_nodes",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_get_node",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_get_variables",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_generate_code",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_create_node",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_update_node",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_delete_node",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_list_comments",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_add_comment",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_reply_comment",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_resolve_comment",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_apply_spec",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_export_spec",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_set_dev_status",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_export_fig_file",
+      "state": "review"
+    },
+    {
+      "name": "designos_query_xpath",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_lint",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_get_guidelines",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_import_web_capture",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_undo",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_lint_fix",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_redo",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_get_screenshot",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_set_in_progress",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_apply_batch",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_get_design_context",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_configure_session",
+      "state": "review"
+    },
+    {
+      "name": "designos_get_app_state",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_docs_list",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_docs_read",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_open_file",
+      "state": "inherit"
+    },
+    {
+      "name": "designos_save_file",
+      "state": "review"
+    },
+    {
+      "name": "designos_close_document",
+      "state": "review"
+    },
+    {
+      "name": "designos_render_png",
+      "state": "review"
+    },
+    {
+      "name": "designos_new_document",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/jangtrinh/design-os-studio",
+    "https://jangtrinh.github.io/design-os-studio/",
+    "https://github.com/jangtrinh/design-os-studio/blob/main/crates/designos-mcp/README.md"
+  ],
+  "saferAlternatives": [
+    "Keep designos_export_fig_file, designos_save_file, designos_render_png and designos_close_document on review: they alone can write under --workspace (.fig, .designos, or a new .png). Existing .fig or .designos files need overwrite.",
+    "Edit tools only change the in-memory session document until designos_save_file writes a .designos file. designos_generate_code and designos_export_spec return source and write no files. designos_get_screenshot returns an inline image.",
+    "Launch as designos-mcp --workspace <dir> over stdio. Relative and absolute paths must stay inside that workspace. Keep designos_configure_session on review: it persists options in the session directory, not under --workspace.",
+    "Keep the other row on review so any tool added in a future Studio release is reviewed until this entry lists it."
+  ]
+}
