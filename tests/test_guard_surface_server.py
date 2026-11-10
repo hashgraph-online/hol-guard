@@ -37,7 +37,6 @@ from codex_plugin_scanner.guard.local_dashboard_session import (
     build_local_dashboard_session_token,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 from codex_plugin_scanner.guard.routes.request_host import _republish_trust_status
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
@@ -2964,29 +2963,6 @@ class TestGuardSurfaceServer:
         assert "sessions" not in initialize_payload
         assert unsupported_error is not None
         assert unsupported_error.code == 400
-
-    def test_initialize_answers_503_when_the_native_handshake_fails(self, tmp_path, monkeypatch) -> None:
-        def unavailable(_kind: str, _args: dict[str, object], **_options: object) -> dict[str, object]:
-            raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
-
-        monkeypatch.setattr("codex_plugin_scanner.guard.schemas.surface_server.native_runner_authority", unavailable)
-        daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
-        daemon.start()
-        try:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/initialize",
-                data=json.dumps({"client_name": "approval-center-web", "surface": "approval-center"}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with pytest.raises(urllib.error.HTTPError) as raised:
-                _ = urllib.request.urlopen(request, timeout=5)
-            body = json.loads(raised.value.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        assert raised.value.code == 503
-        assert "surface server contract" in body["error"]
 
     def test_initialize_refreshes_signed_dashboard_session_within_absolute_lifetime(
         self,

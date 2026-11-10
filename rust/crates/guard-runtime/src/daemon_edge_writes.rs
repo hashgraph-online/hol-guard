@@ -15,7 +15,10 @@ use std::net::SocketAddr;
 use guard_contracts::DaemonFieldV1;
 use serde_json::{json, Map, Value};
 
-use super::super::auth::{authorize_token, authorize_write};
+use super::super::auth::{
+    authorize_initialize, authorize_session_write, authorize_token, authorize_write,
+    refreshed_session,
+};
 use super::super::http::Request;
 use super::{read_state, NativeReads, ReadConfig};
 use crate::guard_store_json::py_strip;
@@ -200,20 +203,32 @@ pub(super) fn respond(
         return Some((status, body, caller.cors_origin, no_store));
     }
     if let Some(route) = sessions::Route::parse(request.method, request.path) {
-        // A dashboard session may come back refreshed from `initialize`,
-        // which only the daemon signs.
-        if request.has_header("Transfer-Encoding")
-            || (matches!(route, sessions::Route::Initialize)
-                && (request.has_header("X-Guard-Dashboard-Session")
-                    || request.has_header("Authorization")))
-        {
+        if request.has_header("Transfer-Encoding") {
             return None;
         }
-        let caller = authorize_token(request, &config.token)?;
+        let initialize = matches!(route, sessions::Route::Initialize);
+        let (caller, include_sessions) = if initialize {
+            authorize_initialize(request, &config.token)?
+        } else {
+            (authorize_session_write(request, &config.token)?, true)
+        };
         let payload = read_body!(py_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
-        return sessions::respond(&route, &payload, config, reads)
-            .map(|(status, body)| (status, body, caller.cors_origin, false));
+        let (status, mut answer) =
+            sessions::respond(&route, &payload, include_sessions, config, reads)?;
+        if initialize && status == 200 {
+            let surface = sessions::initialize_surface(&payload);
+            if let (Some(fields), Some(refreshed)) = (
+                answer.as_object_mut(),
+                refreshed_session(request, &config.token, &surface),
+            ) {
+                fields.insert(
+                    "dashboard_session_token".to_owned(),
+                    Value::String(refreshed),
+                );
+            }
+        }
+        return Some((status, answer, caller.cors_origin, false));
     }
     if let Some(route) = gate_config::Route::parse(request.method, request.path) {
         let caller = authorize_token(request, &config.token)?;

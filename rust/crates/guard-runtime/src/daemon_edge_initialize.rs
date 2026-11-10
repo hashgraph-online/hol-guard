@@ -1,9 +1,10 @@
 //! `POST /v1/initialize`, answered as the daemon's `_handle_initialize` and
-//! `initialize_client` answer a caller holding the daemon key: the same
-//! negotiated protocol, the surface server contract and the newest sessions.
+//! `initialize_client` answer it: the same negotiated protocol and surface
+//! server contract, and the newest sessions for a caller holding the daemon
+//! key.
 //!
-//! A caller that also sends a dashboard session goes to the daemon, which may
-//! hand back a refreshed session.
+//! A caller that presents a dashboard session gets a refreshed one back,
+//! which the write path adds once this answer is built.
 
 use serde_json::{json, Value};
 
@@ -54,6 +55,7 @@ const SESSION_LIMIT: i64 = 20;
 
 pub(super) fn respond(
     payload: &Dict,
+    include_sessions: bool,
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value)> {
@@ -73,10 +75,7 @@ pub(super) fn respond(
     if !contract.is_object() || !protocol.is_object() {
         return None;
     }
-    let sessions = session_items(SESSION_LIMIT, config, reads)?;
-    Some((
-        200,
-        json!({
+    let mut answer = json!({
             "protocol_version": negotiated,
             "schema_version": contract.get("schema_version"),
             "schema": contract,
@@ -96,9 +95,11 @@ pub(super) fn respond(
                     .unwrap_or_else(|| "cli".to_owned()),
                 "capabilities": listed("capabilities").to_json()?,
             },
-            "sessions": sessions,
-        }),
-    ))
+    });
+    if include_sessions {
+        answer["sessions"] = Value::Array(session_items(SESSION_LIMIT, config, reads)?);
+    }
+    Some((200, answer))
 }
 
 #[cfg(all(test, unix))]

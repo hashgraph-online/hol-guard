@@ -122,26 +122,8 @@ class _ControlPostRoutes:
         if route.route_class == "local_cli":
             handle_local_cli_post(self, parsed.path, payload)
             return
-        if parsed.path == "/v1/initialize":
-            self._handle_initialize(payload)
-            return
         if parsed.path == "/v1/command-activity/feedback":
             handle_command_activity_feedback(self, payload)
-            return
-        if parsed.path == "/v1/sessions/start":
-            self._handle_session_start(payload)
-            return
-        if parsed.path == "/v1/operations/start":
-            self._handle_operation_start(payload)
-            return
-        if parsed.path == "/v1/operations/block":
-            self._handle_operation_block(payload)
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] == "items":
-            self._handle_operation_item(path_parts[2], payload)
-            return
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] == "status":
-            self._handle_operation_status(path_parts[2], payload)
             return
         if parsed.path == "/v1/policy/decisions":
             self._handle_policy_upsert(payload)

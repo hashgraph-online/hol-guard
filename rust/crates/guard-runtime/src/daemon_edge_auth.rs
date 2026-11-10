@@ -22,6 +22,8 @@ use super::http::Request;
 use crate::daemon_route_paths::session_path;
 use crate::daemon_route_session::{origin_decision, session_authorize, SessionRequest};
 use crate::guard_store_json::{aware_epoch_micros, py_strip};
+use crate::hook_env_stamp::json_string;
+use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::resident_transport::constant_time_eq;
 
 const SESSION_PREFIX: &str = "gld1";
@@ -31,6 +33,15 @@ const DASHBOARD_SURFACES: [&str; 3] = ["approval-center", "dashboard", "cloud-da
 /// A session this close to its expiry goes to the daemon, so the edge never
 /// honors one the daemon's own clock has already ended.
 const EXPIRY_MARGIN_MICROS: i128 = 1_000_000;
+const SESSION_VERSION: &str = "guard-local-daemon-session.v1";
+const STARTED_AT_CLAIM: &str = "session_started_at";
+const REPAIR_SURFACE: &str = "protection-repair";
+/// How long a refreshed session lasts, at most.
+const SESSION_TTL_MICROS: i128 = 12 * 60 * 60 * 1_000_000;
+/// How long after it was first opened a session may still be refreshed.
+const SESSION_MAX_AGE_MICROS: i128 = 7 * 24 * 60 * 60 * 1_000_000;
+/// How long after it expired a session may still be refreshed.
+const REFRESH_GRACE_MICROS: i128 = 7 * 24 * 60 * 60 * 1_000_000;
 
 /// A caller the daemon would let read: the origin to name in the CORS
 /// headers when the request carried one.
@@ -75,6 +86,133 @@ pub(super) fn authorize_write(request: &Request<'_>, token: &[u8]) -> Option<Cal
             verified_payload(candidate, token, now).is_some_and(|claims| dashboard_session(&claims))
         })
         .then_some(caller)
+}
+
+/// A caller of `POST /v1/initialize`, which the daemon opens to any allowed
+/// origin, and whether it also holds the auth token, which alone lets it see
+/// the newest sessions: the route is no session path, so `_header_token_is_valid`
+/// never takes a dashboard session for it.
+pub(super) fn authorize_initialize(request: &Request<'_>, token: &[u8]) -> Option<(Caller, bool)> {
+    let caller = allowed_origin(request)?;
+    let holds_token = token_matches(request, token).unwrap_or(false);
+    Some((caller, holds_token))
+}
+
+/// A caller of a session or operation write: an allowed origin and either
+/// the auth token or a dashboard session whose verdict lets it write `path`
+/// without spending a nonce, as `_header_token_is_valid` decides.
+pub(super) fn authorize_session_write(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
+    let caller = allowed_origin(request)?;
+    if token_matches(request, token)? {
+        return Some(caller);
+    }
+    if !session_path(request.method, request.path) {
+        return None;
+    }
+    let candidates = session_candidates(request)?;
+    let now = now_micros();
+    candidates
+        .into_iter()
+        .any(|candidate| {
+            let Some(claims) = verified_claims(candidate, token, now) else {
+                return false;
+            };
+            let verdict = session_authorize(&SessionRequest {
+                method: request.method,
+                path: request.path,
+                claims: &claims,
+                payload: None,
+                header_nonce: None,
+                request_origin: caller.cors_origin.as_deref(),
+            });
+            matches!(
+                verdict,
+                DaemonRoutePayloadV1::SessionAuthorize {
+                    allowed: true,
+                    consume_nonce: None,
+                }
+            )
+        })
+        .then_some(caller)
+}
+
+/// `_refresh_dashboard_session_token`: a new session for the dashboard
+/// session the request presents, signed as `build_local_dashboard_session_token`
+/// signs one, or `None` when it presents none the daemon would refresh.
+///
+/// A session that expired within the grace window still refreshes, but never
+/// past seven days from when it was first opened, and one bound to a single
+/// request ends with the link that opened it.
+pub(super) fn refreshed_session(
+    request: &Request<'_>,
+    token: &[u8],
+    surface: &str,
+) -> Option<String> {
+    let now = now_micros();
+    let claims = session_candidates(request)?
+        .into_iter()
+        .find_map(|candidate| {
+            let claims = signed_payload(candidate, token, now - REFRESH_GRACE_MICROS)?;
+            let refreshable = text(&claims, "surface").is_some_and(|surface| {
+                DASHBOARD_SURFACES.contains(&surface.as_str()) || surface == REPAIR_SURFACE
+            });
+            refreshable.then_some(claims)
+        })?;
+    if claims
+        .get("request_id")
+        .is_some_and(|bound| !bound.is_null())
+    {
+        return None;
+    }
+    let started_at = match text(&claims, STARTED_AT_CLAIM) {
+        Some(started_at) => started_at,
+        None => {
+            let expires_at = aware_epoch_micros(&text(&claims, "expires_at")?)?;
+            micros_to_utc_isoformat(
+                i64::try_from(expires_at - SESSION_TTL_MICROS).ok()?,
+                "+00:00",
+            )?
+        }
+    };
+    let remaining = aware_epoch_micros(&started_at)? + SESSION_MAX_AGE_MICROS - now;
+    if remaining < 1_000_000 {
+        return None;
+    }
+    let refreshed_surface = if text(&claims, "surface").as_deref() == Some(REPAIR_SURFACE) {
+        REPAIR_SURFACE
+    } else if DASHBOARD_SURFACES.contains(&surface) {
+        surface
+    } else {
+        "dashboard"
+    };
+    let ttl = (SESSION_TTL_MICROS / 1_000_000)
+        .min(remaining / 1_000_000)
+        .max(1);
+    signed_session(token, refreshed_surface, now + ttl * 1_000_000, &started_at)
+}
+
+/// `build_local_dashboard_session_token` with no extra claims.
+fn signed_session(
+    token: &[u8],
+    surface: &str,
+    expires_at: i128,
+    started_at: &str,
+) -> Option<String> {
+    let expires_at = micros_to_utc_isoformat(i64::try_from(expires_at).ok()?, "+00:00")?;
+    let field = |text: &str| json_string(text, true, false);
+    let payload = format!(
+        "{{\"aud\":{},\"version\":{},\"surface\":{},\"expires_at\":{},\"{STARTED_AT_CLAIM}\":{}}}",
+        field(SESSION_AUDIENCE),
+        field(SESSION_VERSION),
+        field(surface),
+        field(&expires_at),
+        field(started_at),
+    );
+    let encoded = URL_SAFE_NO_PAD.encode(payload.as_bytes());
+    let mut mac = Hmac::<Sha256>::new_from_slice(token).ok()?;
+    mac.update(encoded.as_bytes());
+    let signature = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+    Some(format!("{SESSION_PREFIX}.{encoded}.{signature}"))
 }
 
 /// A session from Guard's own dashboard: a local surface, and no request it
@@ -250,6 +388,12 @@ fn session_candidates<'a>(request: &Request<'a>) -> Option<Vec<&'a str>> {
 /// The decoded claims of a session the auth token signed, for the local
 /// daemon, and not about to expire.
 fn verified_payload(session: &str, token: &[u8], now: i128) -> Option<Map<String, Value>> {
+    signed_payload(session, token, now + EXPIRY_MARGIN_MICROS)
+}
+
+/// The claims of a session the auth token signed for the local daemon whose
+/// expiry falls after `expiry_floor`.
+fn signed_payload(session: &str, token: &[u8], expiry_floor: i128) -> Option<Map<String, Value>> {
     let mut parts = session.split('.');
     let (prefix, payload, signature) = (parts.next()?, parts.next()?, parts.next()?);
     if parts.next().is_some() || prefix != SESSION_PREFIX || payload.is_empty() {
@@ -269,7 +413,7 @@ fn verified_payload(session: &str, token: &[u8], now: i128) -> Option<Map<String
         return None;
     }
     let expires_at = aware_epoch_micros(claims.get("expires_at")?.as_str()?)?;
-    if expires_at <= now + EXPIRY_MARGIN_MICROS {
+    if expires_at <= expiry_floor {
         return None;
     }
     Some(claims)

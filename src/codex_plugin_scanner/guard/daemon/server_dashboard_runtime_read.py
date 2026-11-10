@@ -217,9 +217,6 @@ class _DashboardRuntimeReadRoutes:
                 extra_headers={"Cache-Control": "no-store, max-age=0"},
             )
             return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
-            self._handle_session_resume(path_parts[2])
-            return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
             if not self._header_token_is_valid():
                 self._write_json(
