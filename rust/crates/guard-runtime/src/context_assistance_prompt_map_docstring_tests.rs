@@ -1,6 +1,7 @@
 use super::docstring::asks_for_docstring;
 use super::tests::{files, later, looking_for};
 use super::*;
+use std::path::Path;
 
 /// A function of more than 80 lines with `docstring` as its docstring's
 /// opening line, or no docstring when it is empty.
@@ -19,15 +20,29 @@ fn long_function(signature: &str, docstring: &str) -> String {
 }
 
 fn mapped(text: &str, docstring: bool) -> String {
+    mapped_in("src/iterutils.py", text, docstring)
+}
+
+fn mapped_in(path: &str, text: &str, docstring: bool) -> String {
+    mapped_at(Path::new(""), path, text, docstring)
+}
+
+/// The map of `text` at `path` in a project at `root`.
+fn mapped_at(root: &Path, path: &str, text: &str, docstring: bool) -> String {
     let asked = Asked {
         docstring,
+        root: root.to_path_buf(),
         ..Asked::default()
     };
-    let list = files(&[("src/iterutils.py", text)]);
+    let list = files(&[(path, text)]);
     map(&list, &looking_for(&[("remap", true, 1)]), &asked, later())
         .unwrap()
         .text
 }
+
+const RUN: &str = "\nRun just its doctest with `python -m pytest -q --doctest-modules ";
+const CHECK: &str = "That run is the check an added example needs, and the edit's own reply \
+confirms the edit, so the file need not be read again.";
 
 #[test]
 fn prompts_about_docstrings_or_doctests_are_told_apart_from_docs() {
@@ -99,22 +114,69 @@ fn a_short_function_keeps_showing_whole_with_the_note() {
     assert!(!mapped(text, false).contains("not a raw string"));
 }
 
-/// `python -m doctest` fails on a module that imports from its own package by
-/// a relative import, so a prompt about its docstring names the command that
-/// runs its doctests. A module without one, or another prompt, gets nothing.
+/// A prompt about a Python function's docstring names the command that
+/// runs just its doctest, by the node id pytest gives it: the file, then
+/// `<module>.<name>`, with the class for a method, the folder for a
+/// package's `__init__.py`, and each folder above holding an `__init__.py`.
+/// A node id runs that doctest alone, where `-k toolz.utils.remap` would
+/// also run `remap_more`'s. Shown none, agents guessed a node id, ran the
+/// whole module and then the test suite.
 #[test]
-fn a_module_with_relative_imports_names_the_doctest_command() {
+fn a_docstring_prompt_names_the_run_of_just_its_doctest() {
+    let text = "def remap(root):\n    r\"\"\"Remap it.\"\"\"\n    return root\n";
+    let shown = mapped(text, true);
+    let run = format!("```{RUN}src/iterutils.py::iterutils.remap`. {CHECK}");
+    assert!(shown.contains(&run), "{shown}");
+    assert!(!shown.contains("outside its package"), "{shown}");
+    assert!(!mapped(text, false).contains("--doctest-modules"));
+
+    let project = tempfile::tempdir().unwrap();
+    let write = |path: &str, text: &str| {
+        let file = project.path().join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, text).unwrap();
+    };
+    let method = "class Tree:\n    def remap(self, root):\n        \"\"\"Remap it.\"\"\"\n        return root\n";
+    write("src/tree/__init__.py", method);
+    let shown = mapped_at(project.path(), "src/tree/__init__.py", method, true);
+    let run = format!("{RUN}src/tree/__init__.py::tree.Tree.remap`. {CHECK}");
+    assert!(shown.contains(&run), "{shown}");
+
+    let both = "def remap(root):\n    r\"\"\"Remap it.\"\"\"\n    return root\n\n\ndef remap_more(root):\n    r\"\"\"Remap more.\"\"\"\n    return root\n";
+    write("toolz/__init__.py", "");
+    write("toolz/utils.py", both);
+    let shown = mapped_at(project.path(), "toolz/utils.py", both, true);
+    let run = format!("{RUN}toolz/utils.py::toolz.utils.remap`. {CHECK}");
+    assert!(shown.contains(&run) && !shown.contains(" -k "), "{shown}");
+}
+
+/// `python -m doctest` fails on a module that imports from its own package by
+/// a relative import, so the note says why the command is pytest. Where no
+/// single doctest can be named, as for a function inside another, the
+/// command runs the whole module's.
+#[test]
+fn a_module_with_relative_imports_says_why_the_command_is_pytest() {
     let text = "from .recipes import take\n\n\ndef remap(root):\n    r\"\"\"Remap it.\"\"\"\n    return take(1, root)\n";
     let shown = mapped(text, true);
+    let run = format!(
+        "```{RUN}src/iterutils.py::iterutils.remap`. {CHECK} `python -m doctest` would load \
+the file outside its package, where its relative imports fail."
+    );
+    assert!(shown.contains(&run), "{shown}");
+    assert!(!mapped(text, false).contains("--doctest-modules"));
+
+    let nested = "from .recipes import take\n\n\ndef walk(root):\n    def remap(item):\n        \"\"\"Remap it.\"\"\"\n        return take(1, item)\n\n    return remap(root)\n";
+    let shown = mapped(nested, true);
+    assert!(shown.contains("def remap(item):"), "{shown}");
     assert!(
         shown.contains(
-            "```\nRun its doctests with `python -m pytest --doctest-modules src/iterutils.py`: \
+            "\nRun its doctests with `python -m pytest --doctest-modules src/iterutils.py`: \
 `python -m doctest` loads the file outside its package, so its relative imports fail."
         ),
         "{shown}"
     );
-    assert!(!mapped(text, false).contains("--doctest-modules"));
-    let absolute = text.replace("from .recipes", "from recipes");
+    assert!(!shown.contains("::"), "{shown}");
+    let absolute = nested.replace("from .recipes", "from recipes");
     assert!(!mapped(&absolute, true).contains("--doctest-modules"));
 }
 
