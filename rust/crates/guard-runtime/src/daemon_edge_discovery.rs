@@ -406,10 +406,7 @@ fn headers(extra: &[(&str, &str)]) -> BTreeMap<String, String> {
         // bound.
         ("Accept-Encoding".to_owned(), "identity".to_owned()),
         ("Cache-Control".to_owned(), "no-store".to_owned()),
-        (
-            "User-Agent".to_owned(),
-            format!("hol-guard/{}", crate::PACKAGE_VERSION),
-        ),
+        ("User-Agent".to_owned(), crate::daemon_edge::user_agent()),
     ]);
     for (name, value) in extra {
         headers.insert((*name).to_owned(), (*value).to_owned());

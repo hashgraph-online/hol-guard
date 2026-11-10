@@ -343,10 +343,7 @@ fn fetch(url: &str, etag: Option<&str>) -> Exchange {
         // Identity encoding keeps the byte bound equal to the decompressed
         // bound.
         ("Accept-Encoding".to_owned(), "identity".to_owned()),
-        (
-            "User-Agent".to_owned(),
-            format!("hol-guard/{}", crate::PACKAGE_VERSION),
-        ),
+        ("User-Agent".to_owned(), crate::daemon_edge::user_agent()),
     ]);
     if let Some(etag) = etag {
         headers.insert("If-None-Match".to_owned(), etag.to_owned());

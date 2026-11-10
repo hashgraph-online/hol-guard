@@ -173,10 +173,7 @@ fn download(url: &str) -> Result<Vec<u8>, bool> {
     let policy = CallerEgressFulfilment::resolve_policy(&ManagedPolicySource::native())
         .map_err(|_| false)?;
     let headers = BTreeMap::from([
-        (
-            "User-Agent".to_owned(),
-            format!("hol-guard/{}", crate::PACKAGE_VERSION),
-        ),
+        ("User-Agent".to_owned(), crate::daemon_edge::user_agent()),
         ("Accept".to_owned(), "application/json".to_owned()),
     ]);
     match policy_get(

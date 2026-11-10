@@ -72,6 +72,26 @@ impl Slots {
     }
 }
 
+/// The Guard package version the launcher named, which outbound requests
+/// identify themselves with; the runtime's own version until it is set.
+static PACKAGE_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn set_package_version(version: &str) {
+    if !version.is_empty() && version.len() <= 64 {
+        let _ = PACKAGE_VERSION.set(version.to_owned());
+    }
+}
+
+/// `hol-guard/<package version>`, the User-Agent of every outbound request.
+pub(crate) fn user_agent() -> String {
+    format!(
+        "hol-guard/{}",
+        PACKAGE_VERSION
+            .get()
+            .map_or(crate::PACKAGE_VERSION, String::as_str)
+    )
+}
+
 fn serve(
     listener: &TcpListener,
     limit: usize,

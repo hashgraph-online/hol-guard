@@ -677,3 +677,31 @@ fn remove_queued(state: &mut State, id: u64) -> bool {
 #[cfg(test)]
 #[path = "daemon_edge_hook_scheduler_tests.rs"]
 mod tests;
+
+/// Whether the resident's hook worker is still being built at start. A hook
+/// that arrives meanwhile waits for it before its own deadline starts, as
+/// the in-process daemon only accepted hooks once its worker existed.
+fn warm_state() -> &'static (Mutex<bool>, Condvar) {
+    static WARM: OnceLock<(Mutex<bool>, Condvar)> = OnceLock::new();
+    WARM.get_or_init(|| (Mutex::new(false), Condvar::new()))
+}
+
+/// Marks the start-time warm-up as running or finished.
+pub(crate) fn set_warming(warming: bool) {
+    let (lock, ready) = warm_state();
+    *lock
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = warming;
+    if !warming {
+        ready.notify_all();
+    }
+}
+
+/// Waits, at most `limit`, for a running warm-up to finish.
+pub(super) fn wait_for_warm(limit: Duration) {
+    let (lock, ready) = warm_state();
+    let guard = lock
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _ = ready.wait_timeout_while(guard, limit, |warming| *warming);
+}

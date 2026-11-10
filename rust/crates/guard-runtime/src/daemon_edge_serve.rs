@@ -231,6 +231,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
         eprintln!("daemon-serve: the launch configuration names another daemon");
         return EXIT_USAGE;
     }
+    if let Some(version) = config.state.get("package_version").and_then(Value::as_str) {
+        super::set_package_version(version);
+    }
     let host: IpAddr = config
         .host
         .parse()
@@ -314,7 +317,8 @@ fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32) {
     let Some(config) = reads.config() else {
         return;
     };
-    let _ = std::thread::Builder::new()
+    super::reads::set_hook_worker_warming(true);
+    let spawned = std::thread::Builder::new()
         .name("hook-warm".to_owned())
         .spawn(move || {
             let args = json!({
@@ -328,7 +332,11 @@ fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32) {
                 args,
                 std::time::Duration::from_secs(60),
             );
+            super::reads::set_hook_worker_warming(false);
         });
+    if spawned.is_err() {
+        super::reads::set_hook_worker_warming(false);
+    }
 }
 
 pub(super) fn publish(

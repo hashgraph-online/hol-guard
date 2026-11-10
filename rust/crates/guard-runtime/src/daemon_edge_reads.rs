@@ -1042,6 +1042,7 @@ mod identity;
 mod hook_review;
 #[path = "daemon_edge_hook_scheduler.rs"]
 mod hook_scheduler;
+pub(super) use hook_scheduler::set_warming as set_hook_worker_warming;
 
 #[path = "daemon_edge_direct_hook.rs"]
 mod direct_hook;

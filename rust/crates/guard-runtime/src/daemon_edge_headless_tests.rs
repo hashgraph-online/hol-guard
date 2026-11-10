@@ -166,7 +166,10 @@ fn runtime_merges_the_snapshot_and_operator_health() {
     let (status, body, no_store) = reply.unwrap_or_else(|| unreachable!());
     assert_eq!((status, no_store), (200, false));
     assert_eq!(body["security_level"], "balanced");
-    let health = &body["operator_health"];
+    // The edge's own scheduler replaces the snapshot's, so the load figures
+    // are checked on the health verdict directly.
+    assert!(body["operator_health"]["workers_configured"].is_number());
+    let health = operator_health(snapshot.as_object().unwrap_or_else(|| unreachable!()));
     assert_eq!(health["state"], "backlogged");
     assert_eq!(health["workers_ready"], 3);
     assert_eq!(health["oldest_wait_ms"], 7);

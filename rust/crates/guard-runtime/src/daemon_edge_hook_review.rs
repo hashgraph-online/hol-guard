@@ -43,6 +43,8 @@ const REFERENCE_CODE: &str = "invalid_hook_payload_reference";
 const READINESS_WAIT: Duration = Duration::from_secs(60);
 /// How long past its deadline a hook still waits for a review to finish.
 const LATE_ANSWER_GRACE: Duration = Duration::from_millis(400);
+/// The longest a hook waits for the start-time worker warm-up.
+const WARM_WAIT: Duration = Duration::from_secs(20);
 
 /// `CHALLENGE_HOOK_PATHS`: the hooks only an identity proof admits.
 const CHALLENGE_PATHS: [&str; 2] = ["/v1/hooks/codex", "/v1/hooks/claude-code"];
@@ -341,9 +343,14 @@ impl Hook<'_> {
     /// `POST /v1/hooks/<harness>`: admits the hook under its deadline and the
     /// scheduler's capacity, and answers the worker's review or a fail-safe.
     fn runtime(&self, mut payload: Map<String, Value>, direct_miss: Option<&str>) -> Value {
-        let scheduler = hook_scheduler::shared();
         let event = runtime_event(&payload);
         let (hint, missing) = take_hint(&mut payload);
+        // A hook with no time hint has a client that waits for its answer;
+        // one with a hint keeps its own clock from the moment it arrived.
+        if missing {
+            hook_scheduler::wait_for_warm(WARM_WAIT);
+        }
+        let scheduler = hook_scheduler::shared();
         let expires = expires_at(scheduler.now(), hint, missing, event == "UserPromptSubmit");
         payload.remove("hook_env");
         let remaining = || (expires - scheduler.now()).max(0.0);
