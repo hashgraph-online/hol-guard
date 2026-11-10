@@ -9,8 +9,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server, server_runtime_hook
+from codex_plugin_scanner.guard.daemon import server_runtime_hook
 from codex_plugin_scanner.guard.daemon.hook_direct_pi_transport import PI_DIRECT_SWITCH, pi_direct_answer
+from codex_plugin_scanner.guard.routes import request_handler as server
 
 PAYLOAD = {"tool_name": "bash", "tool_input": {"command": "pwd"}, "cwd": "/work", "guard_remaining_ms": 4000}
 RESPONSE = {"decision": "allow", "policy_action": "allow", "reason_code": "native_allow", "extra": [1, None]}

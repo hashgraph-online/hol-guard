@@ -15,7 +15,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from .mcp_discovery_jobs import _JOB_ID, _MAX_RUNNING_JOBS, DiscoveryJobError, McpDiscoveryJobs, _Job
+from ..daemon.mcp_discovery_jobs import _JOB_ID, _MAX_RUNNING_JOBS, DiscoveryJobError, McpDiscoveryJobs, _Job
 
 try:
     import fcntl

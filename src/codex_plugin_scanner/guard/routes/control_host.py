@@ -173,9 +173,9 @@ def control_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
     """Runs the control handler the daemon dispatches ``POST path`` to."""
 
     from ..daemon.auth_token import load_guard_daemon_auth_token
-    from ..daemon.request_replay import _replay_server_class
     from ..library_calls import LibraryCallError
     from ..native_daemon_route import native_route_facts
+    from .request_host import _replay_server_class
 
     path = args.get("path")
     payload = args.get("payload")

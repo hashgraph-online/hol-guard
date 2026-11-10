@@ -14,12 +14,12 @@ import pytest
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_daemon_route
 from codex_plugin_scanner.guard.daemon.approval_handoff_route import approval_handoff_location
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.local_dashboard_session import (
     build_approval_browser_url,
     build_local_dashboard_session_token,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
 
 AUTH = "test-daemon-auth-token"

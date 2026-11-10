@@ -34,10 +34,11 @@ fn a_before_event_is_a_tool_event() {
 fn a_prompt_event_fails_closed_with_the_prompt_reason() {
     let body = fail_safe("codex", "user_prompt_submit");
     assert_eq!(body["decision"], "block");
-    assert_eq!(
-        body["reason"],
-        "HOL Guard could not complete native prompt review safely."
-    );
+    let contract: serde_json::Value = serde_json::from_str(ENVELOPES).unwrap();
+    assert_eq!(body["reason"], contract["defaults"]["prompt_reason"]);
+    assert!(body["reason"]
+        .as_str()
+        .is_some_and(|reason| !reason.is_empty()));
 }
 
 #[test]

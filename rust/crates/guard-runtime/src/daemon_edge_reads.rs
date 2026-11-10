@@ -81,6 +81,11 @@ struct Handshake {
 impl ReadConfig {
     /// What the edge needs to run the daemon's Guard CLI: its argv prefix,
     /// the Guard home and the daemon's working directory.
+    /// The dashboard bundle every response names.
+    pub(super) fn dashboard_build(&self) -> Option<&str> {
+        self.dashboard_build.as_deref()
+    }
+
     pub(super) fn cli(&self) -> Option<(&[String], &str, Option<&str>)> {
         Some((
             self.cli_command.as_deref()?,

@@ -1,34 +1,35 @@
-"""One daemon request answered in a short-lived CLI process.
+"""One daemon request answered by the route handler in a library call.
 
-The native daemon owns the listening socket. A route it does not answer
-itself arrives here as the raw request bytes on standard input; this module
-runs the daemon's own handler over them and prints the raw response. The
-handler keeps every check it applies today (origin, auth, body limits), so a
-route answered this way behaves as it did in the long-running daemon.
+The native daemon owns the listening socket. A request it does not answer
+itself arrives here (``route.request``) as its raw bytes; this module runs
+the route handler over them and returns the raw response. The handler keeps
+every check it applies (origin, auth, body limits).
 
 State the long-running daemon kept in memory between requests (connect
 flows, discovery challenges, reconnect challenges, session nonces, discovery
 job status) lives in ``daemon-replay-state.json`` under the Guard home
-instead, written atomically with owner-only permissions. Replay processes run
-side by side, so every read-check-write of that state holds an exclusive lock
+instead, written atomically with owner-only permissions. Library-call processes
+run side by side, so every read-check-write of that state holds an exclusive lock
 on ``daemon-replay-state.lock`` and rereads the file first: a nonce or
 challenge one process consumes is gone for the next.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import io
 import json
 import os
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import cached_property
 from pathlib import Path
 from typing import Any
 
 from ..store import GuardStore
-from .request_replay_state import (
+from .request_state import (
     _STATE_LIMIT_BYTES,
     _PersistedMapping,
     _ReplayDiscoveryJobs,
@@ -36,6 +37,8 @@ from .request_replay_state import (
     _SyncedLock,
 )
 
+# The largest request the native daemon hands over (head and body).
+_REQUEST_LIMIT_BYTES = 1_100_000
 # How long work a handler started after answering (a connect flow waiting on
 # the browser) may keep this process alive.
 _BACKGROUND_LIMIT_SECONDS = 15 * 60.0
@@ -102,7 +105,7 @@ def _republish_trust_status(guard_home: Path) -> Callable[[dict[str, object]], N
     """Carries an integrity transition this replay commits into the daemon's state."""
 
     def republish(trust_status: dict[str, object]) -> None:
-        from .manager import republish_guard_daemon_trust_status
+        from ..daemon.manager import republish_guard_daemon_trust_status
 
         republish_guard_daemon_trust_status(guard_home, trust_status)
 
@@ -110,9 +113,9 @@ def _republish_trust_status(guard_home: Path) -> Callable[[dict[str, object]], N
 
 
 def _replay_server_class() -> type:
+    from ..daemon.diagnostics import DaemonDiagnostics
     from ..runtime.surface_server import GuardSurfaceRuntime
-    from . import server as daemon_server
-    from .diagnostics import DaemonDiagnostics
+    from . import request_handler as daemon_server
 
     base = daemon_server._GuardDaemonHTTPServer
 
@@ -251,7 +254,7 @@ def _replay_server_class() -> type:
 
         @cached_property
         def runtime_hook_scheduler(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from .runtime_hook_scheduler import RuntimeHookScheduler
+            from ..daemon.runtime_hook_scheduler import RuntimeHookScheduler
 
             return RuntimeHookScheduler(
                 active_limit=daemon_server._MAX_CONCURRENT_RUNTIME_HOOKS,
@@ -260,7 +263,7 @@ def _replay_server_class() -> type:
 
         @cached_property
         def runtime_heartbeat(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from .runtime_heartbeat import RuntimeHeartbeatWriter
+            from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
 
             return RuntimeHeartbeatWriter(
                 store=self.store,
@@ -289,7 +292,7 @@ def _replay_server_class() -> type:
 
         @cached_property
         def local_cli_api(self) -> Any:
-            from .local_cli_api import LocalCliApiService
+            from ..daemon.local_cli_api import LocalCliApiService
 
             service = LocalCliApiService(store=self.store, record_exception=self.diagnostics.record_exception)
             service._discovery_jobs = _ReplayDiscoveryJobs(self._replay_state)
@@ -305,10 +308,10 @@ def _replay_server_class() -> type:
 
         @cached_property
         def hook_worker(self) -> Any:
+            from ..daemon.hook_direct_counters import bind_hook_counter_sink
+            from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
+            from ..daemon.hook_worker import HookWorker
             from ..native_hook_evidence_writer import NativeHookEvidenceWriter
-            from .hook_direct_counters import bind_hook_counter_sink
-            from .hook_evidence_dispatch import HookEvidenceDispatch
-            from .hook_worker import HookWorker
 
             self.runtime_hook_evidence_writer = NativeHookEvidenceWriter(store=self.store)
             self.runtime_hook_evidence_dispatch = HookEvidenceDispatch()
@@ -351,7 +354,7 @@ def _replay_server_class() -> type:
 def load_runtime_identity(guard_home: Path) -> dict[str, str]:
     """The state id and start time the native daemon published, if any."""
 
-    from .manager import _state_path
+    from ..daemon.manager import _state_path
 
     try:
         with _state_path(guard_home).open("rb") as handle:
@@ -380,8 +383,8 @@ def replay_request(
     the identity proof it issued on the same connection.
     """
 
-    from .auth_token import load_guard_daemon_auth_token
-    from .server import _GuardDaemonHandler
+    from ..daemon.auth_token import load_guard_daemon_auth_token
+    from .request_handler import _GuardDaemonHandler
 
     auth_key = load_guard_daemon_auth_token(guard_home) or ""
     store = GuardStore(guard_home)
@@ -407,4 +410,44 @@ def wait_for_background_work() -> None:
         thread.join(max(0.0, deadline - time.monotonic()))
 
 
-__all__ = ["replay_request", "wait_for_background_work"]
+def route_request(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """``route.request``: the route handler's raw response to one request.
+
+    The native daemon owns the socket and answers every request it can
+    itself; it hands the rest here as raw bytes and writes back the raw
+    response this returns.
+    """
+
+    from ..library_calls import LibraryCallError
+
+    encoded = args.get("request")
+    port = args.get("port")
+    daemon_pid = args.get("daemon_pid")
+    proof_verified = args.get("proof_verified")
+    if (
+        not isinstance(encoded, str)
+        or not isinstance(port, int)
+        or not 0 < port < 65536
+        or not isinstance(proof_verified, bool)
+    ):
+        raise LibraryCallError("invalid_arguments")
+    try:
+        request = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise LibraryCallError("invalid_arguments") from error
+    if not request or len(request) > _REQUEST_LIMIT_BYTES:
+        raise LibraryCallError("invalid_arguments")
+    response = replay_request(
+        store.guard_home,
+        request,
+        port=port,
+        daemon_pid=daemon_pid if isinstance(daemon_pid, int) and daemon_pid > 1 else None,
+        proof_verified=proof_verified,
+    )
+    return {"response": base64.b64encode(response).decode("ascii")}
+
+
+REQUEST_HOST_CALLS = {"route.request": route_request}
+
+
+__all__ = ["REQUEST_HOST_CALLS", "replay_request", "route_request", "wait_for_background_work"]

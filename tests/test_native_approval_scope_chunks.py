@@ -16,13 +16,13 @@ from codex_plugin_scanner.guard.approval_scope_support import (
     request_scope_contract_payloads,
 )
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_scope import (
     _MAX_REQUEST_BYTES,
     ApprovalScopeUnavailableError,
     native_approval_scopes,
 )
+from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
 
 _CONTRACT_REPLY = {

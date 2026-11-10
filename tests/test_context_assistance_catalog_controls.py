@@ -84,7 +84,7 @@ def test_catalog_http_uses_settings_gate_strips_proof_and_keeps_read_routes_fixe
 def test_http_body_budget_is_scoped_and_supports_the_complete_signed_envelope():
     from email.message import Message
 
-    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
+    from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
 
     body = json.dumps({"input": {"action": "import_catalog", "signed_catalog": "x" * (1024 * 1024)}}).encode()
     headers = Message()

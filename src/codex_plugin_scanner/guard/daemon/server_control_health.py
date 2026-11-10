@@ -18,7 +18,7 @@ from .server_common import (
 )
 
 if TYPE_CHECKING:
-    from .server import _GuardDaemonHTTPServer as _GuardDaemonHttpServer
+    from ..routes.request_handler import _GuardDaemonHTTPServer as _GuardDaemonHttpServer
 
 
 _HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")

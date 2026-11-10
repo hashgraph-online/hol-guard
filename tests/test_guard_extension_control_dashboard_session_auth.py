@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.native_daemon_route import native_origin_decision
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 

@@ -12,8 +12,8 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import protection_repair_retry
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.protection_repair_retry import incomplete_protection_repair_payload
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global

@@ -58,6 +58,7 @@ def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None 
 
     from ...version import __version__
     from ..native_approval_gate import session_signals
+    from ..routes.request_handler import _guard_daemon_idle_timeout_seconds
     from ..sqlite_tuning import sqlite_connect_timeout_seconds
     from .dashboard_bundle import dashboard_build_id
     from .manager import (
@@ -67,7 +68,6 @@ def launch_configuration(guard_home: Path, port: int, *, user_home: Path | None 
         _daemon_state_executable,
     )
     from .native_edge_handshake import _daemon_fingerprint, _user_home, guard_cli_command
-    from .server import _guard_daemon_idle_timeout_seconds
 
     home = os.path.abspath(guard_home)
     config: dict[str, object] = {

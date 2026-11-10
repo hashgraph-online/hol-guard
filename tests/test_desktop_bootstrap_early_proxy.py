@@ -293,8 +293,8 @@ def test_cached_desktop_bootstrap_document_single_flights_a_miss() -> None:
 
 
 def test_desktop_bootstrap_route_is_critical() -> None:
-    from codex_plugin_scanner.guard.daemon.server import _DAEMON_CRITICAL_PATHS
     from codex_plugin_scanner.guard.dashboard_launcher import build_desktop_dashboard_session_url_for_daemon
+    from codex_plugin_scanner.guard.routes.request_handler import _DAEMON_CRITICAL_PATHS
 
     assert "/v1/desktop/bootstrap" in _DAEMON_CRITICAL_PATHS
     with pytest.raises(ValueError):

@@ -18,20 +18,37 @@ fn content_length_needs_exactly_one_number() {
 }
 
 #[test]
-fn replay_names_the_home_and_port() {
-    assert_eq!(
-        replay_args("/h", 5474, 42),
-        [
-            "desktop",
-            "daemon-replay",
-            "--guard-home",
-            "/h",
-            "--port",
-            "5474",
-            "--daemon-pid",
-            "42"
-        ]
-    );
+fn a_request_goes_to_the_handler_encoded() {
+    let args = request_args(b"GET / HTTP/1.0\r\n\r\n", 5474, 42, true);
+    assert_eq!(args["request"], "R0VUIC8gSFRUUC8xLjANCg0K");
+    assert_eq!(args["port"], 5474);
+    assert_eq!(args["daemon_pid"], 42);
+    assert_eq!(args["proof_verified"], true);
+}
+
+#[test]
+fn a_garbled_request_is_a_bad_request() {
+    let answer = own_answer(b"\x01\x02\r\n\r\n", None).unwrap();
+    assert!(answer.starts_with(b"HTTP/1.0 400 "));
+}
+
+#[test]
+fn an_unsupported_method_is_not_implemented() {
+    let answer = own_answer(b"PUT /v1/x HTTP/1.0\r\n\r\n", None).unwrap();
+    assert!(answer.starts_with(b"HTTP/1.0 501 "));
+    assert!(own_answer(b"GET /v1/x HTTP/1.0\r\n\r\n", None).is_none());
+}
+
+#[test]
+fn a_preflight_needs_an_origin() {
+    let answer = own_answer(b"OPTIONS /v1/x HTTP/1.0\r\n\r\n", None).unwrap();
+    assert!(answer.starts_with(b"HTTP/1.0 400 "));
+    let refused = own_answer(
+        b"OPTIONS /v1/x HTTP/1.0\r\nOrigin: https://evil.example\r\n\r\n",
+        None,
+    )
+    .unwrap();
+    assert!(refused.starts_with(b"HTTP/1.0 403 "));
 }
 
 #[test]

@@ -38,7 +38,7 @@ def run_library_call(guard_home: Path) -> int:
     devnull = os.open(os.devnull, os.O_WRONLY)
     os.dup2(devnull, sys.stdout.fileno())
     os.close(devnull)
-    from ..daemon.request_replay import wait_for_background_work
+    from ..routes.request_host import wait_for_background_work
 
     wait_for_background_work()
     return 0

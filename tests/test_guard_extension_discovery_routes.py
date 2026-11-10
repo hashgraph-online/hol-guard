@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.extension_discovery_read import (
     DISCOVERY_EVENTS_PATH,
     DISCOVERY_OPTED_OUT,
     DISCOVERY_PLACEMENTS_PATH,
 )
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 
 
 def _handler(path: str) -> daemon_server_module._GuardDaemonHandler:

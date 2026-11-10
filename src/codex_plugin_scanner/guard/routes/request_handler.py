@@ -30,6 +30,69 @@ from ..approval_gate import (
 )
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
+from ..daemon.audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
+from ..daemon.audit_persistence import WRITTEN as AUDIT_WRITTEN
+from ..daemon.audit_persistence import AuditPersistence
+from ..daemon.catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
+from ..daemon.command_activity_api import (
+    parse_command_activity_event_cursor,
+    stream_command_activity_events,
+)
+from ..daemon.dashboard_bundle import DASHBOARD_BUILD_HEADER, dashboard_build_id
+from ..daemon.diagnostics import DaemonDiagnostics
+from ..daemon.extension_discovery_read import (
+    DISCOVERY_EVENTS_PATH,
+    DISCOVERY_OPTED_OUT,
+    DISCOVERY_RENDERS_PATH,
+    DISCOVERY_UNAVAILABLE,
+    DiscoveryReadError,
+    discovery_placement_projection,
+    discovery_rollout_enabled,
+    relay_discovery_measurement,
+)
+from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
+from ..daemon.hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
+from ..daemon.manager import (
+    GUARD_DAEMON_COMPATIBILITY_VERSION,
+    current_guard_daemon_runtime_fingerprint,
+    current_guard_daemon_source_root,
+    write_guard_daemon_state,
+)
+from ..daemon.release_feed_read import (
+    MAX_RELEASE_FEED_PAGE_SIZE,
+    RELEASE_FEED_REQUEST_INVALID,
+    RELEASE_FEED_UNAVAILABLE,
+    release_feed_projection,
+    release_feed_rollout_enabled,
+)
+from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
+from ..daemon.runtime_hook_scheduler import RuntimeHookScheduler
+from ..daemon.server_common import (
+    _build_local_url,
+    _now,
+)
+from ..daemon.server_control_cloud_connect import _CloudConnectRoutes
+from ..daemon.server_control_headless import (
+    _HeadlessRoutes,
+)
+from ..daemon.server_control_health import _ControlHealthRoutes
+from ..daemon.server_control_misc import _ControlMiscRoutes
+from ..daemon.server_control_operations import _ControlOperationRoutes
+from ..daemon.server_control_policy import _ControlPolicyRoutes
+from ..daemon.server_control_repair import _RepairSettingsRoutes
+from ..daemon.server_control_routes_post import _ControlPostRoutes
+from ..daemon.server_control_supply_chain import _SupplyChainRoutes
+from ..daemon.server_control_sync import _ControlSyncRoutes
+from ..daemon.server_dashboard_records_read import _DashboardRecordsReadRoutes
+from ..daemon.server_dashboard_runtime_read import _DashboardRuntimeReadRoutes
+from ..daemon.server_dashboard_support import _DashboardSupportRoutes
+from ..daemon.server_runtime_hook import _RuntimeHookRoutes
+from ..daemon.sponsored_discovery_settings import (
+    sponsored_discovery_allowed,
+    sponsored_discovery_measurement_allowed,
+    sponsored_discovery_settings,
+    update_sponsored_discovery_settings,
+)
 from ..json_transport import escape_json_for_html
 from ..local_dashboard_session import (
     DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS,
@@ -63,69 +126,6 @@ from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..storage_retention import quarantined_store_summary
 from ..store import GuardStore
-from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
-from .audit_persistence import WRITTEN as AUDIT_WRITTEN
-from .audit_persistence import AuditPersistence
-from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
-from .command_activity_api import (
-    parse_command_activity_event_cursor,
-    stream_command_activity_events,
-)
-from .dashboard_bundle import DASHBOARD_BUILD_HEADER, dashboard_build_id
-from .diagnostics import DaemonDiagnostics
-from .extension_discovery_read import (
-    DISCOVERY_EVENTS_PATH,
-    DISCOVERY_OPTED_OUT,
-    DISCOVERY_RENDERS_PATH,
-    DISCOVERY_UNAVAILABLE,
-    DiscoveryReadError,
-    discovery_placement_projection,
-    discovery_rollout_enabled,
-    relay_discovery_measurement,
-)
-from .hook_evidence_dispatch import HookEvidenceDispatch
-from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
-from .manager import (
-    GUARD_DAEMON_COMPATIBILITY_VERSION,
-    current_guard_daemon_runtime_fingerprint,
-    current_guard_daemon_source_root,
-    write_guard_daemon_state,
-)
-from .release_feed_read import (
-    MAX_RELEASE_FEED_PAGE_SIZE,
-    RELEASE_FEED_REQUEST_INVALID,
-    RELEASE_FEED_UNAVAILABLE,
-    release_feed_projection,
-    release_feed_rollout_enabled,
-)
-from .runtime_heartbeat import RuntimeHeartbeatWriter
-from .runtime_hook_scheduler import RuntimeHookScheduler
-from .server_common import (
-    _build_local_url,
-    _now,
-)
-from .server_control_cloud_connect import _CloudConnectRoutes
-from .server_control_headless import (
-    _HeadlessRoutes,
-)
-from .server_control_health import _ControlHealthRoutes
-from .server_control_misc import _ControlMiscRoutes
-from .server_control_operations import _ControlOperationRoutes
-from .server_control_policy import _ControlPolicyRoutes
-from .server_control_repair import _RepairSettingsRoutes
-from .server_control_routes_post import _ControlPostRoutes
-from .server_control_supply_chain import _SupplyChainRoutes
-from .server_control_sync import _ControlSyncRoutes
-from .server_dashboard_records_read import _DashboardRecordsReadRoutes
-from .server_dashboard_runtime_read import _DashboardRuntimeReadRoutes
-from .server_dashboard_support import _DashboardSupportRoutes
-from .server_runtime_hook import _RuntimeHookRoutes
-from .sponsored_discovery_settings import (
-    sponsored_discovery_allowed,
-    sponsored_discovery_measurement_allowed,
-    sponsored_discovery_settings,
-    update_sponsored_discovery_settings,
-)
 
 
 # Local daemon routes. The Cloud paths stay in the read module and are the
@@ -360,7 +360,7 @@ class _GuardDaemonHTTPServer:
         )
 
 
-_STATIC_DIR = Path(__file__).with_name("static")
+_STATIC_DIR = Path(__file__).parent.parent / "daemon" / "static"
 _INDEX_PATH = _STATIC_DIR / "index.html"
 _ENTRY_PATH = _STATIC_DIR / "assets" / "guard-dashboard.js"
 _DASHBOARD_CSP = "; ".join(

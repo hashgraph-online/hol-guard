@@ -27,8 +27,8 @@ _CHALLENGE_PATH = "/v1/daemon/identity-challenge"
 
 
 def _server_class() -> type:
-    from codex_plugin_scanner.guard.daemon.request_replay import _replay_server_class
-    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
+    from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
+    from codex_plugin_scanner.guard.routes.request_host import _replay_server_class
 
     replay = _replay_server_class()
 

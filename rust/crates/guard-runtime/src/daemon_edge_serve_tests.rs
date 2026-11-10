@@ -181,13 +181,15 @@ fn a_waiting_launcher_is_named_as_the_daemon() {
 fn echoing_daemon() -> (tempfile::TempDir, SocketAddr) {
     let dir = private_home();
     let home = fs::canonicalize(dir.path()).unwrap();
-    // A replay echoes its arguments; a hook review answers whether the edge
-    // told it the proof checked out.
+    // A request the route handler answers, and a hook review, both answer
+    // whether the edge told them the proof checked out.
     let script = concat!(
-        "if [ \"$2\" = library-call ]; then ",
-        "if grep -q '\"proof_verified\":true'; then v=true; else v=false; fi; ",
-        "printf '{\"ok\":{\"status\":200,\"body\":{\"proof_verified\":%s},\"no_store\":false}}' $v; ",
-        "else cat >/dev/null; printf 'HTTP/1.0 200 OK\\r\\n\\r\\n%s' \"$*\"; fi"
+        "in=$(cat); ",
+        "if printf %s \"$in\" | grep -q '\"proof_verified\":true'; then v=true; else v=false; fi; ",
+        "if printf %s \"$in\" | grep -q '\"route.request\"'; then ",
+        "r=$(printf 'HTTP/1.0 200 OK\\r\\n\\r\\n{\"proof_verified\":%s}' $v | base64 | tr -d '\\n'); ",
+        "printf '{\"ok\":{\"response\":\"%s\"}}' \"$r\"; ",
+        "else printf '{\"ok\":{\"status\":200,\"body\":{\"proof_verified\":%s},\"no_store\":false}}' $v; fi"
     );
     let echo = json!({"cli_command": ["/bin/sh", "-c", script, "sh"]});
     let config = LaunchConfig::parse(&launch(&home, echo)).unwrap();

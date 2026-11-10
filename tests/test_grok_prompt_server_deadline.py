@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server
 from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
+from codex_plugin_scanner.guard.routes import request_handler as server
 
 
 class _SettledDirectories:

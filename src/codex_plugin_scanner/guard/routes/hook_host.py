@@ -76,8 +76,8 @@ def hook_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Answers ``POST /v1/hooks/<harness>[/readiness]`` as the daemon's handler does."""
 
     from ..daemon.auth_token import load_guard_daemon_auth_token
-    from ..daemon.request_replay import _replay_server_class
     from ..library_calls import LibraryCallError
+    from .request_host import _replay_server_class
 
     path = args.get("path")
     query = args.get("query")

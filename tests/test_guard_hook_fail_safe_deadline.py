@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.daemon import server as module
+from codex_plugin_scanner.guard.routes import request_handler as module
 
 
 def test_fail_safe_response_spends_no_path_rpc_or_store_read() -> None:

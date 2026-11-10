@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
+from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
 from scripts import native_slo_session as native_slo_session_module
 
 

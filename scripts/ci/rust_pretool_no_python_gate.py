@@ -126,10 +126,10 @@ def _keyword_value(call: ast.Call, name: str) -> ast.AST | None:
 
 def _server_graph_failures(root: Path) -> list[str]:
     failures: list[str] = []
-    server = root / "src/codex_plugin_scanner/guard/daemon/server.py"
-    server_ingress = _function_node_or_none(server, "_handle_runtime_hook", class_name="_GuardDaemonHandler")
-    server_execute = _function_node_or_none(server, "_execute_runtime_hook", class_name="_GuardDaemonHandler")
-    server_fast = _function_node_or_none(server, "_handle_runtime_hook_fast", class_name="_GuardDaemonHandler")
+    server = root / "src/codex_plugin_scanner/guard/daemon/server_runtime_hook.py"
+    server_ingress = _function_node_or_none(server, "_handle_runtime_hook", class_name="_RuntimeHookRoutes")
+    server_execute = _function_node_or_none(server, "_execute_runtime_hook", class_name="_RuntimeHookRoutes")
+    server_fast = _function_node_or_none(server, "_handle_runtime_hook_fast", class_name="_RuntimeHookRoutes")
     if server_ingress is None or server_execute is None or server_fast is None:
         failures.append("server native hook fallback graph is incomplete")
         return failures
@@ -137,7 +137,7 @@ def _server_graph_failures(root: Path) -> list[str]:
         failures.append("daemon hook ingress hydrates a payload before native dispatch")
     if _called_node(server_execute, "hydrate_hook_payload_reference") is not None:
         failures.append("daemon hook execution hydrates a payload before native dispatch")
-    if _function_node_or_none(server, "_handle_runtime_hook_compatibility_cli", class_name="_GuardDaemonHandler"):
+    if _function_node_or_none(server, "_handle_runtime_hook_compatibility_cli", class_name="_RuntimeHookRoutes"):
         failures.append("server still carries the retired compatibility CLI hook path")
     if "_native_mode_requires_rust" in function_calls(server_execute):
         failures.append("server execute path still consults a retired native-mode predicate")

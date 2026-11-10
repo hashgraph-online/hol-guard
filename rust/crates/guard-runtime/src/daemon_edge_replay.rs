@@ -1,33 +1,32 @@
-//! Requests no native route answers, run through the daemon's own handler in
-//! a short-lived Guard CLI process (`desktop daemon-replay`): the request's
-//! raw bytes go to its standard input and its standard output is the raw
-//! response, written back to the client unchanged. The handler applies every
-//! origin, auth and body check it always has.
+//! Requests no native route answers: the daemon parses them, answers a
+//! preflight, an unsupported method or a malformed request itself, and runs
+//! the rest through the route handler in the Guard library (the
+//! `route.request` call), which applies every origin, auth and body check it
+//! always has and returns the raw response, written back unchanged.
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
-use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
-use std::thread;
 use std::time::{Duration, Instant};
 
-use super::reads::ReadConfig;
-use crate::onefile_open_paths::{isolate_group, kill_group};
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use serde_json::{json, Value};
 
-/// How long one replayed request may take before the client gets a 504.
-const REPLAY_TIMEOUT: Duration = Duration::from_secs(120);
+use super::auth::{authorize_origin, normalize_origin};
+use super::http::{parse_request, Request};
+use super::library;
+use super::reads::ReadConfig;
+
 /// How long the client has to send the rest of its request.
 const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(10);
 /// The handler refuses bodies past 1,000,000 bytes; past this the edge sends
 /// the head alone and lets it say so.
 const MAX_REPLAYED_BODY_BYTES: usize = 1_000_000;
 const MAX_REPLAYED_HEAD_BYTES: usize = 64 * 1024;
-/// The largest response a replay may print (an evidence export included).
-const MAX_RESPONSE_BYTES: u64 = 64 * 1024 * 1024;
 
 const UNAVAILABLE: &[u8] = b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: 38\r\nConnection: close\r\n\r\n{\"error\": \"daemon_route_unavailable\"}\n";
 
-/// Answers the request on `client` through the CLI. `read_ahead` is the
+/// Answers the request on `client` through the route handler. `read_ahead` is the
 /// request the edge already took off the socket, or empty when it took
 /// nothing.
 pub(in crate::daemon_edge) fn replay(
@@ -49,7 +48,7 @@ pub(in crate::daemon_edge) fn replay(
     replay_with(client, config, request, stalled_write, daemon_pid, false);
 }
 
-/// Answers `request`, already read off `client`, through the CLI.
+/// Answers `request`, already read off `client`, through the route handler.
 /// `proof_verified` tells the handler the edge checked the daemon identity
 /// proof this hook presents on its connection.
 pub(in crate::daemon_edge) fn replay_with(
@@ -60,15 +59,89 @@ pub(in crate::daemon_edge) fn replay_with(
     daemon_pid: u32,
     proof_verified: bool,
 ) {
-    let response = client
-        .local_addr()
-        .ok()
-        .and_then(|local| run(config, local.port(), daemon_pid, proof_verified, request))
-        .filter(|response| !response.is_empty());
+    let response = client.local_addr().ok().and_then(|local| {
+        own_answer(&request, config.dashboard_build()).or_else(|| {
+            run(config, local.port(), daemon_pid, proof_verified, &request)
+                .filter(|response| !response.is_empty())
+        })
+    });
     let _ = client.set_write_timeout(Some(stalled_write));
     let mut writer = client;
     let _ = writer.write_all(response.as_deref().unwrap_or(UNAVAILABLE));
     let _ = client.shutdown(Shutdown::Both);
+}
+
+/// `do_OPTIONS`, the `501` an unsupported method gets and the `400` a
+/// request line that does not parse gets; `None` for a request the route
+/// handler answers.
+fn own_answer(request: &[u8], build: Option<&str>) -> Option<Vec<u8>> {
+    let head = &request[..find_head_end(request)?];
+    let method = head.split(|byte| *byte == b' ').next().unwrap_or_default();
+    match method {
+        b"GET" | b"POST" | b"DELETE" => parse_request(head)
+            .is_none()
+            .then(|| empty_response(400, build, &[])),
+        // The edge reads a preflight's head as it reads a `GET`'s.
+        b"OPTIONS" => Some(
+            match parse_request(&[b"GET", &head[method.len()..]].concat()) {
+                Some(head) => preflight(&head, build),
+                None => empty_response(400, build, &[]),
+            },
+        ),
+        method if !method.is_empty() && method.iter().all(u8::is_ascii_uppercase) => {
+            Some(super::reads::json_response(
+                501,
+                &json!({ "error": "unsupported_method" }),
+                build,
+                None,
+                false,
+            ))
+        }
+        _ => Some(empty_response(400, build, &[])),
+    }
+}
+
+/// The headers `do_OPTIONS` allows a dashboard's preflight.
+const PREFLIGHT_ALLOW_HEADERS: &str = "Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token";
+
+/// `do_OPTIONS`: `400` without a readable `Origin`, `403` for one the path
+/// does not allow, and the CORS headers otherwise.
+fn preflight(request: &Request<'_>, build: Option<&str>) -> Vec<u8> {
+    let Some(origin) = request.single_header("Origin").and_then(normalize_origin) else {
+        return empty_response(400, build, &[]);
+    };
+    if authorize_origin(request).is_none() {
+        return empty_response(403, build, &[]);
+    }
+    empty_response(
+        200,
+        build,
+        &[
+            ("Access-Control-Allow-Origin", origin.as_str()),
+            ("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
+            ("Access-Control-Allow-Headers", PREFLIGHT_ALLOW_HEADERS),
+            ("Access-Control-Allow-Private-Network", "true"),
+            ("Vary", "Origin"),
+        ],
+    )
+}
+
+/// `_write_empty`: a status, the given headers and no body.
+fn empty_response(status: u16, build: Option<&str>, headers: &[(&str, &str)]) -> Vec<u8> {
+    let reason = match status {
+        200 => "OK",
+        400 => "Bad Request",
+        _ => "Forbidden",
+    };
+    let mut response = format!("HTTP/1.0 {status} {reason}\r\n");
+    for (name, value) in headers {
+        response.push_str(&format!("{name}: {value}\r\n"));
+    }
+    if let Some(build) = build {
+        response.push_str(&format!("X-Guard-Dashboard-Build: {build}\r\n"));
+    }
+    response.push_str("Content-Length: 0\r\nConnection: close\r\n\r\n");
+    response.into_bytes()
 }
 
 /// One request's head and declared body, read straight off the socket
@@ -145,87 +218,33 @@ pub(in crate::daemon_edge) fn content_length(head: &[u8]) -> Option<usize> {
     value.parse().ok()
 }
 
-/// The CLI's raw response to `request`, or `None` when the daemon named no
-/// CLI or the CLI printed nothing in time.
+/// The route handler's raw response to `request`, or `None` when the call
+/// could not run or answered nothing usable.
 fn run(
     config: &ReadConfig,
     port: u16,
     daemon_pid: u32,
     proof_verified: bool,
-    request: Vec<u8>,
+    request: &[u8],
 ) -> Option<Vec<u8>> {
-    let (argv, guard_home, cwd) = config.cli()?;
-    let (program, prefix) = argv.split_first()?;
-    let mut command = Command::new(program);
-    command
-        .args(prefix)
-        .args(replay_args(guard_home, port, daemon_pid))
-        .args(proof_verified.then_some("--daemon-proof-verified"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    if let Some(cwd) = cwd {
-        command.current_dir(cwd);
-    }
-    isolate_group(&mut command);
-    let mut child = command.spawn().ok()?;
-    let (Some(mut stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
-        stop(child);
-        return None;
-    };
-    thread::spawn(move || {
-        let _ = stdin.write_all(&request);
-    });
-    let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let read = stdout
-            .take(MAX_RESPONSE_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .is_ok();
-        let _ = sender.send(read.then_some(bytes));
-    });
-    match receiver.recv_timeout(REPLAY_TIMEOUT) {
-        Ok(Some(bytes)) if bytes.len() as u64 <= MAX_RESPONSE_BYTES => {
-            // The handler may still be finishing work it started after
-            // answering; the CLI bounds that itself.
-            thread::spawn(move || {
-                let _ = child.wait();
-            });
-            Some(bytes)
-        }
-        _ => {
-            stop(child);
-            None
-        }
-    }
+    let answer = library::call(
+        config,
+        "route.request",
+        request_args(request, port, daemon_pid, proof_verified),
+    )
+    .ok()?;
+    STANDARD.decode(answer.get("response")?.as_str()?).ok()
 }
 
-/// The CLI arguments for one replay. `daemon_pid` is the process the
-/// published daemon state names.
-pub(in crate::daemon_edge) fn replay_args(
-    guard_home: &str,
-    port: u16,
-    daemon_pid: u32,
-) -> [String; 8] {
-    [
-        "desktop".to_owned(),
-        "daemon-replay".to_owned(),
-        "--guard-home".to_owned(),
-        guard_home.to_owned(),
-        "--port".to_owned(),
-        port.to_string(),
-        "--daemon-pid".to_owned(),
-        daemon_pid.to_string(),
-    ]
-}
-
-fn stop(mut child: Child) {
-    kill_group(&child);
-    let _ = child.kill();
-    thread::spawn(move || {
-        let _ = child.wait();
-    });
+/// The `route.request` arguments for one request. `daemon_pid` is the
+/// process the published daemon state names.
+fn request_args(request: &[u8], port: u16, daemon_pid: u32, proof_verified: bool) -> Value {
+    json!({
+        "request": STANDARD.encode(request),
+        "port": port,
+        "daemon_pid": daemon_pid,
+        "proof_verified": proof_verified,
+    })
 }
 
 #[cfg(all(test, unix))]

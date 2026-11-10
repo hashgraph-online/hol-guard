@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 _MODULES = (
-    "codex_plugin_scanner.guard.daemon.server",
+    "codex_plugin_scanner.guard.routes.request_handler",
     "codex_plugin_scanner.guard.daemon.server_common",
     "codex_plugin_scanner.guard.daemon.server_control_cloud_connect",
     "codex_plugin_scanner.guard.daemon.server_control_cloud_sync",

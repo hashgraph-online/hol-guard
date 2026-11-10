@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon import manager
-from codex_plugin_scanner.guard.daemon.server import _guard_daemon_idle_timeout_seconds
+from codex_plugin_scanner.guard.routes.request_handler import _guard_daemon_idle_timeout_seconds
 
 
 @pytest.mark.parametrize("frozen", [False, True])

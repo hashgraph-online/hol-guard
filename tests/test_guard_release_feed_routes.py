@@ -7,12 +7,12 @@ from urllib.parse import urlparse
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.release_feed_read import (
     RELEASE_FEED_REQUEST_INVALID,
     RELEASE_FEED_UNAVAILABLE,
     RELEASE_INDEX_PATH,
 )
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 
 
 def _handler(path: str) -> daemon_server_module._GuardDaemonHandler:

@@ -71,7 +71,7 @@ def _published_server(store: GuardStore) -> Any:
     """The replay server for the daemon the Guard home's published state names."""
 
     from ..daemon.manager import _state_path
-    from ..daemon.request_replay import _replay_server_class
+    from .request_host import _replay_server_class
 
     try:
         with _state_path(store.guard_home).open("rb") as handle:
@@ -95,7 +95,7 @@ def _published_server(store: GuardStore) -> Any:
 
 
 def _handler_class() -> type:
-    from ..daemon.server import _GuardDaemonHandler
+    from .request_handler import _GuardDaemonHandler
 
     class _OfflineHandler(_GuardDaemonHandler):  # type: ignore[misc, valid-type]
         def __init__(self, server: Any, method: str, path: str) -> None:  # pyright: ignore[reportMissingSuperCall]

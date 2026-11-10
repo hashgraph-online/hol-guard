@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as server_module
+from codex_plugin_scanner.guard.routes import request_handler as server_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 

@@ -22,9 +22,9 @@ from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_catalog_read as transport
 from codex_plugin_scanner.guard import native_runtime_resilience as resilience
 from codex_plugin_scanner.guard.daemon import catalog_read_v2
-from codex_plugin_scanner.guard.daemon import server as server_module
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.native_catalog_read import NativeCatalogReadResult
+from codex_plugin_scanner.guard.routes import request_handler as server_module
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -431,7 +431,7 @@ def test_v2_read_model_is_reachable_only_from_read_paths() -> None:
         and _imported_modules(ast.parse(path.read_text(encoding="utf-8"))) & _V2_READ_MODULES
     }
     # The daemon GET route and the CLI catalog readers are the only callers.
-    assert importers == {"daemon/server.py", "cli/extension_catalog_reads.py"}
+    assert importers == {"routes/request_handler.py", "cli/extension_catalog_reads.py"}
     # The v2 modules import transport helpers only: no store, authority, policy or sync code.
     for module in _V2_READ_MODULES:
         source = next(package.rglob(f"{module}.py")).read_text(encoding="utf-8")

@@ -10,10 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import request_replay, request_replay_state
 from codex_plugin_scanner.guard.daemon.mcp_discovery_jobs import DiscoveryJobError
-from codex_plugin_scanner.guard.daemon.request_replay import replay_request, wait_for_background_work
-from codex_plugin_scanner.guard.daemon.request_replay_state import (
+from codex_plugin_scanner.guard.routes import request_host as request_replay
+from codex_plugin_scanner.guard.routes import request_state as request_replay_state
+from codex_plugin_scanner.guard.routes.request_host import replay_request, wait_for_background_work
+from codex_plugin_scanner.guard.routes.request_state import (
     _PersistedMapping,
     _ReplayDiscoveryJobs,
     _ReplayState,

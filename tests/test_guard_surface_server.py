@@ -28,10 +28,8 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import protection_repair_retry
 from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon import server_runtime_hook as runtime_hook_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
-from codex_plugin_scanner.guard.daemon.request_replay import _republish_trust_status
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
@@ -40,6 +38,8 @@ from codex_plugin_scanner.guard.local_dashboard_session import (
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
+from codex_plugin_scanner.guard.routes.request_host import _republish_trust_status
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore

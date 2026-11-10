@@ -17,7 +17,7 @@ def _configure_guard_desktop_parser(
         dest="desktop_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{bootstrap,qualify,dashboard-update,converge,daemon-replay,library-call}",
+        metavar="{bootstrap,qualify,dashboard-update,converge,library-call}",
     )
     bootstrap_parser = desktop_subparsers.add_parser("bootstrap", help=argparse.SUPPRESS)
     _add_guard_common_args(bootstrap_parser, suppress_defaults=True)
@@ -59,11 +59,6 @@ def _configure_guard_desktop_parser(
     dashboard_update_parser.add_argument("--update-token", required=True)
     dashboard_update_parser.add_argument("--force-pypi-reinstall", action="store_true")
     dashboard_update_parser.add_argument("--alpha", action="store_true")
-    daemon_replay_parser = desktop_subparsers.add_parser("daemon-replay", help=argparse.SUPPRESS)
-    _add_guard_common_args(daemon_replay_parser, suppress_defaults=True)
-    daemon_replay_parser.add_argument("--port", type=int, required=True)
-    daemon_replay_parser.add_argument("--daemon-pid", type=int, default=None)
-    daemon_replay_parser.add_argument("--daemon-proof-verified", action="store_true")
     library_call_parser = desktop_subparsers.add_parser("library-call", help=argparse.SUPPRESS)
     _add_guard_common_args(library_call_parser, suppress_defaults=True)
     library_serve_parser = desktop_subparsers.add_parser("library-serve", help=argparse.SUPPRESS)

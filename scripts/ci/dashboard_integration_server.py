@@ -47,8 +47,8 @@ from installed_extension_authority_fixture import describe_authority, read_autho
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import public_config, update_settings
 from codex_plugin_scanner.guard.daemon import extension_discovery_read
-from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from codex_plugin_scanner.guard.store import GuardStore

@@ -55,7 +55,7 @@ def revalidate_codex_live_allow(
     reviewer re-enters the hook pipeline the resident cannot call back into.
     """
 
-    # Importing this CLI facade while daemon.server is still initializing
+    # Importing this CLI facade while routes.request_handler is still initializing
     # reaches back through _commands_shared to the daemon package. Defer the
     # dependency until request handling so daemon imports remain order-safe.
     from .cli.commands_support_hook_payload import _action_envelope_json, _hook_action_envelope

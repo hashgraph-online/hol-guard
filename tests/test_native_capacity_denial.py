@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as daemon
+from codex_plugin_scanner.guard.routes import request_handler as daemon
 from tests.daemon_control_patching import patch_daemon_global
 
 

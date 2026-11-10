@@ -84,9 +84,10 @@ DEADLINE_CASES: list[dict[str, object]] = [
 
 
 def _vectors() -> dict[str, object]:
-    from codex_plugin_scanner.guard.daemon import server
+    from codex_plugin_scanner.guard.daemon import server_runtime_hook
     from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
     from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
+    from codex_plugin_scanner.guard.routes import request_handler as server
 
     handler = server._GuardDaemonHandler
     lane = [
@@ -109,7 +110,7 @@ def _vectors() -> dict[str, object]:
         hints.append(
             {
                 "payload": {key: _jsonable(value) for key, value in payload.items()},
-                "remaining_seconds": server._runtime_hook_remaining_hint(working),
+                "remaining_seconds": server_runtime_hook._runtime_hook_remaining_hint(working),
                 "remaining_payload_keys": sorted(working),
             }
         )
@@ -133,9 +134,10 @@ def _vectors() -> dict[str, object]:
 
 def _deadline_vectors(server: object, deadline_type: type) -> list[dict[str, object]]:
     """Record the deadlines the daemon's own ``for_admission`` produces, with a pinned clock."""
+    from codex_plugin_scanner.guard.daemon import server_runtime_hook
     from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import PROMPT_ADMISSION_SECONDS
 
-    non_prompt_admission = server._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS  # type: ignore[attr-defined]
+    non_prompt_admission = server_runtime_hook._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
     from_hint = deadline_type.from_remaining_hint.__func__  # type: ignore[attr-defined]
     base = 100.0
     original = from_hint.__kwdefaults__["monotonic"]

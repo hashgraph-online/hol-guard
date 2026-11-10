@@ -20,7 +20,7 @@ from ..supply_chain_repair import (
 from .cloud_review_settings import cloud_review_reconnect_required
 
 if TYPE_CHECKING:
-    from .server import _GuardDaemonHTTPServer as _GuardDaemonHttpServer
+    from ..routes.request_handler import _GuardDaemonHTTPServer as _GuardDaemonHttpServer
 from .server_common import (
     _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS,
 )

@@ -31,8 +31,8 @@ from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.routes.request_handler import _GuardDaemonHandler
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent

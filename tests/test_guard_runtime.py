@@ -20495,7 +20495,7 @@ def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(
 
     command = (
         "git diff -- "
-        "src/codex_plugin_scanner/guard/daemon/server.py "
+        "src/codex_plugin_scanner/guard/routes/request_handler.py "
         "dashboard/src/approval-center-layout.tsx "
         "dashboard/src/review-workspace.tsx "
         "tests/test_guard_approvals.py | sed -n '1,260p'"

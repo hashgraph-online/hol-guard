@@ -608,22 +608,6 @@ def _run_guard_desktop_command(
         if context is None or store is None:
             raise RuntimeError("Guard candidate qualification requires local Guard context")
         return run_desktop_qualification(args, context=context, store=store, output_stream=output_stream or sys.stdout)
-    if getattr(args, "desktop_command", None) == "daemon-replay":
-        from pathlib import Path as _Path
-
-        from .desktop_daemon_replay import run_daemon_replay
-
-        resolved_home = getattr(args, "guard_home", None) or guard_home
-        if resolved_home is None:
-            print("Guard daemon replay requires --guard-home.", file=sys.stderr)
-            return 2
-        daemon_pid = getattr(args, "daemon_pid", None)
-        return run_daemon_replay(
-            _Path(resolved_home),
-            int(args.port),
-            daemon_pid if isinstance(daemon_pid, int) and daemon_pid > 1 else None,
-            proof_verified=bool(getattr(args, "daemon_proof_verified", False)),
-        )
     if getattr(args, "desktop_command", None) == "library-call":
         from pathlib import Path as _Path
 

@@ -99,7 +99,7 @@ def _local_cli_api(store: GuardStore) -> Any:
 
     from ..daemon.background_diagnostics import record_background_event
     from ..daemon.local_cli_api import LocalCliApiService
-    from ..daemon.request_replay_state import _ReplayDiscoveryJobs, _ReplayState
+    from .request_state import _ReplayDiscoveryJobs, _ReplayState
 
     key = str(store.guard_home)
     with _LOCAL_CLI_APIS_LOCK:

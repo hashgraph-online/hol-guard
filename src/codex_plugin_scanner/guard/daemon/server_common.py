@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypeGuard
 
-_LOGGER = logging.getLogger("codex_plugin_scanner.guard.daemon.server")
+_LOGGER = logging.getLogger("codex_plugin_scanner.guard.routes.request_handler")
 
 
 _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS = 1_500
@@ -20,7 +20,7 @@ class _ServerProxy:
     """
 
     def __getattr__(self, name: str):
-        from . import server
+        from ..routes import request_handler as server
 
         return getattr(server, name)
 
