@@ -84,7 +84,7 @@ pub(crate) const WORKSPACE_REASON: &str = "native_workspace_containment_required
 pub(crate) const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 const AUTHORIZATION_FAILED: &str = "contained_run_authorization_failed";
 const AUTHORIZATION_MESSAGE: &str =
-    "Guard could not authorize the remaining contained command; no unapproved command ran outside the sandbox.";
+    "Guard could not authorize the remaining contained command. Any previously authorized host-side setup may already have completed; no unapproved command ran outside the sandbox.";
 const INVALID_COMMAND: &str = "pytest_restricted_invalid_command";
 const SANDBOX_UNAVAILABLE: &str = "pytest_restricted_sandbox_unavailable";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
