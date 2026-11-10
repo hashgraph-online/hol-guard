@@ -12,7 +12,6 @@ import pytest
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_headless_daemon_api import (
     _dashboard_token_for,
@@ -283,70 +282,3 @@ def test_phase07_auth_audit_events_do_not_leak_dashboard_tokens(tmp_path: Path) 
     assert "leaked-payload" not in serialized
     assert "leaked-signature" not in serialized
     assert events[0]["payload"]["has_dashboard_session"] is True
-
-
-def test_phase07_package_firewall_rate_limiter_blocks_burst_actions() -> None:
-    limiter = PackageFirewallActionRateLimiter(limit=2, window_seconds=60.0)
-    assert limiter.allow("workspace-1:install", now=100.0) == (True, 0)
-    assert limiter.allow("workspace-1:install", now=101.0) == (True, 0)
-    allowed, retry_after = limiter.allow("workspace-1:install", now=102.0)
-    assert allowed is False
-    assert retry_after >= 1
-
-
-def test_phase07_daemon_rate_limits_package_firewall_actions(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_premium_entitlement(store)
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon._server.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter(limit=1, window_seconds=60.0)  # type: ignore[attr-defined]
-    daemon.start()
-    try:
-        token = _dashboard_token_for(store)
-        first_status, _first_payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/supply-chain/package-shims/test",
-                token=token,
-                payload={"managers": ["npm"], "workspace_id": "workspace-1"},
-            ),
-        )
-        second_status, second_payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/supply-chain/package-shims/test",
-                token=token,
-                payload={"managers": ["npm"], "workspace_id": "workspace-1"},
-            ),
-        )
-    finally:
-        daemon.stop()
-
-    assert first_status == 200
-    assert second_status == 429
-    assert second_payload["error"] == "rate_limited"
-
-
-@pytest.mark.parametrize(
-    "path",
-    ["/v1/supply-chain/repair", "/v1/supply-chain/package-shims/repair"],
-)
-def test_package_repair_rejects_overlap_while_first_mutation_is_running(tmp_path: Path, path: str) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_premium_entitlement(store)
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    lock = daemon._server.package_firewall_mutation_lock  # type: ignore[attr-defined]
-    try:
-        token = _dashboard_token_for(store)
-        lock.acquire()
-        try:
-            status, payload = _read_json_response(
-                _request(daemon.port, path, token=token, payload={"managers": ["npm"]})
-            )
-        finally:
-            lock.release()
-    finally:
-        daemon.stop()
-
-    assert status == 409
-    assert payload["error"] == "operation_in_progress"

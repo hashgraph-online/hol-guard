@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
 from ..adapters import get_adapter
@@ -353,48 +352,3 @@ class _ControlMiscRoutes:
             lifecycle.refresh_command_queue_worker(),
             extra_headers={"Cache-Control": "no-store"},
         )
-
-    def _enforce_package_firewall_rate_limit(
-        self,
-        operation: str,
-        payload: dict[str, object],
-    ) -> bool:
-        workspace_id = (
-            self._optional_string(payload.get("workspace_id"))
-            or self._optional_string(payload.get("workspaceId"))
-            or self.server.store.get_cloud_workspace_id()  # type: ignore[attr-defined]
-            or "local"
-        )
-        rate_key = f"{workspace_id}:{operation}"
-        allowed, retry_after = self.server.package_firewall_action_rate_limiter.allow(rate_key)  # type: ignore[attr-defined]
-        if allowed:
-            return True
-        self._write_json(
-            {
-                "error": "rate_limited",
-                "message": "Package firewall actions are temporarily rate limited.",
-                "operation": operation,
-                "retry_after_seconds": retry_after,
-            },
-            status=429,
-        )
-        return False
-
-    def _run_package_firewall_mutation(self, operation: str, action: Callable[[], None]) -> None:
-        lock = self.server.package_firewall_mutation_lock  # type: ignore[attr-defined]
-        if not lock.acquire(blocking=False):
-            self._write_json(
-                {
-                    "error": "operation_in_progress",
-                    "message": (
-                        "Guard is still finishing a package protection change. Check its status before retrying."
-                    ),
-                    "operation": operation,
-                },
-                status=409,
-            )
-            return
-        try:
-            action()
-        finally:
-            lock.release()

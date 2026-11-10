@@ -4,8 +4,7 @@
 
 from __future__ import annotations
 
-import json
-from typing import TypedDict
+from typing import Any
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
@@ -20,20 +19,27 @@ from ..cli.install_commands import (
     uninstall_confirmation_token,
 )
 from ..harness_disconnect_gate import require_harness_disconnect_gate
+from ..headless_receipts import record_headless_receipt
 from ..native_daemon_handler import (
     NativeDaemonHandlerError,
     native_headless_action_error,
     native_headless_action_state,
     native_headless_cursor_surface_error,
 )
+from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_runner_authority import NativeRunnerAuthorityError
+from ..package_firewall_entitlement import (
+    PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
+    PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
+    PackageFirewallAccess,
+    package_firewall_access,
+)
 from ..package_firewall_receipts import package_firewall_receipt_metadata
-from ..receipts.manager import build_receipt
 from ..shims import (
     activate_package_shims,
     package_shim_status,
+    package_shim_supported_managers,
 )
-from ..stable_digest import stable_digest_hex
 from .server_common import (
     _NATIVE_HANDLER_UNAVAILABLE,
     _is_string_object_dict,
@@ -45,17 +51,6 @@ from .server_control_cloud_sync import (
     _queue_headless_cloud_sync_with_optional_publish,
     _receipt_summary,
 )
-
-
-class _CursorReceiptContext(TypedDict):
-    action_scope: str
-    artifact_name: str
-    capabilities_summary: str
-    changed_capability: str
-    scanner_evidence: dict[str, object]
-    source_scope: str
-    summary: dict[str, object]
-
 
 _HEADLESS_APP_ACTIONS = {
     "connect": ("install", "install"),
@@ -300,84 +295,8 @@ class _HeadlessRoutes:
             }
         )
 
-    def _record_headless_receipt(
-        self,
-        *,
-        harness: str,
-        location_id: str | None = None,
-        operation: str,
-        payload: dict[str, object],
-        result: dict[str, object],
-        workspace_id: str | None,
-        cloud_sync: dict[str, object] | None = None,
-        policy_decision: str | None = None,
-        capabilities_summary: str | None = None,
-        artifact_name: str | None = None,
-        scanner_evidence_extra: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        cursor_receipt_context = self._cursor_receipt_context(
-            harness=harness,
-            operation=operation,
-            payload=payload,
-            result=result,
-            cloud_sync=cloud_sync,
-        )
-        material = json.dumps(
-            {
-                "harness": harness,
-                "location_id": location_id,
-                "operation": operation,
-                "result_keys": sorted(result.keys()),
-                "cursor": cursor_receipt_context,
-                "workspace_id": workspace_id,
-            },
-            sort_keys=True,
-        )
-        artifact_hash = stable_digest_hex(material.encode("utf-8"))
-        changed_capabilities = [] if operation in {"status", "scan"} else [operation]
-        artifact_id = f"headless:{harness}:{operation}"
-        resolved_artifact_name = artifact_name or f"Headless {operation}"
-        resolved_capabilities_summary = capabilities_summary or f"Guard local daemon completed headless {operation}."
-        source_scope = "local-daemon"
-        resolved_policy_decision = policy_decision or "allow"
-        scanner_evidence: dict[str, object] = {
-            "operation": operation,
-            "location_id": location_id,
-            "workspace_id": workspace_id,
-            "status": "completed",
-        }
-        if scanner_evidence_extra is not None:
-            scanner_evidence.update(scanner_evidence_extra)
-        if cursor_receipt_context is not None:
-            artifact_id = str(cursor_receipt_context["action_scope"])
-            resolved_artifact_name = str(cursor_receipt_context["artifact_name"])
-            resolved_capabilities_summary = str(cursor_receipt_context["capabilities_summary"])
-            source_scope = str(cursor_receipt_context["source_scope"])
-            changed_capabilities = [str(cursor_receipt_context["changed_capability"])]
-            scanner_evidence.update(cursor_receipt_context["scanner_evidence"])
-        receipt = build_receipt(
-            harness=harness,
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash,
-            policy_decision=resolved_policy_decision,
-            capabilities_summary=resolved_capabilities_summary,
-            changed_capabilities=changed_capabilities,
-            provenance_summary="Guard Cloud local daemon API",
-            artifact_name=resolved_artifact_name,
-            source_scope=source_scope,
-            scanner_evidence=(scanner_evidence,),
-            approval_source="guard-cloud-headless",
-        )
-        self.server.store.add_receipt(receipt)  # type: ignore[attr-defined]
-        summary: dict[str, object] = {
-            "id": receipt.receipt_id,
-            "operation": operation,
-            "status": "completed",
-            "timestamp": receipt.timestamp,
-        }
-        if cursor_receipt_context is not None:
-            summary.update(cursor_receipt_context["summary"])
-        return summary
+    def _record_headless_receipt(self, **kwargs: Any) -> dict[str, object]:
+        return record_headless_receipt(self.server.store, **kwargs)  # type: ignore[attr-defined]
 
     def _cursor_headless_surface(self, payload: dict[str, object]) -> str | None:
         surface = self._optional_string(payload.get("surface")) or self._optional_string(payload.get("editor_or_cli"))
@@ -386,55 +305,6 @@ class _HeadlessRoutes:
         if surface not in {"editor", "cli"}:
             raise ValueError("invalid_cursor_surface")
         return surface
-
-    def _cursor_receipt_context(
-        self,
-        *,
-        harness: str,
-        operation: str,
-        payload: dict[str, object],
-        result: dict[str, object],
-        cloud_sync: dict[str, object] | None,
-    ) -> _CursorReceiptContext | None:
-        if harness != "cursor":
-            return None
-        action_payload = result.get("cursor_action")
-        action_dict = action_payload if isinstance(action_payload, dict) else {}
-        surface = (
-            self._optional_string(action_dict.get("surface"))
-            or self._optional_string(payload.get("surface"))
-            or self._optional_string(payload.get("editor_or_cli"))
-            or "editor"
-        )
-        action = self._optional_string(action_dict.get("action")) or operation
-        evidence = action_dict.get("evidence")
-        evidence_dict = evidence if isinstance(evidence, dict) else {}
-        action_scope = self._optional_string(evidence_dict.get("actionScope")) or f"cursor:{surface}:{action}"
-        cloud_sync_status = "pending"
-        if isinstance(cloud_sync, dict):
-            cloud_sync_status = self._optional_string(cloud_sync.get("status")) or cloud_sync_status
-        surface_label = "CLI" if surface == "cli" else "editor"
-        scanner_evidence: dict[str, object] = {
-            "action_scope": action_scope,
-            "cloud_sync_status": cloud_sync_status,
-            "cursor_status": self._optional_string(action_dict.get("status")) or "unknown",
-            "editor_or_cli": surface,
-            "error_reason": self._optional_string(payload.get("error_reason")),
-        }
-        summary: dict[str, object] = {
-            "action_scope": action_scope,
-            "cloud_sync": dict(cloud_sync) if isinstance(cloud_sync, dict) else {"status": cloud_sync_status},
-            "editor_or_cli": surface,
-        }
-        return {
-            "action_scope": action_scope,
-            "artifact_name": f"Cursor {surface_label} {action}",
-            "capabilities_summary": f"Guard local daemon completed Cursor {surface_label} {action}.",
-            "changed_capability": f"{surface}:{action}",
-            "scanner_evidence": scanner_evidence,
-            "source_scope": f"cursor:{surface}",
-            "summary": summary,
-        }
 
     def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
         from .approval_extension_recommendation import (
@@ -480,3 +350,72 @@ class _HeadlessRoutes:
         if connector is not None:
             payload["connector_recommendation"] = connector
         return payload
+
+    def _supply_chain_entitlement(self) -> dict[str, object]:
+        from ..routes.supply_chain_calls import supply_chain_entitlement
+
+        return supply_chain_entitlement(self.server)  # type: ignore[attr-defined]
+
+    def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
+        from ..routes.supply_chain_calls import supply_chain_context
+
+        return supply_chain_context(self.server.store, payload)  # type: ignore[attr-defined]
+
+    def _write_supply_chain_workspace_unavailable(self, operation: str) -> None:
+        """The native runtime could not resolve the workspace; not a bad folder."""
+
+        self._write_json(  # type: ignore[attr-defined]
+            {
+                "error": "supply_chain_workspace_unavailable",
+                "message": "Guard could not check the project folder right now. Try again in a moment.",
+                "operation": operation,
+            },
+            status=503,
+        )
+
+    @staticmethod
+    def _supply_chain_managers(payload: dict[str, object]) -> tuple[tuple[str, ...] | None, str | None]:
+        managers_value = payload.get("managers")
+        if managers_value is None:
+            return None, None
+        if not isinstance(managers_value, list) or not all(isinstance(manager, str) for manager in managers_value):
+            return None, "invalid_managers"
+        normalized = [manager.strip().lower() for manager in managers_value if manager.strip()]
+        if len(normalized) != len(set(normalized)):
+            return None, "duplicate_manager"
+        managers = tuple(normalized)
+        if not managers:
+            return None, "invalid_managers"
+        if not set(managers).issubset(set(package_shim_supported_managers())):
+            return None, "unsupported_manager"
+        return managers, None
+
+    def _package_firewall_access(
+        self,
+        entitlement: dict[str, object],
+        *,
+        operation: str | None,
+        has_installed_managers: bool,
+        reported_operation: str,
+    ) -> PackageFirewallAccess | None:
+        """What the entitlement permits, or a fail-closed reply and ``None``."""
+
+        try:
+            return package_firewall_access(
+                entitlement,
+                operation=operation,
+                has_installed_managers=has_installed_managers,
+                guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+            )
+        except NativeHookComposeError:
+            self._write_json(  # type: ignore[attr-defined]
+                {
+                    "available_actions": [],
+                    "entitlement": entitlement,
+                    "error": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
+                    "message": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
+                    "operation": reported_operation,
+                },
+                status=503,
+            )
+            return None

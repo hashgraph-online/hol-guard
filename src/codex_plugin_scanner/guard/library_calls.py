@@ -25,6 +25,7 @@ from .routes.hook_host import HOOK_HOST_CALLS
 from .routes.policy_sync_call import POLICY_SYNC_CALLS
 from .routes.reads import READ_CALLS
 from .routes.repair_calls import REPAIR_CALLS
+from .routes.supply_chain_calls import SUPPLY_CHAIN_CALLS
 from .routes.service_calls import SERVICE_CALLS
 from .routes.settings_calls import SETTINGS_CALLS
 from .store import GuardStore
@@ -226,6 +227,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **HOOK_HOST_CALLS,
     **READ_CALLS,
     **REPAIR_CALLS,
+    **SUPPLY_CHAIN_CALLS,
     **WORKER_CALLS,
     **EXTENSION_CONTROL_CALLS,
     **CATALOG_CALLS,

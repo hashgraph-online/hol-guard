@@ -50,6 +50,8 @@ mod route_calls;
 mod sessions;
 #[path = "daemon_edge_settings_write.rs"]
 mod settings_write;
+#[path = "daemon_edge_supply_chain.rs"]
+pub(super) mod supply_chain;
 
 /// The value a body read, or the daemon's answer for a body it cannot read.
 macro_rules! read_body {
@@ -342,18 +344,22 @@ fn control_post(
     }
     let port = reads.published_state()?.get("port")?.as_u64()?;
     reads.report_activity();
-    if request.path == "/v1/protection/repair" {
-        let (status, body) = protection_repair::protection_repair(&payload, config, port)?;
-        return Some((status, body, caller.cors_origin, false));
-    }
     let mut args = serde_json::Map::new();
-    args.insert("path".to_owned(), Value::from(request.path));
     args.insert("port".to_owned(), Value::from(port));
     args.insert("daemon_pid".to_owned(), Value::from(reads.daemon_pid()));
     args.insert(
         "home_dir".to_owned(),
         config.user_home.as_deref().map_or(Value::Null, Value::from),
     );
+    if let Some(answer) = supply_chain::post(request.path, &payload, config, args.clone()) {
+        let (status, body) = answer?;
+        return Some((status, body, caller.cors_origin, false));
+    }
+    if request.path == "/v1/protection/repair" {
+        let (status, body) = protection_repair::protection_repair(&payload, config, port)?;
+        return Some((status, body, caller.cors_origin, false));
+    }
+    args.insert("path".to_owned(), Value::from(request.path));
     let (status, body, no_store) = route_calls::respond(
         args,
         &payload,

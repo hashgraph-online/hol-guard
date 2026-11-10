@@ -11,7 +11,8 @@ they write, with that state loaded from the Guard home.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -29,13 +30,11 @@ def _host_class() -> type:
     from ..daemon.server_control_misc import _ControlMiscRoutes
     from ..daemon.server_control_policy import _ControlPolicyRoutes
     from ..daemon.server_control_routes_post import _ControlPostRoutes
-    from ..daemon.server_control_supply_chain import _SupplyChainRoutes
     from ..daemon.server_dashboard_support import _DashboardSupportRoutes
 
     class ControlHost(
         _DashboardSupportRoutes,
         _ControlPostRoutes,
-        _SupplyChainRoutes,
         _CloudConnectRoutes,
         _HeadlessRoutes,
         _ControlMiscRoutes,
@@ -163,6 +162,30 @@ def _host_class() -> type:
 _HOST_CLASSES: dict[str, type] = {}
 
 
+@contextmanager
+def control_server(store: GuardStore, args: Mapping[str, Any]) -> Iterator[Any]:
+    """The daemon's cross-request state, loaded from the Guard home for one call."""
+
+    from ..daemon.auth_token import load_guard_daemon_auth_token
+    from .request_host import _replay_server_class
+
+    port = args.get("port")
+    home_dir = args.get("home_dir")
+    server = _replay_server_class()(
+        store,
+        port if isinstance(port, int) else 0,
+        "127.0.0.1",
+        Path(home_dir) if isinstance(home_dir, str) and home_dir else Path.home(),
+        load_guard_daemon_auth_token(store.guard_home) or "",
+        args.get("daemon_pid") if isinstance(args.get("daemon_pid"), int) else None,
+        False,
+    )
+    try:
+        yield server
+    finally:
+        server.server_close()
+
+
 def control_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Runs the control handler the daemon dispatches ``POST path`` to."""
 
@@ -209,8 +232,6 @@ CONTROL_GET_PATHS = frozenset(
         "/v1/cloud/connect",
         "/v1/local-clis",
         "/v1/runtime",
-        "/v1/supply-chain/entitlement",
-        "/v1/supply-chain/package-shims",
         "/v1/update/status",
     }
 )
@@ -259,12 +280,8 @@ def _dispatch_control_get(host: Any, path: str, query: str) -> None:
         _runtime_read(host, query)
     elif path == "/v1/local-clis":
         handle_local_cli_list(host, query)
-    elif path == "/v1/supply-chain/package-shims":
-        host._handle_supply_chain_package_firewall_status()
     elif path == "/v1/cloud/connect":
         host._handle_guard_cloud_connect_status()
-    elif path == "/v1/supply-chain/entitlement":
-        host._write_json(host._supply_chain_entitlement())
     else:
         guard_home = host.server.store.guard_home
         host._write_json(

@@ -1028,7 +1028,7 @@
         ],
         "entry_points": [],
         "reason": "Request-body, request-list, harness-action, headless-action, detection-status and supply-chain helpers for daemon control-plane and dashboard routes.",
-        "evidence": "Each excluded public helper is called only from daemon/server_control_policy.py, server_control_misc.py, server_control_headless.py, server_control_supply_chain.py (daemon-control-plane-routes) or daemon/server_dashboard_support.py (daemon-dashboard-read-routes). HandlerDecision, NativeDaemonHandlerError and native_events_cursor, which routes/request_handler.py imports, stay in scope. The report validates this reference closure on every run."
+        "evidence": "Each excluded public helper is called only from daemon/server_control_policy.py, server_control_misc.py, server_control_headless.py, routes/supply_chain_calls.py (daemon-control-plane-routes) or daemon/server_dashboard_support.py (daemon-dashboard-read-routes). HandlerDecision, NativeDaemonHandlerError and native_events_cursor, which routes/request_handler.py imports, stay in scope. The report validates this reference closure on every run."
       },
       {
         "id": "store-evidence-dashboard-export",

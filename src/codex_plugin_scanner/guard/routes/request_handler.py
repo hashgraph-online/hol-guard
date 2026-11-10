@@ -27,7 +27,6 @@ from ..daemon.manager import (
 from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
 from ..daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter
-from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.surface_server import GuardSurfaceRuntime
@@ -110,8 +109,6 @@ class _GuardDaemonHTTPServer:
     guard_cloud_connect_state: dict[str, object] | None
     guard_cloud_connect_state_lock: threading.Lock
     guard_cloud_browser_session_lock: threading.Lock
-    package_firewall_action_rate_limiter: PackageFirewallActionRateLimiter
-    package_firewall_mutation_lock: threading.Lock
     package_firewall_session_nonces: dict[str, float]
     package_firewall_session_nonces_lock: threading.Lock
     approval_attention: ApprovalAttentionCoordinator
