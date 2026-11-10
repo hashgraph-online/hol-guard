@@ -89,7 +89,7 @@ pub(super) fn lookup(
     };
     let rendered = |flight: &Flight| {
         answer(service, flight, cutoff)
-            .map(|picked| picked.and_then(&shown))
+            .map(|picked| picked.and_then(shown))
             .ok_or(Miss::Pending)
     };
     let flight = {
