@@ -78,7 +78,7 @@
     ],
     "saferAlternatives": [
         "Inspect existing assets and public CDN URLs with list_files before updating with update_file.",
-        "Review create_temporary_file before use: it publishes supplied content to a public CDN URL, even without authentication. Use only content approved for public sharing.",
+        "Review create_temporary_file before use: it temporarily hosts supplied content on a public CDN URL without authentication, and uploaded files are eventually removed by StaticSave's own cleanup cycle. Use only content approved for public sharing.",
         "Keep delete_folder on Block and file mutations on Review to prevent unintended asset changes."
     ]
 }
