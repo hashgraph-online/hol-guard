@@ -194,7 +194,7 @@
   "saferAlternatives": [
     "Keep designos_export_fig_file, designos_save_file, designos_render_png and designos_close_document on review: they alone can write under --workspace (.fig, .designos, or a new .png). Existing .fig or .designos files need overwrite.",
     "Standalone (no Studio session): edit tools only change the in-memory document until designos_save_file. designos_generate_code and designos_export_spec return source and write no files. designos_get_screenshot returns an inline image.",
-    "Connected Studio session: editing, comment, and document-switch tools also publish live patches into that session folder (doc-patch.jsonl, canvas.designos, doc-sync.designos) without designos_save_file. Keep those tools on review, including designos_open_file and designos_new_document.",
+    "Studio session edits, comments and document switches publish live patches (doc-patch.jsonl, canvas.designos, doc-sync.designos) to the session folder without designos_save_file. Keep them on review, including designos_open_file and designos_new_document.",
     "Launch as designos-mcp --workspace <dir> over stdio. Relative and absolute paths must stay inside that workspace. Keep designos_configure_session on review: it persists options in the session directory, not under --workspace.",
     "Keep the other row on review so any tool added in a future Studio release is reviewed until this entry lists it."
   ]
