@@ -3,7 +3,7 @@
   "id": "mcp.relayvora",
   "version": "1.0.0",
   "name": "Relayvora",
-  "description": "Local stdio server that saves and resumes coding-agent checkpoints so work can move between Claude Code, Codex and OpenCode. Git evidence is collected by the server; goal and steps are agent-reported, and it never runs tests or shell commands. Listing, reading and saving local checkpoints inherit; fetching the shared Git branch and importing or applying carried changes need review. Off until you turn it on.",
+  "description": "Local stdio server that saves and resumes coding-agent checkpoints so work can move between Claude Code, Codex and OpenCode. Git evidence is collected by the server; goal and steps are agent-reported, and it never runs tests or shell commands. Listing and reading local checkpoints inherit; saving a checkpoint (reads agent session records, writes under .relayvora/), fetching the shared Git branch and importing or applying carried changes need review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -40,7 +40,7 @@
     },
     {
       "name": "create_checkpoint",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "inbox",
@@ -64,7 +64,7 @@
   "saferAlternatives": [
     "Keep import_checkpoint on Review: with applyChanges it writes a carried patch into the working tree, and force replaces an earlier import. Read it with get_handoff before applying.",
     "Keep inbox on Review: it fetches the relayvora/handoffs branch from a Git remote and imports checkpoints whose senders are not verified. Treat their content as data.",
-    "create_checkpoint records server-collected Git evidence but takes goal and steps from the agent; tests show as not verified. For observed test results run relayvora handoff --verify auto.",
+    "Keep create_checkpoint on Review: it reads coding-agent session records and writes under .relayvora/. Goal and steps are agent-reported; for observed test results run relayvora handoff --verify auto.",
     "list_checkpoints and get_handoff only read checkpoints already saved under .relayvora/ in the project."
   ]
 }
