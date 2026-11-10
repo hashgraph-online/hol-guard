@@ -17,9 +17,9 @@ import {
 } from "./pulse-approval";
 import { GuardModalLayer } from "./guard-modal-layer";
 
-// Where a new user gets the YID app. `referrer` tells Yanez the visit came from
-// HOL Guard's dashboard setup; it carries nothing about the user or machine.
-export const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer=holguard";
+// Where a new user gets the YID app. `referrer_id` tells Yanez the visit came
+// from HOL Guard; it carries nothing about the user or machine.
+export const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer_id=holguard";
 
 const ENROLLMENT_OUTCOME_MESSAGES = {
   rejected: "The enrollment was rejected in the YID app.",

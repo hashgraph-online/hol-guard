@@ -383,7 +383,7 @@ async function closingSetupWhileItStartsNeverTurnsPulseOn(): Promise<void> {
 function theSetupLinkTellsYanezItCameFromGuard(): void {
   const link = new URL(PULSE_SITE_URL);
   assert(link.origin === "https://pulse.yanez.ai", "PULSE-16: setup links to the YID app page");
-  assert(link.searchParams.get("referrer") === "holguard" && [...link.searchParams.keys()].length === 1,
+  assert(link.searchParams.get("referrer_id") === "holguard" && [...link.searchParams.keys()].length === 1,
     "PULSE-16: the link carries only the HOL Guard referrer");
 }
 

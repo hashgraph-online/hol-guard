@@ -26,9 +26,10 @@ from ..approval_gate import (
 )
 from .approval_gate_prompt import print_pulse_status, prompt_for_approval_gate
 
-# Where a new user gets the YID app. `referrer` tells Yanez the visit came from
-# HOL Guard's CLI; it carries nothing about the user or the machine.
-PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer=holguard-cli"
+# Where a new user gets the YID app, the same link as the dashboard.
+# `referrer_id` tells Yanez the visit came from HOL Guard; it carries nothing
+# about the user or the machine.
+PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer_id=holguard"
 # How Pulse works, for anyone who wants to read more.
 PULSE_DOCS_URL = "https://docs.yanez.ai/pulse/"
 _SETUP_STEPS = (

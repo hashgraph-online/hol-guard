@@ -586,7 +586,7 @@ def test_every_pulse_command_help_says_where_to_get_the_app_and_read_more(
     with pytest.raises(SystemExit):
         root.parse_args(["approval-pulse", *command, "--help"])
     shown = capsys.readouterr().out
-    assert "Get the YID app:  https://pulse.yanez.ai/?referrer=holguard-cli\n" in shown
+    assert "Get the YID app:  https://pulse.yanez.ai/?referrer_id=holguard\n" in shown
     assert "How Pulse works:  https://docs.yanez.ai/pulse/\n" in shown
 
 
@@ -597,6 +597,6 @@ def test_cli_setup_sends_new_users_to_the_yid_app_page() -> None:
 
     link = urlsplit(PULSE_SITE_URL)
     assert (link.scheme, link.netloc) == ("https", "pulse.yanez.ai")
-    assert parse_qs(link.query) == {"referrer": ["holguard-cli"]}, "only the CLI referrer, nothing about the user"
+    assert parse_qs(link.query) == {"referrer_id": ["holguard"]}, "only the HOL Guard referrer, nothing about the user"
     assert any(PULSE_SITE_URL in line for line in _SETUP_STEPS), "setup shows the app link"
     assert not any("docs.yanez.ai" in line for line in _SETUP_STEPS), "setup does not send new users to developer docs"
