@@ -1062,6 +1062,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             else:
                 value = name
             summary.add_row("Configured protection", value)
+            health_note = payload.get("protection_health_note")
+            if isinstance(health_note, str) and health_note.strip():
+                summary.add_row("Live health", health_note)
             per_app = harness_posture_line(payload).strip()
             if per_app:
                 summary.add_row("Per app", per_app.removeprefix("per app: "))
