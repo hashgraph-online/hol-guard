@@ -121,6 +121,8 @@ pub(super) struct Asked {
     pub(super) renames: Vec<(String, String)>,
     /// The project root, where a command the note gives runs from.
     pub(super) root: PathBuf,
+    /// Files Guard keeps out of the context for what they hold, by path.
+    pub(super) kept_out: Vec<(String, String)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -204,6 +206,8 @@ pub(super) fn mapped(
     }
     let files: Vec<String> = walk.files.iter().chain(&walk.tests).cloned().collect();
     let texts = screened_texts(home, root, app, &files, files.len(), until);
+    // A file kept out for what it holds still places what the prompt names.
+    let kept_out = withheld_texts(home, root, app, &files, &texts, until);
     let asked = Asked {
         docs: more::asks_for_docs(prompt),
         docstring: docstring::asks_for_docstring(prompt),
@@ -215,11 +219,10 @@ pub(super) fn mapped(
         spellings: spellings(prompt),
         renames: renames(prompt),
         root: root.to_path_buf(),
+        kept_out,
     };
-    // A file kept out for what it holds still places what the prompt names.
     let mapped = map(&texts, &sought, &asked, until);
-    let withheld = withheld_texts(home, root, app, &files, &texts, until);
-    withheld::added(mapped, &withheld, &sought, &asked, until)
+    withheld::added(mapped, &asked.kept_out, &sought, &asked, until)
 }
 
 /// The tests that use `names`, the definitions a change touched, from the
@@ -351,11 +354,7 @@ pub(super) fn map(
     if renamed.is_empty() {
         blocks.push((format!("Where {title} appear in source:"), plain(uses)));
     }
-    blocks.extend(
-        renamed
-            .into_iter()
-            .map(|(title, lines)| (title, quoted(lines))),
-    );
+    blocks.extend(renamed.into_iter().map(|(name, body)| (name, quoted(body))));
     let tests = more::tests(&files, &mentioned, asked, &earlier);
     let shown: Vec<Span> = (earlier.iter().cloned())
         .chain(tests.iter().flat_map(|entry| entry.shown.iter().cloned()))

@@ -156,3 +156,44 @@ from every template line.\" Reply with its file path and function name.";
     assert!(map.contains("src/lexer.py:8-10 Lexer._strip"), "{map}");
     assert!(!map.contains("stream.current"), "{map}");
 }
+
+/// A rename lists the lines naming the old name in a test file Guard keeps
+/// out, by number alone, and counts that file, so the list is whole and the
+/// one rename command covers it. Before, the list held only the files read,
+/// and an agent renamed the rest and left the kept-out test calling the old
+/// name.
+#[test]
+fn a_rename_lists_the_lines_of_a_withheld_file_by_number() {
+    let held = concat!("to", "ken = self.stream.current");
+    let test = format!(
+        "from app import utils\n\n\ndef test_name():\n    {held}\n    \
+assert utils._detect_program_name(path=None) == 'app'\n"
+    );
+    let list = [
+        (
+            "src/app/utils.py",
+            "def _detect_program_name(path=None):\n    return 'app'\n",
+        ),
+        (
+            "src/app/core.py",
+            "from .utils import _detect_program_name\n\n\ndef main():\n    \
+return _detect_program_name()\n",
+        ),
+        ("tests/test_utils.py", test.as_str()),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the internal helper `_detect_program_name` to \
+`_detect_program_name_impl` everywhere in the project, including tests.";
+    let map = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(map.contains("tests/test_utils.py:6: Guard keeps"), "{map}");
+    assert!(
+        map.contains("Every line naming `_detect_program_name`"),
+        "{map}"
+    );
+    assert!(!map.contains("stream.current"), "{map}");
+    assert!(!map.contains("utils._detect_program_name(path"), "{map}");
+    if !cfg!(windows) {
+        let command = (map.lines()).find(|line| line.contains("perl")).unwrap();
+        assert!(command.contains("tests/test_utils.py"), "{map}");
+    }
+}

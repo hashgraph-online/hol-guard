@@ -3,7 +3,7 @@
 //! the agent need not search or open them again before editing. For a stubbed-out
 //! function, the other lines naming it, with their text: the module state,
 //! imports and platform versions its body has to use.
-use super::{Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
+use super::{file, Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
 
@@ -46,6 +46,10 @@ pub(super) fn blocks(
     if !asked.everywhere {
         return (Vec::new(), None);
     }
+    // A file Guard keeps out still holds lines the rename has to change.
+    let kept: Vec<File> = (asked.kept_out.iter())
+        .map(|(path, text)| file(path, text))
+        .collect();
     let found: Vec<_> = (sought.iter())
         .filter(|item| item.name && !item.phrase && !owner_only(&asked.spellings, &item.text))
         .filter_map(|item| {
@@ -54,9 +58,9 @@ pub(super) fn blocks(
             let spelled = (asked.spellings.iter()).find(|word| term_form(word) == item.text);
             let found = spelled.and_then(|word| {
                 let new = renamed_to(&asked.renames, word);
-                every_line(files, item, Some(word.as_str()), new, until)
+                every_line(files, &kept, item, Some(word.as_str()), new, until)
             });
-            found.or_else(|| every_line(files, item, None, None, until))
+            found.or_else(|| every_line(files, &kept, item, None, None, until))
         })
         .take(MAX_NAMES)
         .collect();
@@ -192,6 +196,7 @@ fn builds_on(line: &str, name: &str) -> bool {
 /// holding it beyond these, and every line fits.
 fn every_line(
     files: &[File],
+    kept: &[File],
     item: &Sought,
     exact: Option<&str>,
     new: Option<&str>,
@@ -226,7 +231,12 @@ fn every_line(
             let count = entries.len();
             whole &= fits(line_entry(file, number), &mut entries, count);
         }
-        others.extend(found.longer.into_iter().map(|number| (file, number)));
+        others.extend(
+            found
+                .longer
+                .into_iter()
+                .map(|number| line_entry(file, number)),
+        );
         building.extend(
             found
                 .building
@@ -239,9 +249,26 @@ fn every_line(
             }
         }
     }
-    for (file, number) in others {
+    // A kept-out file's lines go by number alone, never with their text.
+    for file in kept {
+        let found = naming(file, &item.text, exact, until)?;
+        written = written.or(found.written);
+        holding += usize::from(found.held);
+        if !found.lines.is_empty() {
+            holders.push(file);
+            let count = entries.len();
+            whole &= fits(kept_entry(file, &found.lines), &mut entries, count);
+        }
+        if !found.longer.is_empty() {
+            others.push(kept_entry(file, &found.longer));
+        }
+        if !found.building.is_empty() {
+            building.push(kept_entry(file, &found.building));
+        }
+    }
+    for entry in others {
         let count = entries.len() + longer.len();
-        whole &= fits(line_entry(file, number), &mut longer, count);
+        whole &= fits(entry, &mut longer, count);
     }
     let name = written?;
     whole &= item.spelled == Some(holding);
@@ -349,6 +376,18 @@ fn line_entry(file: &File, number: usize) -> String {
         .collect();
     let text: String = text.chars().take(MAX_LINE_CHARS).collect();
     format!("{}:{number}:{indent}{text}", file.path)
+}
+
+/// The lines of a file Guard keeps out, by number: the agent opens them.
+fn kept_entry(file: &File, numbers: &[usize]) -> String {
+    let numbers = (numbers.iter().take(MAX_RENAME_LINES))
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "{}:{numbers}: Guard keeps this file's text out of this note; edit these lines too",
+        file.path
+    )
 }
 
 /// Whether section `at` of `file` is a body left to be written.
