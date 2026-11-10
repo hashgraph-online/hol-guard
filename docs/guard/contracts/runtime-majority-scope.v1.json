@@ -658,9 +658,10 @@
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
           "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
           "src/codex_plugin_scanner/guard/adapters/zcode_config.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py"
+          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
+          "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
-        "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope."
+        "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
       },
       {
         "path": [
@@ -1706,23 +1707,6 @@
         "entry_points": [],
         "reason": "Pending MCP policy creation requests are staged, applied, declined and recovered only by operator workflows: the Guard MCP policy tools (mcp/policy_tools.py, mcp/tools.py, mcp/policy_apply.py), the daemon policy-decision and business-policy recovery routes, and dashboard support reads. None of those run on a hook or proxy request. The runtime keeps ensure_mcp_policy_request_schema, which store_connection_schema calls when it opens the store.",
         "evidence": "rg -n 'MCPolicyRequestRepository|PendingPolicyRequest|StageRequestInput' src -g '*.py' lists only mcp/policy_apply.py, mcp/policy_tools.py, mcp/tools.py, daemon/mcp_policy_decisions.py, daemon/business_policy_recovery.py and daemon/server_dashboard_support.py outside mcp/policy_store.py; none of them is in the runtime import closure."
-      },
-      {
-        "id": "daemon-peer-update-and-cli-endpoint",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
-        "symbols": [
-          "live_desktop_owned_daemon",
-          "load_guard_daemon_endpoint",
-          "load_guard_daemon_endpoint_url",
-          "retained_newer_runtime_payload",
-          "daemon_refresh_outcome_succeeded",
-          "retained_desktop_owner_payload",
-          "retained_desktop_owner_note"
-        ],
-        "entry_points": [],
-        "reason": "Desktop-owned daemon detection, retained-runtime payloads and refresh outcomes serve Guard self-update and desktop apply; the endpoint loaders serve CLI commands that talk to a running daemon. None of them runs on a hook or proxy request. daemon_source_is_desktop_core stays counted because retained runtime code reads it.",
-        "evidence": "rg -n 'live_desktop_owned_daemon|load_guard_daemon_endpoint|retained_newer_runtime_payload|daemon_refresh_outcome_succeeded|retained_desktop_owner_(payload|note)' src -g '*.py' lists only cli/update_commands.py, cli/update_desktop_apply.py, daemon/dashboard_update_runner.py and daemon/update_refresh_program.py (self-update), and cli/commands_dispatch_trust.py, cli/commands_support_service.py, cli/extension_controls_commands.py and cli/product.py outside daemon/runtime_peer.py; none of them is in the runtime import closure."
       },
       {
         "id": "policy-document-file-io",

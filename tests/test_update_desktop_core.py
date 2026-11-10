@@ -741,7 +741,7 @@ def test_dashboard_runner_and_daemon_env_preserve_desktop_version(
     popen_kwargs["log_handle"].close()
     assert runner_env["HOL_GUARD_DESKTOP_VERSION"] == "0.2.0"
     assert "HOL_GUARD_DESKTOP_VERSION" in dashboard_update_module._DASHBOARD_UPDATE_RUNNER_ENV_KEYS
-    assert "HOL_GUARD_DESKTOP_VERSION" in daemon_manager._GUARD_DAEMON_ENV_KEYS
+    assert "HOL_GUARD_DESKTOP_VERSION" in daemon_manager._DESKTOP_ENV_KEYS
 
 
 class _FakeClock:

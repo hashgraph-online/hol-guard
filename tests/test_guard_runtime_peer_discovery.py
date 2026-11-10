@@ -90,7 +90,7 @@ def _signed_desktop_daemon(
         "source_root": source_root,
         "auth_token_id": hashlib.sha256(state_token.encode("utf-8")).hexdigest(),
     }
-    auth_path = manager._auth_token_path(guard_home)
+    auth_path = manager.auth_file_path(guard_home)
     auth_path.write_text(token, encoding="utf-8")
     state_path = manager._state_path(guard_home)
     state_path.write_text(

@@ -45,7 +45,7 @@ def test_reap_asks_the_runtime_with_the_caller_pid(monkeypatch: pytest.MonkeyPat
                 {"schema": "orphaned-worker-reap.v1", "self_pid": os.getpid(), "budget_ms": 14750},
             ),
             {
-                "output_limit": manager._ORPHAN_REAP_OUTPUT_LIMIT,
+                "output_limit": manager._MANAGE_OUTPUT_LIMIT,
                 "deadline": 100.0 + manager._ORPHAN_REAP_TIMEOUT_SECONDS,
             },
         )

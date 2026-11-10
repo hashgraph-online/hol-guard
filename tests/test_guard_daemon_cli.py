@@ -211,7 +211,7 @@ class TestDaemonStopCommand:
     def test_stop_clears_daemon_state(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.native_daemon_manage import write_guard_daemon_state
 
-        write_guard_daemon_state(tmp_path, port=0, auth_token="x")
+        write_guard_daemon_state(tmp_path, port=5530, auth_token="x")
 
         code, _payload = _run(["daemon", "stop"], tmp_path)
         assert code == 0

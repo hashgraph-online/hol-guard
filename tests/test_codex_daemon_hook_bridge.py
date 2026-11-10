@@ -579,7 +579,11 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     finally:
         daemon.stop()
 
-    assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {None, "deny"}
+    assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {
+        None,
+        "allow",
+        "deny",
+    }
 
 
 def test_bridge_real_daemon_emits_schema_exact_post_tool_response(

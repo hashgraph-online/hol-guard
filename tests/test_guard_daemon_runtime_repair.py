@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_daemon_manage as manager
-from codex_plugin_scanner.guard import native_daemon_manage as start_lock
 from codex_plugin_scanner.guard.daemon import live_identity, runtime_repair
 
 
@@ -642,12 +641,3 @@ def test_live_identity_rejects_authenticated_probe_redirects() -> None:
         finally:
             server.shutdown()
             worker.join(timeout=2)
-
-
-def test_daemon_start_lock_is_reentrant_for_repair_transaction(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-
-    with manager._guard_daemon_start_lock(guard_home), manager._guard_daemon_start_lock(guard_home):
-        assert start_lock._THREAD_DEPTHS[(start_lock.threading.get_ident(), str(guard_home.resolve()))] == 2
-
-    assert start_lock._THREAD_DEPTHS == {}

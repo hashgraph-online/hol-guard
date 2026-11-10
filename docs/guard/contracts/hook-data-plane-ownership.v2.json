@@ -524,6 +524,7 @@
     "src/codex_plugin_scanner/guard/native_command_effect.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/native_daemon_manage.py",
+    "src/codex_plugin_scanner/guard/native_recovery_store.py",
     "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
     "src/codex_plugin_scanner/guard/native_catalog_read.py",
     "src/codex_plugin_scanner/guard/native_extension_control.py"

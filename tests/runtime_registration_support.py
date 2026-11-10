@@ -16,7 +16,6 @@ from typing import cast
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.models import GuardRuntimeRegistration
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     CONTAINMENT_POLICY_VERSION,
@@ -115,11 +114,6 @@ def start_daemon(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[GuardStore, GuardDaemonServer]:
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_guard_daemon_process_inventory_for_guard_home",
-        lambda _home: [],
-    )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

@@ -217,18 +217,9 @@ def test_fact_rounds_stop_at_the_operation_deadline(monkeypatch: pytest.MonkeyPa
     assert timeouts == [5.0]
 
 
-def test_resident_outage_is_not_a_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resident_outage_is_not_a_value_error() -> None:
     assert issubclass(transport.NativeDaemonLifecycleError, RuntimeError)
     assert not issubclass(transport.NativeDaemonLifecycleError, ValueError)
-
-    from codex_plugin_scanner.guard import native_daemon_manage as manager
-
-    def boom(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise transport.NativeDaemonLifecycleError("native_daemon_lifecycle_unavailable")
-
-    monkeypatch.setattr(manager, "native_daemon_lifecycle", boom)
-    with pytest.raises(transport.NativeDaemonLifecycleError):
-        manager._healthz_payload_is_current("{}")
 
 
 def _answer(kwargs: dict[str, object], timeouts: list[float]) -> dict[str, object]:

@@ -246,3 +246,20 @@ fn a_reservation_is_cleared_only_by_its_holder() {
     assert!(super::recover::clear(&caller, &"a".repeat(32)));
     assert!(!path.exists());
 }
+
+#[test]
+fn locator_publish_without_an_authenticated_state_writes_nothing() {
+    let home = private_home();
+    let request = json!({
+        "schema": "daemon-manage.v1",
+        "op": "locator_publish",
+        "guard_home": home.path(),
+        "implicit_home": "/nonexistent-implicit-home/.hol-guard",
+        "budget_ms": 5000,
+        "args": {"daemon_url": "http://127.0.0.1:6175"},
+    });
+    let answer: Value =
+        serde_json::from_slice(&run_command(request.to_string().as_bytes()).unwrap()).unwrap();
+    assert_eq!(answer["kind"], "runtime");
+    assert!(!home.path().join("approval-center-locator.json").exists());
+}

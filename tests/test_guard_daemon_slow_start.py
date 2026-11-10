@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import shlex
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.native_daemon_lifecycle import (
     _DAEMON_LIFECYCLE_DEADLINE,
     native_daemon_lifecycle,
@@ -63,13 +61,6 @@ def _deadline_bound_tree_check(pid: int, root_pid: int) -> bool:
     if deadline is not None and time.monotonic() >= deadline:
         raise TimeoutError("Guard daemon operation deadline exceeded.")
     return pid == root_pid
-
-
-def test_bootstrap_command_line_stays_shell_splittable() -> None:
-    # Process inventory shlex-splits the daemon command line; an unbalanced
-    # quote makes the inventory unknown and blocks every daemon start.
-    bootstrap = daemon_manager_module._GUARD_DAEMON_BOOTSTRAP
-    assert shlex.split(f"python -c {bootstrap} a b c m")[-4:] == ["a", "b", "c", "m"]
 
 
 def test_a_windows_start_record_stays_live_as_long_as_the_client_waits(native_hook_force: Path, tmp_path: Path) -> None:

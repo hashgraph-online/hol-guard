@@ -183,22 +183,6 @@ def test_guard_daemon_state_matches_existing_absolute_newer_desktop_core_tree(tm
     assert daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
 
 
-def test_healthz_details_require_compatible_same_release_peer() -> None:
-    compatible = {
-        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-        "package_version": __version__,
-        "source_root": "/peer-install",
-        "runtime_fingerprint": "desktop-sidecar-fingerprint",
-    }
-    incompatible = dict(compatible)
-    incompatible["compatibility_version"] = "not-current"
-    legacy = dict(compatible)
-    del legacy["source_root"]
-    assert daemon_manager_module._daemon_healthz_details_match_current_runtime(compatible)
-    assert not daemon_manager_module._daemon_healthz_details_match_current_runtime(incompatible)
-    assert not daemon_manager_module._daemon_healthz_details_match_current_runtime(legacy)
-
-
 def test_load_guard_daemon_url_rejects_older_package_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -219,81 +203,6 @@ def test_load_guard_daemon_url_rejects_older_package_version(
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
 
     assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
-
-
-def test_load_guard_daemon_url_rejects_older_desktop_core_sidecar(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_current_guard_daemon_source_root",
-        lambda: "Library/Application Support/org.hol.guard.desktop/core/versions/3.0.45/hol-guard",
-    )
-    monkeypatch.setattr(daemon_manager_module, "__version__", "3.0.45")
-    daemon_manager_module.write_guard_daemon_state(
-        guard_home,
-        5530,
-        "token-123",
-        pid=12345,
-    )
-    monkeypatch.setattr(daemon_manager_module, "__version__", "3.0.46")
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_current_guard_daemon_runtime_fingerprint",
-        lambda: "pipx-runtime-fingerprint",
-    )
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_guard_daemon_pid_matches_command",
-        lambda _pid, expected_guard_home=None: True,
-    )
-    monkeypatch.setattr(
-        daemon_manager_module.urllib.request,
-        "urlopen",
-        lambda request, timeout=1: _HealthzResponse(),
-    )
-
-    assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
-
-
-def test_load_guard_daemon_url_accepts_same_release_peer_fingerprint(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    with monkeypatch.context() as peer_install:
-        peer_install.setattr(
-            daemon_manager_module,
-            "_current_guard_daemon_source_root",
-            lambda: str(tmp_path / "peer-install"),
-        )
-        daemon_manager_module.write_guard_daemon_state(
-            guard_home,
-            5530,
-            "token-123",
-            pid=12345,
-        )
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_current_guard_daemon_runtime_fingerprint",
-        lambda: "pipx-runtime-fingerprint",
-    )
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_guard_daemon_pid_matches_command",
-        lambda _pid, expected_guard_home=None: True,
-    )
-    monkeypatch.setattr(
-        daemon_manager_module.urllib.request,
-        "urlopen",
-        lambda request, timeout=1: _HealthzResponse(),
-    )
-
-    assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
 
 
 def test_availability_without_acknowledged_watch_denies_git_and_network(tmp_path: Path) -> None:

@@ -72,7 +72,6 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # Thin adapter over `daemon-manage --stdin`: private auth read and lock handles only.
         "src/codex_plugin_scanner/guard/native_daemon_manage.py",
         # Interpreter bootstrap identity only; no policy or command decisions.
-        "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
         # Resident sensitive-request transport; the observed git path is a fact, never a verdict.
         "src/codex_plugin_scanner/guard/native_sensitive_request.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",

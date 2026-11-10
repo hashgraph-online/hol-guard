@@ -37,7 +37,7 @@
   ],
   "adversarial_nodeids": [
     "tests/test_guard_daemon_acceptance.py::test_sqlite_lock_is_bounded_and_recovers",
-    "tests/test_guard_daemon_recovery_resilience.py::test_transport_recovery_preserves_verified_old_process_when_health_probe_misses",
+    "tests/test_guard_daemon_recovery_resilience.py::test_recovery_lock_serializes_separate_processes",
     "tests/test_guard_update_artifact.py::test_revalidate_rejects_staged_byte_mutation"
   ],
   "soak": {
