@@ -169,6 +169,86 @@ def test_convert():\n    assert convert(2) == 2\n",
     assert_eq!(off, serde_json::json!({ "hookSpecificOutput": {} }));
 }
 
+/// A prompt saying the newest commit broke something gets a lead after the
+/// note's first line: fix from the code shown without running the tests
+/// first, then run the tests the prompt names once. Shown the change and
+/// the definitions it touched, an agent still ran the tests to see the
+/// failure and read each file whole before its edit.
+#[test]
+fn a_prompt_about_a_failure_leads_with_fixing_from_the_code_shown() {
+    let repo = Repo::new();
+    repo.write(
+        "tests/test_core.py",
+        "from src.core import other\n\n\ndef test_other():\n    assert other() == 1\n",
+    );
+    for name in ["a", "b", "c", "d", "e"] {
+        repo.write(
+            &format!("tests/test_{name}.py"),
+            "def test_it():\n    pass\n",
+        );
+    }
+    let far = tempfile::tempdir().unwrap();
+    fs::write(far.path().join("test_far.py"), "def test_it():\n    pass\n").unwrap();
+    let link = repo.path().join("tests/test_far.py");
+    std::os::unix::fs::symlink(far.path().join("test_far.py"), link).unwrap();
+    repo.commit("tests");
+    repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
+    repo.commit("teammate: other returns 2");
+    let guard_home = tempfile::tempdir().unwrap();
+    fs::write(guard_home.path().join("config.toml"), ON).unwrap();
+    let root = fs::canonicalize(repo.path()).unwrap();
+    let session = repo.session("a-failure");
+    let ask = |prompt: &str| {
+        let home = repo.home.path();
+        let changed = since_start(
+            guard_home.path(),
+            home,
+            &root,
+            "codex",
+            Some(&session),
+            prompt,
+            later(),
+        );
+        changed.unwrap().text
+    };
+    let lead = "This note shows the newest change. Where it caused the failure, fix it from the \
+code shown here without running the tests first: open just the range you change (a file must be \
+read before it is edited), edit it, then run ";
+    let named = ask("`tests/test_core.py::test_other` started failing after the last commit.");
+    let (head, rest) = named.split_once("\n\n").unwrap();
+    let command = format!(
+        "`cd '{}' && python -m pytest -q tests/test_core.py`",
+        root.display()
+    );
+    assert!(
+        head.starts_with("HOL Guard CIGAR: the newest commit in this project")
+            && rest.starts_with(&format!("{lead}{command} once to check.\n\n"))
+            && rest.contains("\nChanged definitions as they read now:"),
+        "{named}"
+    );
+    // Named no test file, one that is not there or not in the project, or
+    // more than four, the lead names no command.
+    let others = [
+        "A teammate just pushed a commit and now some tests fail.",
+        "Something in `other` broke recently. tests/test_gone.py::test_other fails.",
+        "../tests/test_core.py::test_other fails since the last commit",
+        "tests/test_far.py::test_it fails since the last commit",
+        "tests/test_a.py, tests/test_b.py, tests/test_c.py, tests/test_d.py and \
+tests/test_e.py fail since the last commit",
+    ];
+    for prompt in others {
+        let text = ask(prompt);
+        let check = format!("{lead}the tests that use it once to check.\n\n");
+        assert!(text.contains(&check) && !text.contains("pytest"), "{text}");
+    }
+    // A push no prompt says broke anything leads with nothing.
+    let pushed = ask("Review what the teammate pushed.");
+    assert!(
+        pushed.contains("Changed definitions") && !pushed.contains("This note shows"),
+        "{pushed}"
+    );
+}
+
 const LEAD: &str = "\n\nThis note already holds what `git status`, `git diff` and `git log` \
 show about this session's changes, so do not run them: read the diff at the end of this note, \
 and open a file only where the diff does not show enough of a change.\n\n";

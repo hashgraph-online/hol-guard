@@ -120,9 +120,10 @@ pub(super) fn since_start(
         (None, Some(base)) => Since::Start(base),
         (None, None) => Since::Nothing,
     };
-    changes(&git, since, about_others(prompt), until, |paths| {
+    let changed = changes(&git, since, about_others(prompt), until, |paths| {
         screened_texts(guard_home, root, app, paths, paths.len(), until)
-    })
+    })?;
+    Some(fix::led(changed, parent.is_some(), prompt, root))
 }
 
 /// A trusted Git, run in one project with a bare environment.
@@ -485,6 +486,8 @@ fn clean(text: &str) -> bool {
 
 #[path = "context_assistance_prompt_changes_code.rs"]
 mod code;
+#[path = "context_assistance_prompt_changes_fix.rs"]
+mod fix;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
 #[path = "context_assistance_prompt_changes_removed.rs"]
