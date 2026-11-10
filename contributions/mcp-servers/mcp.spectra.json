@@ -3,7 +3,7 @@
   "id": "mcp.spectra",
   "version": "1.0.0",
   "name": "Spectra",
-  "description": "Dual-instrument optical UI verification referee over stdio (Meta SAM 3.1 segmentation + Pixel NCC template matching) with a 4.10% cross-instrument delta cutoff and 1.35% 3-sigma noise floor. Read-only verification checks inherit policy; invariant compilation and closed-loop CSS repair patch synthesis require review. Off until you turn it on.",
+  "description": "Dual-instrument optical UI verification referee over stdio (Meta SAM 3.1 segmentation + Pixel NCC template matching). Verification and check tools can upload local MP4 video to Meta when an API key is configured, invariant compilation can write output files, and closed-loop repair requests external model patches, so all tools require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -32,11 +32,11 @@
   "tools": [
     {
       "name": "spectra_verify",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "spectra_check",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "spectra_compile_invariant",
@@ -48,7 +48,7 @@
     },
     {
       "name": "other",
-      "state": "inherit"
+      "state": "review"
     }
   ],
   "referenceUrls": [
@@ -57,7 +57,7 @@
   ],
   "saferAlternatives": [
     "Run spectra_verify over stdio as a pre-commit or pre-merge optical gate on settled UI clips (.mp4); accept only the verdict value \"pass\", and fail closed on errors, \"fail\", and \"inconclusive\".",
-    "Keep spectra_closed_loop in review state so CSS repair patches synthesized via remote inference are inspected before modifying repository stylesheets.",
-    "Prefer cached deterministic verification fixtures in CI, or scope META_API_KEY and BASETEN_API_KEY strictly to the stdio MCP server process."
+    "Keep spectra_closed_loop and spectra_compile_invariant in review state so disk writes and CSS repair patches synthesized via remote inference are inspected before modifying repository stylesheets.",
+    "Configuring META_API_KEY or BASETEN_API_KEY enables uploading local MP4 clips to external model APIs; omit API keys to restrict evaluation strictly to local cached deterministic fixtures in CI."
   ]
 }
