@@ -823,7 +823,7 @@
    "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_directory_instead_of_file",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported",
-    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_bad_digest"
+    "rust/crates/guard-runtime/src/daemon_edge_hook_admission_tests.rs::a_payload_reference_needs_version_one_a_path_and_a_digest"
    ],
    "status": "native_behavior_ported_requires_ci"
   },

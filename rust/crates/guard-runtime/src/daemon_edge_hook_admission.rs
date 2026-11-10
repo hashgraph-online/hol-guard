@@ -165,6 +165,43 @@ pub(super) fn exec_workdir(payload: &Map<String, Value>) -> (bool, Option<String
     }
 }
 
+/// The reservation a referenced payload takes before it is read.
+pub(super) const MAX_PAYLOAD_REFERENCE_BYTES: u64 = 5 * 1024 * 1024;
+const PAYLOAD_REFERENCE_KEY: &str = "guard_payload_ref";
+
+/// The path an out-of-band payload reference names, once its metadata reads
+/// as Guard's writer left it: version 1, a path, and a sha256 digest. `None`
+/// for an inline payload; `Err` for a reference the daemon must refuse.
+pub(super) fn payload_reference(payload: &Map<String, Value>) -> Result<Option<String>, ()> {
+    let Some(reference) = payload
+        .get(PAYLOAD_REFERENCE_KEY)
+        .and_then(Value::as_object)
+    else {
+        return Ok(None);
+    };
+    let version_one = match reference.get("version") {
+        Some(Value::Bool(flag)) => *flag,
+        Some(Value::Number(number)) => number.as_f64() == Some(1.0),
+        _ => false,
+    };
+    let (Some(path), Some(digest)) = (
+        reference.get("path").and_then(Value::as_str),
+        reference.get("sha256").and_then(Value::as_str),
+    ) else {
+        return Err(());
+    };
+    let digest = py_strip(digest).to_lowercase();
+    if !version_one
+        || digest.len() != 64
+        || !digest
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(());
+    }
+    Ok(Some(path.to_owned()))
+}
+
 /// Python truthiness for a JSON value.
 pub(super) fn truthy(value: Option<&Value>) -> bool {
     match value {

@@ -18,8 +18,9 @@ use super::super::library;
 use super::{authorize_token, hook_scheduler, json_response, refusals, NativeReads, ReadConfig};
 use crate::claude_hook_bridge_render::py_strip;
 use admission::{
-    client_key, exec_workdir, expanduser, expires_at, lane, normpath, reply_event, runtime_event,
-    take_hint, truthy, Directories, Rejection,
+    client_key, exec_workdir, expanduser, expires_at, lane, normpath, payload_reference,
+    reply_event, runtime_event, take_hint, truthy, Directories, Rejection,
+    MAX_PAYLOAD_REFERENCE_BYTES,
 };
 
 #[path = "daemon_edge_hook_admission.rs"]
@@ -33,6 +34,9 @@ const ENVELOPES: &str = include_str!(
 const WORKER_UNAVAILABLE_REASON: &str =
     "HOL Guard could not complete the native hook decision safely.";
 const WORKER_UNAVAILABLE_CODE: &str = "native_hook_worker_unavailable";
+/// The refusal for a payload reference Guard's writer could not have left.
+const REFERENCE_REASON: &str = "HOL Guard could not authenticate the local hook payload.";
+const REFERENCE_CODE: &str = "invalid_hook_payload_reference";
 
 /// How long a readiness step may take: it prepares a workspace's policy
 /// under its own setup budget.
@@ -429,10 +433,19 @@ impl Hook<'_> {
         if let Some(refused) = prepared.get("fail_safe") {
             return refusal(refused).map_or_else(unavailable, |(reason, code)| fail(reason, code));
         }
-        let bytes = prepared
-            .get("reference_bytes")
-            .and_then(Value::as_u64)
-            .unwrap_or_else(|| serde_json::to_vec(&payload).map_or(0, |body| body.len() as u64));
+        // A referenced payload is read only where Guard's own writer could
+        // have put it, and reserves the most a reference may carry.
+        let bytes = match payload_reference(&payload) {
+            Ok(None) => serde_json::to_vec(&payload).map_or(0, |body| body.len() as u64),
+            Ok(Some(path)) => match self
+                .settle(&[("payload-reference", Some(path), None)])
+                .require("payload-reference")
+            {
+                Ok(Some(_)) => MAX_PAYLOAD_REFERENCE_BYTES,
+                _ => return fail(REFERENCE_REASON, REFERENCE_CODE),
+            },
+            Err(()) => return fail(REFERENCE_REASON, REFERENCE_CODE),
+        };
 
         let client = client_key(&payload, workspace.as_deref());
         let admitted = scheduler

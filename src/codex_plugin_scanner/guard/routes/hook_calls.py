@@ -118,12 +118,11 @@ def hook_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
 
 
 def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Applies the native-policy barrier and sizes a referenced payload."""
+    """Applies the native-policy barrier before the daemon admits the hook."""
 
     from ..daemon.hook_fail_closed import unmanaged_passthrough
     from ..daemon.hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
     from ..daemon.hook_policy_admission import _native_policy_not_ready_reason
-    from ..daemon.hook_request_parsing import HookPayloadReferenceError, hook_payload_reference_size
 
     server = _server(store, args)
     _record_path_rejection(server, args)
@@ -142,17 +141,7 @@ def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
                 "reason_code": "native_policy_not_ready",
             }
         }
-    try:
-        size = hook_payload_reference_size(_payload(args), guard_home=store.guard_home, deadline_monotonic=deadline)
-    except HookPayloadReferenceError as error:
-        worker.metrics.record_failure(stage="server", exception_type=type(error).__name__)
-        return {
-            "fail_safe": {
-                "reason": "HOL Guard could not authenticate the local hook payload.",
-                "reason_code": "invalid_hook_payload_reference",
-            }
-        }
-    return {"reference_bytes": size}
+    return {}
 
 
 def hook_ready(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:

@@ -152,3 +152,35 @@ fn nothing_named_settles_to_nothing() {
     let directories = Directories::settle("/g", "/h", &[("home", None, None)]);
     assert_eq!(directories.require("home"), Ok(None));
 }
+
+#[test]
+fn a_payload_reference_needs_version_one_a_path_and_a_digest() {
+    let digest = "A".repeat(64);
+    let read = |reference: Value| {
+        let payload = json!({ "guard_payload_ref": reference });
+        payload_reference(payload.as_object().unwrap_or_else(|| unreachable!()))
+    };
+    assert_eq!(
+        payload_reference(&Map::new()),
+        Ok(None),
+        "an inline payload names no reference"
+    );
+    assert_eq!(read(json!("not-an-object")), Ok(None));
+    assert_eq!(
+        read(json!({"version": 1, "path": "/tmp/p", "sha256": digest})),
+        Ok(Some("/tmp/p".to_owned()))
+    );
+    assert_eq!(read(json!({"version": 1})), Err(()));
+    assert_eq!(
+        read(json!({"version": 2, "path": "/tmp/p", "sha256": digest})),
+        Err(())
+    );
+    assert_eq!(
+        read(json!({"version": 1, "path": "/tmp/p", "sha256": "abc"})),
+        Err(())
+    );
+    assert_eq!(
+        read(json!({"version": 1, "path": "/tmp/p", "sha256": "z".repeat(64)})),
+        Err(())
+    );
+}
