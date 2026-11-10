@@ -189,3 +189,24 @@ fn a_secret_in_the_whole_subject_is_not_shown() {
     repo.commit("src/core.py", STUBBED, &subject);
     assert_eq!(repo.note("src/core.py"), None);
 }
+
+/// A signature on several lines closes before the body starts, so the note
+/// goes on past it to the body.
+#[test]
+fn a_signature_on_several_lines_keeps_its_body() {
+    let before = "def convert(\n    value,\n) -> int:\n    doubled = value * 2\n    \
+return doubled\n\n\ndef other():\n    return 1\n";
+    let stubbed = "def convert(\n    value,\n) -> int:\n    raise NotImplementedError\n\n\n\
+def other():\n    return 1\n";
+    let repo = Repo::new();
+    repo.commit("src/core.py", before, "first");
+    repo.commit("src/core.py", stubbed, "stub convert");
+    let note = repo.note("src/core.py").expect("a note");
+    assert!(
+        note.ends_with(
+            "the definition read:\ndef convert(\n    value,\n) -> int:\n    \
+doubled = value * 2\n    return doubled"
+        ),
+        "{note}"
+    );
+}

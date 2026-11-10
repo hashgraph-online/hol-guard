@@ -114,7 +114,9 @@ fn once(lines: &[&str], header: &str) -> bool {
 }
 
 /// The definition starting at `header` in `text`: the lines after it that are
-/// blank or indented more, and a closing bracket at its own indentation.
+/// blank or indented more, and a closing bracket at its own indentation. A
+/// closing line that also opens the body, such as `) -> int:` or `) {` after
+/// a signature on several lines, ends the signature, not the definition.
 fn definition(text: &str, header: &str) -> Option<String> {
     let lines: Vec<&str> = text
         .lines()
@@ -125,20 +127,26 @@ fn definition(text: &str, header: &str) -> Option<String> {
     }
     let at = lines.iter().position(|line| *line == header)?;
     let inside = |line: &str| line.trim().is_empty() || indent(line) > indent(header);
-    let mut end = at
-        + 1
-        + lines[at + 1..]
-            .iter()
-            .take_while(|line| inside(line))
-            .count();
     let closes = |line: &&str| {
         indent(line) == indent(header) && line.trim_start().starts_with([')', ']', '}'])
     };
-    if lines.get(end).is_some_and(closes) {
-        end += 1;
-    } else {
-        while end > at + 1 && lines[end - 1].trim().is_empty() {
-            end -= 1;
+    let opens = |line: &str| line.trim_end().ends_with([':', '{']);
+    let mut end = at + 1;
+    loop {
+        end += lines[end..].iter().take_while(|line| inside(line)).count();
+        match lines.get(end).copied().filter(closes) {
+            Some(line) => {
+                end += 1;
+                if !opens(line) {
+                    break;
+                }
+            }
+            None => {
+                while end > at + 1 && lines[end - 1].trim().is_empty() {
+                    end -= 1;
+                }
+                break;
+            }
         }
     }
     (end > at + 1).then(|| lines[at..end].join("\n"))
