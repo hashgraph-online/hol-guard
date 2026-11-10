@@ -68,3 +68,20 @@ fn an_unnamed_function_in_a_withheld_file_is_not_placed() {
         "{map:?}"
     );
 }
+
+/// A definition whose name reads as the same word but is spelled another
+/// way is not the one the prompt names.
+#[test]
+fn a_definition_spelled_another_way_is_not_placed() {
+    let text = lexer().replace("get_lexer", "getLexer");
+    let list = [
+        ("src/lexer.py", text.as_str()),
+        ("src/utils.py", "def helper():\n    return 1\n"),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let map = prompt_map(home.path(), &root, "Where is `get_lexer` defined?");
+    assert!(
+        map.as_ref().is_none_or(|map| !map.contains("getLexer")),
+        "{map:?}"
+    );
+}

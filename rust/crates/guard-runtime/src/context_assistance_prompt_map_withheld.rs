@@ -2,6 +2,7 @@
 //! context for what they hold, such as a line its secret check takes for a
 //! credential. The map gives each one's lines and name, never the file's
 //! text, so the agent opens those lines itself instead of searching for them.
+use super::super::sections::written_name;
 use super::{file, named_definitions, Asked, Entry, File, Rendered, Sought, HEADER};
 use std::time::Instant;
 
@@ -38,9 +39,11 @@ pub(super) fn added(
     }
     // Only a definition the prompt names: with none found, the picker falls
     // back to a named file's unfinished functions, which may be unrelated.
+    // Spelled as the prompt writes it: `getLexer` is not `get_lexer`, though
+    // both read as the same word.
     let named = |file: &File, at: usize| {
-        let name = file.sections[at].name.as_deref();
-        names.iter().any(|(sought, _)| name == Some(*sought))
+        let own = written_name(file.opening(at));
+        own.is_some_and(|own| asked.spellings.contains(&own))
             || asked.spellings.contains(&file.qualified(at))
     };
     let entries: Vec<Entry> = named_definitions(&files, &names, asked, false)
