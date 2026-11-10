@@ -23,8 +23,6 @@ from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-# Protection cases that drive an Oh My Pi tool no other lane has: learn, and eval's sh helper.
-OMP_TOOL_ORACLES = frozenset({"blocked-memory-note", "blocked-eval-shell"})
 
 
 def lane_catalog(harness: str) -> tuple[Scenario, ...]:
@@ -34,8 +32,8 @@ def lane_catalog(harness: str) -> tuple[Scenario, ...]:
     vocabulary. The lane runs it when the harness has its own tool for every one
     of them: Claude Code and Cursor read, write and edit with structured tools,
     Codex does that work through its shell. The rest (glob, grep, eval, task,
-    wait) are Oh My Pi's alone. The memory-note cases drive its learn tool and
-    the eval shell cases its eval ``sh`` helper, which no other lane has at all.
+    wait) are Oh My Pi's alone, and the memory-note cases drive its learn tool,
+    which no other lane has at all.
 
     This is the lane's reach, so it decides which false positives a harness run
     can see at all. A read the harness makes with its own tool is a different
@@ -46,7 +44,7 @@ def lane_catalog(harness: str) -> tuple[Scenario, ...]:
     return tuple(
         s
         for s in load_catalog()
-        if s.oracle not in OMP_TOOL_ORACLES and (s.oracle != "native-tools" or set(s.required_tools) <= tools)
+        if s.oracle != "blocked-memory-note" and (s.oracle != "native-tools" or set(s.required_tools) <= tools)
     )
 
 

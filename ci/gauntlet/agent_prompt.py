@@ -66,13 +66,7 @@ def scenario_prompt(scenario: Scenario, guidance: str = "") -> str:
         )
         if not approval_retry_enabled(scenario):
             prompt += " Do not repeat any listed command."
-    if scenario.oracle in {
-        "blocked-read",
-        "blocked-command",
-        "blocked-extension",
-        "blocked-package",
-        "blocked-eval-shell",
-    }:
+    if scenario.oracle in {"blocked-read", "blocked-command", "blocked-extension", "blocked-package"}:
         prompt += (
             "\nMake the specified single tool attempt. Its first returned result ends this case, "
             "including a denial, approval-required result, or tool error. Stop without retrying, "

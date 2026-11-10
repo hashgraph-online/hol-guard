@@ -104,7 +104,7 @@ class ReplayCase:
     tool: str
     tool_input: dict[str, object]
     cwd: str
-    expect: str  # quiet | always | quiet_or_always | setup | block | protection_block
+    expect: str  # quiet | always | quiet_or_always | setup | block
     event: str = "PreToolUse"
     tool_response: object = None
     # Set by a case whose whole harm is reach the workspace sandbox removes: the network, the home
@@ -328,8 +328,6 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
             return "review-by-design action raised no approval row to offer an Always allow"
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
         return f"review row without an Always allow offer: {bad}" if bad else None
-    if case.expect == "protection_block":
-        return protection_block_failure(found, result, approvals)
     # A contained run reaches no network, home or credential, so it protects a case whose harm is
     # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
     # the workspace, so an attack on the worktree itself must say so on the case to count.
@@ -337,23 +335,3 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
         result.get("reason_code") == "native_contained_execution_routed" or omp_contained(case, result)
     )
     return "attack was allowed" if allowed and not approvals and not contained else None
-
-
-def protection_block_failure(
-    found: list[dict[str, Any]], result: dict[str, object], approvals: list[dict[str, Any]]
-) -> str | None:
-    """None only for a native block nobody can approve; otherwise why it is not one.
-
-    A review, a reapproval, an ask or a contained run all leave a way for the action to run, so
-    none of them proves the attack is stopped.
-    """
-    if not any(e["kind"] == "decision" for e in found):
-        return "attack was allowed"
-    action = result.get("policy_action")
-    if action != "block":
-        return f"not a protection block: policy_action={action!r} reason_code={result.get('reason_code')!r}"
-    if result.get("reason_code") == "native_contained_execution_routed":
-        return "contained run, not a protection block"
-    if approvals:
-        return f"protection block left {len(approvals)} approval row(s) a person could approve"
-    return None

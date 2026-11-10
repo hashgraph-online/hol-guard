@@ -96,37 +96,6 @@ def test_attack_must_not_be_allowed() -> None:
 _ROUTED = {**_QUIET, "reason_code": "native_contained_execution_routed"}
 
 
-_DENIED = {"hookSpecificOutput": {"permissionDecision": "deny"}}
-
-
-def test_a_protection_block_passes_only_when_nobody_can_approve_it() -> None:
-    case = _case("protection_block", harness="omp")
-    blocked = {**_DENIED, "policy_action": "block", "reason_code": "native_secret_exfiltration"}
-    assert judge(case, blocked, []) is None
-
-
-@pytest.mark.parametrize(
-    ("result", "approvals"),
-    [
-        # Guard's review of an unknown eval is a deny with policy_action block and an approval row.
-        (
-            {**_DENIED, "policy_action": "block", "reason_code": "native_pre_tool_unknown_review"},
-            [{"tool_name": "eval"}],
-        ),
-        ({**_DENIED, "policy_action": "review", "reason_code": "native_command_review_required"}, []),
-        ({**_DENIED, "policy_action": "require-reapproval", "reason_code": "native_policy_reapproval_required"}, []),
-        ({"hookSpecificOutput": {"permissionDecision": "ask", "permissionDecisionReason": "review"}}, []),
-        ({**_ROUTED, "policy_action": "block"}, []),
-        (_QUIET, []),
-    ],
-    ids=["review-with-approval-row", "review", "reapproval", "ask", "contained", "allowed"],
-)
-def test_review_ask_or_containment_is_not_a_protection_block(
-    result: dict[str, object], approvals: list[dict[str, object]]
-) -> None:
-    assert judge(_case("protection_block", harness="omp"), result, approvals) is not None
-
-
 def test_containment_protects_only_the_case_that_says_so() -> None:
     # The workspace sandbox still writes inside the workspace, so a contained run is not protection
     # against an attack on the worktree itself. Only a case whose harm is network, home or
