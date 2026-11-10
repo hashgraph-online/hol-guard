@@ -250,6 +250,74 @@ def _start_policy_publication(store: GuardStore, home_dir: Path) -> Any:
     )
 
 
+class _LibraryCallServer:
+    """Answers the native daemon's library calls inside the test process.
+
+    ``ci/native_library_bridge.py`` is the daemon's CLI command; it sends each
+    ``desktop library-call`` and ``desktop library-serve`` here, so the Guard
+    library work a route hands off runs where the test's patches apply.
+    """
+
+    def __init__(self) -> None:
+        self.nonce = uuid.uuid4().hex
+        self._listener = socket.create_server(("127.0.0.1", 0))
+        self.port = int(self._listener.getsockname()[1])
+        self._closed = threading.Event()
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def cli_command(self) -> list[str]:
+        import json
+        import sys
+
+        from codex_plugin_scanner.guard.daemon.native_edge_handshake import guard_cli_command
+
+        bridge = Path(__file__).with_name("native_library_bridge.py").resolve()
+        cli = guard_cli_command() or [sys.executable, "-m", "codex_plugin_scanner.cli"]
+        return [sys.executable, str(bridge), str(self.port), self.nonce, json.dumps(cli)]
+
+    def close(self) -> None:
+        self._closed.set()
+        self._listener.close()
+
+    def _accept(self) -> None:
+        while not self._closed.is_set():
+            try:
+                connection, _ = self._listener.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._serve, args=(connection,), daemon=True).start()
+
+    def _serve(self, connection: socket.socket) -> None:
+        import json
+
+        from codex_plugin_scanner.guard.library_calls import run_library_call
+
+        with connection, connection.makefile("rb") as reader:
+            try:
+                header = json.loads(reader.readline())
+            except ValueError:
+                return
+            if not isinstance(header, dict) or not hmac.compare_digest(str(header.get("nonce")), self.nonce):
+                return
+            guard_home = Path(str(header.get("guard_home")))
+
+            def answer(request: bytes) -> bytes:
+                result = run_library_call(guard_home, request)
+                return json.dumps(result, separators=(",", ":"), default=str).encode("utf-8")
+
+            if header.get("mode") == "library-serve":
+                for line in reader:
+                    connection.sendall(answer(line) + b"\n")
+                return
+            request = reader.read()
+            if request:
+                connection.sendall(answer(request))
+            connection.shutdown(socket.SHUT_WR)
+        from codex_plugin_scanner.guard.routes.request_host import wait_for_background_work
+
+        wait_for_background_work()
+
+
 class _NativeServerView:
     """The few server attributes tests read, from the native daemon."""
 
@@ -277,7 +345,8 @@ class _NativeDaemonServer:
         from ci.native_daemon_harness import NativeGuardDaemon
 
         self.store = store
-        self._daemon = NativeGuardDaemon(store, host, port, home_dir=home_dir)
+        self._library = _LibraryCallServer()
+        self._daemon = NativeGuardDaemon(store, host, port, home_dir=home_dir, cli_command=self._library.cli_command())
         self.port = port
         self._server = _NativeServerView(self._daemon)
 
@@ -291,6 +360,7 @@ class _NativeDaemonServer:
 
     def stop(self) -> None:
         self._daemon.stop()
+        self._library.close()
 
     def _finish_service(self) -> bool:
         return self._daemon._process is None

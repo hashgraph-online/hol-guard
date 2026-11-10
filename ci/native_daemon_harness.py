@@ -58,6 +58,7 @@ class NativeGuardDaemon:
         home_dir: Path | None = None,
         workers: bool = False,
         environment: Mapping[str, str] | None = None,
+        cli_command: list[str] | None = None,
     ) -> None:
         # The daemon binds loopback, on a free port unless one is named; the
         # arguments mirror ``GuardDaemonServer`` so a test can swap one for the
@@ -68,6 +69,7 @@ class NativeGuardDaemon:
         self.home_dir = home_dir
         self.workers = workers
         self.environment = dict(environment or {})
+        self.cli_command = cli_command
         self.port = port
         self.pid = 0
         self._process: subprocess.Popen[bytes] | None = None
@@ -94,6 +96,8 @@ class NativeGuardDaemon:
         guard_home = self.store.guard_home
         config = launch_configuration(guard_home, self.port, user_home=self.home_dir)
         config["workers"] = self.workers
+        if self.cli_command is not None:
+            config["cli_command"] = self.cli_command
         if os.name == "nt":
             # As on an installed Windows Guard, the daemon names its launcher
             # as its pid and stops when the launcher's standard input closes.
