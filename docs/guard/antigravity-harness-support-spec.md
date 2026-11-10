@@ -20,11 +20,11 @@ HOL Guard integrates with the Antigravity harness through:
 
 | Surface | Detection Source | Enforcement Mechanism | Current Grade | Target Grade (Roadmap) |
 | :--- | :--- | :--- | :--- | :--- |
-| **User Settings** | `~/.config/antigravity/user/settings.json`<br>`~/.config/Antigravity/User/settings.json`<br>`~/Library/Application Support/Antigravity/User/settings.json`<br>`~/AppData/Roaming/Antigravity/User/settings.json` | Preflight configuration validation & drift detection | `observe_only_degraded` | `verified` |
+| **User Settings** | `~/.config/antigravity/user/settings.json`<br>`~/.config/Antigravity/User/settings.json`<br>`~/Library/Application Support/Antigravity/User/settings.json`<br>`~/AppData/Roaming/Antigravity/User/settings.json` *(redirected APPDATA locations outside `~/AppData/Roaming` are not detected)* | Preflight MCP configuration discovery & `mcpServers` artifact drift detection | `observe_only_degraded` | `verified` |
 | **Extensions** | `~/.antigravity/extensions/extensions.json` | Manifest scanning & supply-chain provenance check | `observe_only_degraded` | `verified` |
 | **Skills (Multi-Root)** | `.gemini/antigravity/skills/` (`skills`)<br>`.gemini/antigravity/builtin/skills/` (`builtin-skills`)<br>`.gemini/config/plugins/*/skills/` (`plugin-skills`)<br>Workspace `.agents/skills/` (`agents-skills`) | Recursive directory hashing, symlink traversal containment, and script integrity | `observe_only_degraded` | `verified` |
 | **MCP Servers** | `.gemini/antigravity/mcp_config.json`<br>Settings `mcpServers` | Planned native Managed stdio MCP Proxy Relay (`hol-guard mcp-relay`) | `observe_only_degraded` | `managed_proxy_active` (Phase 1) |
-| **Subagents** | Dynamic subagent invocation (`invoke_subagent`, `define_subagent`) | Planned workspace mode isolation enforcement (`branch`, `share`, `inherit`) | `observe_only_degraded` | `enforceable_guard` (Phase 2) |
+| **Subagents** | Not currently observed *(dynamic subagent invocation detection planned)* | Planned workspace mode isolation enforcement (`branch`, `share`, `inherit`) | `observe_only_degraded` | `enforceable_guard` (Phase 2) |
 
 ---
 
@@ -70,7 +70,7 @@ When `hol-guard apps connect antigravity` or `hol-guard run antigravity` runs in
    ```
    *(Exact CLI invocation arguments remain subject to final design stabilization before Phase 1 ships).*
 
-### 2. Zero-Overhead Tool Call Interception
+### 2. Planned Native Tool Call Interception
 - JSON-RPC `tools/call` requests from rewritten eligible stdio servers pass through the native Rust resident (`guard-runtime`). Calls to other unrewritten MCP servers do not pass through this relay.
 - The evaluation engine checks tool parameters against policy (destructive filesystem operations, sensitive credential exfiltration, suspicious outbound network commands).
 - **Decision Path**: Evaluated locally via Rust framing without external network or LLM roundtrips.
@@ -79,9 +79,9 @@ When `hol-guard apps connect antigravity` or `hol-guard run antigravity` runs in
 
 ## Approval Invariant Enforcement
 
-Every command and tool invocation paused for review strictly honors the repository **Approval Invariant** (`docs/guard/approval-invariant.md`):
+Every command and tool invocation paused for review strictly honors the repository **Approval Invariant** (`approval-invariant.md`):
 1. **Allow Once**: Authorizes the agent's retry of that specific tool call or artifact through. The retry binding omits the ephemeral call ID while session ID is present, and preserves the command/tool name, arguments, working directory, session, and policy.
-2. **Always Allow**: Saved against the exact action or artifact hash. The saved approval ends only when:
+2. **Always Allow**: Saved against the exact action token ([What the hash covers](approval-invariant.md#what-the-hash-covers)). The strong token binds resolved executable contents where Guard can prove the command, while the command-hash fallback does not establish content binding. The saved approval ends only when:
    - the user explicitly removes it, or
    - the command or artifact hash changes.
    Saved approvals survive rule or advisory changes, but never lower terminal `block` or `sandbox-required` verdicts.
@@ -122,7 +122,7 @@ All Antigravity implementations must pass:
 - Rust unit tests in `rust/crates/guard-runtime/src/adapters/detection/antigravity_detect.rs`:
   - `lowercase_xdg_source_stays_distinct_when_the_path_is_only_the_suffix`
   - `lowercase_xdg_settings_keep_a_distinct_mcp_id`
-  - `xdg_case_variants_do_not_collapse_when_they_are_different_files`
+  - `xdg_case_variants_do_not_collapse_when_they_are_different_files` (Unix only)
   - `home_agents_skills_are_not_antigravity_and_do_not_admit_editor_settings`
   - `workspace_agents_skills_and_builtin_skills_keep_distinct_ids`
   - `nested_primary_skills_do_not_reuse_other_root_ids`
