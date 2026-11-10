@@ -6,8 +6,14 @@ Swarm is the place to see and direct AI agents working on this computer. A
 person can follow one agent, coordinate several agents in one project, or move
 between projects without losing track of work, approvals, and context access.
 
-Base: `main` at `394be6de4a075d01a79b54e2a773cbbcc4eef775`.
+Base: `main` at `4a0b5ab5a1f2b4f18818056b6116ad98035bf42e`.
 Branch: `feat/swarm-agent-workspace`.
+
+Rebased on 2026-11-10. This main includes the newest alpha,
+`alpha/v3.60.0a65` (`5539f65caee09098a62dd9b814041efb5e1a493a`), plus two
+subsequent MCP integration commits. The three Swarm commits retain their source
+changes; generated dashboard assets were rebuilt to resolve bundle conflicts.
+Validation uses upstream's pinned Rust 1.89.0 toolchain and locked dependencies.
 
 ### Experience
 
@@ -174,11 +180,10 @@ states in a browser. No extra visualization framework is needed initially.
   archive. Do not merge, publish a release, or alter live agent settings as part
   of development.
 
-## Execution status
+## Implementation status
 
 Architecture, implementation, and browser refinement are complete on the branch
-above. The execution goal records GPT-6 Astra with Max requested; the host
-controls reasoning effort and the goal API does not change it.
+above.
 
 ### Delivered behavior
 
@@ -232,11 +237,13 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
 
 - Rust Swarm: 17 tests cover process discovery, daemon PATH transport, literal stdin, exact resume,
   duplicate/stale/foreign actions, output limits, owned descendant shutdown,
-  inert recovery, CLI permissions, and truthful context counts. Clippy passes
-  with warnings denied.
-- Native resident: scoped home binding, reply identity, schema validation, and
+  inert recovery, CLI permissions, and truthful context counts.
+- Native resident: two tests cover scoped home binding, reply identity, schema validation, and
   local-dashboard authorization; approval and repair sessions are denied.
-- Python: 12 native reply binding, error handling, and HTTP framing tests pass.
+- Rust 1.89.0 workspace formatting and Clippy for `guard-swarm` and
+  `hol-guard-runtime` pass, including all targets with warnings denied.
+- Python: 12 native reply binding, error handling, and HTTP framing tests pass,
+  along with 128 existing native transport and review-boundary tests.
 - Dashboard: model/parser, existing routing and navigation checks; five browser
   journeys exercise desktop, 390px/320px layouts, launch, instruction queue,
   stop confirmation, uncertain retries, stale state, filters, CIGAR, and dialog
@@ -245,6 +252,9 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
   selection and approval, preview citations, return-to-agent status, reuse of
   existing grants, refused grants and failed previews, unknown folders, MCP
   pairing guidance, and keeping the handoff while CIGAR is off.
+- The full dashboard test command (`bun run test`) passes. Swarm model tests
+  now run as part of that command in CI. The rebase also passes the 20 existing
+  CIGAR workspace browser journeys, for 29 browser checks in total.
 - Production Vite build passes and shipped assets are rebuilt. Existing shared
   chunk hashes change with the dashboard entry point; no generated evidence,
   vendored dependencies, or old CIGAR branch content is included.
@@ -252,8 +262,8 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
   with no new diagnostics. The default TypeScript invocation also inherits
   main's missing Node-type configuration.
 
-An isolated live macOS dashboard also verified authenticated Swarm reads, real
-process inventory, and installed Codex detection through the resident/HTTP path.
+Before the rebase, an isolated live macOS dashboard verified authenticated Swarm
+reads, real process inventory, and installed Codex detection through the resident/HTTP path.
 The context regression then exercised an observed agent's handoff, both saved
 projects (eight selected files each), successful cited previews, and return to
 the same inspector. CIGAR stayed Ready and the browser reported no page errors.

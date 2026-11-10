@@ -6,6 +6,12 @@ from typing import Any
 
 from ..native_swarm import SwarmError, execute
 
+WRITE_PATHS = {
+    "/v1/swarm/launch": "launch",
+    "/v1/swarm/action": "direct",
+    "/v1/swarm/events": "events",
+}
+
 
 def respond(handler: Any, action: str = "snapshot", payload: dict[str, Any] | None = None) -> None:
     try:

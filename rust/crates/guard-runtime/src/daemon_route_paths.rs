@@ -313,7 +313,10 @@ pub(crate) fn local_surface_session_allowed(method: &str, path: &str) -> bool {
     if path == "/v1/swarm" {
         return method == "GET";
     }
-    if matches!(path, "/v1/swarm/launch" | "/v1/swarm/action" | "/v1/swarm/events") {
+    if matches!(
+        path,
+        "/v1/swarm/launch" | "/v1/swarm/action" | "/v1/swarm/events"
+    ) {
         return method == "POST";
     }
     if LOCAL_SURFACE_PATHS.contains(&path) || REMOTE_REVIEW_POST_ROUTES.contains(&path) {
