@@ -3,7 +3,7 @@
   "id": "mcp.designos-studio",
   "version": "1.0.0",
   "name": "DESIGN:OS Studio",
-  "description": "Local stdio MCP server for DESIGN:OS Studio, a FREE source-available (PolyForm Shield 1.0.0) interface design tool. Agents inspect and edit a .fig or .designos document in memory over 39 tools, then save or export inside a configured workspace. The server does not listen on a network port. Off until you turn it on.",
+  "description": "Local stdio MCP server for DESIGN:OS Studio, a FREE source-available (PolyForm Shield 1.0.0) interface design tool. Agents inspect and edit a .fig or .designos document over 39 tools, then save or export inside a configured workspace. Standalone edits stay in memory until save; a connected Studio session also persists live changes in its session folder. The server does not listen on a network port. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -59,15 +59,15 @@
     },
     {
       "name": "designos_create_node",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_update_node",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_delete_node",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_list_comments",
@@ -75,19 +75,19 @@
     },
     {
       "name": "designos_add_comment",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_reply_comment",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_resolve_comment",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_apply_spec",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_export_spec",
@@ -95,7 +95,7 @@
     },
     {
       "name": "designos_set_dev_status",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_export_fig_file",
@@ -115,19 +115,19 @@
     },
     {
       "name": "designos_import_web_capture",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_undo",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_lint_fix",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_redo",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_get_screenshot",
@@ -135,11 +135,11 @@
     },
     {
       "name": "designos_set_in_progress",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_apply_batch",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_get_design_context",
@@ -163,7 +163,7 @@
     },
     {
       "name": "designos_open_file",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "designos_save_file",
@@ -179,7 +179,7 @@
     },
     {
       "name": "designos_new_document",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "other",
@@ -193,7 +193,8 @@
   ],
   "saferAlternatives": [
     "Keep designos_export_fig_file, designos_save_file, designos_render_png and designos_close_document on review: they alone can write under --workspace (.fig, .designos, or a new .png). Existing .fig or .designos files need overwrite.",
-    "Edit tools only change the in-memory session document until designos_save_file writes a .designos file. designos_generate_code and designos_export_spec return source and write no files. designos_get_screenshot returns an inline image.",
+    "Standalone (no Studio session): edit tools only change the in-memory document until designos_save_file. designos_generate_code and designos_export_spec return source and write no files. designos_get_screenshot returns an inline image.",
+    "Connected Studio session: editing, comment, and document-switch tools also publish live patches into that session folder (doc-patch.jsonl, canvas.designos, doc-sync.designos) without designos_save_file. Keep those tools on review, including designos_open_file and designos_new_document.",
     "Launch as designos-mcp --workspace <dir> over stdio. Relative and absolute paths must stay inside that workspace. Keep designos_configure_session on review: it persists options in the session directory, not under --workspace.",
     "Keep the other row on review so any tool added in a future Studio release is reviewed until this entry lists it."
   ]
