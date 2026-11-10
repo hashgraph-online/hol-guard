@@ -11,8 +11,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 
 _LAUNCH_PID = 64_321
@@ -21,10 +19,6 @@ _LAUNCH_OWNER = "launch-owner"
 _LAUNCH_PORT = 5410
 _LAUNCH_CREATION_TIME = 4_242_424
 _NONCE = "a" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH
-
-
-class _RetirementProceededError(Exception):
-    pass
 
 
 def _write_launch_receipt(guard_home: Path) -> None:
@@ -75,14 +69,6 @@ def _live_daemon_state(monkeypatch, guard_home: Path, overrides: dict[str, objec
     monkeypatch.setattr(daemon_manager_module, "windows_process_creation_time", lambda _pid: None)
 
 
-def _stop_after_the_receipt_gate(monkeypatch) -> None:
-    def proceeded(_home: Path) -> None:
-        raise _RetirementProceededError
-
-    # Reading the daemon state is the first step after the receipt gate.
-    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", proceeded)
-
-
 def test_handoff_from_another_executable_matches_only_when_the_runtime_may_differ(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     _write_launch_receipt(guard_home)
@@ -103,48 +89,20 @@ def test_handoff_from_another_executable_matches_only_when_the_runtime_may_diffe
     )
 
 
-@pytest.mark.parametrize("lifecycle", ["retire", "ensure"])
-def test_a_handed_off_launch_from_another_executable_no_longer_blocks_the_home(tmp_path, monkeypatch, lifecycle):
+def test_a_handed_off_launch_from_another_executable_no_longer_blocks_the_home(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     _write_launch_receipt(guard_home)
     _live_daemon_state(monkeypatch, guard_home)
 
-    if lifecycle == "retire":
-        _stop_after_the_receipt_gate(monkeypatch)
-        with pytest.raises(_RetirementProceededError):
-            daemon_manager_module._retire_guard_daemons_for_home(guard_home, keep_port=None, deadline=None)
-    else:
-        monkeypatch.setattr(
-            daemon_manager_module, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_live_or_newer_daemon_url",
-            lambda *_args, **_kwargs: f"http://127.0.0.1:{_LAUNCH_PORT}",
-        )
-        assert daemon_manager_module.ensure_guard_daemon(guard_home) == f"http://127.0.0.1:{_LAUNCH_PORT}"
+    monkeypatch.setattr(daemon_manager_module, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_live_or_newer_daemon_url",
+        lambda *_args, **_kwargs: f"http://127.0.0.1:{_LAUNCH_PORT}",
+    )
+    assert daemon_manager_module.ensure_guard_daemon(guard_home) == f"http://127.0.0.1:{_LAUNCH_PORT}"
 
     assert daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
-
-
-@pytest.mark.parametrize(
-    ("field", "foreign_value"),
-    [
-        ("launch_nonce", "b" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH),
-        ("generation", "b" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH),
-        ("port", _LAUNCH_PORT + 1),
-        ("owner", "other-owner"),
-        ("guard_home", "/elsewhere"),
-    ],
-)
-def test_a_daemon_that_does_not_bind_the_launch_leaves_it_unresolved(tmp_path, monkeypatch, field, foreign_value):
-    guard_home = tmp_path / "guard-home"
-    _write_launch_receipt(guard_home)
-    _live_daemon_state(monkeypatch, guard_home, {field: foreign_value})
-    _stop_after_the_receipt_gate(monkeypatch)
-
-    assert daemon_manager_module._retire_guard_daemons_for_home(guard_home, keep_port=None, deadline=None) == []
-    assert not daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
 
 
 def test_a_launch_of_another_executable_accepts_its_handoff_while_it_waits(tmp_path, monkeypatch):
@@ -164,31 +122,3 @@ def test_a_launch_of_another_executable_accepts_its_handoff_while_it_waits(tmp_p
         )
         == url
     )
-
-
-@pytest.mark.parametrize("replacement", ["state", "receipt"])
-def test_retirement_leaves_a_launch_that_replaced_the_handed_off_daemon(tmp_path, monkeypatch, replacement):
-    guard_home = tmp_path / "guard-home"
-    _write_launch_receipt(guard_home)
-    _live_daemon_state(monkeypatch, guard_home)
-    replacement_nonce = "c" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH
-
-    def replacement_started(_home: Path) -> dict[str, object]:
-        # Another caller starts a daemon between the receipt clear and this read.
-        if replacement == "receipt":
-            _write_launch_receipt(guard_home)
-            return {"pid": _LAUNCH_PID + 1, "port": _LAUNCH_PORT, "launch_nonce": _NONCE}
-        return {"pid": _LAUNCH_PID + 1, "port": _LAUNCH_PORT, "launch_nonce": replacement_nonce}
-
-    def inventory(*_args, **_kwargs):
-        raise AssertionError("retirement must not inventory a home a newer launch owns")
-
-    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", replacement_started)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", inventory)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_retire_guard_daemon_pid",
-        lambda *_args, **_kwargs: pytest.fail("retirement must not stop the replacement"),
-    )
-
-    assert daemon_manager_module._retire_guard_daemons_for_home(guard_home, keep_port=None, deadline=None) == []

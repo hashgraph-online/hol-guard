@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_hook_test_client import open_authenticated_claude_request
@@ -77,9 +78,9 @@ def test_observe_mode_denies_failed_local_review_with_a_fixed_response(
     # hooks off the resident's direct lane, which answers them itself.
     monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
-        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        HookWorker,
         "_review_native_edge_with_snapshot",
-        _deadline_exceeded_native_review,
+        staticmethod(_deadline_exceeded_native_review),
     )
 
     try:
@@ -118,9 +119,9 @@ def test_prompt_mode_still_blocks_failed_local_review(
     # hooks off the resident's direct lane, which answers them itself.
     monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
-        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        HookWorker,
         "_review_native_edge_with_snapshot",
-        _deadline_exceeded_native_review,
+        staticmethod(_deadline_exceeded_native_review),
     )
 
     try:
@@ -159,9 +160,9 @@ def test_prompt_mode_denies_unverified_inspection_when_review_cannot_complete(
     # hooks off the resident's direct lane, which answers them itself.
     monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
-        daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
+        HookWorker,
         "_review_native_edge_with_snapshot",
-        _deadline_exceeded_native_review,
+        staticmethod(_deadline_exceeded_native_review),
     )
 
     try:

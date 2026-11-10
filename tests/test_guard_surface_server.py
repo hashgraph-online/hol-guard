@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.daemon import protection_repair_retry
 from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.daemon import server_runtime_hook as runtime_hook_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
@@ -751,7 +752,7 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            assert getattr(daemon._server.hook_worker, "policy_repair", None) is None
+            assert getattr(HookWorker, "policy_repair", None) is None
             for route in (
                 "/",
                 "/home",
@@ -1450,14 +1451,14 @@ class TestGuardSurfaceServer:
             return {"decision": "allow"}
 
         monkeypatch.setattr(
-            daemon._server.hook_worker,
+            HookWorker,
             "prepare_workspace_policy",
-            lambda *_args, **_kwargs: {},
+            staticmethod(lambda *_args, **_kwargs: {}),
         )
         monkeypatch.setattr(
-            daemon._server.hook_worker,
+            HookWorker,
             "review_http_payload",
-            review,
+            staticmethod(review),
         )
         daemon.start()
 
@@ -1512,14 +1513,14 @@ class TestGuardSurfaceServer:
             return {"decision": "allow"}
 
         monkeypatch.setattr(
-            daemon._server.hook_worker,
+            HookWorker,
             "prepare_workspace_policy",
-            lambda *_args, **_kwargs: {},
+            staticmethod(lambda *_args, **_kwargs: {}),
         )
         monkeypatch.setattr(
-            daemon._server.hook_worker,
+            HookWorker,
             "review_http_payload",
-            review,
+            staticmethod(review),
         )
         daemon.start()
 
@@ -1578,11 +1579,11 @@ class TestGuardSurfaceServer:
             return {"decision": "allow"}
 
         monkeypatch.setattr(
-            daemon._server.hook_worker,
+            HookWorker,
             "prepare_workspace_policy",
-            lambda *_args, **_kwargs: {},
+            staticmethod(lambda *_args, **_kwargs: {}),
         )
-        monkeypatch.setattr(daemon._server.hook_worker, "review_http_payload", late_review)
+        monkeypatch.setattr(HookWorker, "review_http_payload", staticmethod(late_review))
         daemon.start()
 
         try:
@@ -2122,11 +2123,11 @@ class TestGuardSurfaceServer:
 
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         monkeypatch.setattr(
-            daemon._server.hook_worker,
+            HookWorker,
             "prepare_workspace_policy",
-            lambda *_args, **_kwargs: {},
+            staticmethod(lambda *_args, **_kwargs: {}),
         )
-        monkeypatch.setattr(daemon._server.hook_worker, "review_http_payload", fake_review)
+        monkeypatch.setattr(HookWorker, "review_http_payload", staticmethod(fake_review))
         daemon.start()
         try:
             request = urllib.request.Request(
@@ -2165,11 +2166,11 @@ class TestGuardSurfaceServer:
 
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         monkeypatch.setattr(
-            daemon._server.hook_worker,
+            HookWorker,
             "prepare_workspace_policy",
-            lambda *_args, **_kwargs: {},
+            staticmethod(lambda *_args, **_kwargs: {}),
         )
-        monkeypatch.setattr(daemon._server.hook_worker, "review_http_payload", fake_review)
+        monkeypatch.setattr(HookWorker, "review_http_payload", staticmethod(fake_review))
         daemon.start()
 
         try:
@@ -4284,9 +4285,9 @@ class TestGuardDaemonFastHookPath:
                 raise RuntimeError("resident worker failed")
 
             monkeypatch.setattr(
-                daemon._server.hook_worker,
+                HookWorker,
                 "review_http_payload",
-                fail_review,
+                staticmethod(fail_review),
             )
             payload = {
                 "hook_event_name": "PostToolUse",
