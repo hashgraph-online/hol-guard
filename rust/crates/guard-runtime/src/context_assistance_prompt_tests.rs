@@ -387,7 +387,7 @@ fn project(
 fn own_read(home: &Path, root: &Path, found: &[&str], terms: &[&str]) -> Option<String> {
     let later = Instant::now() + Duration::from_secs(5);
     let (found, terms) = (words(found), words(terms));
-    read_matched(home, root, "codex", &found, &terms, &[], later).map(|read| read.text)
+    read_matched(home, root, "codex", (&found, &[]), &terms, &[], later).map(|read| read.text)
 }
 
 /// A prompt sent while CIGAR is busy with another, or still loading the
@@ -458,7 +458,8 @@ fn a_quote_only_a_test_named_module_holds_is_shown() {
     let found = search().found(&words);
     assert!(found.contains(&"src/tests.py".to_owned()), "{found:?}");
     let later = Instant::now() + Duration::from_secs(5);
-    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    let read =
+        read_matched(home.path(), &root, "codex", (&found, &[]), &words, &[], later).unwrap();
     assert!(read.text.contains("src/tests.py (lines"), "{}", read.text);
     assert!(read.text.contains("def test_number"), "{}", read.text);
     std::fs::write(root.join("src/env.py"), format!("{env}{module}")).unwrap();
@@ -490,7 +491,8 @@ assert convert('bad') == 'suggest a choice for an invalid value'\n";
     .found(&words);
     assert_eq!(found, ["src/types.py".to_owned()]);
     let later = Instant::now() + Duration::from_secs(5);
-    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    let read =
+        read_matched(home.path(), &root, "codex", (&found, &[]), &words, &[], later).unwrap();
     assert!(read.text.contains("src/types.py (lines"), "{}", read.text);
 }
 

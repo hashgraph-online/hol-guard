@@ -17,6 +17,7 @@ use crate::context_assistance_prompt_words::marked_terms;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
 use lookup::{lookup, Miss, Request};
+use names::{held_names, holding};
 use seen::{Session, Span};
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -32,6 +33,8 @@ use ending::{end_note, prompt_session};
 mod lookup;
 #[path = "context_assistance_prompt_map.rs"]
 mod map;
+#[path = "context_assistance_prompt_names.rs"]
+mod names;
 #[path = "context_assistance_prompt_sections.rs"]
 mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
@@ -213,6 +216,7 @@ fn attach(
     }
     let searched = walk(&root, &words, &quoted, &named(prompt), budget);
     let found = searched.found(&words);
+    let names = held_names(prompt, &words, &searched.spelled);
     if found.is_empty() {
         return;
     }
@@ -259,6 +263,7 @@ fn attach(
         words: words.clone(),
         found: found.clone(),
         earlier: earlier.clone(),
+        names: names.clone(),
     };
     let until = deadline + HOOK_MARGIN / 2;
     // CIGAR still starting, busy with another prompt, or still loading the
@@ -269,7 +274,7 @@ fn attach(
     let own_read = || {
         service
             .prompt_context_chosen()
-            .then(|| read_matched(home, &root, harness, &found, &words, &earlier, until))
+            .then(|| read_matched(home, &root, harness, (&found, &names), &words, &earlier, until))
             .flatten()
             .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness))
     };
@@ -296,18 +301,19 @@ fn answered(
 }
 
 /// Guard's own read of the matched files CIGAR would accept: their best
-/// parts, or the names of the files it checked when no part fits.
+/// parts, or the names of the files it checked when no part fits or none
+/// holds the project code the prompt `named`.
 fn read_matched(
     home: &Path,
     root: &Path,
     harness: &str,
-    found: &[String],
+    (found, named): (&[String], &[String]),
     words: &[String],
     earlier: &[Span],
     until: Instant,
 ) -> Option<Rendered> {
     let (picked, names) = quick_excerpts(home, root, harness, found, words, MAX_OTHER_FILES, until);
-    render(&picked, &names, words, earlier).or_else(|| matched(&names))
+    render(holding(&picked, named), &names, words, earlier).or_else(|| matched(&names))
 }
 
 /// The harness session this prompt belongs to, when its payload names one.

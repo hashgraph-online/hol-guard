@@ -2,7 +2,7 @@
 //! its own thread, so a hook never waits past its budget. A prompt that finds
 //! CIGAR still starting leaves a warm-up behind: it waits for the worker and
 //! loads the project, so the next prompt gets code instead of a file list.
-use super::{render, Rendered, Span};
+use super::{holding, render, Rendered, Span};
 use crate::context_assistance_engine::PickedExcerpt;
 use crate::context_assistance_service::{LaneMiss, LaneWatch, PromptLane, Service};
 use std::collections::{BTreeMap, BTreeSet};
@@ -34,6 +34,8 @@ pub(super) struct Request {
     pub(super) found: Vec<String>,
     /// What earlier prompts of the session were shown.
     pub(super) earlier: Vec<Span>,
+    /// The project's names the prompt writes as code, which an answer holds.
+    pub(super) names: Vec<String>,
 }
 
 type Key = (PathBuf, String);
@@ -78,12 +80,16 @@ pub(super) fn lookup(
     let prompt = hashed(&request.query);
     let words = request.words.clone();
     let earlier = request.earlier.clone();
+    let names = request.names.clone();
     // One cutoff for every wait, so the read keeps its reserve however long
     // the lane took.
     let cutoff = short_of(deadline, Instant::now());
+    let shown = |found: Arc<(Vec<PickedExcerpt>, Vec<String>)>| {
+        render(holding(&found.0, &names), &found.1, &words, &earlier)
+    };
     let rendered = |flight: &Flight| {
         answer(service, flight, cutoff)
-            .map(|picked| picked.and_then(|found| render(&found.0, &found.1, &words, &earlier)))
+            .map(|picked| picked.and_then(&shown))
             .ok_or(Miss::Pending)
     };
     let flight = {

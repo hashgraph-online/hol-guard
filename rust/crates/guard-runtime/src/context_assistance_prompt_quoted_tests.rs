@@ -41,7 +41,8 @@ assert convert('bad') == 'suggest a choice for an invalid value'\n";
     .found(&words);
     assert_eq!(found, ["src/types.py", "src/test_types.py"]);
     let later = Instant::now() + Duration::from_secs(5);
-    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], later).unwrap();
+    let read =
+        read_matched(home.path(), &root, "codex", (&found, &[]), &words, &[], later).unwrap();
     assert!(read.text.contains("src/types.py (lines"), "{}", read.text);
     assert!(
         read.text.contains("src/test_types.py (lines"),
