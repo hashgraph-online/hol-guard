@@ -68,8 +68,10 @@ def runtime_answer(
     if stop_event is not None:
         options["stop_event"] = stop_event
     if allow_windows_breakaway:
-        # A daemon it launches must outlive the job that contains this call.
+        # A daemon it launches must outlive the job that contains this call:
+        # the job may let it break away, and closing it does not kill it.
         options["allow_windows_breakaway"] = True
+        options["windows_kill_on_job_close"] = False
     output = _run_native_process(
         status.identity.path,
         (command, "--stdin"),
