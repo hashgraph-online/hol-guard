@@ -109,7 +109,7 @@ def daemon_state_matches_current_runtime(
 ) -> bool:
     """Accept the live current-protocol daemon when identity or a current Desktop Core matches."""
 
-    from .manager import (
+    from ..native_daemon_manage import (
         GUARD_DAEMON_COMPATIBILITY_VERSION,
         __version__,
         _current_guard_daemon_runtime_fingerprint,
@@ -146,7 +146,7 @@ def daemon_state_matches_current_runtime(
 def retain_newer_live_daemon_url(guard_home: Path, current_version: str) -> str | None:
     """Keep a newer live daemon when an older Desktop or CLI caller tries to replace it."""
 
-    from .manager import _live_guard_daemon_url, _load_authenticated_daemon_identity
+    from ..native_daemon_manage import _live_guard_daemon_url, _load_authenticated_daemon_identity
 
     identity = _load_authenticated_daemon_identity(guard_home)
     if identity is None:
@@ -178,7 +178,7 @@ def live_desktop_owned_daemon(guard_home: Path) -> dict[str, object] | None:
 def load_guard_daemon_endpoint(guard_home: Path) -> tuple[str, str] | None:
     """Resolve a verified daemon endpoint, preferring the current runtime or Desktop owner."""
 
-    from .manager import load_guard_daemon_auth_token, load_guard_daemon_url
+    from ..native_daemon_manage import load_guard_daemon_auth_token, load_guard_daemon_url
 
     daemon_url = load_guard_daemon_url(guard_home)
     auth_token = load_guard_daemon_auth_token(guard_home)
@@ -321,7 +321,7 @@ def live_or_newer_daemon_url(
 ) -> str | None:
     """Reuse a newer live daemon on any port; otherwise only the preferred port."""
 
-    from .manager import _guard_daemon_url_port, load_guard_daemon_url
+    from ..native_daemon_manage import _guard_daemon_url_port, load_guard_daemon_url
 
     if executable is not None:
         return retain_newer_live_daemon_url(guard_home, current_version)

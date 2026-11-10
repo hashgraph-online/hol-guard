@@ -255,14 +255,14 @@ import json
 import sys
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.manager import (
+from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_is_running,
     clear_guard_daemon_state,
     guard_daemon_retirement_is_complete,
     load_authenticated_guard_daemon_pending_launch,
     retire_all_guard_daemons_for_home,
 )
-from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
+from codex_plugin_scanner.guard.native_daemon_manage import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.windows_paths import windows_process_creation_time
 
 payload = json.loads(sys.stdin.read())

@@ -6,7 +6,7 @@ import shlex
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.native_daemon_lifecycle import (
     _DAEMON_LIFECYCLE_DEADLINE,
     native_daemon_lifecycle,

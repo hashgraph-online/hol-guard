@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Literal
 
 from ..codex_hook_windows_job import windows_system_executable_path
-from ..daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from ..native_context import _resolve_existing_digest_home
+from ..native_daemon_manage import GUARD_DAEMON_COMPATIBILITY_VERSION
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ._modules.pi.pi_extension_native_hook import pi_native_hook_runtime
 from .pi_extension_runtime_ownership import resolve_pi_extension_runtime_ownership

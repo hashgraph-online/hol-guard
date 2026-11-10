@@ -11,7 +11,7 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_headless_daemon_api import (
     _dashboard_token_for,

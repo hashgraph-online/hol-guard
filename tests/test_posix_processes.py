@@ -4,8 +4,8 @@ import os
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_manage as manager
 from codex_plugin_scanner.guard import posix_processes
-from codex_plugin_scanner.guard.daemon import manager
 
 
 class _Runtime:

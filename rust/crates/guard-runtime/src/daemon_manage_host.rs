@@ -179,7 +179,7 @@ pub(super) fn parent_pid(pid: i64) -> Option<i64> {
         .filter(|parent| *parent > 0)
 }
 
-fn posix_query(op: &str, pid: Option<u32>) -> Option<Value> {
+pub(super) fn posix_query(op: &str, pid: Option<u32>) -> Option<Value> {
     let mut request = json!({"schema": "posix-processes.v1", "op": op});
     if let Some(pid) = pid {
         request["pid"] = pid.into();

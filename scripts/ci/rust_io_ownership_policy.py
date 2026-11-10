@@ -69,9 +69,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_resident_client.py",
         "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
         "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
-        "src/codex_plugin_scanner/guard/daemon/discovery.py",
-        "src/codex_plugin_scanner/guard/daemon/manager.py",
-        "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py",
+        # Thin adapter over `daemon-manage --stdin`: private auth read and lock handles only.
+        "src/codex_plugin_scanner/guard/native_daemon_manage.py",
         # Interpreter bootstrap identity only; no policy or command decisions.
         "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
         # Resident sensitive-request transport; the observed git path is a fact, never a verdict.
@@ -302,10 +301,7 @@ _SERVICE_PATHS: Final = frozenset(
     {
         # Retained Python: daemon supervision/lifecycle, cloud/OAuth/network
         # services, publication, and install support.
-        "src/codex_plugin_scanner/guard/daemon/discovery.py",
-        "src/codex_plugin_scanner/guard/daemon/lifecycle_journal.py",
-        "src/codex_plugin_scanner/guard/daemon/manager.py",
-        "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py",
+        "src/codex_plugin_scanner/guard/native_daemon_manage.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
         "src/codex_plugin_scanner/guard/daemon/start_classification.py",
         "src/codex_plugin_scanner/guard/frozen_daemon_runtime.py",

@@ -217,7 +217,7 @@ def _recover_authority(
             for warning in recovery_warnings:
                 print(f"Warning: {warning}", file=sys.stderr)
     else:
-        from ..daemon.manager import ensure_guard_daemon
+        from ..native_daemon_manage import ensure_guard_daemon
 
         try:
             ensure_guard_daemon(guard_home)
@@ -336,7 +336,7 @@ def run_extension_controls_command(
                 output_stream=output_stream,
             )
         if command != "status":
-            from ..daemon.manager import ensure_guard_daemon
+            from ..native_daemon_manage import ensure_guard_daemon
 
             try:
                 ensure_guard_daemon(guard_home)

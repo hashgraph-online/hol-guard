@@ -30,8 +30,8 @@ def desktop_bootstrap(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
     """``GET /v1/desktop/bootstrap``: the document Guard Desktop starts from."""
 
     from ..cli.commands_dispatch_desktop import desktop_bootstrap_document_for_running_daemon
-    from ..daemon.auth_token import load_guard_daemon_auth_token
     from ..library_calls import LibraryCallError
+    from ..native_daemon_manage import load_guard_daemon_auth_token
 
     daemon_url = args.get("daemon_url")
     home_dir = args.get("home_dir")

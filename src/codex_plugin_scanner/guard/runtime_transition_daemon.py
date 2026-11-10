@@ -12,12 +12,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol, cast
 
+from . import native_daemon_manage as manager
 from .codex_hook_integrity import canonical_manifest_bytes
-from .daemon import manager
-from .daemon.discovery import load_authenticated_daemon_state
 from .daemon.live_identity import DaemonArtifactBinding, verified_live_guard_daemon_identity
-from .daemon.start_lock import guard_daemon_start_lock
 from .live_process_identity import process_start_token
+from .native_daemon_manage import guard_daemon_start_lock, load_authenticated_daemon_state
 from .runtime_transition import RuntimeTransition, TransitionError, TransitionPlan
 from .runtime_transition_admission import NativeProtectionAdmission, verified_admission_payload
 

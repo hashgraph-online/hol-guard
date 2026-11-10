@@ -71,7 +71,7 @@ def _republish_trust_status(guard_home: Path) -> Callable[[dict[str, object]], N
     """Carries an integrity transition this replay commits into the daemon's state."""
 
     def republish(trust_status: dict[str, object]) -> None:
-        from ..daemon.manager import republish_guard_daemon_trust_status
+        from ..native_daemon_manage import republish_guard_daemon_trust_status
 
         republish_guard_daemon_trust_status(guard_home, trust_status)
 
@@ -299,7 +299,7 @@ def _replay_server_class() -> type:
 def load_runtime_identity(guard_home: Path) -> dict[str, str]:
     """The state id and start time the native daemon published, if any."""
 
-    from ..daemon.manager import _state_path
+    from ..native_daemon_manage import _state_path
 
     try:
         with _state_path(guard_home).open("rb") as handle:

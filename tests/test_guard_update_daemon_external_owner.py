@@ -16,8 +16,9 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_manage as manager
 from codex_plugin_scanner.guard.cli import update_commands
-from codex_plugin_scanner.guard.daemon import live_identity, manager, runtime_peer
+from codex_plugin_scanner.guard.daemon import live_identity, runtime_peer
 
 # Relative on purpose: availability checks keep relative fixture paths
 # matching by shape, so this stays a Desktop-owned source on every runner.

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_manage as manager
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import (
     commands_dispatch_trust,
@@ -20,11 +21,10 @@ from codex_plugin_scanner.guard.cli import (
 from codex_plugin_scanner.guard.cli import product as product_module
 from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon import manager
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError
-from codex_plugin_scanner.guard.daemon.discovery import authenticate_daemon_state, ensure_daemon_discovery_key
 from codex_plugin_scanner.guard.daemon.runtime_peer import load_guard_daemon_endpoint
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_daemon_state_signing import authenticate_daemon_state, ensure_daemon_discovery_key
 
 _DESKTOP_CORE_VERSION = "3.0.86"
 

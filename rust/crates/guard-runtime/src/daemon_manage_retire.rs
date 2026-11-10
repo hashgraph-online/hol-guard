@@ -24,10 +24,10 @@ const ORPHAN_REAP_MAX_BUDGET_MS: u128 = 60_000;
 
 /// What one retirement attempt may expect of the process it signals.
 #[derive(Default)]
-struct Expected<'a> {
-    creation_time: Option<i64>,
-    start_marker: Option<&'a str>,
-    owner_marker: Option<&'a str>,
+pub(super) struct Expected<'a> {
+    pub(super) creation_time: Option<i64>,
+    pub(super) start_marker: Option<&'a str>,
+    pub(super) owner_marker: Option<&'a str>,
 }
 
 /// The shared deadline of one management request.
@@ -81,7 +81,12 @@ pub(super) fn retire_generation(
 }
 
 /// `_retire_guard_daemon_pid`.
-fn retire_pid(caller: &Caller, pid: i64, expected: &Expected<'_>, deadline: Deadline) -> bool {
+pub(super) fn retire_pid(
+    caller: &Caller,
+    pid: i64,
+    expected: &Expected<'_>,
+    deadline: Deadline,
+) -> bool {
     let marker = expected.start_marker;
     let wait = || match deadline.remaining() {
         None => host::wait_for_death(pid, DEFAULT_WAIT),
@@ -147,7 +152,7 @@ fn retire_pid(caller: &Caller, pid: i64, expected: &Expected<'_>, deadline: Dead
 
 /// `_guard_daemon_pid_identity_for_retirement`: the generation and owner an
 /// inventoried process must keep, when it runs as this user.
-fn identity_for_retirement(pid: i64) -> Option<(String, String)> {
+pub(super) fn identity_for_retirement(pid: i64) -> Option<(String, String)> {
     let marker = host::start_marker(pid)?;
     let owner = host::owner_marker(pid)?;
     let own = host::own_owner_marker()?;

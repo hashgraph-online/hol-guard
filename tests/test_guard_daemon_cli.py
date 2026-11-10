@@ -16,7 +16,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.discovery import load_daemon_discovery_key
+from tests.guard_daemon_state_signing import load_daemon_discovery_key
 
 
 def _run(args: list[str], guard_home: Path) -> tuple[int, dict[str, object]]:
@@ -86,7 +86,7 @@ class TestDaemonStatusCommand:
         assert time.monotonic() - started < baseline_elapsed + 0.5
 
     def test_status_running_true_when_live_state(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
+        from codex_plugin_scanner.guard.native_daemon_manage import write_guard_daemon_state
 
         write_guard_daemon_state(tmp_path, port=19999, auth_token="test-token-abc")
         state_path = tmp_path / "daemon-state.json"
@@ -209,7 +209,7 @@ class TestDaemonStopCommand:
         assert payload.get("stopped") is True or payload.get("running") is False
 
     def test_stop_clears_daemon_state(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
+        from codex_plugin_scanner.guard.native_daemon_manage import write_guard_daemon_state
 
         write_guard_daemon_state(tmp_path, port=0, auth_token="x")
 
@@ -232,7 +232,7 @@ class TestDaemonStopCommand:
         """Regression: status must verify daemon identity, not just PID liveness."""
         import json as _json
 
-        from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
+        from codex_plugin_scanner.guard.native_daemon_manage import write_guard_daemon_state
 
         write_guard_daemon_state(tmp_path, port=19998, auth_token="tok")
         state_path = tmp_path / "daemon-state.json"

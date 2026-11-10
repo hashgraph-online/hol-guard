@@ -416,7 +416,7 @@ def main():
                 "-c",
                 "import json; "
                 "from pathlib import Path; "
-                "from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token; "
+                "from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token; "
                 "home=Path('/tmp/guard-home'); "
                 "state=json.loads((home/'daemon-state.json').read_text()); "
                 "print(json.dumps({'auth_token': load_guard_daemon_auth_token(home) or '', "

@@ -13,10 +13,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands, update_desktop_core
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,

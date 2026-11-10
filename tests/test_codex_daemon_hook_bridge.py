@@ -19,11 +19,11 @@ from urllib.parse import urlencode
 import pytest
 
 from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
+from codex_plugin_scanner.guard import hook_deadline as runtime_hook_deadline_module
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-from codex_plugin_scanner.guard import hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
 from codex_plugin_scanner.guard.store import GuardStore
 from scripts import daemon_hook_auth as hook_auth

@@ -16,7 +16,7 @@ from typing import cast
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.models import GuardRuntimeRegistration
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     CONTAINMENT_POLICY_VERSION,

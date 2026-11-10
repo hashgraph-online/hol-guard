@@ -12,12 +12,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launch_runtime
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import (
     isolated_daemon_start_command,
     isolated_hook_environment,
     run_isolated_hook_process,
 )
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX recovery contention regression")

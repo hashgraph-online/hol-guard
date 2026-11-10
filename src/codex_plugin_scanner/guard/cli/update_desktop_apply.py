@@ -243,7 +243,7 @@ def refresh_desktop_core_daemon(
     executable: Path,
     minimum_version: str | None = None,
 ) -> tuple[dict[str, object] | None, str | None]:
-    from ..daemon.manager import (
+    from ..native_daemon_manage import (
         ensure_guard_daemon_after_update,
         guard_daemon_retirement_is_complete,
         retire_all_guard_daemons_for_home,

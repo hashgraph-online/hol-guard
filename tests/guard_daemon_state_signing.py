@@ -9,7 +9,7 @@ import os
 import secrets
 from pathlib import Path
 
-from ..private_file_io import read_private_regular_text
+from codex_plugin_scanner.guard.private_file_io import read_private_regular_text
 
 DAEMON_DISCOVERY_PROTOCOL_VERSION = 1
 DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS = 5

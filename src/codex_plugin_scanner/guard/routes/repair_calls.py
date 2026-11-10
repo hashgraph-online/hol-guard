@@ -14,9 +14,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..config import load_guard_config
-from ..daemon.manager import current_guard_daemon_runtime_fingerprint
 from ..daemon.server_control_connect_flow import _repair_command_activity_persistence_health
 from ..models import GuardRuntimeRegistration
+from ..native_daemon_manage import current_guard_daemon_runtime_fingerprint
 from ..runtime.containment_health import containment_health_signals, probe_containment_health
 from ..runtime_artifact_reconciliation import repair_failing_managed_harness_hooks
 from ..store import GuardStore

@@ -712,7 +712,7 @@ def test_concurrent_cli_processes_do_not_replay_a_home_mutation(tmp_path: Path) 
         from codex_plugin_scanner.guard import live_process_identity
         from codex_plugin_scanner.guard.cli import commands_daemon_recovery as cli
         from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import LifecycleGateContext
-        from codex_plugin_scanner.guard.daemon import manager
+        from codex_plugin_scanner.guard import native_daemon_manage as manager
         from codex_plugin_scanner.guard.daemon.user_recovery import (
             ProcessIdentity,
             ProtectionResult,

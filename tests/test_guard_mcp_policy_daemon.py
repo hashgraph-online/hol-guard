@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.mcp.policy_tools import decline_pending_policy_request, execute_create_policy
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_mcp_policy_test_support import _BASIC_POLICY_YAML, _assert_no_policy_response_leaks, _digest
 from tests.guard_mcp_policy_test_support import env_flags as env_flags

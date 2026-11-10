@@ -18,15 +18,15 @@ from typing import Protocol, TypeGuard, cast
 from urllib.parse import urlsplit
 
 from ..local_dashboard_session import build_local_dashboard_session_token
-from ..runtime.extension_control_limits import MAX_DAEMON_CATALOG_RESPONSE_BYTES, MAX_DAEMON_GET_RESPONSE_BYTES
-from .extension_control_timeouts import APPLY_REQUEST_TIMEOUT_S, PREVIEW_REQUEST_TIMEOUT_S
-from .manager import (
+from ..native_daemon_manage import (
     clear_guard_daemon_state,
     ensure_guard_daemon,
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
     load_running_guard_daemon_identity,
 )
+from ..runtime.extension_control_limits import MAX_DAEMON_CATALOG_RESPONSE_BYTES, MAX_DAEMON_GET_RESPONSE_BYTES
+from .extension_control_timeouts import APPLY_REQUEST_TIMEOUT_S, PREVIEW_REQUEST_TIMEOUT_S
 from .response_bounds import _bound_response_read, _ReadableResponse, _response_is_closed
 
 _HEALTH_PROBE_DEADLINE_SECONDS = 1.0

@@ -44,7 +44,7 @@ def _use_legacy_status_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
         build_legacy_status_distribution,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.manager._guard_daemon_process_inventory_for_guard_home",
+        "codex_plugin_scanner.guard.native_daemon_manage._guard_daemon_process_inventory_for_guard_home",
         lambda _guard_home: [],
     )
 

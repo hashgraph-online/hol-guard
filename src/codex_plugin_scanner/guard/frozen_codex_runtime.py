@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .daemon.live_identity import DaemonArtifactBinding
-    from .daemon.manager import GuardDaemonHookFailureKind
+    from .native_daemon_manage import GuardDaemonHookFailureKind
 
 from .codex_hook_bridge_runtime import decode_bridge_config_argument
 from .codex_hook_compatibility import python_bridge_argv

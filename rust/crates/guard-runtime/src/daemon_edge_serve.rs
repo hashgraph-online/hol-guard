@@ -37,7 +37,7 @@ pub(super) const LAUNCH_SCHEMA: &str = "guard-daemon-serve-launch.v1";
 const MAX_LAUNCH_BYTES: u64 = 64 * 1024;
 const DISCOVERY_PROTOCOL_VERSION: i64 = 1;
 const DISCOVERY_KEY_FILE: &str = "daemon-discovery-key";
-const AUTH_SECRET_FILE: &str = "daemon-auth-token";
+pub(crate) const AUTH_SECRET_FILE: &str = "daemon-auth-token";
 const STATE_FILE: &str = "daemon-state.json";
 const STATE_WRITE_LOCK_FILE: &str = "daemon-state-write.lock";
 #[cfg(unix)]
@@ -403,7 +403,7 @@ fn state_payload(
 
 /// The path as Python's `Path.resolve()` writes it: without the Windows
 /// verbatim prefix that `fs::canonicalize` adds.
-fn plain_path_text(path: &str) -> String {
+pub(crate) fn plain_path_text(path: &str) -> String {
     if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{unc}")
     } else {
@@ -412,7 +412,7 @@ fn plain_path_text(path: &str) -> String {
 }
 
 /// `authenticate_daemon_state`: binds the payload to the discovery key.
-pub(super) fn sign_state(
+pub(crate) fn sign_state(
     mut payload: Map<String, Value>,
     key: &str,
 ) -> io::Result<Map<String, Value>> {
@@ -436,7 +436,7 @@ pub(super) fn sign_state(
     Ok(payload)
 }
 
-fn now_iso() -> String {
+pub(crate) fn now_iso() -> String {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
@@ -474,7 +474,7 @@ pub(crate) fn random_hex(bytes: usize) -> String {
     hex::encode(buffer)
 }
 
-fn ensure_private_directory(path: &Path) -> io::Result<()> {
+pub(crate) fn ensure_private_directory(path: &Path) -> io::Result<()> {
     fs::create_dir_all(path)?;
     set_private_directory(path)
 }
@@ -582,7 +582,7 @@ fn read_private(path: &Path) -> io::Result<Option<String>> {
 }
 
 /// `ensure_daemon_discovery_key`.
-fn ensure_discovery_key(home: &Path) -> io::Result<String> {
+pub(crate) fn ensure_discovery_key(home: &Path) -> io::Result<String> {
     let path = home.join(DISCOVERY_KEY_FILE);
     if let Some(existing) = read_private(&path)? {
         return Ok(existing.trim().to_owned());
@@ -609,7 +609,7 @@ fn ensure_discovery_key(home: &Path) -> io::Result<String> {
 
 /// `ensure_guard_daemon_auth_token`: the Guard home's shared secret, created
 /// only when absent. The caller holds the state write lock.
-fn ensure_auth_secret(home: &Path) -> io::Result<String> {
+pub(crate) fn ensure_auth_secret(home: &Path) -> io::Result<String> {
     let path = home.join(AUTH_SECRET_FILE);
     if let Some(existing) = read_private(&path)? {
         let existing = existing.trim();

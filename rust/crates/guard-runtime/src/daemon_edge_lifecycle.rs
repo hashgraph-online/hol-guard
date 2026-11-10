@@ -1,6 +1,6 @@
 //! The daemon lifecycle journal (`<guard home>/daemon-lifecycle/`): one small
-//! private JSON file per event, read by `daemon/lifecycle_journal.py` without
-//! opening Guard SQLite. Writing is best effort, as it was for the daemon.
+//! private JSON file per event, read back by `load_events` without opening
+//! Guard SQLite. Writing is best effort, as it was for the daemon.
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -11,6 +11,9 @@ use serde_json::{Map, Value};
 
 const DIRECTORY: &str = "daemon-lifecycle";
 const MAX_ENTRIES: usize = 128;
+const MAX_EVENT_BYTES: u64 = 2048;
+const MAX_INCIDENT_SCAN: usize = 256;
+const MAX_INCIDENT_ENTRIES: usize = 20;
 
 /// Records `event` for this process; failures are ignored.
 pub(super) fn record(
@@ -134,6 +137,94 @@ fn prune(directory: &Path) {
     }
 }
 
+/// The newest `limit` valid events, oldest first. `incident` caps the
+/// directory scan and the timeline, and reports why entries are missing:
+/// `ok`, `invalid_entries_omitted`, `journal_unavailable`,
+/// `journal_path_unsafe` or `journal_scan_limit`.
+pub(crate) fn load_events(
+    guard_home: &Path,
+    limit: usize,
+    incident: bool,
+) -> (Vec<Value>, &'static str) {
+    let directory = guard_home.join(DIRECTORY);
+    if is_symlink(&directory) {
+        return (Vec::new(), "journal_path_unsafe");
+    }
+    let Ok(entries) = fs::read_dir(&directory) else {
+        return (Vec::new(), "journal_unavailable");
+    };
+    let mut names = Vec::new();
+    for (index, entry) in entries.enumerate() {
+        if incident && index >= MAX_INCIDENT_SCAN {
+            return (Vec::new(), "journal_scan_limit");
+        }
+        let Ok(entry) = entry else {
+            return (Vec::new(), "journal_unavailable");
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".json") && (incident || !name.starts_with('.')) {
+            names.push(name);
+        }
+    }
+    let cap = if incident {
+        MAX_INCIDENT_ENTRIES
+    } else {
+        MAX_ENTRIES
+    };
+    names.sort_unstable_by(|left, right| right.cmp(left));
+    names.truncate(limit.min(cap));
+    let mut invalid = false;
+    let mut events = Vec::new();
+    for name in &names {
+        match read_event(&directory.join(name)) {
+            Some(event) => events.push(event),
+            None => invalid = true,
+        }
+    }
+    events.reverse();
+    (
+        events,
+        if invalid {
+            "invalid_entries_omitted"
+        } else {
+            "ok"
+        },
+    )
+}
+
+fn read_event(path: &Path) -> Option<Value> {
+    let raw =
+        crate::daemon_policy_authority::read_private_regular_text(path, MAX_EVENT_BYTES, false)?;
+    let value: Value = serde_json::from_str(&raw).ok()?;
+    let event = value.as_object()?;
+    let optional_text = |key: &str, check: fn(&str) -> bool| {
+        event
+            .get(key)
+            .is_none_or(|item| item.as_str().is_some_and(check))
+    };
+    let port_ok = event.get("port").is_none_or(|port| {
+        port.as_u64()
+            .is_some_and(|port| (1..=65_535).contains(&port))
+    });
+    let valid = event.get("version").and_then(Value::as_i64) == Some(1)
+        && event
+            .get("event")
+            .and_then(Value::as_str)
+            .is_some_and(safe_label)
+        && event
+            .get("recorded_at_ns")
+            .and_then(Value::as_u64)
+            .is_some_and(|at| at > 0)
+        && event
+            .get("pid")
+            .and_then(Value::as_u64)
+            .is_some_and(|pid| pid > 0)
+        && optional_text("session_id", safe_session_id)
+        && optional_text("reason", safe_label)
+        && port_ok;
+    valid.then_some(value)
+}
+
 /// `^[a-z][a-z0-9_-]{0,63}$`.
 fn safe_label(value: &str) -> bool {
     let mut bytes = value.bytes();
@@ -170,7 +261,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn records_a_ready_event_the_python_journal_reads() {
+    fn records_a_ready_event_load_events_reads() {
         let home = tempfile::tempdir().unwrap();
         record(home.path(), "ready", None, Some("abc123"), Some(4781));
         let entries: Vec<_> = fs::read_dir(home.path().join(DIRECTORY))
@@ -183,6 +274,25 @@ mod tests {
         assert_eq!(value["version"], 1);
         assert_eq!(value["port"], 4781);
         assert_eq!(value["session_id"], "abc123");
+    }
+
+    #[test]
+    fn load_events_returns_newest_valid_oldest_first() {
+        let home = tempfile::tempdir().unwrap();
+        record(home.path(), "starting", None, None, None);
+        record(home.path(), "ready", None, None, Some(4781));
+        let directory = home.path().join(DIRECTORY);
+        fs::write(directory.join("99999999999999999999-bad.json"), "{}").unwrap();
+        let (events, status) = load_events(home.path(), 20, true);
+        assert_eq!(status, "invalid_entries_omitted");
+        let names: Vec<_> = events.iter().map(|event| event["event"].clone()).collect();
+        assert_eq!(names, vec![Value::from("starting"), Value::from("ready")]);
+        let (latest, _) = load_events(home.path(), 1, false);
+        assert!(latest.is_empty());
+        assert_eq!(
+            load_events(&home.path().join("missing"), 5, true).1,
+            "journal_unavailable"
+        );
     }
 
     #[test]

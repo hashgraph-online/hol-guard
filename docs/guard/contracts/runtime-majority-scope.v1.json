@@ -520,14 +520,6 @@
         ]
       },
       {
-        "id": "ephemeral-daemon-reaper",
-        "category": "control_plane",
-        "reason": "Best-effort janitor that retires guard daemons and clears daemon state leaked by ephemeral (pytest temp) guard homes. It is scheduled once per interval on a daemon thread from ensure_guard_daemon (manager._schedule_stale_ephemeral_guard_daemon_reap), never joins, never gates the caller, and acts only on other homes (the caller's own home is excluded). It runs no hook admission, decision, authorization or enforcement, and the manager reaches it through a late-bound facade.",
-        "path": [
-          "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py"
-        ]
-      },
-      {
         "category": "control_plane",
         "id": "protection-capability-payloads",
         "path": [

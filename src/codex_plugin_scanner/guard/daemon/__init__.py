@@ -36,7 +36,7 @@ def __getattr__(name: str) -> Any:
             "load_guard_surface_daemon_client": load_guard_surface_daemon_client,
         }[name]
     if name in __all__:
-        value = getattr(import_module(".manager", __name__), name)
+        value = getattr(import_module("..native_daemon_manage", __name__), name)
         globals()[name] = value
         return value
     raise AttributeError(name)

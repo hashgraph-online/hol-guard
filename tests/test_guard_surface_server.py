@@ -18,12 +18,11 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from ci.native_daemon_harness import NativeGuardDaemon
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import primary_approval_browser_url
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
@@ -42,6 +41,7 @@ from tests.conftest import guard_commands_module
 from tests.daemon_control_patching import patch_daemon_global
 from tests.daemon_hook_test_client import open_authenticated_claude_request
 from tests.dashboard_bundle_support import dashboard_chunk
+from tests.guard_daemon_state_signing import load_authenticated_daemon_state
 from tests.native_store_shims import list_guard_operation_items
 from tests.support.network import urlopen_json
 

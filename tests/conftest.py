@@ -226,7 +226,7 @@ def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pyte
     monkeypatch.setattr(mcp_relay_native, "native_mcp_relay", lambda guard_home=None: None)
 
 
-_session_daemon_runtime_fingerprint: list[tuple[str, str]] = []
+_session_daemon_runtime_fingerprint: list[str] = []
 _daemon_runtime_fingerprint_attempts: list[None] = []
 
 
@@ -242,19 +242,18 @@ def _pinned_daemon_runtime_fingerprint(monkeypatch: pytest.MonkeyPatch) -> None:
     the daemon code to fill. Tests of the measurement reset the memo
     themselves.
     """
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
 
     if not _session_daemon_runtime_fingerprint:
         if len(_daemon_runtime_fingerprint_attempts) >= 3:
             return
         _daemon_runtime_fingerprint_attempts.append(None)
-        # Measured without the cache file, which lives under the real home.
-        source_root = Path(manager._current_guard_daemon_source_root())
+        monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
         try:
-            _tree_sig, fingerprint, _reused = manager._measure_runtime_fingerprint(source_root, None)
-        except RuntimeError:
+            fingerprint = manager._current_guard_daemon_runtime_fingerprint()
+        except (OSError, RuntimeError, ValueError):
             return
-        _session_daemon_runtime_fingerprint.append(("session", fingerprint))
+        _session_daemon_runtime_fingerprint.append(fingerprint)
     monkeypatch.setattr(manager, "_runtime_fingerprint_cache", _session_daemon_runtime_fingerprint[0])
 
 
@@ -427,11 +426,11 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
     if not isinstance(test_tmp_path, Path):
         return
 
-    from codex_plugin_scanner.guard.daemon.manager import (
+    from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
+    from codex_plugin_scanner.guard.native_daemon_manage import (
         guard_daemon_retirement_is_complete,
         retire_all_guard_daemons_for_home,
     )
-    from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 
     # The per-test native mode is already undone here; the lifecycle decisions
     # that identify the daemons to retire need the same compiled authority.

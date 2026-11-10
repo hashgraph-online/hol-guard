@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     availability_harness_response,
     cursor_fallback_permission,

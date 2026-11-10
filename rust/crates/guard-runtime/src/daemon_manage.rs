@@ -32,6 +32,8 @@ mod records;
 mod recover;
 #[path = "daemon_manage_retire.rs"]
 mod retire;
+#[path = "daemon_manage_state.rs"]
+mod state;
 #[cfg(all(test, unix))]
 #[path = "daemon_manage_tests.rs"]
 mod tests;
@@ -91,6 +93,10 @@ struct Request {
     worker_env: BTreeMap<String, String>,
     #[serde(default)]
     worker_cwd: Option<String>,
+    #[serde(default)]
+    wake: Option<String>,
+    #[serde(default)]
+    args: Map<String, Value>,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -154,7 +160,7 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
         "retirement_complete" => Ok(json!({"complete": retire::retirement_is_complete(&caller)})),
         "posture" => Ok(json!({"posture": recover::posture(&caller.guard_home)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
-        "ensure" | "recover" | "schedule_recovery" => {
+        "ensure" | "recover" | "schedule_recovery" | "schedule_ensure" => {
             let ensure = ensure::Ensure {
                 launch: &request.launch,
                 serve_executable: request.serve_executable.as_deref(),
@@ -184,13 +190,41 @@ fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> 
                     &request.worker_env,
                     request.worker_cwd.as_deref(),
                 ),
-                _ => match ensure::ensure(&caller, &ensure, deadline) {
-                    Ok(url) => json!({"url": url}),
-                    Err(failure) => failure.reply(),
-                },
+                "schedule_ensure" => {
+                    let current = request
+                        .launch
+                        .get("state")
+                        .and_then(Value::as_object)
+                        .cloned()
+                        .unwrap_or_default();
+                    let predicted = request
+                        .args
+                        .get("predicted_url")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_owned();
+                    state::schedule_ensure(
+                        &caller,
+                        raw.clone(),
+                        current,
+                        predicted,
+                        &request.worker_env,
+                        request.worker_cwd.as_deref(),
+                    )
+                }
+                _ => {
+                    let answer = match ensure::ensure(&caller, &ensure, deadline) {
+                        Ok(url) => json!({"url": url}),
+                        Err(failure) => failure.reply(),
+                    };
+                    if let Some(key) = request.wake.as_deref() {
+                        state::wake_clear(&caller.guard_home, key);
+                    }
+                    answer
+                }
             })
         }
-        _ => Err(invalid()),
+        op => state::answer(&caller, op, &request.args, deadline).ok_or_else(invalid),
     }
 }
 

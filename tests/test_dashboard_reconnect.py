@@ -16,12 +16,12 @@ from typing import Any, cast
 import pytest
 
 from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.discovery import (
+from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_daemon_state_signing import (
     daemon_discovery_key_path,
     ensure_daemon_discovery_key,
 )
-from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
-from codex_plugin_scanner.guard.store import GuardStore
 
 # The native ``dashboard_reconnect`` kind, called the way the dashboard's daemon routes call it.
 
@@ -462,5 +462,3 @@ def test_dashboard_reconnect_authorization_file_is_private_and_contains_no_verif
     assert cast(str, authorization["verifier"]) not in contents
     if os.name != "nt":
         assert stat.S_IMODE(state_path.stat().st_mode) == 0o600
-
-

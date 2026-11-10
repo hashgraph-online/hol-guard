@@ -20,10 +20,10 @@ from typing import Any, TypeAlias, TypedDict
 from ..daemon.audit_persistence import AuditPersistence
 from ..daemon.diagnostics import DaemonDiagnostics
 from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
-from ..daemon.manager import (
+from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
+from ..native_daemon_manage import (
     write_guard_daemon_state,
 )
-from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.network_supervisor import NetworkSupervisor

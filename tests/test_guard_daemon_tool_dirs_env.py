@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager
+from codex_plugin_scanner.guard import native_daemon_manage as manager
 from codex_plugin_scanner.guard.native_shim_admin import _facts
 
 _MARKER = "HOL_GUARD_SHIM_TOOL_DIRS"

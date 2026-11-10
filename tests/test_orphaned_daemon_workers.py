@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager
+from codex_plugin_scanner.guard import native_daemon_manage as manager
 from codex_plugin_scanner.guard.mdm import runtime_request
 
 

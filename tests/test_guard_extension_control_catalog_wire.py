@@ -13,8 +13,8 @@ from codex_plugin_scanner.guard.daemon.extension_control_api import (
     ExtensionControlApiError,
     ExtensionControlApiService,
 )
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.json_transport import escape_json_for_html
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 )

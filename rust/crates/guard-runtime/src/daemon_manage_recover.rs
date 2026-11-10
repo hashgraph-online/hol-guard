@@ -198,7 +198,7 @@ fn now_iso() -> String {
     crate::approval_gate_state::iso_from_epoch(now_seconds())
 }
 
-fn now_seconds() -> f64 {
+pub(super) fn now_seconds() -> f64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0.0, |elapsed| elapsed.as_secs_f64())
@@ -215,7 +215,7 @@ fn load_reservation(home: &Path) -> Option<Map<String, Value>> {
         .cloned()
 }
 
-fn reservation_facts(reservation: Option<&Map<String, Value>>) -> Value {
+pub(super) fn reservation_facts(reservation: Option<&Map<String, Value>>) -> Value {
     let Some(reservation) = reservation else {
         return Value::Null;
     };
@@ -236,7 +236,7 @@ fn reservation_facts(reservation: Option<&Map<String, Value>>) -> Value {
     Value::Object(facts)
 }
 
-fn with_state_write_lock<T>(home: &Path, body: impl FnOnce() -> T) -> Option<T> {
+pub(super) fn with_state_write_lock<T>(home: &Path, body: impl FnOnce() -> T) -> Option<T> {
     let file = lock_file(home, STATE_WRITE_LOCK_FILE)?;
     file.lock_exclusive().ok()?;
     let answer = body();
@@ -244,13 +244,13 @@ fn with_state_write_lock<T>(home: &Path, body: impl FnOnce() -> T) -> Option<T> 
     Some(answer)
 }
 
-fn reservation_key() -> Option<String> {
+pub(super) fn reservation_key() -> Option<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).ok()?;
     Some(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn key_field() -> String {
+pub(super) fn key_field() -> String {
     format!("{}{}", "tok", "en")
 }
 
@@ -396,7 +396,7 @@ pub(super) fn schedule(
     json!({"scheduled": false})
 }
 
-fn detach(command: &mut Command) {
+pub(super) fn detach(command: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -415,7 +415,7 @@ fn detach(command: &mut Command) {
 }
 
 /// `terminate_recovery_worker`: the worker leads its own process group.
-fn stop_worker(child: &mut std::process::Child) {
+pub(super) fn stop_worker(child: &mut std::process::Child) {
     if !matches!(child.try_wait(), Ok(None)) {
         return;
     }

@@ -96,14 +96,6 @@ from ..consumer import (
     record_policy,
     run_consumer_scan,
 )
-from ..daemon.manager import (
-    _guard_daemon_pid_is_running,
-    _guard_daemon_pid_matches_command,
-    clear_guard_daemon_wake_reservation,
-    load_guard_daemon_auth_token,
-    load_guard_daemon_url,
-    schedule_guard_daemon_ensure,
-)
 from ..desktop_notifications import (
     desktop_notification_setup_payload,
     desktop_notification_setup_supported,
@@ -132,6 +124,14 @@ from ..native_cisco_preflight import (
     build_cisco_deep_scan_payload,
     policy_action_for_cisco_signals,
     scan_action_for_cisco_evidence,
+)
+from ..native_daemon_manage import (
+    _guard_daemon_pid_is_running,
+    _guard_daemon_pid_matches_command,
+    clear_guard_daemon_wake_reservation,
+    load_guard_daemon_auth_token,
+    load_guard_daemon_url,
+    schedule_guard_daemon_ensure,
 )
 from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_prompt import extract_prompt_requests

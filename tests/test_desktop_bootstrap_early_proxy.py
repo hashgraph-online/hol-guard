@@ -41,8 +41,8 @@ def _write_daemon_identity(
     tamper_signature: bool = False,
     executable: str | None = None,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon.discovery import authenticate_daemon_state
     from codex_plugin_scanner.version import __version__
+    from tests.guard_daemon_state_signing import authenticate_daemon_state
 
     guard_home = home / ".hol-guard"
     guard_home.mkdir()
@@ -307,7 +307,7 @@ def test_desktop_bootstrap_route_is_critical() -> None:
 
 
 def test_daemon_state_executable_falls_back_when_resolution_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
 
     def fail_resolve(self: Path, strict: bool = False) -> Path:
         del self, strict

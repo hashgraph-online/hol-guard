@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager
+from codex_plugin_scanner.guard import native_daemon_manage as manager
 
 
 def test_runtime_fingerprint_waits_out_a_cold_capability_probe_miss(

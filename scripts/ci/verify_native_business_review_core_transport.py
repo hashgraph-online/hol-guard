@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(1, str(Path(__file__).resolve().parents[2]))
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_request
 from codex_plugin_scanner.guard.native_runtime import _isolated_environment, native_runtime_status
 from codex_plugin_scanner.guard.store import GuardStore

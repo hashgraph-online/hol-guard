@@ -11,8 +11,11 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionPlan
 
-from .discovery import load_authenticated_daemon_state
-from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION, load_guard_daemon_auth_token
+from ..native_daemon_manage import (
+    GUARD_DAEMON_COMPATIBILITY_VERSION,
+    load_authenticated_daemon_state,
+    load_guard_daemon_auth_token,
+)
 
 
 @dataclass(frozen=True)

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +37,7 @@ def test_recovery_lock_serializes_separate_processes(tmp_path: Path) -> None:
     with daemon_manager_module._guard_daemon_recovery_lock(guard_home):
         script = (
             "from pathlib import Path;"
-            "from codex_plugin_scanner.guard.daemon.manager import _guard_daemon_recovery_lock;"
+            "from codex_plugin_scanner.guard.native_daemon_manage import _guard_daemon_recovery_lock;"
             f"home=Path({str(guard_home)!r});"
             "lock=_guard_daemon_recovery_lock(home);"
             "lock.__enter__();"

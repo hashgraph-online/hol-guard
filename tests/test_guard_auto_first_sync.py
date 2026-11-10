@@ -7,7 +7,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.connect_flow import CONNECT_SYNC_AUTH_CONTEXT_KEY
 from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
 from codex_plugin_scanner.guard.daemon import server_control_connect_flow as _ctl_connect_flow
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncNotConfiguredError
 from codex_plugin_scanner.guard.store import GuardStore

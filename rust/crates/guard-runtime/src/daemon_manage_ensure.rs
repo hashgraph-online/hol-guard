@@ -299,7 +299,7 @@ fn clear_state(home: &Path) -> Result<(), Failure> {
 }
 
 /// The cross-process start lock every launcher of this home takes.
-fn start_lock(home: &Path, deadline: Deadline) -> Result<File, Failure> {
+pub(super) fn start_lock(home: &Path, deadline: Deadline) -> Result<File, Failure> {
     let unavailable = || runtime("Guard daemon start lock could not be opened.");
     fs::create_dir_all(home).map_err(|_| unavailable())?;
     let file = OpenOptions::new()
@@ -321,12 +321,16 @@ fn start_lock(home: &Path, deadline: Deadline) -> Result<File, Failure> {
     }
 }
 
-fn url_port(url: &str) -> Option<i64> {
+pub(super) fn url_port(url: &str) -> Option<i64> {
     url.rsplit_once(':')?.1.parse().ok()
 }
 
 /// `daemon_state_matches_current_runtime`.
 fn runtime_matches(context: &Context<'_>, payload: &Map<String, Value>) -> bool {
+    runtime_matches_current(&context.current, payload)
+}
+
+fn runtime_matches_current(current: &Map<String, Value>, payload: &Map<String, Value>) -> bool {
     if int(payload, "compatibility_version") != Some(COMPATIBILITY_VERSION) {
         return false;
     }
@@ -334,13 +338,13 @@ fn runtime_matches(context: &Context<'_>, payload: &Map<String, Value>) -> bool 
     else {
         return false;
     };
-    let current_version = context.current.get("package_version");
-    let current_root = context.current.get("source_root");
+    let current_version = current.get("package_version");
+    let current_root = current.get("source_root");
     let same_version = payload.get("package_version") == current_version;
     if same_version && payload.get("source_root") != current_root {
         return true;
     }
-    if Some(fingerprint) == context.current_text("runtime_fingerprint") {
+    if Some(fingerprint) == text(current, "runtime_fingerprint") {
         return true;
     }
     if payload.get("source_root") == current_root {
@@ -354,7 +358,7 @@ fn runtime_matches(context: &Context<'_>, payload: &Map<String, Value>) -> bool 
     }
     version_at_least(
         text(payload, "package_version"),
-        context.current_text("package_version"),
+        text(current, "package_version"),
         false,
     )
 }
@@ -428,6 +432,51 @@ fn live_url(
     require_current: bool,
     expected_pid: Option<i64>,
 ) -> Option<String> {
+    live_identity_of(context, require_current, expected_pid).map(|(url, _)| url)
+}
+
+/// `_live_guard_daemon_identity` for a caller that names only the current
+/// runtime identity: the live URL and the home's shared auth value.
+pub(super) fn live_identity(
+    caller: &Caller,
+    current: Map<String, Value>,
+    require_current: bool,
+    expected_pid: Option<i64>,
+) -> Option<(String, String)> {
+    let launch = Map::new();
+    let env = BTreeMap::new();
+    let request = Ensure {
+        launch: &launch,
+        serve_executable: None,
+        executable: None,
+        home_dir: None,
+        launch_cwd: None,
+        preferred_port: None,
+        background_maintenance: false,
+        allow_windows_job_breakaway: false,
+        start_lock_held: false,
+        launcher_env: &env,
+        env_port: None,
+    };
+    let context = Context {
+        caller,
+        request: &request,
+        deadline: Deadline(None),
+        current,
+    };
+    live_identity_of(&context, require_current, expected_pid)
+}
+
+/// `daemon_state_matches_current_runtime` against a named current identity.
+pub(super) fn state_matches(current: &Map<String, Value>, payload: &Map<String, Value>) -> bool {
+    runtime_matches_current(current, payload)
+}
+
+fn live_identity_of(
+    context: &Context<'_>,
+    require_current: bool,
+    expected_pid: Option<i64>,
+) -> Option<(String, String)> {
     let home = context.home();
     let (state, auth) = load_authenticated_daemon_identity(home)?;
     if require_current && !runtime_matches(context, &state) {
@@ -459,14 +508,14 @@ fn live_url(
         return None;
     }
     if daemon_pid_matches_command(pid, home) {
-        return Some(url);
+        return Some((url, auth));
     }
     let header = format!("X-Guard-{}", "Token");
     let details = http_get_json(
         &format!("{url}/v1/healthz/details"),
         &[(header.as_str(), auth.as_str())],
     )?;
-    healthz_payload_matches_guard_home(&details, home).then_some(url)
+    healthz_payload_matches_guard_home(&details, home).then_some((url, auth))
 }
 
 /// `_live_or_newer_guard_daemon_url`: a newer live Desktop daemon is never
@@ -612,7 +661,7 @@ fn launch_config(context: &Context<'_>, port: u16, nonce: Option<&str>) -> Optio
     LaunchConfig::parse(&serde_json::to_vec(&Value::Object(launch)).ok()?)
 }
 
-fn load_progress(home: &Path) -> Option<Map<String, Value>> {
+pub(super) fn load_progress(home: &Path) -> Option<Map<String, Value>> {
     let raw = read_private_regular_text(&home.join(PROGRESS_FILE), PROGRESS_MAX_BYTES, true)?;
     let Value::Object(payload) = serde_json::from_str(&raw).ok()? else {
         return None;

@@ -25,7 +25,7 @@ _SERVERS_LOCK = threading.Lock()
 def _server(store: GuardStore, args: Mapping[str, Any]) -> Any:
     """The resident's daemon state for this Guard home, built on first use."""
 
-    from ..daemon.auth_token import load_guard_daemon_auth_token
+    from ..native_daemon_manage import load_guard_daemon_auth_token
     from .request_host import _replay_server_class
 
     key = str(store.guard_home)

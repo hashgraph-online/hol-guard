@@ -21,7 +21,7 @@ from ..store import GuardStore
 def control_server(store: GuardStore, args: Mapping[str, Any]) -> Iterator[Any]:
     """The daemon's cross-request state, loaded from the Guard home for one call."""
 
-    from ..daemon.auth_token import load_guard_daemon_auth_token
+    from ..native_daemon_manage import load_guard_daemon_auth_token
     from .request_host import _replay_server_class
 
     port = args.get("port")

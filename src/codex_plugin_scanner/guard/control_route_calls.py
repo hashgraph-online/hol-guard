@@ -371,7 +371,7 @@ def operation_block(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
 
     from .approvals import _append_guard_token_to_url, build_approval_browser_url
     from .browser_opener import open_browser_url
-    from .daemon.auth_token import load_guard_daemon_auth_token
+    from .native_daemon_manage import load_guard_daemon_auth_token
     from .runtime.surface_server import GuardSurfaceRuntime
     from .workers.host import DurableApprovalAttention
 

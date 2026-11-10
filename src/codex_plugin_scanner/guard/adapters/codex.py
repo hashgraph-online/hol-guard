@@ -420,7 +420,7 @@ def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
         ("native_receipt", guard_root / "native_decision_receipt.py"),
         ("fallback_entrypoint", scanner_root / "cli.py"),
         ("daemon_entrypoint", guard_root / "daemon" / "__init__.py"),
-        ("daemon_manager", guard_root / "daemon" / "manager.py"),
+        ("daemon_manager", guard_root / "native_daemon_manage.py"),
         ("launch_runtime", guard_root / "codex_hook_launch_runtime.py"),
         ("runtime_trust", guard_root / "codex_hook_runtime_trust.py"),
         ("windows_job", guard_root / "codex_hook_windows_job.py"),

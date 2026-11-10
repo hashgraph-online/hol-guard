@@ -267,8 +267,8 @@ class WorkerHost:
                 _LOGGER.exception("Guard worker host could not wait for native policy publication")
 
     def _schedule_attention(self, attention: Any) -> None:
-        from ..daemon.manager import ensure_guard_daemon_auth_token
         from ..local_dashboard_session import build_approval_browser_url
+        from ..native_daemon_manage import ensure_guard_daemon_auth_token
 
         pending = _take_attention(self.store)
         if not pending:

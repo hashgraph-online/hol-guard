@@ -168,10 +168,10 @@ def runtime_snapshot(store: GuardStore, args: Mapping[str, Any]) -> dict[str, ob
     from ..approvals import build_runtime_snapshot
     from ..config import load_guard_config
     from ..daemon.command_activity_health_repair import auto_repair_command_activity_health_if_degraded
-    from ..daemon.manager import current_guard_daemon_runtime_fingerprint
     from ..daemon.server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
     from ..daemon.server_control_health import cached_containment_health
     from ..models import format_local_http_origin
+    from ..native_daemon_manage import current_guard_daemon_runtime_fingerprint
     from ..runtime.containment_health import probe_containment_health
 
     with control_server(store, args) as server:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 
 
 def test_recovery_worker_thread_lock_timeout_is_bounded(tmp_path: Path) -> None:

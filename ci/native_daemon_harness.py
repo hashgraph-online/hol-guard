@@ -78,7 +78,7 @@ class NativeGuardDaemon:
 
     @property
     def auth_token(self) -> str:
-        from codex_plugin_scanner.guard.daemon.auth_token import load_guard_daemon_auth_token
+        from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 
         loaded = load_guard_daemon_auth_token(self.store.guard_home)
         if not loaded:

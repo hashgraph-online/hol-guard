@@ -221,7 +221,7 @@ def test_resident_outage_is_not_a_value_error(monkeypatch: pytest.MonkeyPatch) -
     assert issubclass(transport.NativeDaemonLifecycleError, RuntimeError)
     assert not issubclass(transport.NativeDaemonLifecycleError, ValueError)
 
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
 
     def boom(*_args: object, **_kwargs: object) -> dict[str, object]:
         raise transport.NativeDaemonLifecycleError("native_daemon_lifecycle_unavailable")

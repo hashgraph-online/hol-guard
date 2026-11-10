@@ -133,7 +133,7 @@ def _daemon_fingerprint() -> str | None:
     Without it the edge leaves containment health to the daemon.
     """
 
-    from .manager import current_guard_daemon_runtime_fingerprint
+    from ..native_daemon_manage import current_guard_daemon_runtime_fingerprint
 
     try:
         return current_guard_daemon_runtime_fingerprint()

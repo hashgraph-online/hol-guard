@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.manager import (
+from codex_plugin_scanner.guard.native_daemon_manage import (
     clear_guard_daemon_state,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,

@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import live_process_identity
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
 from codex_plugin_scanner.guard.cli import commands_daemon_recovery as recovery_cli
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import user_recovery as recovery_module
 from codex_plugin_scanner.guard.daemon.user_recovery import (
     AuthorizationDecision,
@@ -3022,7 +3022,7 @@ def test_cross_process_unresolved_stop_receipt_blocks_second_stop_until_proven_d
 
         from codex_plugin_scanner.guard import live_process_identity
         from codex_plugin_scanner.guard.cli import commands_daemon_recovery as cli
-        from codex_plugin_scanner.guard.daemon import manager
+        from codex_plugin_scanner.guard import native_daemon_manage as manager
         from codex_plugin_scanner.guard.daemon.user_recovery import (
             ProcessIdentity,
             ProtectionResult,
@@ -3249,7 +3249,7 @@ def test_cli_stopping_receipt_blocks_retry_when_timeout_persistence_fails(tmp_pa
 
         from codex_plugin_scanner.guard import live_process_identity
         from codex_plugin_scanner.guard.cli import commands_daemon_recovery as cli
-        from codex_plugin_scanner.guard.daemon import manager
+        from codex_plugin_scanner.guard import native_daemon_manage as manager
         from codex_plugin_scanner.guard.daemon.user_recovery import (
             ProcessIdentity,
             ProtectionResult,
@@ -3484,7 +3484,7 @@ def test_cli_started_worker_receipt_blocks_second_start_until_proven_dead(tmp_pa
 
         from codex_plugin_scanner.guard import live_process_identity
         from codex_plugin_scanner.guard.cli import commands_daemon_recovery as cli
-        from codex_plugin_scanner.guard.daemon import manager
+        from codex_plugin_scanner.guard import native_daemon_manage as manager
         from codex_plugin_scanner.guard.daemon.user_recovery import (
             ProcessIdentity,
             ProtectionResult,

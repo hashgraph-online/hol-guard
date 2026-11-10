@@ -42,7 +42,7 @@ from codex_plugin_scanner.guard.cli import extension_catalog_reads as reads
 from codex_plugin_scanner.guard.daemon import catalog_v2_client
 from codex_plugin_scanner.guard.daemon.catalog_v2_client import CatalogV2Client, extension_route
 from codex_plugin_scanner.guard.daemon.client import GuardSurfaceDaemonClient
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
 

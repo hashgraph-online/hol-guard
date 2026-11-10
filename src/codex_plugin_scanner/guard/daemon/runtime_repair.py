@@ -8,16 +8,16 @@ from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
 from ..cursor_hook_rebind import rebind_stale_cursor_hooks
-from .live_identity import verified_live_guard_daemon_identity
-from .manager import (
+from ..native_daemon_manage import (
     clear_guard_daemon_state,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
+from ..native_daemon_manage import guard_daemon_start_lock as _guard_daemon_start_lock
+from .live_identity import verified_live_guard_daemon_identity
 from .runtime_peer import daemon_state_matches_current_runtime
-from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 
 
 def _verified_live_runtime(

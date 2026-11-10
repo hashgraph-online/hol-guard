@@ -626,7 +626,8 @@ def test_daemon_refresh_script_retries_a_retirement_timeout(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import manager, runtime_peer
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
+    from codex_plugin_scanner.guard.daemon import runtime_peer
 
     context = _context(tmp_path)
     context.home_dir.mkdir(parents=True)

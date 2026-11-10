@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
     from ..daemon import GuardDaemonHookFailureKind
-    from ..daemon.manager import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
+    from ..native_daemon_manage import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
     from ._commands_shared import _now
     from .commands_support_connect import _guard_service_runtime_profile
     from .commands_support_interaction import _emit, _resolve_cisco_scan_options
@@ -198,8 +198,10 @@ def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str,
 
 def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     from codex_plugin_scanner.version import __version__
-    from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
-    from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_daemon_lifecycle_events
+    from codex_plugin_scanner.guard.native_daemon_manage import (
+        load_authenticated_daemon_state,
+        load_daemon_lifecycle_events,
+    )
 
     running = False
     port: int | None = None

@@ -17,8 +17,8 @@ from codex_plugin_scanner.guard.daemon.client import (
     GuardDaemonResponseSchemaError,
     GuardSurfaceDaemonClient,
 )
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.managed_controls.feature_flags import GUARD_EXTENSION_CATALOG_SYNC_V1
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime import extension_control_limits as limits_module
 from codex_plugin_scanner.guard.runtime import managed_controls_sync, runner
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
