@@ -60,9 +60,6 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    # Hold the native hook edge unavailable so the burst exercises storage
-    # contention rather than real native review latency.
-    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
     daemon.start()
     # Route policy is answered by the resident, which needs the home's verifier
     # key (provisioned through the store) and a started stream. Establish both

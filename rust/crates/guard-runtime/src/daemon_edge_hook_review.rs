@@ -42,7 +42,7 @@ const REFERENCE_CODE: &str = "invalid_hook_payload_reference";
 /// under its own setup budget.
 const READINESS_WAIT: Duration = Duration::from_secs(60);
 /// How long past its deadline a hook still waits for a review to finish.
-const LATE_ANSWER_GRACE: Duration = Duration::from_secs(5);
+const LATE_ANSWER_GRACE: Duration = Duration::from_millis(400);
 
 /// `CHALLENGE_HOOK_PATHS`: the hooks only an identity proof admits.
 const CHALLENGE_PATHS: [&str; 2] = ["/v1/hooks/codex", "/v1/hooks/claude-code"];

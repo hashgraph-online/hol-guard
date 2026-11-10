@@ -364,10 +364,38 @@ impl NativeReads {
     /// `store_call` for a write: `Err(true)` when the call failed after its
     /// write committed, which the daemon must not repeat.
     fn store_write(&self, config: &ReadConfig, method: &str, args: Value) -> Result<Value, bool> {
+        self.store_within(config, method, args, config.busy_timeout_ms)
+    }
+
+    /// `store_call` waiting at most `busy_ms` for a locked store, for a
+    /// health read that must answer while the store is held.
+    pub(super) fn store_read_within(
+        &self,
+        config: &ReadConfig,
+        method: &str,
+        args: Value,
+        busy_ms: u64,
+    ) -> Option<Value> {
+        self.store_within(
+            config,
+            method,
+            args,
+            busy_ms.clamp(1, config.busy_timeout_ms.max(1)),
+        )
+        .ok()
+    }
+
+    fn store_within(
+        &self,
+        config: &ReadConfig,
+        method: &str,
+        args: Value,
+        busy_timeout_ms: u64,
+    ) -> Result<Value, bool> {
         let Value::Object(args) = args else {
             return Err(false);
         };
-        let wait = Duration::from_millis(config.busy_timeout_ms);
+        let wait = Duration::from_millis(busy_timeout_ms);
         let _gate =
             crate::hook_evidence_store_gate::hold_storage_gate(Path::new(&config.guard_home), wait)
                 .map_err(|_| false)?;
@@ -381,7 +409,7 @@ impl NativeReads {
             guard_home: config.guard_home.clone(),
             method: method.to_owned(),
             source: config.source.clone(),
-            busy_timeout_ms: config.busy_timeout_ms,
+            busy_timeout_ms,
             args,
         };
         let (outcome, committed) = crate::guard_store_op::evaluate_committing(&request);

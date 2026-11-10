@@ -148,6 +148,13 @@ pub(in crate::daemon_edge) fn refusal(
             .single_header("Origin")
             .map(|_| Refusal::ForbiddenOrigin);
     }
+    // A query token is refused before any credential is read.
+    if request.method == "GET"
+        && refuses_query_token(request.path)
+        && super::discovery::query_names_token(request.query)
+    {
+        return Some(Refusal::QueryToken);
+    }
     if request.has_header("X-Guard-Dashboard-Session")
         || request.has_header("Authorization")
         || request.has_header("X-Guard-Daemon-Proof")

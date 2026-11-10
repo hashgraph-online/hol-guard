@@ -443,7 +443,7 @@ fn session_allows_with(
     origin: Option<&str>,
     payload: Option<&DaemonSessionPayloadV1>,
 ) -> bool {
-    if !session_path(request.method, request.path) {
+    if !session_path(request.method, request.path) && !session_may_read_payload(request) {
         return false;
     }
     let Some(candidates) = session_candidates(request) else {
@@ -477,7 +477,7 @@ fn session_allows_with(
         else {
             return false;
         };
-        if consume_nonce.is_some_and(|nonce| !consume_session_nonce(&nonce)) {
+        if allowed && consume_nonce.is_some_and(|nonce| !consume_session_nonce(&nonce)) {
             return false;
         }
         allowed

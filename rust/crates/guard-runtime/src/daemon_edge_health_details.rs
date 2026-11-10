@@ -23,19 +23,27 @@ const CONTROL_LIMIT: u64 = 8;
 const CRITICAL_LIMIT: u64 = 8;
 /// `REPAIR_SELF_CHECK_KEY`, which the worker host publishes its last run to.
 const REPAIR_SELF_CHECK_KEY: &str = "daemon_repair_self_check_status";
+/// How long each details read waits for a locked store.
+const HEALTH_STORE_BUSY_MS: u64 = 200;
 
-/// The details body, or `None` when a store read fails and the request is
-/// left to the daemon's refusal path.
+/// The details body, or `None` before the daemon has published its state,
+/// when the request is left to the daemon's refusal path.
 pub(super) fn respond(config: &ReadConfig, reads: &NativeReads) -> Option<Value> {
     let state = reads.published_state()?;
-    let store = |method: &str, args: Value| reads.store_call(config, method, args);
-    let receipts = store("count_receipts", json!({}))?;
+    // A held store must not hold the health answer: each read waits briefly
+    // and reports null when the store stays locked.
+    let store = |method: &str, args: Value| {
+        reads.store_read_within(config, method, args, HEALTH_STORE_BUSY_MS)
+    };
+    let receipts = store("count_receipts", json!({})).unwrap_or(Value::Null);
     let pending = store(
         "count_approval_requests",
         json!({ "status": "pending", "exclude_watch_only": false }),
-    )?;
-    let tables = store("list_table_names", json!({}))?;
-    let activity = store("get_command_activity_persistence_health", json!({}))?;
+    )
+    .unwrap_or(Value::Null);
+    let tables = store("list_table_names", json!({})).unwrap_or(Value::Null);
+    let activity =
+        store("get_command_activity_persistence_health", json!({})).unwrap_or(Value::Null);
     let repair_self_check = store(
         "get_sync_payload",
         json!({ "state_key": REPAIR_SELF_CHECK_KEY }),
