@@ -168,7 +168,7 @@ pub(in crate::daemon_edge) fn read(
     Some(placements(
         flag(&settings, DISCOVERY_ENABLED),
         fetch_placements,
-        now_wall_ms(),
+        now_wall_ms,
     ))
 }
 
@@ -285,16 +285,18 @@ pub(in crate::daemon_edge) type Exchange =
     Result<(u16, Option<String>, Option<String>, Vec<u8>), &'static str>;
 
 /// `discovery_placement_projection` after the gates, with the upstream read
-/// supplied by `fetcher`.
+/// supplied by `fetcher`. The wall clock is read once the read is done, so
+/// the time spent fetching counts against the lease.
 pub(in crate::daemon_edge) fn placements(
     policy_allowed: bool,
     fetcher: impl FnOnce(Option<&str>) -> Exchange,
-    now_wall_ms: i64,
+    now_wall_ms: impl FnOnce() -> i64,
 ) -> Answer {
     let snapshot = match snapshot(fetcher) {
         Ok(snapshot) => snapshot,
         Err((status, code)) => return error(status, code),
     };
+    let now_wall_ms = now_wall_ms();
     let Ok(body) = String::from_utf8(snapshot.body) else {
         return error(503, TRANSPORT_FAILED);
     };

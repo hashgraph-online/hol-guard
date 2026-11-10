@@ -127,7 +127,7 @@ fn placements_cache_and_upstream_failures() {
     ];
     for (exchange, status, code) in cases {
         reset_cache_for_tests();
-        let answer = placements(true, move |_| exchange, 0);
+        let answer = placements(true, move |_| exchange, || 0);
         assert_eq!(answer, Answer::Json(status, json!({"error": code})));
     }
     reset_cache_for_tests();
@@ -139,9 +139,9 @@ fn placements_cache_and_upstream_failures() {
             assert_eq!(etag, None);
             Ok((200, Some("\"e\"".to_owned()), None, b"not json".to_vec()))
         },
-        0,
+        || 0,
     );
-    let again = placements(true, |_| panic!("a fresh snapshot is not refetched"), 0);
+    let again = placements(true, |_| panic!("a fresh snapshot is not refetched"), || 0);
     assert_eq!(first, again);
     assert_eq!(seen.get(), 1);
     assert!(matches!(

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
-from codex_plugin_scanner.guard.daemon.manager import guard_daemon_process_count
+from codex_plugin_scanner.guard.daemon.manager import _guard_daemon_process_inventory_for_guard_home
 from scripts.native_slo_adapter import process_resources
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -324,7 +324,8 @@ def settle_stress_runtime(execution: StressExecution, guard_home: Path, settle_s
 def finalize_stress_runtime(execution: StressExecution, guard_home: Path) -> None:
     sample_stress_runtime(execution)
     update_pid_stability(execution, guard_home)
-    execution.process_count = guard_daemon_process_count(guard_home)
+    inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
+    execution.process_count = None if inventory is None else len(inventory)
     record_resources(execution, process_tree_resources(execution.initial_pid))
 
 

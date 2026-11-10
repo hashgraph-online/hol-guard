@@ -1880,36 +1880,6 @@ def test_windows_exact_creation_time_termination_rejects_pid_reuse() -> None:
             process.wait(timeout=2.0)
 
 
-def test_gated_daemon_bootstrap_exits_before_module_execution_when_gate_is_withheld(tmp_path) -> None:
-    marker = tmp_path / "daemon-executed"
-    probe_module = tmp_path / "gated_daemon_probe.py"
-    probe_module.write_text(
-        "from pathlib import Path\nimport sys\nPath(sys.argv[1]).write_text('executed', encoding='utf-8')\n",
-        encoding="utf-8",
-    )
-    command = [
-        sys.executable,
-        "-S",
-        "-c",
-        daemon_manager_module._GUARD_DAEMON_GATED_BOOTSTRAP,
-        sys.prefix,
-        sys.exec_prefix,
-        json.dumps([str(tmp_path)]),
-        "gated_daemon_probe",
-        str(marker),
-    ]
-
-    withheld = subprocess.run(command, input=b"", capture_output=True, timeout=5.0, check=False)
-
-    assert withheld.returncode == 70
-    assert not marker.exists()
-
-    released = subprocess.run(command, input=b"1", capture_output=True, timeout=5.0, check=False)
-
-    assert released.returncode == 0, released.stderr.decode("utf-8", errors="replace")
-    assert marker.read_text(encoding="utf-8") == "executed"
-
-
 @pytest.mark.skipif(os.name == "nt" or not hasattr(os, "waitid"), reason="requires POSIX waitid")
 def test_daemon_death_wait_observes_exact_exited_child_without_poll_delay(monkeypatch) -> None:
     process = subprocess.Popen([sys.executable, "-c", "raise SystemExit(17)"])

@@ -525,11 +525,14 @@ fn exchange(
         }
         builder = builder.header(name.as_str(), value.as_str());
     }
-    let request = builder
-        .body(body.unwrap_or_default())
-        .map_err(|_| Box::new(error_outcome("request")))?;
-    let mut response = agent
-        .run(request)
+    // A request without a body carries no `Content-Length`, as Python's
+    // urllib sends it; some origins refuse a GET that names a zero length.
+    let sent = match body {
+        Some(body) => builder.body(body).map(|request| agent.run(request)),
+        None => builder.body(()).map(|request| agent.run(request)),
+    };
+    let mut response = sent
+        .map_err(|_| Box::new(error_outcome("request")))?
         .map_err(|error| Box::new(map_error(error)))?;
     let status = response.status().as_u16();
     let mut headers = BTreeMap::new();
