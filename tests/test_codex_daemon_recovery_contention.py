@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -26,10 +28,10 @@ def test_concurrent_daemon_start_commands_do_not_wait_behind_active_recovery(tmp
     home_dir.mkdir()
     package_root = Path(launch_runtime.__file__).resolve().parents[2]
     command = isolated_daemon_start_command(sys.executable, package_root, guard_home, home_dir)
-    recovery_token = daemon_manager._claim_guard_daemon_recovery_reservation(  # pyright: ignore[reportPrivateUsage]
-        guard_home
+    # A live recovery reservation, as a scheduled worker leaves it.
+    (guard_home / "daemon-recovery-reservation.json").write_text(
+        json.dumps({"created_at": time.time(), "token": "f" * 32}), encoding="utf-8"
     )
-    assert recovery_token is not None
 
     def run_start_command():
         return run_isolated_hook_process(
@@ -50,10 +52,7 @@ def test_concurrent_daemon_start_commands_do_not_wait_behind_active_recovery(tmp
         ):
             results = list(executor.map(lambda _index: run_start_command(), range(4)))
     finally:
-        daemon_manager.clear_guard_daemon_recovery_reservation(
-            guard_home,
-            token=recovery_token,
-        )
+        (guard_home / "daemon-recovery-reservation.json").unlink(missing_ok=True)
 
     diagnostics = [
         (result.returncode, result.timed_out, result.containment_failed, result.stdout) for result in results

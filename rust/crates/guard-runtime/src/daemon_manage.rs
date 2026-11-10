@@ -28,6 +28,8 @@ mod ensure;
 mod host;
 #[path = "daemon_manage_records.rs"]
 mod records;
+#[path = "daemon_manage_recover.rs"]
+mod recover;
 #[path = "daemon_manage_retire.rs"]
 mod retire;
 #[cfg(all(test, unix))]
@@ -81,6 +83,14 @@ struct Request {
     launcher_env: BTreeMap<String, String>,
     #[serde(default)]
     env_port: Option<String>,
+    #[serde(default)]
+    failure_kind: Option<String>,
+    #[serde(default)]
+    reservation: Option<String>,
+    #[serde(default)]
+    worker_env: BTreeMap<String, String>,
+    #[serde(default)]
+    worker_cwd: Option<String>,
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -96,8 +106,10 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     if bytes.len() as u64 > MAX_REQUEST_BYTES {
         return Err("daemon_manage_request_too_large".to_owned());
     }
-    let request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    let answer = answer(&request)?;
+    let raw: Map<String, Value> = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    let request: Request =
+        serde_json::from_value(Value::Object(raw.clone())).map_err(|_| invalid())?;
+    let answer = answer(&request, &raw)?;
     serde_json::to_vec(&answer).map_err(|_| "daemon_manage_response_unencodable".to_owned())
 }
 
@@ -105,7 +117,7 @@ fn invalid() -> String {
     "daemon_manage_request_invalid".to_owned()
 }
 
-fn answer(request: &Request) -> Result<Value, String> {
+fn answer(request: &Request, raw: &Map<String, Value>) -> Result<Value, String> {
     if request.schema != SCHEMA
         || !request.guard_home.is_absolute()
         || request
@@ -140,8 +152,9 @@ fn answer(request: &Request) -> Result<Value, String> {
             Ok(json!({"retired": retire::retire_all(&caller, request.keep_port, deadline)}))
         }
         "retirement_complete" => Ok(json!({"complete": retire::retirement_is_complete(&caller)})),
+        "posture" => Ok(json!({"posture": recover::posture(&caller.guard_home)})),
         "repair_locator" => Ok(repair_locator(&caller, deadline)),
-        "ensure" => {
+        "ensure" | "recover" | "schedule_recovery" => {
             let ensure = ensure::Ensure {
                 launch: &request.launch,
                 serve_executable: request.serve_executable.as_deref(),
@@ -155,9 +168,26 @@ fn answer(request: &Request) -> Result<Value, String> {
                 launcher_env: &request.launcher_env,
                 env_port: request.env_port.as_deref(),
             };
-            Ok(match ensure::ensure(&caller, &ensure, deadline) {
-                Ok(url) => json!({"url": url}),
-                Err(failure) => failure.reply(),
+            let failure_kind = request.failure_kind.as_deref().unwrap_or("");
+            Ok(match request.op.as_str() {
+                "recover" => {
+                    let answer = recover::recover(&caller, &ensure, failure_kind, deadline);
+                    if let Some(key) = request.reservation.as_deref() {
+                        recover::clear(&caller, key);
+                    }
+                    answer
+                }
+                "schedule_recovery" => recover::schedule(
+                    &caller,
+                    failure_kind,
+                    raw.clone(),
+                    &request.worker_env,
+                    request.worker_cwd.as_deref(),
+                ),
+                _ => match ensure::ensure(&caller, &ensure, deadline) {
+                    Ok(url) => json!({"url": url}),
+                    Err(failure) => failure.reply(),
+                },
             })
         }
         _ => Err(invalid()),

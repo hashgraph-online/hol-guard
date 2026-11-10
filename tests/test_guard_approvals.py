@@ -40,7 +40,6 @@ from codex_plugin_scanner.guard.models import (
 )
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.native_runtime_fixtures import patch_popen_past_native_runtime
 from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _AGENT_CONTEXT_ENV_MARKERS = (
@@ -1571,50 +1570,6 @@ class TestGuardApprovals:
         )
 
         assert resolved is None
-
-    def test_ensure_guard_daemon_uses_stable_default_port(self, tmp_path, monkeypatch):
-        launched_commands: list[list[str]] = []
-        guard_home = tmp_path / "guard-home"
-        expected_port = daemon_manager_module._configured_port(guard_home)
-        responses = iter([None, None, f"http://127.0.0.1:{expected_port}"])
-
-        class FakeProcess:
-            def poll(self):
-                return None
-
-        monkeypatch.delenv("GUARD_DAEMON_PORT", raising=False)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "load_guard_daemon_url",
-            lambda _guard_home: next(responses),
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_reap_stale_ephemeral_guard_daemons",
-            lambda *_args, **_kwargs: None,
-        )
-        monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
-        monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        patch_popen_past_native_runtime(
-            monkeypatch,
-            lambda command, **_kwargs: launched_commands.append(command) or FakeProcess(),
-        )
-
-        url = daemon_manager_module.ensure_guard_daemon(guard_home)
-
-        assert url == f"http://127.0.0.1:{expected_port}"
-        assert launched_commands
-        assert launched_commands[0][-2:] == ["--port", str(expected_port)]
 
     def test_load_guard_daemon_url_rejects_stale_runtime_without_connect_state_support(self, tmp_path, monkeypatch):
         guard_home = tmp_path / "guard-home"

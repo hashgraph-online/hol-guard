@@ -598,48 +598,6 @@ def test_maintenance_thread_start_failure_clears_single_flight_state(
         assert daemon_manager_module._LAST_EPHEMERAL_REAP_AT == 0.0
 
 
-def test_hook_failure_preserves_an_older_authenticated_daemon(tmp_path, monkeypatch) -> None:
-    guard_home = tmp_path / "guard-home"
-    old_state = {"started_at": "2020-01-01T00:00:00+00:00"}
-    retired: list[Path] = []
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_lock", lambda _home, **_kwargs: nullcontext())
-    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: old_state)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5474")
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "retire_all_guard_daemons_for_home",
-        lambda home: retired.append(home) or pytest.fail("hook traffic must not retire an authenticated daemon"),
-    )
-    monkeypatch.setattr(daemon_manager_module, "guard_daemon_retirement_is_complete", lambda _home: True)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "ensure_guard_daemon",
-        lambda _home, *, home_dir=None, **_kwargs: "http://127.0.0.1:5475",
-    )
-
-    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(guard_home)
-
-    assert recovered == "http://127.0.0.1:5474"
-    assert retired == []
-
-
-def test_hook_failure_preserves_a_concurrently_started_replacement(tmp_path, monkeypatch) -> None:
-    guard_home = tmp_path / "guard-home"
-    recent_state = {"started_at": datetime.now(timezone.utc).isoformat()}
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_lock", lambda _home, **_kwargs: nullcontext())
-    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: recent_state)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:5475")
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "retire_all_guard_daemons_for_home",
-        lambda _home: pytest.fail("recent replacement must not be retired"),
-    )
-
-    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(guard_home)
-
-    assert recovered == "http://127.0.0.1:5475"
-
-
 def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
     guard_home = tmp_path / "guard-home"
 
@@ -1135,38 +1093,6 @@ def test_guard_daemon_command_matches_accepts_console_script_shortcuts() -> None
     assert _inspect_command(
         "/Users/test/.local/bin/plugin-guard daemon --serve --guard-home /tmp/guard-home --port 5474"
     )["matches"]
-
-
-def test_ensure_guard_daemon_retires_duplicate_ports_for_same_guard_home(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    killed: list[int] = []
-    retired = threading.Event()
-
-    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
-    monkeypatch.setattr(
-        daemon_manager_module, "load_guard_daemon_url", lambda _guard_home, **kwargs: "http://127.0.0.1:5474"
-    )
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_running_guard_daemon_processes_for_guard_home",
-        lambda _guard_home, **kwargs: [(111, 5474), (222, 5475)],
-    )
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda pid: f"linux:duplicate-{pid}")
-    monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
-
-    def retire(pid: int, *, expected_guard_home=None, **_identity) -> bool:
-        del expected_guard_home
-        killed.append(pid)
-        retired.set()
-        return True
-
-    monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", retire)
-
-    url = daemon_manager_module.ensure_guard_daemon(guard_home)
-
-    assert url == "http://127.0.0.1:5474"
-    assert retired.wait(timeout=1.0)
-    assert killed == [222]
 
 
 def test_ensure_guard_daemon_expired_outer_deadline_has_no_launch_or_home_mutation(tmp_path, monkeypatch):

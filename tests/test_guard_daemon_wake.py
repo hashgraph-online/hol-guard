@@ -72,60 +72,6 @@ def _make_start_mock(guard_home: Path, port: int = 5700):
 class TestNoDashboardApprovalURLWake:
     """L314: daemon must start and expose the approval URL with no browser open."""
 
-    def test_ensure_guard_daemon_does_not_spawn_second_daemon_when_already_running(self, tmp_path, monkeypatch) -> None:
-        """If the daemon state file is already present and healthy, ensure_guard_daemon
-        must return the existing URL without spawning a new process."""
-        guard_home = tmp_path / "guard-home"
-        port = 5701
-        spawn_calls: list[str] = []
-
-        monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "load_guard_daemon_url",
-            lambda _gh: f"http://127.0.0.1:{port}",
-        )
-        monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
-
-        def _boom(*_args, **_kwargs):
-            spawn_calls.append("spawn")
-            raise AssertionError("daemon must not be spawned when already running")
-
-        patch_popen_past_native_runtime(monkeypatch, _boom)
-
-        url = daemon_manager_module.ensure_guard_daemon(guard_home)
-
-        assert url == f"http://127.0.0.1:{port}"
-        assert spawn_calls == []
-
-    def test_approval_url_has_expected_structure(self, tmp_path, monkeypatch) -> None:
-        """The returned approval URL must be a valid localhost HTTP URL."""
-        guard_home = tmp_path / "guard-home"
-        port = 5702
-
-        monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "_running_guard_daemon_processes_for_guard_home",
-            lambda _guard_home: [],
-        )
-        monkeypatch.setattr(
-            daemon_manager_module,
-            "load_guard_daemon_url",
-            lambda _gh: f"http://127.0.0.1:{port}",
-        )
-
-        url = daemon_manager_module.ensure_guard_daemon(guard_home)
-
-        assert url.startswith("http://"), "URL must be HTTP"
-        assert "127.0.0.1" in url or "localhost" in url, "URL must be local"
-        assert str(port) in url, "URL must include the daemon port"
-
     def test_approval_url_exposed_without_browser_open(self, tmp_path, monkeypatch) -> None:
         """Guard must provide an approval URL for CLI/headless consumers
         even when the shared browser opener is never called."""

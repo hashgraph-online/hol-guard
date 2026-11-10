@@ -149,6 +149,38 @@ pub(super) fn ensure(
     locked(&context)
 }
 
+/// `authenticated_live_current_daemon_url`: the URL of a running current
+/// daemon whatever its health, so recovery from overload never restarts a
+/// daemon that is only busy. A recorded daemon that is gone is journalled.
+pub(super) fn running_current_url(caller: &Caller, request: &Ensure<'_>) -> Option<String> {
+    let current = request.launch.get("state")?.as_object()?.clone();
+    let context = Context {
+        caller,
+        request,
+        deadline: Deadline(None),
+        current,
+    };
+    let home = context.home();
+    let (state, _) = load_authenticated_daemon_identity(home)?;
+    let pid = int(&state, "pid").filter(|pid| *pid > 0)?;
+    if !host::pid_is_running(pid) {
+        crate::daemon_edge::lifecycle::record_for_pid(
+            home,
+            u32::try_from(pid).unwrap_or(0),
+            "death_observed",
+            Some("process_missing"),
+            text(&state, "state_id"),
+        );
+        return None;
+    }
+    let port = int(&state, "port").filter(|port| (1..=65_535).contains(port))?;
+    text(&state, "state_id").filter(|id| !id.is_empty())?;
+    if !runtime_matches(&context, &state) || !daemon_pid_matches_command(pid, home) {
+        return None;
+    }
+    Some(format!("http://127.0.0.1:{port}"))
+}
+
 fn locked(context: &Context<'_>) -> Result<String, Failure> {
     let caller = context.caller;
     let home = context.home().to_path_buf();

@@ -166,3 +166,83 @@ fn the_edge_repairs_a_home_without_retiring_itself() {
     );
     assert_eq!(repair_from_daemon(Path::new("relative"), "/home"), None);
 }
+
+fn ask_with(home: &Path, op: &str, extra: Value) -> Value {
+    let mut request = json!({
+        "schema": "daemon-manage.v1",
+        "op": op,
+        "guard_home": home,
+        "implicit_home": "/nonexistent-implicit-home/.hol-guard",
+        "budget_ms": 2000,
+    });
+    for (key, value) in extra.as_object().unwrap() {
+        request[key] = value.clone();
+    }
+    let bytes = run_command(request.to_string().as_bytes()).unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[test]
+fn recovery_posture_follows_watch_and_harness_overrides() {
+    let home = private_home();
+    assert_eq!(ask(home.path(), "posture").unwrap()["posture"], "on");
+    write_private(
+        &home.path().join("config.toml"),
+        "protection_posture = \"watch\"\n",
+    );
+    assert_eq!(ask(home.path(), "posture").unwrap()["posture"], "off");
+    write_private(
+        &home.path().join("config.toml"),
+        "protection_posture = \"watch\"\n[harness_postures]\ncodex = \"protected\"\n",
+    );
+    assert_eq!(ask(home.path(), "posture").unwrap()["posture"], "on");
+}
+
+#[test]
+fn recovery_rejects_an_unknown_failure_kind() {
+    let home = private_home();
+    for op in ["recover", "schedule_recovery"] {
+        let answer = ask_with(home.path(), op, json!({"failure_kind": "crash"}));
+        assert_eq!(answer["kind"], "value", "{op}");
+    }
+}
+
+#[test]
+fn scheduling_is_skipped_while_protection_is_off() {
+    let home = private_home();
+    write_private(&home.path().join("config.toml"), "mode = \"observe\"\n");
+    let answer = ask_with(
+        home.path(),
+        "schedule_recovery",
+        json!({"failure_kind": "overload"}),
+    );
+    assert_eq!(answer["scheduled"], false);
+    assert!(!home
+        .path()
+        .join("daemon-recovery-reservation.json")
+        .exists());
+}
+
+#[test]
+fn a_reservation_is_cleared_only_by_its_holder() {
+    let home = private_home();
+    let caller = super::host::Caller {
+        guard_home: home.path().to_path_buf(),
+        implicit_home: String::new(),
+        own_pid: i64::from(std::process::id()),
+        parent_pid: 0,
+        frozen_runtime: false,
+        frozen_parent_trusted: false,
+        executable_name: None,
+    };
+    let path = home.path().join("daemon-recovery-reservation.json");
+    let field = format!("{}{}", "tok", "en");
+    write_private(
+        &path,
+        &json!({"created_at": 1.0, field: "a".repeat(32)}).to_string(),
+    );
+    assert!(!super::recover::clear(&caller, &"b".repeat(32)));
+    assert!(path.exists());
+    assert!(super::recover::clear(&caller, &"a".repeat(32)));
+    assert!(!path.exists());
+}

@@ -89,7 +89,6 @@ _GUARD_DAEMON_LAUNCH_NONCE_ENV = "HOL_GUARD_DAEMON_LAUNCH_NONCE"
 _GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH = 64
 _GUARD_DAEMON_START_PROGRESS_FILE = "daemon-start-progress.json"
 _GUARD_DAEMON_WAKE_RESERVATION_FILE = "daemon-wake-reservation.json"
-_GUARD_DAEMON_RECOVERY_RESERVATION_FILE = "daemon-recovery-reservation.json"
 _GUARD_DAEMON_OWNER_LOCK_FILE = "daemon-owner.lock"
 _GUARD_DAEMON_RECOVERY_LOCK_FILE = "daemon-recovery.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
@@ -547,55 +546,26 @@ def _ensure_guard_daemon_body(
 ) -> str:
     """Reuse, adopt or launch the home's daemon through `daemon-manage ensure`."""
 
-    from . import start_lock
-    from .native_serve import launch_configuration, native_serve_executable
-
     if background_maintenance:
         _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
-    serve_executable = native_serve_executable(guard_home) if executable is None else None
-    if executable is None and serve_executable is None:
-        raise RuntimeError("Guard daemon requires the native runtime.")
-    if executable is not None:
-        launch_executable = Path(executable)
-        if not launch_executable.is_absolute() or not launch_executable.is_file():
-            raise RuntimeError("Frozen Guard daemon requires the signed Guard executable.")
-        executable = launch_executable.resolve(strict=True)
-    trusted_home = _trusted_daemon_home(home_dir)
-    launch = launch_configuration(guard_home, 0, user_home=trusted_home)
-    launch.pop("launch_nonce", None)
-    lock_key = str(guard_home.resolve())
-    start_lock_held = any(key == lock_key and depth > 0 for (_thread, key), depth in start_lock._THREAD_DEPTHS.items())
     answer = _daemon_manage(
         "ensure",
         guard_home,
         deadline=start_deadline,
         allow_windows_breakaway=True,
-        extra={
-            "launch": launch,
-            "serve_executable": str(serve_executable) if serve_executable is not None else None,
-            "executable": str(executable) if executable is not None else None,
-            "home_dir": str(trusted_home),
-            "launch_cwd": str(trusted_home),
-            "preferred_port": preferred_port if isinstance(preferred_port, int) and preferred_port > 0 else None,
-            "background_maintenance": background_maintenance,
-            "allow_windows_job_breakaway": allow_windows_job_breakaway,
-            "start_lock_held": start_lock_held,
-            "launcher_env": _daemon_launcher_env(home_dir=home_dir, guard_home=guard_home, executable=executable),
-            "env_port": os.environ.get("GUARD_DAEMON_PORT"),
-        },
+        extra=_ensure_request_extra(
+            guard_home,
+            home_dir=home_dir,
+            preferred_port=preferred_port,
+            allow_windows_job_breakaway=allow_windows_job_breakaway,
+            executable=executable,
+            background_maintenance=background_maintenance,
+        ),
     )
-    if answer is None:
-        if time.monotonic() >= start_deadline:
-            raise TimeoutError("Guard daemon operation deadline exceeded.")
-        raise RuntimeError("Guard daemon start requires the native runtime.")
-    url = answer.get("url")
-    if isinstance(url, str) and url:
-        if background_maintenance:
-            _schedule_duplicate_guard_daemon_retirement(guard_home)
-        return url
-    message = answer.get("error")
-    text = message if isinstance(message, str) and message else "Guard approval center did not start."
-    raise RuntimeError(text)
+    url = _daemon_url_from_answer(answer, start_deadline)
+    if background_maintenance:
+        _schedule_duplicate_guard_daemon_retirement(guard_home)
+    return url
 
 
 def _windows_daemon_creation_flags(*, allow_job_breakaway: bool) -> int:
@@ -639,14 +609,22 @@ def recover_guard_daemon_after_hook_failure(
     failure_kind: GuardDaemonHookFailureKind = "authenticated-control-plane-failure",
     recovery_lock_timeout_seconds: float | None = None,
 ) -> str:
-    from .recovery_lifecycle import recover_guard_daemon_after_hook_failure as recover
+    """Recover the home's daemon after a hook failure through `daemon-manage recover`."""
 
-    return recover(
-        guard_home,
-        home_dir=home_dir,
-        failure_kind=failure_kind,
-        recovery_lock_timeout_seconds=recovery_lock_timeout_seconds,
+    timeout = (
+        _default_guard_daemon_start_timeout()
+        if recovery_lock_timeout_seconds is None
+        else recovery_lock_timeout_seconds
     )
+    deadline = time.monotonic() + max(0.0, timeout)
+    answer = _daemon_manage(
+        "recover",
+        guard_home,
+        deadline=deadline,
+        allow_windows_breakaway=True,
+        extra={"failure_kind": failure_kind, **_ensure_request_extra(guard_home, home_dir=home_dir, recovery=True)},
+    )
+    return _daemon_url_from_answer(answer, deadline)
 
 
 def schedule_guard_daemon_recovery(
@@ -656,14 +634,90 @@ def schedule_guard_daemon_recovery(
     failure_kind: GuardDaemonHookFailureKind = "authenticated-control-plane-failure",
     executable: Path | None = None,
 ) -> None:
-    from .recovery_lifecycle import schedule_guard_daemon_recovery as schedule
+    """Hand recovery to a detached native worker through `daemon-manage schedule_recovery`.
 
-    schedule(
-        guard_home,
-        home_dir=home_dir,
-        failure_kind=failure_kind,
-        executable=executable,
-    )
+    `executable` is accepted for the frozen hook caller; the native worker
+    starts the daemon from the native runtime either way.
+    """
+
+    del executable
+    try:
+        trusted_home = _trusted_daemon_home(home_dir)
+        extra = _ensure_request_extra(guard_home, home_dir=home_dir, recovery=True)
+    except (OSError, RuntimeError, ValueError):
+        return
+    worker_deadline = time.monotonic() + _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS
+    with suppress(OSError, RuntimeError, ValueError):
+        _ = _daemon_manage(
+            "schedule_recovery",
+            guard_home,
+            deadline=worker_deadline,
+            allow_windows_breakaway=True,
+            extra={
+                "failure_kind": failure_kind,
+                "worker_env": extra["launcher_env"],
+                "worker_cwd": str(trusted_home),
+                **extra,
+            },
+        )
+
+
+def _ensure_request_extra(
+    guard_home: Path,
+    *,
+    home_dir: Path | None,
+    recovery: bool = False,
+    preferred_port: int | None = None,
+    allow_windows_job_breakaway: bool = False,
+    executable: Path | None = None,
+    background_maintenance: bool = True,
+) -> dict[str, object]:
+    """The launch configuration and environment `daemon-manage` starts a daemon with."""
+
+    from . import start_lock
+    from .native_serve import launch_configuration, native_serve_executable
+
+    serve_executable = native_serve_executable(guard_home) if executable is None else None
+    if executable is None and serve_executable is None:
+        raise RuntimeError("Guard daemon requires the native runtime.")
+    if executable is not None:
+        launch_executable = Path(executable)
+        if not launch_executable.is_absolute() or not launch_executable.is_file():
+            raise RuntimeError("Frozen Guard daemon requires the signed Guard executable.")
+        executable = launch_executable.resolve(strict=True)
+    trusted_home = _trusted_daemon_home(home_dir)
+    launch = launch_configuration(guard_home, 0, user_home=trusted_home)
+    launch.pop("launch_nonce", None)
+    lock_key = str(guard_home.resolve())
+    start_lock_held = any(key == lock_key and depth > 0 for (_thread, key), depth in start_lock._THREAD_DEPTHS.items())
+    return {
+        "launch": launch,
+        "serve_executable": str(serve_executable) if serve_executable is not None else None,
+        "executable": str(executable) if executable is not None else None,
+        "home_dir": str(trusted_home),
+        "launch_cwd": str(trusted_home),
+        "preferred_port": preferred_port if isinstance(preferred_port, int) and preferred_port > 0 else None,
+        "background_maintenance": background_maintenance,
+        "allow_windows_job_breakaway": (os.name == "nt") if recovery else allow_windows_job_breakaway,
+        "start_lock_held": start_lock_held,
+        "launcher_env": _daemon_launcher_env(home_dir=home_dir, guard_home=guard_home, executable=executable),
+        "env_port": os.environ.get("GUARD_DAEMON_PORT"),
+    }
+
+
+def _daemon_url_from_answer(answer: Mapping[str, object] | None, deadline: float) -> str:
+    if answer is None:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Guard daemon operation deadline exceeded.")
+        raise RuntimeError("Guard daemon start requires the native runtime.")
+    url = answer.get("url")
+    if isinstance(url, str) and url:
+        return url
+    message = answer.get("error")
+    text = message if isinstance(message, str) and message else "Guard approval center did not start."
+    if answer.get("kind") == "value":
+        raise ValueError(text)
+    raise RuntimeError(text)
 
 
 def retire_all_guard_daemons_for_home(
@@ -839,67 +893,17 @@ def clear_guard_daemon_wake_reservation(guard_home: Path, *, token: str) -> bool
     return _clear_reservation(guard_home, _guard_daemon_wake_reservation_path(guard_home), token)
 
 
-def _guard_daemon_recovery_reservation_path(guard_home: Path) -> Path:
-    return guard_home / _GUARD_DAEMON_RECOVERY_RESERVATION_FILE
+def guard_recovery_posture(guard_home: Path) -> str:
+    """Local protection for recovery: "on", "off" or "unknown" when unreadable.
 
+    Callers that perform a privileged mutation must refuse on "unknown".
+    """
 
-def _load_guard_daemon_recovery_reservation(guard_home: Path) -> dict[str, object] | None:
-    return _load_reservation(_guard_daemon_recovery_reservation_path(guard_home))
-
-
-def _claim_guard_daemon_recovery_reservation(guard_home: Path) -> str | None:
-    token = secrets.token_hex(16)
-    now = time.time()
-    _ensure_private_directory(guard_home)
-    with _guard_daemon_state_write_lock(guard_home):
-        existing = _load_guard_daemon_recovery_reservation(guard_home)
-        query = {"existing": _reservation_facts(existing), "now": now}
-        if not _lifecycle("recovery_claim", query, home=guard_home)["claim"]:
-            return None
-        _write_private_atomic_text(
-            _guard_daemon_recovery_reservation_path(guard_home),
-            json.dumps({"created_at": now, "token": token}, sort_keys=True),
-        )
-    return token
-
-
-def _bind_guard_daemon_recovery_reservation(
-    guard_home: Path,
-    *,
-    token: str,
-    pid: int,
-    process_creation_time: int | None = None,
-) -> bool:
-    if pid <= 0:
-        return False
-    with _guard_daemon_state_write_lock(guard_home):
-        reservation = _load_guard_daemon_recovery_reservation(guard_home)
-        if not isinstance(reservation, dict) or not secrets.compare_digest(
-            str(reservation.get("token", "")),
-            token,
-        ):
-            return False
-        payload = dict(reservation)
-        payload["pid"] = pid
-        process_command = _guard_daemon_command_for_pid(pid)
-        if process_command is not None:
-            payload["process_command_digest"] = hashlib.sha256(
-                process_command.encode("utf-8", errors="replace")
-            ).hexdigest()
-        process_start_marker = process_start_token(pid)
-        if process_start_marker is not None:
-            payload["process_start_marker"] = process_start_marker
-        if process_creation_time is not None:
-            payload["process_creation_time"] = process_creation_time
-        _write_private_atomic_text(
-            _guard_daemon_recovery_reservation_path(guard_home),
-            json.dumps(payload, sort_keys=True),
-        )
-    return True
-
-
-def clear_guard_daemon_recovery_reservation(guard_home: Path, *, token: str) -> bool:
-    return _clear_reservation(guard_home, _guard_daemon_recovery_reservation_path(guard_home), token)
+    answer = _daemon_manage("posture", guard_home)
+    posture = None if answer is None else answer.get("posture")
+    if posture == "on":
+        return "on"
+    return "off" if posture == "off" else "unknown"
 
 
 def schedule_guard_daemon_ensure(

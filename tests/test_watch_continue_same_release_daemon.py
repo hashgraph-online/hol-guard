@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import recovery_lifecycle
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     availability_harness_response,
     cursor_fallback_permission,
@@ -90,24 +89,6 @@ def test_authenticated_daemon_identity_rejects_missing_state_id(tmp_path, monkey
     )
 
     assert daemon_manager_module._load_authenticated_daemon_identity(guard_home) is None
-
-
-def test_recovery_does_not_reuse_live_daemon_without_state_id(tmp_path, monkeypatch) -> None:
-    guard_home = tmp_path / "guard"
-    state = {
-        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-        "pid": 12345,
-        "port": 4781,
-    }
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_state_matches_current_runtime", lambda _state: True)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_guard_daemon_pid_matches_command",
-        lambda _pid, *, expected_guard_home: expected_guard_home == guard_home,
-    )
-
-    assert recovery_lifecycle.authenticated_live_current_daemon_url(guard_home, state) is None
 
 
 def test_guard_daemon_state_matches_newer_windows_desktop_core_sidecar() -> None:

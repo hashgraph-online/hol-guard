@@ -694,11 +694,10 @@
           "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
           "src/codex_plugin_scanner/guard/daemon/live_identity.py",
           "src/codex_plugin_scanner/guard/daemon/policy_authority_client.py",
-          "src/codex_plugin_scanner/guard/daemon/recovery_lifecycle.py",
           "src/codex_plugin_scanner/guard/daemon/response_bounds.py",
           "src/codex_plugin_scanner/guard/daemon/runtime_peer.py"
         ],
-        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; recovery_lifecycle is invoked from daemon/manager on hook-failure recovery; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
+        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
       },
       {
         "path": [
@@ -909,6 +908,14 @@
           "src/codex_plugin_scanner/guard/cli/command_extension_listing.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the CLI reaches it lazily when `command extensions` runs, so the import graph counts it as lazy. It is transport and presentation only -- it asks the daemon for the delivered catalog over the same route `command controls` uses, falls back to the packaged catalog when nothing answers, and renders what comes back. The native read model still owns the catalog, so nothing here re-derives an extension."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/daemon/dashboard_bundle.py",
+          "src/codex_plugin_scanner/guard/daemon/native_edge_handshake.py",
+          "src/codex_plugin_scanner/guard/daemon/native_serve.py"
+        ],
+        "reason": "Reviewed: native serve glue: native_serve replaces `hol-guard daemon --serve` with the native daemon process; native_edge_handshake and dashboard_bundle build the startup line and bundle snapshot it is handed."
       }
     ],
     "tests": {
