@@ -13,7 +13,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use guard_contracts::{DaemonRoutePayloadV1, DaemonSessionClaimsV1};
+use guard_contracts::{
+    DaemonListFieldV1, DaemonRoutePayloadV1, DaemonSessionClaimsV1, DaemonSessionPayloadV1,
+};
 use hmac::{Hmac, Mac};
 use serde_json::{Map, Value};
 use sha2::Sha256;
@@ -57,35 +59,82 @@ pub(super) fn authorize(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
     session_allows(request, token, caller.cors_origin.as_deref()).then_some(caller)
 }
 
-/// A caller the daemon would let write: an allowed origin and its auth token.
-/// A dashboard session goes to the daemon, whose write verdicts can spend a
-/// nonce.
+/// A caller the daemon would let write: an allowed origin and its auth token,
+/// or a session whose verdict lets it use the path, as `_header_token_is_valid`
+/// decided; a nonce the verdict spends is honored once.
 pub(super) fn authorize_token(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
     let caller = allowed_origin(request)?;
-    token_matches(request, token)?.then_some(caller)
+    if token_matches(request, token)? {
+        return Some(caller);
+    }
+    session_allows(request, token, caller.cors_origin.as_deref()).then_some(caller)
 }
 
-/// A caller the daemon would let write: an allowed origin and either its
-/// auth token or a session Guard's own dashboard holds. A session opened from
-/// an approval link or for protection repair changes what the daemon's
-/// handlers decide, and a supply-chain session spends a nonce, so either goes
-/// to the daemon.
+/// A caller of a `POST` or `DELETE`: an allowed origin and either its auth
+/// token or a session whose verdict lets it write the path.
 pub(super) fn authorize_write(request: &Request<'_>, token: &[u8]) -> Option<Caller> {
     let caller = allowed_origin(request)?;
     if token_matches(request, token)? {
         return Some(caller);
     }
-    if !matches!(request.method, "POST" | "DELETE") || !session_path(request.method, request.path) {
+    (matches!(request.method, "POST" | "DELETE")
+        && session_allows(request, token, caller.cors_origin.as_deref()))
+    .then_some(caller)
+}
+
+/// A caller of an approval decision, and whether it holds a session opened
+/// from an approval link: such a session settles only its own request, as
+/// `_request_holds_link_bound_session` decided.
+pub(super) fn authorize_resolve(request: &Request<'_>, token: &[u8]) -> Option<(Caller, bool)> {
+    let caller = allowed_origin(request)?;
+    let bound = holds_link_bound_session(request, token);
+    if token_matches(request, token)? {
+        return Some((caller, bound));
+    }
+    if request.method != "POST" || !session_path(request.method, request.path) {
         return None;
     }
-    let candidates = session_candidates(request)?;
     let now = now_micros();
-    candidates
+    session_candidates(request)?
         .into_iter()
         .any(|candidate| {
-            verified_payload(candidate, token, now).is_some_and(|claims| dashboard_session(&claims))
+            let Some(claims) = verified_claims(candidate, token, now) else {
+                return false;
+            };
+            let verdict = session_authorize(&SessionRequest {
+                method: request.method,
+                path: request.path,
+                claims: &claims,
+                payload: None,
+                header_nonce: None,
+                request_origin: caller.cors_origin.as_deref(),
+            });
+            matches!(
+                verdict,
+                DaemonRoutePayloadV1::SessionAuthorize {
+                    allowed: true,
+                    consume_nonce: None,
+                }
+            )
         })
-        .then_some(caller)
+        .then_some((caller, bound))
+}
+
+/// `_request_holds_link_bound_session`: any presented session, refreshable,
+/// from a dashboard surface and bound to a request.
+fn holds_link_bound_session(request: &Request<'_>, token: &[u8]) -> bool {
+    let now = now_micros();
+    session_candidates(request).is_some_and(|candidates| {
+        candidates.into_iter().any(|candidate| {
+            signed_payload(candidate, token, now - REFRESH_GRACE_MICROS).is_some_and(|claims| {
+                text(&claims, "surface").is_some_and(|surface| {
+                    DASHBOARD_SURFACES.contains(&surface.as_str()) || surface == REPAIR_SURFACE
+                }) && claims
+                    .get("request_id")
+                    .is_some_and(|bound| !bound.is_null())
+            })
+        })
+    })
 }
 
 /// A caller of `POST /v1/initialize`, which the daemon opens to any allowed
@@ -215,14 +264,6 @@ fn signed_session(
     Some(format!("{SESSION_PREFIX}.{encoded}.{signature}"))
 }
 
-/// A session from Guard's own dashboard: a local surface, and no request it
-/// is bound to (the daemon treats any `request_id` that is not `null` as one).
-fn dashboard_session(claims: &Map<String, Value>) -> bool {
-    let surface = claims.get("surface").and_then(Value::as_str);
-    surface.is_some_and(|surface| DASHBOARD_SURFACES.contains(&surface))
-        && claims.get("request_id").is_none_or(Value::is_null)
-}
-
 /// A caller on a route the daemon opens to any allowed origin.
 pub(super) fn authorize_origin(request: &Request<'_>) -> Option<Caller> {
     allowed_origin(request)
@@ -319,7 +360,80 @@ pub(super) fn normalize_origin(raw: &str) -> Option<String> {
 /// Whether a dashboard session the request presents lets it read `path`
 /// without spending a nonce.
 pub(super) fn session_allows(request: &Request<'_>, token: &[u8], origin: Option<&str>) -> bool {
-    if !session_path("GET", request.path) {
+    session_allows_with(request, token, origin, None)
+}
+
+/// A caller of a `POST` whose session verdict reads the body, as
+/// `_header_token_is_valid(payload=...)` decided: the auth token, or a session
+/// the verdict lets write the path with this payload.
+pub(super) fn authorize_write_with(
+    request: &Request<'_>,
+    token: &[u8],
+    payload: &Map<String, Value>,
+) -> Option<Caller> {
+    let caller = allowed_origin(request)?;
+    if token_matches(request, token)? {
+        return Some(caller);
+    }
+    let payload = session_payload(payload);
+    session_allows_with(
+        request,
+        token,
+        caller.cors_origin.as_deref(),
+        Some(&payload),
+    )
+    .then_some(caller)
+}
+
+/// Whether a `POST` that failed the header check may still be admitted by a
+/// session verdict that reads its body.
+pub(super) fn session_may_read_payload(request: &Request<'_>) -> bool {
+    request.method == "POST" && session_path(request.method, request.path)
+}
+
+/// The body fields a session verdict reads, as `native_session_authorize`
+/// projected them.
+fn session_payload(payload: &Map<String, Value>) -> DaemonSessionPayloadV1 {
+    let text = |key: &str| {
+        payload
+            .get(key)
+            .and_then(Value::as_str)
+            .map(py_strip)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    let managers = match payload.get("managers") {
+        None | Some(Value::Null) => DaemonListFieldV1::Absent,
+        Some(Value::Array(items)) if items.iter().all(Value::is_string) => {
+            DaemonListFieldV1::Strings {
+                values: items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_owned))
+                    .collect(),
+            }
+        }
+        Some(_) => DaemonListFieldV1::Invalid,
+    };
+    DaemonSessionPayloadV1 {
+        harness: text("harness"),
+        workspace_id: text("workspace_id"),
+        workspace_id_camel: text("workspaceId"),
+        location_id: text("location_id"),
+        location_id_camel: text("locationId"),
+        daemon_origin: text("daemon_origin"),
+        daemon_origin_camel: text("daemonOrigin"),
+        dashboard_session_nonce: text("dashboard_session_nonce"),
+        managers,
+    }
+}
+
+fn session_allows_with(
+    request: &Request<'_>,
+    token: &[u8],
+    origin: Option<&str>,
+    payload: Option<&DaemonSessionPayloadV1>,
+) -> bool {
+    if !session_path(request.method, request.path) {
         return false;
     }
     let Some(candidates) = session_candidates(request) else {
@@ -339,21 +453,44 @@ pub(super) fn session_allows(request: &Request<'_>, token: &[u8], origin: Option
             return false;
         };
         let verdict = session_authorize(&SessionRequest {
-            method: "GET",
+            method: request.method,
             path: request.path,
             claims: &claims,
-            payload: None,
+            payload,
             header_nonce,
             request_origin: origin,
         });
-        matches!(
-            verdict,
-            DaemonRoutePayloadV1::SessionAuthorize {
-                allowed: true,
-                consume_nonce: None,
-            }
-        )
+        let DaemonRoutePayloadV1::SessionAuthorize {
+            allowed,
+            consume_nonce,
+        } = verdict
+        else {
+            return false;
+        };
+        if consume_nonce.is_some_and(|nonce| !consume_session_nonce(&nonce)) {
+            return false;
+        }
+        allowed
     })
+}
+
+/// `_consume_dashboard_session_nonce`: a nonce a session verdict spends is
+/// honored once in ten minutes.
+fn consume_session_nonce(nonce: &str) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{LazyLock, Mutex};
+    use std::time::{Duration, Instant};
+
+    static SEEN: LazyLock<Mutex<HashMap<String, Instant>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    let now = Instant::now();
+    let mut seen = SEEN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    seen.retain(|_, at| now.duration_since(*at) < Duration::from_secs(600));
+    if seen.contains_key(nonce) {
+        return false;
+    }
+    seen.insert(nonce.to_owned(), now);
+    true
 }
 
 /// The session tokens the daemon would try, in its order, or `None` when a

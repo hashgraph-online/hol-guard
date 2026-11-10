@@ -89,6 +89,7 @@ pub(in crate::daemon_edge) fn respond(
     path: &str,
     payload: &Map<String, Value>,
     local: SocketAddr,
+    resolve_scope_matches: bool,
     call: impl FnOnce(Value) -> Result<Value, CallError>,
 ) -> Option<(u16, Value, bool)> {
     let DaemonRoutePayloadV1::ResolveRequest {
@@ -118,9 +119,10 @@ pub(in crate::daemon_edge) fn respond(
         "scope_contract_version": scope_contract_version,
         "scope_contract_digest": scope_contract_digest,
         "payload": Value::Object(payload.clone()),
-        // A token caller holds no link-bound session, so its scoped decision
-        // also settles the other pending requests it matches.
-        "resolve_scope_matches": true,
+        // A session opened from an approval link settles only its own
+        // request; any other caller's scoped decision also settles the
+        // other pending requests it matches.
+        "resolve_scope_matches": resolve_scope_matches,
         "copy": copy_table(&action),
     });
     let answer = match call(args) {

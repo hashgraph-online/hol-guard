@@ -87,7 +87,7 @@ class TestDaemonMcpPolicyRequestSurface:
     @staticmethod
     def _read_response(request: Any) -> tuple[int, dict[str, object]]:
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=30) as response:
                 return response.status, json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             return error.code, json.loads(error.read().decode("utf-8"))

@@ -84,11 +84,16 @@ pub(super) fn respond(
     }
     if request.method == "POST" && resolve::owns(request.path) {
         let local = local?;
-        let caller = authorize_write(request, &config.token)?;
+        let (caller, link_bound) = super::super::auth::authorize_resolve(request, &config.token)?;
         let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
-        let (status, body, no_store) =
-            resolve::respond(request.path, &payload, local, resolve::call_library(config))?;
+        let (status, body, no_store) = resolve::respond(
+            request.path,
+            &payload,
+            local,
+            !link_bound,
+            resolve::call_library(config),
+        )?;
         return Some((status, body, caller.cors_origin, no_store));
     }
     if request.method == "POST" && route_calls::EXTENSION_CONTROL_WRITES.contains(&request.path) {
@@ -303,8 +308,18 @@ fn control_post(
     if request.method != "POST" || request.path.starts_with("/v1/hooks/") {
         return None;
     }
-    let caller = authorize_write(request, &config.token)?;
-    let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
+    // The header check runs before the body is read; only a session the
+    // verdict could admit on its payload waits for the body.
+    let header_caller = authorize_write(request, &config.token);
+    if header_caller.is_none() && !super::super::auth::session_may_read_payload(request) {
+        return None;
+    }
+    let origin = super::super::auth::authorize_origin(request)?;
+    let payload = read_body!(json_payload(request, body), origin.cors_origin.clone());
+    let caller = match header_caller {
+        Some(caller) => caller,
+        None => super::super::auth::authorize_write_with(request, &config.token, &payload)?,
+    };
     if request.path == "/v1/daemon/repair" {
         reads.report_activity();
         let answer = crate::daemon_manage::repair_from_daemon(

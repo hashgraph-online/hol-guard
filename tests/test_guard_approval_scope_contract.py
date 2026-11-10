@@ -1081,13 +1081,13 @@ def test_raced_completed_replay_maps_scope_contract_errors(
         reason=None,
         resolved_at="2026-07-19T00:00:01+00:00",
     )
-    original_get = store.get_approval_request
+    original_get = GuardStore.get_approval_request
     call_count = 0
 
-    def raced_get(request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
+    def raced_get(self: GuardStore, request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         nonlocal call_count
         call_count += 1
-        current = original_get(request_id, derive_scope=derive_scope)
+        current = original_get(self, request_id, derive_scope=derive_scope)
         if current is None:
             return None
         if call_count == 1:
@@ -1100,7 +1100,7 @@ def test_raced_completed_replay_maps_scope_contract_errors(
             }
         return current
 
-    monkeypatch.setattr(store, "get_approval_request", raced_get)
+    monkeypatch.setattr(GuardStore, "get_approval_request", raced_get)
     payload = _v2_selection(row, payload_scope) if use_contract else {"scope": payload_scope}
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

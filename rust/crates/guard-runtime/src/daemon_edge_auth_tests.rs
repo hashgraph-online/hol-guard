@@ -190,19 +190,24 @@ fn takes_a_dashboard_session_for_the_writes_it_opens() {
 }
 
 #[test]
-fn leaves_link_bound_repair_and_scoped_sessions_to_the_daemon() {
+fn writes_as_the_session_verdict_decides() {
     let path = "/v1/requests/req-1/approve";
-    for (key, value) in [
-        ("request_id", json!("req-1")),
-        ("request_id", json!("")),
-        ("surface", json!("protection-repair")),
-        ("surface", json!("package-firewall")),
-        ("aud", json!("someone-else")),
-        ("expires_at", json!("2000-01-01T00:00:00+00:00")),
+    for (key, value, allowed) in [
+        ("surface", json!("protection-repair"), false),
+        ("surface", json!("package-firewall"), false),
+        ("aud", json!("someone-else"), false),
+        ("expires_at", json!("2000-01-01T00:00:00+00:00"), false),
     ] {
         let mut claims = dashboard_claims();
         claims[key] = value;
-        assert!(!writes(&post_with(&claims, path)), "{key}");
+        assert_eq!(writes(&post_with(&claims, path)), allowed, "{key}");
+    }
+    // A session opened from an approval link decides its own request only.
+    for (bound, allowed) in [("req-1", true), ("req-2", false)] {
+        let mut claims = dashboard_claims();
+        claims["surface"] = json!("approval-center");
+        claims["request_id"] = json!(bound);
+        assert_eq!(writes(&post_with(&claims, path)), allowed, "{bound}");
     }
     let forged = session(&dashboard_claims(), b"another-daemon");
     assert!(!writes(&format!(

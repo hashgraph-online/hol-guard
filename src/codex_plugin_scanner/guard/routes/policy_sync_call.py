@@ -137,7 +137,11 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
     from ..approval_gate import ApprovalGateError, require_high_risk
     from ..approval_gate import input_from_mapping as gate_input_from_mapping
     from ..config import VALID_RECEIPT_REDACTION_LEVELS
-    from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION, PolicyBundleNativeUnavailableError
+    from ..native_policy_bundle import (
+        NATIVE_UNAVAILABLE_REJECTION,
+        PolicyBundleNativeError,
+        PolicyBundleNativeUnavailableError,
+    )
     from ..native_runner_authority import NativeRunnerAuthorityError
     from ..policy_bundle_activation import activate_with_reason
     from ..policy_bundle_delivery import policy_bundle_acknowledgement_payload
@@ -256,6 +260,8 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
             approval_gate_grant=grant,
             remote_write_authorized=True,
         )
+    except PolicyBundleNativeError:
+        raise
     except (ExtensionControlAuthorityError, ValueError):
         return _reply({"error": "managed_runtime_publish_failed"}, 503)
     if activated is None:
