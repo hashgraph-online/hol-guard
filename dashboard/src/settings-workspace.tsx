@@ -1321,18 +1321,8 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
   }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
 
   const handlePulseSettingsPayload = useCallback((payload: GuardSettingsPayload) => {
-    const normalizedPayload = normalizeSettingsPayload(payload);
-    const gate = normalizedPayload.settings.approval_gate;
-    setState({ kind: "ready", payload: normalizedPayload });
-    setDraft(normalizedPayload.settings);
-    savedSettingsRef.current = normalizedPayload.settings;
-    if (gate !== undefined) {
-      setApprovalGateEnabled(gate.enabled);
-      setApprovalGateCooldown(gate.cooldown_seconds);
-      setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
-      onApprovalGateChange?.(gate);
-    }
-  }, [onApprovalGateChange]);
+    applyLoadedSettingsPayload(normalizeSettingsPayload(payload));
+  }, [applyLoadedSettingsPayload]);
 
   const handleDisableTotp = useCallback(async () => {
     handleRequestDisableTotp();

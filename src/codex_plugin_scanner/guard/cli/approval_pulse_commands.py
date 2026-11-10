@@ -26,26 +26,34 @@ from ..approval_gate import (
 )
 from .approval_gate_prompt import print_pulse_status, prompt_for_approval_gate
 
+# Where a new user gets the YID app. `referrer` tells Yanez the visit came from
+# HOL Guard's CLI; it carries nothing about the user or the machine.
+PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer=holguard-cli"
+# How Pulse works, for anyone who wants to read more.
 PULSE_DOCS_URL = "https://docs.yanez.ai/pulse/"
 _SETUP_STEPS = (
     "Set up Yanez Pulse as your approval factor:",
-    f"  1. Install the YID app if you do not have it yet ({PULSE_DOCS_URL}).",
-    "  2. In the YID app, register your Yanez identity by scanning its registration QR code.",
-    "  3. In the YID app, create an agent key for HOL Guard.",
-    "  4. Paste that key at the prompt below. It is hidden and stored only in Guard's secret store.",
+    f"  1. Scan the QR code on {PULSE_SITE_URL} with your phone camera.",
+    "     It installs the YanezYID app if needed, then registers your Yanez identity.",
+    "  2. In the YID app, go to Settings > Agent Keys and create a key named HOL Guard.",
+    "  3. Paste that key at the prompt below. It is hidden and stored only in Guard's secret store.",
 )
+_HELP_LINKS = f"Get the YID app:  {PULSE_SITE_URL}\nHow Pulse works:  {PULSE_DOCS_URL}"
 
 
 def add_approval_pulse_parser(settings_subparsers, add_common_args, parser_class) -> None:
+    # Every Pulse command's --help ends with where to get the app and read more.
+    links = {"epilog": _HELP_LINKS, "formatter_class": argparse.RawDescriptionHelpFormatter}
     parser = settings_subparsers.add_parser(
         "approval-pulse",
         help="Use Yanez Pulse (YID app face scan approval) as the approval factor",
+        **links,
     )
     add_common_args(parser, suppress_defaults=True)
     parser.add_argument("--json", action="store_true")
     commands = parser.add_subparsers(dest="settings_approval_pulse_command", required=True, parser_class=parser_class)
-    status = commands.add_parser("status", help="Show whether Pulse is the approval factor")
-    enroll = commands.add_parser("enroll", help="Set up Pulse; needs your current approval factor")
+    status = commands.add_parser("status", help="Show whether Pulse is the approval factor", **links)
+    enroll = commands.add_parser("enroll", help="Set up Pulse; needs your current approval factor", **links)
     enroll.add_argument(
         "--cooldown",
         type=int,
@@ -59,10 +67,11 @@ def add_approval_pulse_parser(settings_subparsers, add_common_args, parser_class
         default="medium",
         help="Lowest face-scan assurance Guard accepts (default medium; high needs a device that signs at high)",
     )
-    disable = commands.add_parser("disable", help="Return to the approval password; needs a Pulse approval")
+    disable = commands.add_parser("disable", help="Return to the approval password; needs a Pulse approval", **links)
     recover = commands.add_parser(
         "recover",
         help="Lost the YID app: turn Pulse off with the approval password and the recovery code",
+        **links,
     )
     for sub in (status, enroll, disable, recover):
         add_common_args(sub, suppress_defaults=True)

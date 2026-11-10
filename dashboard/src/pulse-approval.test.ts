@@ -11,7 +11,7 @@ import {
 } from "./pulse-approval";
 import { approvalProofCooldownOptionShown, approvalProofModalTitle } from "./approval-center-review-cards";
 import { withLocalProtectionDeadline } from "./guard-api";
-import { pulseSetupCanClose } from "./pulse-setup-modal";
+import { PULSE_SITE_URL, pulseSetupCanClose, runPulseEnrollment, type PulseEnrollmentSteps } from "./pulse-setup-modal";
 import { bulkPulsePrompt } from "./queue-bulk-approval-credentials";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
@@ -306,6 +306,85 @@ function setupCannotCloseWhileFinishing(): void {
   assert(!pulseSetupCanClose("recovery"), "PULSE-12: setup cannot close while the recovery code is shown");
 }
 
+async function closingSetupWhileItStartsNeverTurnsPulseOn(): Promise<void> {
+  const enrollment = {
+    status: "pending" as const, request_id: "azr_setup", match_code: "K7Q2XM", yid_hint: "yid_…", decide_by: "",
+  };
+  function setup(overrides: Partial<PulseEnrollmentSteps> = {}) {
+    const calls: string[] = [];
+    let open = true;
+    const steps: PulseEnrollmentSteps = {
+      begin: async () => {
+        calls.push("begin");
+        return enrollment;
+      },
+      isOpen: () => open,
+      started: () => calls.push("started"),
+      wait: async () => {
+        calls.push("wait");
+        return "approved";
+      },
+      verifying: () => calls.push("verifying"),
+      confirm: async () => {
+        calls.push("confirm");
+        return "PRC-ONCE";
+      },
+      ...overrides,
+    };
+    return { calls, steps, close: () => { open = false; } };
+  }
+
+  const normal = setup();
+  assert((await runPulseEnrollment(normal.steps)) === "PRC-ONCE", "PULSE-15: a completed setup returns its recovery code");
+  assert(normal.calls.join(",") === "begin,started,wait,verifying,confirm", "PULSE-15: setup runs in order");
+
+  // The window closes while Guard is still starting the enrollment.
+  const closedWhileStarting = setup();
+  closedWhileStarting.steps.begin = async () => {
+    closedWhileStarting.calls.push("begin");
+    closedWhileStarting.close();
+    return enrollment;
+  };
+  assert((await runPulseEnrollment(closedWhileStarting.steps)) === null, "PULSE-15: a closed setup reports nothing");
+  assert(closedWhileStarting.calls.join(",") === "begin",
+    "PULSE-15: closed while starting, setup neither waits for the YID app nor turns Pulse on");
+
+  // The window closes during the wait (which then ends as cancelled).
+  const closedWhileWaiting = setup();
+  closedWhileWaiting.steps.wait = async () => {
+    closedWhileWaiting.calls.push("wait");
+    closedWhileWaiting.close();
+    return "cancelled";
+  };
+  let refused = false;
+  try {
+    await runPulseEnrollment(closedWhileWaiting.steps);
+  } catch {
+    refused = true;
+  }
+  assert(refused && !closedWhileWaiting.calls.includes("confirm"), "PULSE-15: a cancelled wait never turns Pulse on");
+
+  // Even an approval that arrives after the window closed is not used.
+  const closedThenApproved = setup();
+  closedThenApproved.steps.wait = async () => {
+    closedThenApproved.calls.push("wait");
+    closedThenApproved.close();
+    return "approved";
+  };
+  assert((await runPulseEnrollment(closedThenApproved.steps)) === null && !closedThenApproved.calls.includes("confirm"),
+    "PULSE-15: an approval after the window closed does not turn Pulse on");
+
+  assert(!pulseSetupCanClose("connect", true), "PULSE-15: setup cannot close while starting the enrollment");
+  assert(pulseSetupCanClose("connect", false), "PULSE-15: setup can close on step 2 when nothing is in flight");
+}
+
+function theSetupLinkTellsYanezItCameFromGuard(): void {
+  const link = new URL(PULSE_SITE_URL);
+  assert(link.origin === "https://pulse.yanez.ai", "PULSE-16: setup links to the YID app page");
+  assert(link.searchParams.get("referrer") === "holguard" && [...link.searchParams.keys()].length === 1,
+    "PULSE-16: the link carries only the HOL Guard referrer");
+}
+
 function theBulkPromptCountsWhatThePhoneShows(): void {
   assert(bulkPulsePrompt(1) === "Approve this request in your YID app.", "PULSE-13: one request");
   assert(bulkPulsePrompt(3) === "Approve these 3 requests in your YID app.",
@@ -351,4 +430,6 @@ eachApprovalKeepsItsOwnMatchCode();
 setupCannotCloseWhileFinishing();
 theBulkPromptCountsWhatThePhoneShows();
 pulseModeNeverAsksForAPasswordOrCode();
+await closingSetupWhileItStartsNeverTurnsPulseOn();
+theSetupLinkTellsYanezItCameFromGuard();
 console.log("pulse-approval tests passed");

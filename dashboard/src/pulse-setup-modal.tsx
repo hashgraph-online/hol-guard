@@ -9,10 +9,17 @@ import {
   type GuardPulseEnrollment,
 } from "./guard-api";
 import type { GuardSettingsPayload } from "./guard-types";
-import { PULSE_FACE_SCAN_OPTIONS, waitForPulseApproval, type PulseMinTier } from "./pulse-approval";
+import {
+  PULSE_FACE_SCAN_OPTIONS,
+  waitForPulseApproval,
+  type PulseApprovalStatus,
+  type PulseMinTier,
+} from "./pulse-approval";
 import { GuardModalLayer } from "./guard-modal-layer";
 
-export const PULSE_SITE_URL = "https://pulse.yanez.ai";
+// Where a new user gets the YID app. `referrer` tells Yanez the visit came from
+// HOL Guard's dashboard setup; it carries nothing about the user or machine.
+export const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer=holguard";
 
 const ENROLLMENT_OUTCOME_MESSAGES = {
   rejected: "The enrollment was rejected in the YID app.",
@@ -29,8 +36,43 @@ type SetupStep = "confirm" | "connect" | "approve" | "verifying" | "recovery";
  * shown only once, so closing then would lose the code. Not while the code is
  * shown either: only "I saved it" closes the window then.
  */
-export function pulseSetupCanClose(step: SetupStep): boolean {
+export function pulseSetupCanClose(step: SetupStep, requestInFlight = false): boolean {
+  // While setup is talking to Guard (for example, starting the enrollment in
+  // step 2), closing would leave that call running with no window to finish it.
+  if (requestInFlight) return false;
   return step !== "verifying" && step !== "recovery";
+}
+
+type EnrollmentOutcome = Exclude<PulseApprovalStatus, "pending">;
+
+/** The calls one enrollment makes, so the flow can run without a mounted window in tests. */
+export type PulseEnrollmentSteps = {
+  begin: () => Promise<GuardPulseEnrollment>;
+  /** Whether the setup window is still open. */
+  isOpen: () => boolean;
+  started: (enrollment: GuardPulseEnrollment) => void;
+  wait: (enrollment: GuardPulseEnrollment) => Promise<EnrollmentOutcome>;
+  verifying: () => void;
+  /** Turns Pulse on and returns the one-time recovery code. */
+  confirm: (requestId: string) => Promise<string>;
+};
+
+/**
+ * Start Pulse setup, wait for the YID app and confirm. The window must still be
+ * open at each step: if it was closed while a call was in flight, the flow
+ * stops before it waits or confirms, so Pulse never turns on without the
+ * recovery code being shown. Returns the recovery code, or null when the window
+ * was closed.
+ */
+export async function runPulseEnrollment(steps: PulseEnrollmentSteps): Promise<string | null> {
+  const enrollment = await steps.begin();
+  if (!steps.isOpen()) return null;
+  steps.started(enrollment);
+  const outcome = await steps.wait(enrollment);
+  if (outcome !== "approved") throw new Error(ENROLLMENT_OUTCOME_MESSAGES[outcome]);
+  if (!steps.isOpen()) return null;
+  steps.verifying();
+  return steps.confirm(enrollment.request_id);
 }
 
 const STEP_TEXT: Record<SetupStep, { label: string; title: string; description: string }> = {
@@ -107,9 +149,17 @@ export function PulseSetupModal(props: {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancelWait = useRef<AbortController | null>(null);
+  const open = useRef(true);
 
-  // Closing the window stops the wait for the YID app.
-  useEffect(() => () => cancelWait.current?.abort(), []);
+  // Closing the window stops the wait for the YID app, and stops a setup call
+  // still in flight from going on to wait or confirm.
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+      cancelWait.current?.abort();
+    };
+  }, []);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     setPending(true);
@@ -134,27 +184,39 @@ export function PulseSetupModal(props: {
   }), [password, props.totpEnabled, run, totpCode]);
 
   const handleConnect = useCallback(() => run(async () => {
-    const response = await beginApprovalGatePulseEnrollment({ pulse_agent_key: agentKey.trim(), min_tier: minTier });
-    // The key is now in Guard's secret store; drop it from page memory.
-    setAgentKey("");
-    const started = response.pulse_enrollment;
-    setEnrollment(started);
-    setStep("approve");
-    const controller = new AbortController();
-    cancelWait.current = controller;
     try {
-      const outcome = await waitForPulseApproval(
-        fetchWithGuardAuth,
-        { requestId: started.request_id, matchCode: started.match_code, decideBy: started.decide_by },
-        controller.signal,
-      );
-      if (outcome !== "approved") throw new Error(ENROLLMENT_OUTCOME_MESSAGES[outcome]);
-      setStep("verifying");
-      const { pulse_recovery_code: code, ...settings } = await confirmApprovalGatePulseEnrollment({
-        request_id: started.request_id,
-        cooldown_seconds: cooldown,
+      const code = await runPulseEnrollment({
+        begin: async () => {
+          const response = await beginApprovalGatePulseEnrollment({ pulse_agent_key: agentKey.trim(), min_tier: minTier });
+          // The key is now in Guard's secret store; drop it from page memory.
+          setAgentKey("");
+          return response.pulse_enrollment;
+        },
+        isOpen: () => open.current,
+        started: (started) => {
+          setEnrollment(started);
+          setStep("approve");
+        },
+        wait: (started) => {
+          const controller = new AbortController();
+          cancelWait.current = controller;
+          return waitForPulseApproval(
+            fetchWithGuardAuth,
+            { requestId: started.request_id, matchCode: started.match_code, decideBy: started.decide_by },
+            controller.signal,
+          );
+        },
+        verifying: () => setStep("verifying"),
+        confirm: async (requestId) => {
+          const { pulse_recovery_code: recovery, ...settings } = await confirmApprovalGatePulseEnrollment({
+            request_id: requestId,
+            cooldown_seconds: cooldown,
+          });
+          props.onSettingsPayload(settings);
+          return recovery;
+        },
       });
-      props.onSettingsPayload(settings);
+      if (code === null) return;
       setRecoveryCode(code);
       setStep("recovery");
     } catch (failure) {
@@ -175,7 +237,7 @@ export function PulseSetupModal(props: {
   const connectReady = agentKey.trim().length > 0;
 
   const closeUnlessShowingCode = () => {
-    if (pulseSetupCanClose(step)) props.onClose();
+    if (pulseSetupCanClose(step, pending)) props.onClose();
   };
 
   return (
@@ -195,7 +257,7 @@ export function PulseSetupModal(props: {
           <button
             type="button"
             onClick={closeUnlessShowingCode}
-            hidden={!pulseSetupCanClose(step)}
+            hidden={!pulseSetupCanClose(step, pending)}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-dark"
             aria-label="Close Pulse setup"
           >
