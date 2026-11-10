@@ -185,7 +185,9 @@ pub(super) fn respond(
         return Some((200, body, caller.cors_origin, false));
     }
     if request.method == "POST" && legacy_cloud_handoff(request.path) {
-        let caller = authorize_write(request, &config.token)?;
+        // The retired handoff does nothing, so it answers without a token,
+        // as the Python daemon did.
+        let caller = super::super::auth::authorize_origin(request)?;
         read_body!(json_payload(request, body), caller.cors_origin.clone());
         reads.report_activity();
         let body = serde_json::json!({

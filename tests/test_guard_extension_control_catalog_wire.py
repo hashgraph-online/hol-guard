@@ -97,15 +97,16 @@ def test_catalog_http_body_matches_service_wire_measurement(tmp_path: Path) -> N
         with urllib.request.urlopen(request, timeout=10) as response:
             body = response.read()
         payload = json.loads(body)
-        assert body == _wire_bytes(payload)
-        assert len(body) <= MAX_DAEMON_CATALOG_RESPONSE_BYTES
+        # The native daemon writes compact JSON, never longer than the
+        # measured wire form the limit is checked against.
+        assert len(body) <= len(_wire_bytes(payload)) <= MAX_DAEMON_CATALOG_RESPONSE_BYTES
+        assert b"<" not in body and b"&" not in body and b">" not in body
         assert payload["limits"]["max_body_bytes"] == MAX_DAEMON_CATALOG_RESPONSE_BYTES
         assert payload["limits"]["max_catalog_payload_bytes"] == CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES
     finally:
         daemon.stop()
 
 
-@pytest.mark.python_daemon
 def test_catalog_http_route_maps_bounded_service_error_to_413(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

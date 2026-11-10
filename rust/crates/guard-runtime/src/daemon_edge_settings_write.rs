@@ -50,7 +50,7 @@ pub(super) fn apply(
     let Some(PyVal::Dict(settings)) = lookup(payload, "settings") else {
         return Some((400, json!({"error": missing_error})));
     };
-    let hand_off = settings.iter().any(|(key, _)| key == "context_assistance");
+    let hand_off = hands_off_to_context_assistance(settings);
     let gate_payload = json_payload
         .get("settings")
         .and_then(|settings| settings.get("approval_gate"))
@@ -399,10 +399,24 @@ fn requeue_privacy_projection(config: &ReadConfig, reads: &NativeReads, level: &
     Some(())
 }
 
+/// Whether a settings write changes CIGAR's settings, so prompt hooks must
+/// be handed them now rather than on the next context call.
+fn hands_off_to_context_assistance(settings: &[(String, PyVal)]) -> bool {
+    settings.iter().any(|(key, _)| key == "context_assistance")
+}
+
+#[cfg(test)]
+thread_local! {
+    static HANDOFFS: std::cell::RefCell<Vec<std::path::PathBuf>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 /// `_hand_settings_to_cigar`: ask the resident for the context-assistance
 /// status so it reads the saved settings now. Failures are ignored, as the
 /// daemon suppresses them.
 fn hand_settings_to_context_assistance(guard_home: &Path) {
+    #[cfg(test)]
+    HANDOFFS.with(|handoffs| handoffs.borrow_mut().push(guard_home.to_path_buf()));
     let Ok(home) = std::fs::canonicalize(guard_home) else {
         return;
     };

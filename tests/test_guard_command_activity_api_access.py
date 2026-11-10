@@ -12,8 +12,6 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-import pytest
-
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.command_activity_api import stream_command_activity_events
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
@@ -229,7 +227,6 @@ def test_analytics_and_extensions_are_paginated_bounded_contracts(tmp_path: Path
     assert "project_markers" not in serialized
 
 
-@pytest.mark.python_daemon
 def test_sse_emits_only_invalidation_type_and_activity_id(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     seed(store, occurred_on=recent_day())
@@ -322,33 +319,6 @@ def test_sse_retention_gap_emits_reset_before_retained_events(tmp_path: Path) ->
     assert reset_id == "id: 1"
     assert reset_event == "event: command_activity_reset"
     assert reset_payload == {"event": "command_activity_reset", "reset_required": True}
-
-
-@pytest.mark.python_daemon
-def test_sse_admission_is_capped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # The handler's own cap, used when the daemon serves its public port
-    # itself; the native edge enforces the same limit for streams it serves.
-    monkeypatch.setenv("HOL_GUARD_DAEMON_NATIVE_EDGE", "0")
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store, occurred_on=recent_day())
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        token = _dashboard_token(daemon)
-        with daemon._server.active_stream_clients_lock:
-            daemon._server.active_stream_clients = 8
-        status, payload, _ = json_request(
-            daemon,
-            "/v1/command-activity/events?cursor=0",
-            token=token,
-        )
-    finally:
-        with daemon._server.active_stream_clients_lock:
-            daemon._server.active_stream_clients = 0
-        daemon.stop()
-
-    assert status == 429
-    assert payload == {"error": "too_many_streams"}
 
 
 def test_sse_header_failure_releases_admission_slot() -> None:

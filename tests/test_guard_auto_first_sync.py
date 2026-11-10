@@ -438,7 +438,6 @@ def test_queue_headless_cloud_sync_respects_cross_process_sync_lock(tmp_path, mo
     }
 
 
-@pytest.mark.python_daemon
 def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     now = "2026-06-04T12:00:00+00:00"
@@ -449,15 +448,16 @@ def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkey
     )
     calls: list[str] = []
 
+    # The daemon's library calls open their own store, so the class is patched.
     monkeypatch.setattr(
-        store,
+        GuardStore,
         "get_cloud_sync_profile",
-        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+        lambda _self: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
     )
     monkeypatch.setattr(
-        store,
+        GuardStore,
         "get_oauth_local_credential_health",
-        lambda: {"configured": True, "state": "healthy"},
+        lambda _self: {"configured": True, "state": "healthy"},
     )
 
     def _record_queue(*, store: GuardStore) -> dict[str, object]:

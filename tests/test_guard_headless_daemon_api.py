@@ -572,7 +572,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         state: dict[str, object] | None,
     ) -> None:
         set_guard_cloud_connect_state(server, state)
-        if server.store is not store:
+        if server.store.guard_home != store.guard_home:
             return
         if state is None:
             if connect_started.is_set():
@@ -1347,7 +1347,7 @@ def test_supply_chain_package_firewall_status_self_heals_connected_cloud_auth_wi
     calls: list[str] = []
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         calls.append("proof")
         current_store.record_latest_guard_connect_sync_success(
             sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
@@ -1356,7 +1356,7 @@ def test_supply_chain_package_firewall_status_self_heals_connected_cloud_auth_wi
         return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
 
     def fake_sync_supply_chain_bundle(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         calls.append("bundle")
         current_store.set_sync_payload(
             "supply_chain_bundle_entitlement",
@@ -1430,7 +1430,7 @@ def test_supply_chain_package_firewall_install_self_heals_retry_required_cloud_a
     )
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         current_store.record_latest_guard_connect_sync_success(
             sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
             now="2026-06-05T01:41:00+00:00",
@@ -1438,7 +1438,7 @@ def test_supply_chain_package_firewall_install_self_heals_retry_required_cloud_a
         return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
 
     def fake_sync_supply_chain_bundle(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         current_store.set_sync_payload(
             "supply_chain_bundle_entitlement",
             {
@@ -2393,10 +2393,9 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     )
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         sync_calls.append("runtime")
         sync_calls.append("receipts")
-        sync_finished.set()
         summary = {
             "synced_at": "2026-05-23T17:18:40.061Z",
             "receipts_stored": 1,
@@ -2408,6 +2407,8 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
             sync_payload=summary,
             now="2026-05-23T17:18:40.061Z",
         )
+        # Signal once the success is stored: the sync runs on another store.
+        sync_finished.set()
         return summary
 
     patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
@@ -2464,7 +2465,7 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
     sync_release = threading.Event()
 
     def blocking_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         sync_calls.append(1)
         sync_started.set()
         sync_release.wait(timeout=5)

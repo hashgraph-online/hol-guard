@@ -10,7 +10,8 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -136,58 +137,119 @@ pub(in crate::daemon_edge) fn serve_args(guard_home: &str) -> [String; 4] {
     ]
 }
 
-/// One `desktop library-serve` child: calls go in a line at a time and
-/// answers come back a line at a time, in order.
+/// One `desktop library-serve` child. Each call goes in as one line carrying
+/// an `id`, and its answer comes back as one line with the same `id`, in
+/// whatever order the calls finish, so a slow call (a browser sign-in
+/// starting) never holds up the others.
 struct Resident {
-    child: Child,
-    input: ChildStdin,
-    answers: mpsc::Receiver<Option<Vec<u8>>>,
+    child: Mutex<Option<Child>>,
+    input: Mutex<ChildStdin>,
+    pending: Arc<Mutex<Pending>>,
+    next_id: AtomicU64,
+}
+
+/// The callers waiting on a resident's answers, by call id. `None` once its
+/// output has ended, so a late caller is told at once.
+type Pending = Option<HashMap<u64, mpsc::Sender<Vec<u8>>>>;
+
+impl Resident {
+    fn stop(&self) {
+        let child = self
+            .child
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(child) = child {
+            stop(child);
+        }
+    }
 }
 
 /// The resident process for each Guard home this daemon has served.
-fn residents() -> &'static Mutex<HashMap<String, Resident>> {
-    static RESIDENTS: OnceLock<Mutex<HashMap<String, Resident>>> = OnceLock::new();
+fn residents() -> &'static Mutex<HashMap<String, Arc<Resident>>> {
+    static RESIDENTS: OnceLock<Mutex<HashMap<String, Arc<Resident>>>> = OnceLock::new();
     RESIDENTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// Runs `call` with `args` in the resident library process, whose state
 /// outlives one request: an extension-control preview's proof waits there for
-/// its apply. Calls run one at a time. A process that does not answer in time
-/// is stopped and the next call starts another.
+/// its apply, and a Guard Cloud sign-in another request started is joined
+/// rather than started twice. Calls run side by side. A process that does
+/// not answer one in time is stopped and the next call starts another.
 pub(in crate::daemon_edge) fn call_resident(
     config: &ReadConfig,
     name: &str,
     args: Value,
 ) -> Result<Value, CallError> {
-    let mut request = serde_json::to_vec(&json!({"call": name, "args": args}))
-        .map_err(|_| CallError::Unavailable)?;
-    request.push(b'\n');
     let (_, guard_home, _) = config.cli().ok_or(CallError::Unavailable)?;
     let guard_home = guard_home.to_owned();
-    let mut residents = residents()
+    let resident = {
+        let mut residents = residents()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match residents.get(&guard_home) {
+            Some(resident) => Arc::clone(resident),
+            None => {
+                let resident = Arc::new(start_resident(config).ok_or(CallError::Unavailable)?);
+                residents.insert(guard_home.clone(), Arc::clone(&resident));
+                resident
+            }
+        }
+    };
+    let id = resident.next_id.fetch_add(1, Ordering::Relaxed);
+    let mut request = serde_json::to_vec(&json!({"id": id, "call": name, "args": args}))
+        .map_err(|_| CallError::Unavailable)?;
+    request.push(b'\n');
+    let (sender, receiver) = mpsc::channel();
+    let registered = match resident
+        .pending
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if !residents.contains_key(&guard_home) {
-        let resident = start_resident(config).ok_or(CallError::Unavailable)?;
-        residents.insert(guard_home.clone(), resident);
-    }
-    let resident = residents
-        .get_mut(&guard_home)
-        .ok_or(CallError::Unavailable)?;
-    let answer = match resident
-        .input
-        .write_all(&request)
-        .and_then(|()| resident.input.flush())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .as_mut()
     {
-        Ok(()) => resident.answers.recv_timeout(CALL_TIMEOUT).ok().flatten(),
-        Err(_) => None,
+        Some(pending) => {
+            pending.insert(id, sender);
+            true
+        }
+        None => false,
+    };
+    let written = registered && {
+        let mut input = resident
+            .input
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        input
+            .write_all(&request)
+            .and_then(|()| input.flush())
+            .is_ok()
+    };
+    let answer = if written {
+        receiver.recv_timeout(CALL_TIMEOUT).ok()
+    } else {
+        None
     };
     match answer {
         Some(answer) => decode(&answer),
         None => {
-            if let Some(resident) = residents.remove(&guard_home) {
-                stop(resident.child);
+            if let Some(pending) = resident
+                .pending
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_mut()
+            {
+                pending.remove(&id);
             }
+            let mut residents = residents()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if residents
+                .get(&guard_home)
+                .is_some_and(|current| Arc::ptr_eq(current, &resident))
+            {
+                residents.remove(&guard_home);
+            }
+            drop(residents);
+            resident.stop();
             Err(CallError::Unavailable)
         }
     }
@@ -212,7 +274,8 @@ fn start_resident(config: &ReadConfig) -> Option<Resident> {
         stop(child);
         return None;
     };
-    let (sender, answers) = mpsc::channel();
+    let pending: Arc<Mutex<Pending>> = Arc::new(Mutex::new(Some(HashMap::new())));
+    let answers = Arc::clone(&pending);
     thread::spawn(move || {
         let mut lines = BufReader::new(stdout);
         loop {
@@ -220,22 +283,44 @@ fn start_resident(config: &ReadConfig) -> Option<Resident> {
             let read = (&mut lines)
                 .take(MAX_ANSWER_BYTES + 1)
                 .read_until(b'\n', &mut line);
-            let answer = match read {
-                Ok(0) | Err(_) => None,
-                Ok(_) if line.last() == Some(&b'\n') => Some(line),
-                Ok(_) => None,
+            if !matches!(read, Ok(read) if read > 0 && line.last() == Some(&b'\n')) {
+                break;
+            }
+            let Some(id) = answer_id(&line) else {
+                continue;
             };
-            let ended = answer.is_none();
-            if sender.send(answer).is_err() || ended {
-                return;
+            let waiter = answers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_mut()
+                .and_then(|pending| pending.remove(&id));
+            if let Some(waiter) = waiter {
+                let _ = waiter.send(line);
             }
         }
+        // Dropping every waiter's sender tells it the process is gone.
+        answers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
     });
     Some(Resident {
-        child,
-        input,
-        answers,
+        child: Mutex::new(Some(child)),
+        input: Mutex::new(input),
+        pending,
+        next_id: AtomicU64::new(1),
     })
+}
+
+/// The call id an answer line names.
+fn answer_id(line: &[u8]) -> Option<u64> {
+    #[derive(serde::Deserialize)]
+    struct Head {
+        id: u64,
+    }
+    serde_json::from_slice::<Head>(line)
+        .ok()
+        .map(|head| head.id)
 }
 
 /// The CLI arguments for the worker host.

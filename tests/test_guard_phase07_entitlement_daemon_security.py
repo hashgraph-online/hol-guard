@@ -294,7 +294,6 @@ def test_phase07_package_firewall_rate_limiter_blocks_burst_actions() -> None:
     assert retry_after >= 1
 
 
-@pytest.mark.python_daemon
 def test_phase07_daemon_rate_limits_package_firewall_actions(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_premium_entitlement(store)

@@ -182,6 +182,12 @@ pub(in crate::daemon_edge) fn refusal(
     (!header_secret_matches(request, secret)).then_some(Refusal::Unauthorized)
 }
 
+/// Whether the daemon checks this `POST`'s caller before it reads the body,
+/// so a refusal can be sent while the body is still arriving.
+pub(in crate::daemon_edge) fn post_checks_caller_first(request: &Request<'_>) -> bool {
+    request.method == "POST" && route_class(request.path) != "none"
+}
+
 /// Why `do_DELETE`'s preamble refused a caller the edge did not authorize:
 /// the origin check, then the header token or dashboard session.
 pub(in crate::daemon_edge) fn delete_refusal(request: &Request<'_>) -> Refusal {

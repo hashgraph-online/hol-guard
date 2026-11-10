@@ -405,7 +405,7 @@ pub(super) fn answer(
     stalled_write: Duration,
 ) -> Outcome {
     let Some((bytes, head_len)) = take_request(client) else {
-        if let Some(response) = early_delete_refusal(client, config, reads) {
+        if let Some(response) = early_refusal(client, config, reads) {
             return write_answer(client, &response, reads, stalled_write);
         }
         // Beside the daemon, only a body larger than the peek holds is read
@@ -650,23 +650,27 @@ fn is_public_health_probe(request: &Request<'_>) -> bool {
         && !request.has_header("Transfer-Encoding")
 }
 
-/// `do_DELETE` checked the caller before reading a body, so a `DELETE` whose
-/// body has not arrived is refused on its head when the caller is not
-/// authorized.
-fn early_delete_refusal(
-    client: &TcpStream,
-    config: &ReadConfig,
-    reads: &NativeReads,
-) -> Option<Vec<u8>> {
+/// `do_DELETE` and a guarded `do_POST` checked the caller before reading a
+/// body, so a request whose body has not arrived is refused on its head when
+/// the caller is not authorized.
+fn early_refusal(client: &TcpStream, config: &ReadConfig, reads: &NativeReads) -> Option<Vec<u8>> {
     if !reads.is_standalone() {
         return None;
     }
     let head = super::http::waiting_head(client)?;
-    let request = parse_request(&head).filter(|request| request.method == "DELETE")?;
-    if super::auth::authorize_write(&request, &config.token).is_some() {
+    let request = parse_request(&head)?;
+    let refusal = if request.method == "DELETE" {
+        if super::auth::authorize_write(&request, &config.token).is_some() {
+            return None;
+        }
+        refusals::delete_refusal(&request)
+    } else if refusals::post_checks_caller_first(&request) {
+        // `_require_auth` runs before `_load_request_body`, so a caller the
+        // header check refuses never waits for its body to be read.
+        refusals::refusal(&request, &[], &config.token)?
+    } else {
         return None;
-    }
-    let refusal = refusals::delete_refusal(&request);
+    };
     let (status, body, cors_origin) =
         refusals::respond(&request, &refusal, client.local_addr().ok(), config, reads);
     Some(json_response(

@@ -365,3 +365,32 @@ fn a_standalone_daemon_answers_a_request_that_arrives_slowly_itself() {
         "{response}"
     );
 }
+
+#[test]
+fn a_standalone_daemon_refuses_a_guarded_post_before_its_body_arrives() {
+    let (_dir, address) = echoing_daemon();
+    for (extra, status) in [
+        ("X-Guard-Token: wrong\r\n", "401"),
+        ("Origin: http://evil.example\r\n", "403"),
+    ] {
+        let head = format!(
+            "POST /v1/extension-controls/apply HTTP/1.1\r\nHost: 127.0.0.1\r\n{extra}Content-Type: application/json\r\nContent-Length: 1000000\r\n\r\n"
+        );
+        let mut client = std::net::TcpStream::connect(address).unwrap();
+        client
+            .set_read_timeout(Some(std::time::Duration::from_secs(20)))
+            .unwrap();
+        let started = std::time::Instant::now();
+        client.write_all(head.as_bytes()).unwrap();
+        let mut response = String::new();
+        let _ = client.read_to_string(&mut response);
+        assert!(
+            response.starts_with(&format!("HTTP/1.0 {status} ")),
+            "{extra}: {response}"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "{extra}"
+        );
+    }
+}

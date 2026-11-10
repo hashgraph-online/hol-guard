@@ -55,6 +55,21 @@ _BACKGROUND_THREAD_NAMES = frozenset(
 )
 
 
+# Package firewall mutations and their rate limit span requests, and each
+# request builds its own server, so both live for the serving process.
+_PROCESS_SHARED_LOCK = threading.Lock()
+_PROCESS_SHARED: dict[tuple[str, str], Any] = {}
+
+
+def _process_shared(guard_home: Path, name: str, build: Callable[[], Any]) -> Any:
+    key = (str(guard_home), name)
+    with _PROCESS_SHARED_LOCK:
+        value = _PROCESS_SHARED.get(key)
+        if value is None:
+            value = _PROCESS_SHARED[key] = build()
+        return value
+
+
 class _ReplaySocket:
     """The connection the handler sees: the request bytes in, the answer out."""
 
@@ -173,7 +188,9 @@ def _replay_server_class() -> type:
             self.repair_self_check_status = repair_status if isinstance(repair_status, dict) else None
             self.guard_cloud_connect_state_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
             self.guard_cloud_browser_session_lock = _SyncedLock(state_file)  # pyright: ignore[reportAttributeAccessIssue]
-            self.package_firewall_mutation_lock = threading.Lock()
+            self.package_firewall_mutation_lock = _process_shared(
+                store.guard_home, "package_firewall_mutation_lock", threading.Lock
+            )
             self.package_firewall_session_nonces = _PersistedMapping(
                 self._replay_state, "package_firewall_session_nonces"
             )
@@ -240,11 +257,18 @@ def _replay_server_class() -> type:
         def package_firewall_connect_state(self, value: dict[str, object] | None) -> None:  # pyright: ignore[reportIncompatibleVariableOverride]
             self._replay_state.set("package_firewall_connect_state", value)
 
-        @cached_property
+        @property
         def package_firewall_action_rate_limiter(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
             from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 
-            return PackageFirewallActionRateLimiter()
+            return _process_shared(
+                self.store.guard_home, "package_firewall_action_rate_limiter", PackageFirewallActionRateLimiter
+            )
+
+        @package_firewall_action_rate_limiter.setter
+        def package_firewall_action_rate_limiter(self, value: Any) -> None:  # pyright: ignore[reportIncompatibleVariableOverride]
+            with _PROCESS_SHARED_LOCK:
+                _PROCESS_SHARED[(str(self.store.guard_home), "package_firewall_action_rate_limiter")] = value
 
         @cached_property
         def network_supervisor(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]

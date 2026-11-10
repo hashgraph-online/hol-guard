@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import tempfile
 import time
 from collections.abc import Mapping
@@ -22,8 +21,8 @@ from typing import IO
 from codex_plugin_scanner.guard.store import GuardStore
 
 _START_TIMEOUT_SECONDS = 30.0
-# Read once: tests patch ``sys.platform`` while a daemon starts.
-_HOST_IS_LINUX = sys.platform == "linux"
+# Ask the kernel: tests patch ``sys.platform`` while a daemon starts.
+_HOST_IS_LINUX = hasattr(os, "uname") and os.uname().sysname == "Linux"
 
 
 def _runtime_binary(guard_home: Path) -> Path:

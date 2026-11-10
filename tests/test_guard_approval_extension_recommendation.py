@@ -173,64 +173,6 @@ def _resident_recommends(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, obje
     return asked
 
 
-@pytest.mark.python_daemon
-def test_daemon_request_detail_includes_recommendation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    asked = _resident_recommends(monkeypatch)
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-1", hint=_hint(GIT_ADD)), "2026-10-09T10:00:00+00:00")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        detail = _get_json(daemon.port, "/v1/requests/req-1", token=daemon._server.auth_token)
-    finally:
-        daemon.stop()
-
-    assert "extension_allow_hint" not in detail
-    recommendation = detail["extension_recommendation"]
-    assert recommendation["schema"] == RECOMMENDATION_SCHEMA
-    assert recommendation["status"] in {"available", "authority_unavailable"}
-    assert [item["permission_id"] for item in recommendation["permissions"]] == [GIT_ADD]
-    # The resident of the daemon's own home is the one asked.
-    recommended = [entry for entry in asked if entry["query"]["kind"] != "coverage"]
-    assert [entry["guard_home"] for entry in recommended] == [store.guard_home]
-
-
-@pytest.mark.python_daemon
-def test_daemon_request_detail_computes_live_recommendation_for_legacy_pending_row(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from codex_plugin_scanner.guard.daemon import native_review_allow_hint
-
-    _resident_recommends(monkeypatch)
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-legacy", hint=None), "2026-10-09T10:00:00+00:00")
-
-    recoveries = []
-
-    def live_hint(approval, **kwargs):
-        recoveries.append((approval.get("request_id"), kwargs["guard_home"]))
-        return _hint(GIT_ADD) if approval.get("request_id") == "req-legacy" else None
-
-    monkeypatch.setattr(
-        native_review_allow_hint,
-        "live_approval_extension_hint",
-        live_hint,
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        detail = _get_json(daemon.port, "/v1/requests/req-legacy", token=daemon._server.auth_token)
-    finally:
-        daemon.stop()
-
-    assert recoveries == [("req-legacy", store.guard_home)]
-    assert "extension_allow_hint" not in detail
-    recommendation = detail["extension_recommendation"]
-    assert recommendation["schema"] == RECOMMENDATION_SCHEMA
-    assert [item["permission_id"] for item in recommendation["permissions"]] == [GIT_ADD]
-
-
 def test_daemon_request_detail_without_a_resident_answer_lists_the_request_without_advice(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -306,8 +306,9 @@ class _LibraryCallServer:
                 return json.dumps(result, separators=(",", ":"), default=str).encode("utf-8")
 
             if header.get("mode") == "library-serve":
-                for line in reader:
-                    connection.sendall(answer(line) + b"\n")
+                from codex_plugin_scanner.guard.cli.desktop_library_call import serve_lines
+
+                serve_lines(guard_home, reader.readline, connection.sendall)
                 return
             request = reader.read()
             if request:
@@ -319,15 +320,45 @@ class _LibraryCallServer:
 
 
 class _NativeServerView:
-    """The few server attributes tests read, from the native daemon."""
+    """Server attributes tests read or seed, from the native daemon.
+
+    Anything beyond ``store`` and ``auth_token`` comes from the request host
+    the daemon's library calls build, so state it keeps on disk, such as the
+    connect flows, is shared with the calls the daemon makes.
+    """
 
     def __init__(self, daemon: Any) -> None:
-        self._daemon = daemon
-        self.store = daemon.store
+        object.__setattr__(self, "_daemon", daemon)
+        object.__setattr__(self, "store", daemon.store)
+        object.__setattr__(self, "_host", None)
 
     @property
     def auth_token(self) -> str:
         return str(self._daemon.auth_token)
+
+    def _request_host(self) -> Any:
+        host = self.__dict__["_host"]
+        if host is None:
+            from codex_plugin_scanner.guard.routes.request_host import _replay_server_class
+
+            home_dir = Path(self._daemon.home_dir) if self._daemon.home_dir is not None else Path.home()
+            # Tests may seed state before the daemon starts and publishes its
+            # credential; the host only needs it to answer requests.
+            try:
+                auth = self.auth_token
+            except RuntimeError:
+                auth = ""
+            host = _replay_server_class()(self.store, int(self._daemon.port), "127.0.0.1", home_dir, auth)
+            object.__setattr__(self, "_host", host)
+        return host
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return getattr(self._request_host(), name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        setattr(self._request_host(), name, value)
 
 
 class _NativeDaemonServer:

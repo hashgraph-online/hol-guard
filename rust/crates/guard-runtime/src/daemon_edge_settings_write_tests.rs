@@ -220,3 +220,20 @@ fn truthiness_matches_python() {
         assert!(truthy(&value), "{value}");
     }
 }
+
+#[test]
+fn only_a_cigar_change_or_a_reset_hands_settings_to_the_native_service() {
+    let edge = edge("cigar", "");
+    let cigar = entries(json!({"context_assistance": {"enabled": false}, "mode": "observe"}));
+    assert!(hands_off_to_context_assistance(&cigar));
+    assert!(!hands_off_to_context_assistance(&entries(
+        json!({"mode": "observe"})
+    )));
+    let previous = Loaded::read(&edge.home).unwrap();
+    HANDOFFS.with(|handoffs| handoffs.borrow_mut().clear());
+    after_write(&edge.config, &edge.reads, &previous, None, false);
+    assert!(HANDOFFS.with(|handoffs| handoffs.borrow().is_empty()));
+    after_write(&edge.config, &edge.reads, &previous, None, true);
+    let handed = HANDOFFS.with(|handoffs| handoffs.borrow().clone());
+    assert_eq!(handed, vec![edge.home.clone()]);
+}

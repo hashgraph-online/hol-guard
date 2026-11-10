@@ -128,7 +128,6 @@ def test_http_routes_authenticate_before_reading_sensitive_post_body(
         daemon.stop()
 
 
-@pytest.mark.python_daemon
 def test_http_inspect_command_uses_authenticated_client_route(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

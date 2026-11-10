@@ -640,7 +640,7 @@ def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
     sync_finished = threading.Event()
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         sync_finished.set()
         return {"synced_at": WORKSPACE_AUDIT_NOW, "receipts_stored": 1}
 

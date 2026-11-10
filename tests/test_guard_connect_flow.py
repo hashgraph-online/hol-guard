@@ -189,7 +189,6 @@ def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None
     assert "legacy-sync-secret" not in json.dumps([request_payload, complete_payload, result_payload])
 
 
-@pytest.mark.python_daemon
 def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -290,7 +289,7 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
         daemon.stop()
 
     assert session.closed is True
-    assert preflight_calls == [store]
+    assert [called.guard_home for called in preflight_calls] == [store.guard_home]
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
     assert store.get_cloud_sync_profile() is not None
     assert status_code == 200

@@ -16,7 +16,6 @@ from .guard_extension_control_authority_fixtures import MemorySecretStore, _stor
 _DIGEST = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
 
 
-@pytest.mark.python_daemon
 def test_a_fresh_home_starts_with_a_protected_authority(tmp_path: Path) -> None:
     store = _store(tmp_path, MemorySecretStore(), enroll=False)
     assert store.read_extension_control_authority(catalog_digest=_DIGEST).health is AuthorityHealth.UNENROLLED
