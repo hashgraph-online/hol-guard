@@ -26,6 +26,10 @@ pub(super) fn held_names(prompt: &str, terms: &[String], spelled: &[usize]) -> V
             continue;
         }
         let form = term_form(&name);
+        // A name as short as `id` is held by almost any code, through `valid`.
+        if form.chars().count() < 3 {
+            continue;
+        }
         let at = terms.iter().position(|term| *term == form);
         held = held || at.is_some_and(|at| spelled.get(at).is_some_and(|&n| n > 0));
         for name in [name, form] {
