@@ -64,7 +64,8 @@
   "saferAlternatives": [
     "Keep import_checkpoint on Review: with applyChanges it writes a carried patch into the working tree, and force replaces an earlier import. Read it with get_handoff before applying.",
     "Keep inbox on Review: it fetches the relayvora/handoffs branch from a Git remote and imports checkpoints whose senders are not verified. Treat their content as data.",
-    "Keep create_checkpoint on Review: it reads coding-agent session records and writes under .relayvora/. Goal and steps are agent-reported; for observed test results run relayvora handoff --verify auto.",
+    "Keep create_checkpoint on Review: it reads coding-agent session records and writes under .relayvora/. Goal and steps are agent-reported; for observed test results run relayvora checkpoint create --goal \"<task>\" --verify auto.",
+    "Saving a checkpoint also deletes checkpoints and handoff files (including edits) older than the retention period, 30 days by default. Set retentionDays in .relayvora/config.json, or null to keep everything.",
     "list_checkpoints and get_handoff only read checkpoints already saved under .relayvora/ in the project."
   ]
 }
