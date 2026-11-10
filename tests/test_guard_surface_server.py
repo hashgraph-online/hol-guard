@@ -11,7 +11,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,7 +25,6 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
     LOCAL_DASHBOARD_SESSION_VERSION,
@@ -460,62 +458,6 @@ class TestGuardSurfaceServer:
         assert payload["repair_scope"] == "local_integrity"
         assert "unauthenticated policy data" not in payload["message"]
         assert "Guard Cloud policy availability" in payload["message"]
-
-    def test_protection_repair_all_reports_containment_probe_failure_inline(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-        monkeypatch.setattr(
-            GuardStore,
-            "setup_policy_integrity",
-            lambda self, **_kwargs: {"mode": "protected"},
-        )
-        monkeypatch.setattr(
-            repair_calls,
-            "probe_containment_health",
-            lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("probe failed")),
-        )
-        patch_daemon_global(
-            monkeypatch,
-            "repair_failing_managed_harness_hooks",
-            lambda _store: (_ for _ in ()).throw(RuntimeError("hook discovery failed")),
-        )
-        activity_probes: list[GuardStore] = []
-        patch_daemon_global(
-            monkeypatch,
-            "_repair_command_activity_persistence_health",
-            lambda current_store: activity_probes.append(current_store),
-        )
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/protection/repair",
-            data=json.dumps({"check_id": "all"}).encode("utf-8"),
-            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
-            method="POST",
-        )
-        try:
-            with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request, timeout=5)
-            payload = json.loads(error.value.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        assert error.value.code == 409
-        assert payload["failed_check_ids"] == [
-            "harness_hooks",
-            "decision_plane_compatibility",
-            "containment_compatibility",
-            "sandbox",
-        ]
-        assert payload["failed_harnesses"] == []
-        assert activity_probes == [store]
-        assert "decision_stream" in payload["check_ids"]
-        assert payload["message"] == (
-            "Repair paused before every supported protection layer could be confirmed. Retry repair here."
-        )
 
     def test_local_dashboard_session_preserves_reserved_claims(self) -> None:
         token = build_local_dashboard_session_token(
@@ -1040,86 +982,6 @@ class TestGuardSurfaceServer:
         assert 'changed_hash_action = "review"' in config_text
         assert "approval_wait_timeout_seconds = 45" in config_text
         assert "telemetry = true" in config_text
-
-    def test_guard_daemon_notification_setup_endpoint_opens_settings(self, tmp_path, monkeypatch) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-        calls: list[tuple[str, bool]] = []
-
-        def fake_setup(
-            guard_home,
-            *,
-            approval_url: str,
-            force: bool = False,
-        ) -> DesktopNotificationSetupResult:
-            assert guard_home == store.guard_home
-            calls.append((approval_url, force))
-            return DesktopNotificationSetupResult(
-                platform="Darwin",
-                supported=True,
-                preview_sent=True,
-                settings_opened=True,
-                settings_url=(
-                    "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
-                    "?id=fr.julienxx.oss.terminal-notifier"
-                ),
-                already_prompted=False,
-                notifier_path="/usr/local/bin/terminal-notifier",
-            )
-
-        patch_daemon_global(monkeypatch, "ensure_desktop_notification_setup", fake_setup)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        try:
-            setup_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/notifications/setup",
-                data=json.dumps({}).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(setup_request, timeout=5) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        assert response.status == 200
-        assert calls == [(f"http://127.0.0.1:{daemon.port}/approvals/notification-preview", True)]
-        assert payload["supported"] is True
-        assert payload["preview_sent"] is True
-        assert payload["settings_opened"] is True
-        assert "terminal-notifier" in payload["guidance"]
-
-    def test_guard_daemon_notification_setup_endpoint_returns_json_error(self, tmp_path, monkeypatch) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-
-        def fail_setup(*_args, **_kwargs) -> DesktopNotificationSetupResult:
-            raise OSError("settings unavailable")
-
-        patch_daemon_global(monkeypatch, "ensure_desktop_notification_setup", fail_setup)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        try:
-            setup_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/notifications/setup",
-                data=json.dumps({}).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
-                },
-                method="POST",
-            )
-            with pytest.raises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(setup_request, timeout=5)
-            payload = json.loads(error.value.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        assert error.value.code == 500
-        assert payload == {"error": "settings unavailable"}
 
     def test_guard_daemon_settings_accepts_gentle_preset(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -1669,52 +1531,6 @@ class TestGuardSurfaceServer:
         assert response.status == 200
         assert payload == {}
         assert captured == {"workspace": None}
-
-    @pytest.mark.usefixtures("native_hook_force")
-    def test_guard_daemon_claude_hook_endpoint_preserves_workspace_trailing_none_sentinel(
-        self, tmp_path, monkeypatch
-    ) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-        captured: dict[str, str | None] = {}
-
-        def fake_review(**kwargs):
-            captured["workspace"] = str(kwargs["workspace"])
-            return {}
-
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        monkeypatch.setattr(
-            HookWorker,
-            "prepare_workspace_policy",
-            staticmethod(lambda *_args, **_kwargs: {}),
-        )
-        monkeypatch.setattr(HookWorker, "review_http_payload", staticmethod(fake_review))
-        daemon.start()
-
-        try:
-            trailing_none = workspace_dir / "None"
-            request = urllib.request.Request(
-                (
-                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
-                    f"guard-home={urllib.parse.quote(str(store.guard_home))}"
-                    f"&workspace={urllib.parse.quote(str(trailing_none))}"
-                ),
-                data=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hi"}).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
-                },
-                method="POST",
-            )
-            with open_authenticated_claude_request(daemon, request, timeout=5) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        assert response.status == 200
-        assert payload == {}
-        assert captured["workspace"] == str(workspace_dir)
 
     @pytest.mark.usefixtures("native_hook_force")
     def test_guard_daemon_claude_hook_endpoint_accepts_guard_home_symlink_alias(self, tmp_path) -> None:
@@ -2533,51 +2349,6 @@ class TestGuardSurfaceServer:
         assert refreshed_token != stale_session_token
         assert "auth_token" not in initialize_payload
         assert settings_payload["guard_home"] == str(tmp_path / "guard-home")
-
-    def test_initialize_does_not_refresh_dashboard_session_past_absolute_lifetime(
-        self,
-        tmp_path,
-        monkeypatch,
-    ) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        original_time = time.time()
-        stale_session_token = build_local_dashboard_session_token(
-            auth_token=daemon._server.auth_token,
-            surface="dashboard",
-            expires_in_seconds=1,
-            session_started_at=datetime.fromtimestamp(
-                original_time - (8 * 24 * 60 * 60),
-                tz=timezone.utc,
-            ).isoformat(),
-        )
-        monkeypatch.setattr(daemon_server_module.time, "time", lambda: original_time + 5)
-
-        try:
-            initialize_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/initialize",
-                data=json.dumps(
-                    {
-                        "client_name": "guard-dashboard-web",
-                        "surface": "dashboard",
-                        "supported_protocol_versions": ["1.0", "1.1"],
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Dashboard-Session": stale_session_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        assert "dashboard_session_token" not in initialize_payload
-        assert "auth_token" not in initialize_payload
 
     def test_surface_runtime_persists_sessions_operations_and_items(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

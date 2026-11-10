@@ -15,7 +15,7 @@ use serde_json::{json, Map, Value};
 
 use super::super::http::{query_value, Request};
 use super::super::library;
-use super::{authorize_token, hook_scheduler, json_response, NativeReads, ReadConfig};
+use super::{authorize_token, hook_scheduler, json_response, refusals, NativeReads, ReadConfig};
 use crate::claude_hook_bridge_render::py_strip;
 use admission::{
     client_key, exec_workdir, expanduser, expires_at, lane, normpath, reply_event, runtime_event,
@@ -81,8 +81,7 @@ fn payload(request: &Request<'_>, body: &[u8]) -> Option<Result<Map<String, Valu
     })
 }
 
-/// The response to the hook, or `None` for a request the daemon refuses on
-/// its usual path (a caller without the credential, a disallowed origin).
+/// The response to the hook, or `None` for a path that is not a hook route.
 pub(in crate::daemon_edge) fn respond(
     request: &Request<'_>,
     body: &[u8],
@@ -97,8 +96,19 @@ pub(in crate::daemon_edge) fn respond(
     }
     let challenge = CHALLENGE_PATHS.contains(&request.path);
     let proven = challenge && proof_verified;
-    if !proven {
-        authorize_token(request, &config.token)?;
+    if !proven && authorize_token(request, &config.token).is_none() {
+        // No handler sits behind the edge for a hook, so the refusal and its
+        // audit row are written here.
+        let refusal = refusals::refusal(request, body, &config.token)
+            .unwrap_or(refusals::Refusal::Unauthorized);
+        let (status, body, cors_origin) = refusals::respond(request, &refusal, None, config, reads);
+        return Some(json_response(
+            status,
+            &body,
+            config.dashboard_build.as_deref(),
+            cors_origin.as_deref(),
+            false,
+        ));
     }
     let answer = |status: u16, body: &Value, no_store: bool| {
         json_response(

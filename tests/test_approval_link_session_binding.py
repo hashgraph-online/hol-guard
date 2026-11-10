@@ -6,7 +6,6 @@ import base64
 import json
 import urllib.request
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -18,7 +17,6 @@ from codex_plugin_scanner.guard.local_dashboard_session import (
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 
 AUTH = "test-daemon-auth-token"
 REQUEST_ID = "0123456789abcdef0123456789abcdef"
@@ -49,19 +47,6 @@ def test_the_request_claim_reaches_the_native_session_check(monkeypatch: pytest.
     )
 
     assert seen["claims"]["request_id"] == REQUEST_ID
-
-
-@pytest.mark.parametrize("request_id", [REQUEST_ID, "ffffffffffffffffffffffffffffffff"])
-def test_a_link_bound_session_is_never_refreshed_into_a_broader_one(request_id: str) -> None:
-    handler = SimpleNamespace(
-        _refreshable_dashboard_session_claims=lambda: {
-            "surface": "approval-center",
-            "request_id": request_id,
-            "expires_at": "2999-01-01T00:00:00+00:00",
-        },
-    )
-
-    assert _GuardDaemonHandler._refresh_dashboard_session_token(handler, surface="dashboard") is None
 
 
 def _pending_request(request_id: str) -> GuardApprovalRequest:

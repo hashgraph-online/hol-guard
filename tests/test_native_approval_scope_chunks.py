@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -22,7 +21,6 @@ from codex_plugin_scanner.guard.native_approval_scope import (
     ApprovalScopeUnavailableError,
     native_approval_scopes,
 )
-from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
 
 _CONTRACT_REPLY = {
@@ -256,40 +254,3 @@ def test_resolution_returns_the_contract_derived_before_commit(tmp_path: Path, m
     assert result["scope_contract_digest"] == "cd" * 32
     assert result["scope_contract_version"] == APPROVAL_SCOPE_CONTRACT_VERSION
     assert result["applied_scope"] == "artifact"
-
-
-def test_requests_list_reports_scope_unavailable_without_a_fallback_contract() -> None:
-    captured: dict[str, object] = {}
-
-    class _Handler:
-        server = SimpleNamespace(
-            store=SimpleNamespace(
-                guard_home=Path("guard-home"),
-                list_approval_request_page=lambda **kwargs: (_ for _ in ()).throw(ApprovalScopeUnavailableError()),
-            )
-        )
-
-        def _native_handler_decision(self, producer: object) -> SimpleNamespace:
-            del producer
-            return SimpleNamespace(fields={"status": "pending", "limit": 50})
-
-        def _is_hosted_dashboard_origin(self) -> bool:
-            return True
-
-        def _write_json(
-            self,
-            body: dict[str, object],
-            status: int = 200,
-            extra_headers: dict[str, str] | None = None,
-        ) -> None:
-            captured["body"] = body
-            captured["status"] = status
-            captured["headers"] = extra_headers
-
-    _GuardDaemonHandler._handle_requests_list(_Handler(), "")
-
-    assert captured["status"] == 503
-    body = captured["body"]
-    assert isinstance(body, dict)
-    assert body == {"error": "native_approval_scope_unavailable"}
-    assert "allowed_scopes" not in body

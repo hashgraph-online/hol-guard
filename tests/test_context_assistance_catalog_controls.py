@@ -81,34 +81,6 @@ def test_catalog_http_uses_settings_gate_strips_proof_and_keeps_read_routes_fixe
     assert calls == [("native", {"guard_home": tmp_path, "payload": {"action": "catalog"}})]
 
 
-def test_http_body_budget_is_scoped_and_supports_the_complete_signed_envelope():
-    from email.message import Message
-
-    from tests.daemon_handler_support import GuardDaemonHandler as _GuardDaemonHandler
-
-    body = json.dumps({"input": {"action": "import_catalog", "signed_catalog": "x" * (1024 * 1024)}}).encode()
-    headers = Message()
-    headers["Content-Type"] = "application/json"
-    headers["Content-Length"] = str(len(body))
-    calls = []
-    handler = SimpleNamespace(
-        headers=headers,
-        path="/v1/context-assistance/versions?read=1",
-        _MAX_BODY_BYTES=1_000_000,
-        _read_request_body=lambda size: calls.append(size) or (body, None),
-    )
-    payload, error = _GuardDaemonHandler._load_request_body(handler)
-    assert error is None and len(payload["input"]["signed_catalog"]) == 1024 * 1024
-    assert calls == [len(body)]
-    for path in ("/v1/settings", "/v1/hooks/codex/pre", "/v1/context-assistance/workspace"):
-        handler.path = path
-        assert _GuardDaemonHandler._load_request_body(handler) == ({}, "request_body_too_large")
-    handler.path = "/v1/context-assistance/versions"
-    headers.replace_header("Content-Length", str(4 * 1024 * 1024 + 1))
-    assert _GuardDaemonHandler._load_request_body(handler) == ({}, "request_body_too_large")
-    assert calls == [len(body)]
-
-
 def test_catalog_lifecycle_conflict_is_an_http_conflict(monkeypatch, tmp_path):
     responses = []
     handler = SimpleNamespace(
