@@ -46,8 +46,11 @@ must be read before it is edited), edit it, {check}.\n\n{tail}"
 /// The command that runs the test files `prompt` names, as `test_a.py` or
 /// `tests/test_a.py::test_one`, from `root`, where each one is. None on
 /// Windows, whose shell may not chain commands, when the prompt names no
-/// such file, or for a path a shell would read as more than itself.
+/// such file or more than [`MAX_TESTS`], or for a path a shell would read as
+/// more than itself. A file is named only when it resolves inside `root`, so
+/// a link to another checkout is not run.
 fn command(prompt: &str, root: &Path) -> Option<String> {
+    let inside = root.canonicalize().ok()?;
     let root = root.to_str()?;
     if cfg!(windows) || root.is_empty() || root.chars().any(|c| c == '\'' || c.is_control()) {
         return None;
@@ -62,12 +65,17 @@ fn command(prompt: &str, root: &Path) -> Option<String> {
             continue;
         };
         let runnable = stem.starts_with("test_") || stem.ends_with("_test");
-        if runnable && plain(path) && !tests.contains(&path) && Path::new(root).join(path).is_file()
-        {
+        let here = || {
+            let file = Path::new(root).join(path).canonicalize().ok();
+            file.is_some_and(|file| file.is_file() && file.starts_with(&inside))
+        };
+        if runnable && plain(path) && !tests.contains(&path) && here() {
             tests.push(path);
         }
     }
-    tests.truncate(MAX_TESTS);
+    if tests.len() > MAX_TESTS {
+        return None;
+    }
     (!tests.is_empty()).then(|| format!("cd '{root}' && python -m pytest -q {}", tests.join(" ")))
 }
 

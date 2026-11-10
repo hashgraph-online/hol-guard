@@ -181,6 +181,16 @@ fn a_prompt_about_a_failure_leads_with_fixing_from_the_code_shown() {
         "tests/test_core.py",
         "from src.core import other\n\n\ndef test_other():\n    assert other() == 1\n",
     );
+    for name in ["a", "b", "c", "d", "e"] {
+        repo.write(
+            &format!("tests/test_{name}.py"),
+            "def test_it():\n    pass\n",
+        );
+    }
+    let far = tempfile::tempdir().unwrap();
+    fs::write(far.path().join("test_far.py"), "def test_it():\n    pass\n").unwrap();
+    let link = repo.path().join("tests/test_far.py");
+    std::os::unix::fs::symlink(far.path().join("test_far.py"), link).unwrap();
     repo.commit("tests");
     repo.write("src/core.py", &CORE.replace("return 1", "return 2"));
     repo.commit("teammate: other returns 2");
@@ -216,11 +226,15 @@ read before it is edited), edit it, then run ";
             && rest.contains("\nChanged definitions as they read now:"),
         "{named}"
     );
-    // Named no test file, or one that is not there, the lead names no command.
+    // Named no test file, one that is not there or not in the project, or
+    // more than four, the lead names no command.
     let others = [
         "A teammate just pushed a commit and now some tests fail.",
         "Something in `other` broke recently. tests/test_gone.py::test_other fails.",
         "../tests/test_core.py::test_other fails since the last commit",
+        "tests/test_far.py::test_it fails since the last commit",
+        "tests/test_a.py, tests/test_b.py, tests/test_c.py, tests/test_d.py and \
+tests/test_e.py fail since the last commit",
     ];
     for prompt in others {
         let text = ask(prompt);
