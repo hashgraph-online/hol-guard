@@ -65,6 +65,7 @@ from tests.benign_fp_gate_projects import (
     _INSTALLED_PACKAGES,
     _NODE_PACKAGES,
     COMMITTED_SOURCE,
+    MAINTENANCE_AUTH_SOURCE,
     _application_database,
     _build_toolchain,
     _bun_lockfile,
@@ -321,6 +322,7 @@ def build_fixture(root: Path) -> BenignFixture:
     # The one committed file long enough for a range-limited read of its history.
     _write(parent / "src" / "report-window.ts", COMMITTED_SOURCE)
     _write(parent / "src" / "password-reset-email.tsx", "export const Email = ({ password }) => <Field password={password} />;\n")
+    _write(parent / "src" / "maintenance-auth.ts", MAINTENANCE_AUTH_SOURCE)
     _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
     # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
     # the whole file body with each read of it.

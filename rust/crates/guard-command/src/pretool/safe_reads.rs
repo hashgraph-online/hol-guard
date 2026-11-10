@@ -223,15 +223,15 @@ pub(super) fn safe_sed_arguments(
                     .iter()
                     .all(|statement| bounded_print_statement(statement))
         });
-    // Exactly one substitution with inert flags. No e/w commands, program
-    // files, in-place edits, or additional statements can enter this proof.
-    let substitution = !quiet
-        && matches!(programs.as_slice(), [program]
-        if !program.contains(';')
-            && program.strip_prefix("s/").is_some_and(|body| {
-                let parts: Vec<_> = body.split('/').collect();
-                parts.len() == 3 && matches!(parts[2], "" | "g")
-            }));
+    // Substitutions with inert flags, and nothing else. A redaction spells
+    // its own delimiter inside the pattern -- `s/\\/tmp\\/scratch-[a-z]*/DIR/`
+    // names a path by escaping every slash in it -- so the reading walks the
+    // program and honours that escape rather than counting the delimiters it
+    // finds. No e/w commands, program files, in-place edits or any other
+    // statement can enter this proof.
+    let substitution = programs
+        .iter()
+        .all(|program| crate::sed_substitution::sed_script_is_pure_substitution(program));
     (bounded_print || substitution)
         && (matches!(targets, [target] if (target == "-" && piped_input) || (!target.starts_with('-') && command_read_target(target, context, false)))
             || (targets.is_empty() && piped_input))

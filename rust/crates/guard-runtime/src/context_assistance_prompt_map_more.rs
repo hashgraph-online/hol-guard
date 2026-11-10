@@ -3,7 +3,9 @@
 //! changelog section an entry for the change belongs in.
 use super::super::sections::{headed_sections, marked_test, members, written_name, Section};
 use super::super::seen::Span;
-use super::{Asked, Entry, File, Kind, Pick, LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS};
+use super::{
+    docstring, Asked, Entry, File, Kind, Pick, LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS,
+};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
 use std::collections::BTreeSet;
@@ -83,7 +85,7 @@ pub(super) fn asks_for_changelog(prompt: &str) -> bool {
     prompt_words(prompt).any(|word| word == "changelog")
 }
 
-fn prompt_words(prompt: &str) -> impl Iterator<Item = String> + '_ {
+pub(super) fn prompt_words(prompt: &str) -> impl Iterator<Item = String> + '_ {
     prompt
         .split(|c: char| !c.is_alphanumeric())
         .map(str::to_lowercase)
@@ -458,13 +460,16 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
     };
     for pick in chosen {
         let mut item = Entry::plain(entry(files, pick));
-        let code = pick.whole.then(|| whole(&files[pick.file], pick.at));
-        if let Some((span, code)) = code.flatten() {
+        let code = pick
+            .whole
+            .then(|| docstring::shown(&files[pick.file], pick.at, asked));
+        if let Some((span, code, note)) = code.flatten() {
             if code.len() <= room && !asked.earlier.contains(&span) {
                 room -= code.len();
                 let shown = fenced(&code);
                 item.code += shown.len();
                 item.text.push_str(&shown);
+                item.text.push_str(&note);
                 item.shown.push(span);
             }
         }
@@ -475,7 +480,7 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
 
 /// A short function or method's own lines, to show whole, with the span they
 /// fill. A class or a longer definition is given by its lines only.
-fn whole(file: &File, at: usize) -> Option<(Span, String)> {
+pub(super) fn whole(file: &File, at: usize) -> Option<(Span, String)> {
     let section = &file.sections[at];
     if file.container(at) || section.end + 1 - section.start > MAX_SHOWN_LINES {
         return None;

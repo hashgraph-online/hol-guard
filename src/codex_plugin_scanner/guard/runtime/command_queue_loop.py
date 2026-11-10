@@ -19,6 +19,11 @@ COMMAND_QUEUE_ERROR_BACKOFF_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ERROR_BACKOFF_SECON
 _DEFAULT_POLL_INTERVAL_SECONDS = 2.0
 _DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 _LONG_POLL_EMPTY_MIN_WAIT_SECONDS = 0.05
+# An empty lease that took at least this long was held open by Cloud, so the
+# next lease goes out at once. Backing off after it would leave the device
+# without an open lease for up to a poll interval once it has been idle a few
+# minutes, and a decision made in that gap would wait for the next poll.
+_LONG_POLL_HELD_SECONDS = 1.0
 # While an agent waits on a decision, a failed poll is retried at this pace so a
 # decision made during an outage reaches it soon after the network returns. An
 # error backoff already under way is slept in slices of this length, so an
@@ -54,11 +59,16 @@ def run_command_queue_loop(
         wait_seconds = poll_interval
         error_wait = False
         try:
+            poll_started = time.monotonic()
             status = poll_once(store, context)
             error_streak = 0
             if status.get("last_poll_was_empty") is True:
                 empty_streak += 1
-                if command_queue_long_poll_enabled():
+                long_poll = command_queue_long_poll_enabled()
+                if long_poll and time.monotonic() - poll_started >= _LONG_POLL_HELD_SECONDS:
+                    empty_streak = 0
+                    wait_seconds = _LONG_POLL_EMPTY_MIN_WAIT_SECONDS
+                elif long_poll:
                     wait_seconds = min(
                         poll_interval,
                         _LONG_POLL_EMPTY_MIN_WAIT_SECONDS * (2 ** min(empty_streak - 1, 8)),

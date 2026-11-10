@@ -135,8 +135,22 @@ fn expand(
         let last = index + 1 == components.len();
         let is_pattern = component.contains(GLOB_CHARACTERS);
         let keeps_files = last && !(directories_only && is_pattern);
+        // `ls -a` already prints every hidden name a directory holds, so a
+        // listing narrowed by a dot-leading pattern prints a subset of what
+        // the bare listing prints. Only the last component earns that, and
+        // only where the expansion cannot stand for `.` or `..`, which the
+        // shell adds to a pattern such as `.*` and which would print another
+        // directory's entries.
+        let hidden_listing = is_pattern
+            && last
+            && screen == Screen::Names
+            && component.starts_with('.')
+            && !glob_matches(component.as_bytes(), b".")
+            && !glob_matches(component.as_bytes(), b"..");
         if *component == ".."
-            || (component.starts_with('.') && (is_pattern || !hidden_allowed(component)))
+            || (component.starts_with('.')
+                && !hidden_listing
+                && (is_pattern || !hidden_allowed(component)))
             || (mode.refuse_ambiguous
                 && is_pattern
                 && (component.contains('[') || component.contains("**")))
@@ -165,7 +179,7 @@ fn expand(
                 }
                 let name = entry.ok()?.file_name();
                 let name = name.to_str()?;
-                if !component_matches(component, name, mode.fold_case)? {
+                if !component_matches(component, name, mode.fold_case, hidden_listing)? {
                     continue;
                 }
                 let path = directory.join(name);
@@ -191,13 +205,18 @@ fn expand(
     Some(matches)
 }
 
-/// Whether one directory entry matches one pattern component. Folding case
+/// Whether one directory entry matches one pattern component. A hidden entry
+/// matches only where the pattern itself leads with a literal `.` and the
+/// caller has established that the match is printed by name. Folding case
 /// matches ASCII names the way `nocaseglob` does and refuses (`None`) a hidden
 /// entry the pattern could match under `dotglob` or a non-ASCII name, where
 /// `?` means a byte or a character depending on the locale.
-fn component_matches(component: &str, name: &str, fold_case: bool) -> Option<bool> {
+fn component_matches(component: &str, name: &str, fold_case: bool, hidden: bool) -> Option<bool> {
     if !fold_case {
-        return Some(!name.starts_with('.') && glob_matches(component.as_bytes(), name.as_bytes()));
+        return Some(
+            (hidden || !name.starts_with('.'))
+                && glob_matches(component.as_bytes(), name.as_bytes()),
+        );
     }
     if !name.is_ascii() {
         return None;
@@ -206,7 +225,7 @@ fn component_matches(component: &str, name: &str, fold_case: bool) -> Option<boo
         component.to_ascii_lowercase().as_bytes(),
         name.to_ascii_lowercase().as_bytes(),
     );
-    if matched && name.starts_with('.') {
+    if matched && name.starts_with('.') && !hidden {
         return None;
     }
     Some(matched)
@@ -242,15 +261,37 @@ fn screened_match(
             .is_some_and(|extension| {
                 SECRET_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
             });
+    let canonical = std::fs::canonicalize(path).ok()?;
+    // `ls` prints a regular file's name and metadata, never its bytes, so a
+    // match that is a file the read screen turns down is admitted by the
+    // directory holding it, exactly as the same name spelled literally is
+    // admitted as a listing operand. That is what keeps
+    // `ls .deploy-production.lock*` and `ls .deploy-production.lock`
+    // answering alike, while a match the read screen already admits keeps
+    // answering through it, so a file below a directory the parent screen
+    // turns down is unaffected. A directory match is listed itself, which
+    // prints names the parent listing does not, so it keeps the read
+    // screen.
+    let located = crate::pretool::read_paths::resolved_path_allowed(
+        &canonical,
+        context.home_dir,
+        context.cwd,
+    ) || (screen == Screen::Names
+        && metadata.is_file()
+        && canonical.parent().is_some_and(|parent| {
+            crate::pretool::read_paths::resolved_path_allowed_for_operation(
+                parent,
+                context.home_dir,
+                context.cwd,
+                false,
+                true,
+            )
+        }));
     Some(
         guard_secure_fs::sensitive_path_family(path).is_none()
             && (screen == Screen::Names || !guard_secure_fs::credential_named_path(relative))
             && !secret_extension
-            && crate::pretool::read_paths::resolved_path_allowed(
-                &std::fs::canonicalize(path).ok()?,
-                context.home_dir,
-                context.cwd,
-            ),
+            && located,
     )
 }
 

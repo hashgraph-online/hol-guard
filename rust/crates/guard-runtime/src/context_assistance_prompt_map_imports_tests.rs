@@ -38,7 +38,10 @@ partial,\n    reduce,\n)\nfrom itertools import chain\n```"
         ),
         "{text}"
     );
-    assert!(!text.contains("import json"), "{text}");
+    // The import inside `joined` is not one of the file's imports.
+    let imports = text.split("\n\nImports in").nth(1).unwrap();
+    let imports = imports.split("\n\n").next().unwrap();
+    assert!(!imports.contains("import json"), "{text}");
     let prompt = "Add a short usage example to the docstring of `joined` in src/pkg/more.py, \
 written as a doctest.";
     let text = prompt_map(home.path(), &root, prompt).unwrap();

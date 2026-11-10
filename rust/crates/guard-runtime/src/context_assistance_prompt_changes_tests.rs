@@ -101,8 +101,7 @@ impl Repo {
     }
 
     fn changes_shown(&self, base: Option<&str>, show_diffs: bool) -> Option<String> {
-        let since = base.map_or(Since::Nothing, Since::Start);
-        self.since(since, show_diffs)
+        self.since(base.map_or(Since::Nothing, Since::Start), show_diffs)
     }
 
     fn since(&self, since: Since, show_diffs: bool) -> Option<String> {
@@ -115,6 +114,7 @@ impl Repo {
                 })
                 .collect()
         })
+        .map(|changed| changed.text)
     }
 }
 

@@ -48,6 +48,43 @@ export function describe(request: ReportRequest): string {
 }
 """
 
+# Express middleware an agent read in a real session and Guard withheld as a
+# leaked secret: an `x-` header read into `token`, a `typeof` guard choosing
+# `apiKey`, an arrow function with one parameter per line, and a fetch with
+# `credentials: 'omit'`. None holds a credential.
+MAINTENANCE_AUTH_SOURCE = """import type { NextFunction, Request, Response } from 'express';
+
+export function readCapability(req: Request): string | undefined {
+  const token = req.header('x-service-maintenance-token');
+  return token;
+}
+
+export function readApiKey(req: Request): string | undefined {
+  const rawApiKeyHeader = req.headers['x-api-key'];
+  const apiKey = typeof rawApiKeyHeader === 'string' ? rawApiKeyHeader : undefined;
+  return apiKey;
+}
+
+export const requireMaintenanceToken = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (!readCapability(req)) {
+    res.status(401).end();
+    return;
+  }
+  next();
+};
+
+export async function loadPublicPlugins(url: string): Promise<unknown> {
+  const response = await fetch(url, {
+    credentials: 'omit',
+  });
+  return response.json();
+}
+"""
+
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
