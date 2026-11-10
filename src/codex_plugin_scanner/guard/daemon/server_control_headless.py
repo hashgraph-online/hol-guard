@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+import platform
+import uuid
 from typing import Any
 
+from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approval_gate import (
@@ -63,6 +66,49 @@ _HEADLESS_APP_ACTIONS = {
 
 class _HeadlessRoutes:
     """Handler methods for control-plane routes."""
+
+    def _headless_reconnect_payload(
+        self,
+        *,
+        cloud_sync: dict[str, object],
+        location_id: str | None,
+    ) -> dict[str, object]:
+        runtime_summary = self.server.store.get_sync_payload("runtime_session_summary")  # type: ignore[attr-defined]
+        runtime = runtime_summary if isinstance(runtime_summary, dict) else {}
+        latest_cloud_sync = self._latest_cloud_sync_snapshot()
+        cloud_sync_status = self._optional_string(cloud_sync.get("status")) or "unknown"
+        if cloud_sync_status in {"queued", "in_progress"}:
+            reconciliation_status = cloud_sync_status
+        elif cloud_sync_status == "auth_expired":
+            reconciliation_status = "auth_expired"
+        elif cloud_sync_status == "not_configured":
+            reconciliation_status = "not_configured"
+        elif cloud_sync_status == "synced":
+            reconciliation_status = "synced"
+        else:
+            reconciliation_status = "pending"
+        return {
+            "correlation_id": str(uuid.uuid4()),
+            "freshness": {
+                "last_receipt_sync_at": self._optional_string(latest_cloud_sync.get("synced_at")),
+                "last_runtime_sync_at": (
+                    self._optional_string(runtime.get("runtime_session_synced_at"))
+                    or self._optional_string(runtime.get("synced_at"))
+                ),
+                "local_guard_online_at": self._optional_string(runtime.get("local_guard_online_at")),
+            },
+            "latest_cloud_sync": latest_cloud_sync,
+            "local_identity": {
+                "daemon_id": self._optional_string(runtime.get("runtime_device_id")),
+                "daemon_version": __version__,
+                "hostname": platform.node() or None,
+                "ip_address": None,
+                "private_ip_address": None,
+                "public_ip_address": None,
+            },
+            "location_id": location_id,
+            "reconciliation_status": reconciliation_status,
+        }
 
     def _latest_cloud_sync_snapshot(self) -> dict[str, object]:
         latest_payload = self.server.store.get_sync_payload("headless_app_sync_summary")  # type: ignore[attr-defined]

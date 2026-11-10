@@ -20,14 +20,15 @@ from .control_route_calls import ROUTE_CALLS
 from .extension_control_host import EXTENSION_CONTROL_CALLS
 from .routes.calls import HANDLER_CALLS
 from .routes.catalog_calls import CATALOG_CALLS
+from .routes.connect_calls import CONNECT_CALLS
 from .routes.control_host import CONTROL_HOST_CALLS
 from .routes.hook_host import HOOK_HOST_CALLS
 from .routes.policy_sync_call import POLICY_SYNC_CALLS
 from .routes.reads import READ_CALLS
 from .routes.repair_calls import REPAIR_CALLS
-from .routes.supply_chain_calls import SUPPLY_CHAIN_CALLS
 from .routes.service_calls import SERVICE_CALLS
 from .routes.settings_calls import SETTINGS_CALLS
+from .routes.supply_chain_calls import SUPPLY_CHAIN_CALLS
 from .store import GuardStore
 from .workers.ticks import WORKER_CALLS
 
@@ -226,6 +227,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **CONTROL_HOST_CALLS,
     **HOOK_HOST_CALLS,
     **READ_CALLS,
+    **CONNECT_CALLS,
     **REPAIR_CALLS,
     **SUPPLY_CHAIN_CALLS,
     **WORKER_CALLS,

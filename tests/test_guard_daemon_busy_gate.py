@@ -95,15 +95,6 @@ def test_a_busy_cors_lookup_does_not_turn_a_real_denial_into_a_retry(
     assert written == [(401, {"error": "unauthorized"})]
 
 
-def test_a_busy_reconnect_origin_check_answers_retryable_503(tmp_path: Path) -> None:
-    handler, written = _handler(tmp_path)
-    handler._native_gate_unavailable = True
-
-    handler._write_dashboard_reconnect_candidate_failure("dashboard_reconnect_origin_mismatch")
-
-    assert written == [(503, {"error": "native_route_policy_unavailable"})]
-
-
 def test_a_new_request_does_not_inherit_an_earlier_restart_refusal(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

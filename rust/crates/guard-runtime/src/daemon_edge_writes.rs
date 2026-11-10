@@ -34,6 +34,8 @@ const PLUGIN_SLUG_BYTES: usize = 256;
 /// `native_daemon_handler._MAX_LIST_ITEMS`.
 const MAX_HANDLER_LIST_ITEMS: usize = 4_096;
 
+#[path = "daemon_edge_cloud_connect.rs"]
+pub(super) mod cloud_connect;
 #[path = "daemon_edge_gate.rs"]
 mod gate;
 #[path = "daemon_edge_gate_config.rs"]
@@ -352,6 +354,10 @@ fn control_post(
         config.user_home.as_deref().map_or(Value::Null, Value::from),
     );
     if let Some(answer) = supply_chain::post(request.path, &payload, config, args.clone()) {
+        let (status, body) = answer?;
+        return Some((status, body, caller.cors_origin, false));
+    }
+    if let Some(answer) = cloud_connect::post(request.path, config, args.clone()) {
         let (status, body) = answer?;
         return Some((status, body, caller.cors_origin, false));
     }

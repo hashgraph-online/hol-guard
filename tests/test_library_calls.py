@@ -250,13 +250,12 @@ def test_control_get_answers_live_reads_from_the_daemon_state(tmp_path: Path) ->
     def control_get(path: str, **extra: object) -> dict[str, object]:
         return _call(tmp_path, "route.control_get", {"path": path, "port": 5999, "daemon_pid": 1, **extra})
 
-    connect = control_get("/v1/cloud/connect")["ok"]
-    assert connect["status"] == 200  # type: ignore[index]
-    assert set(connect["body"]) == {"connect_required", "connect_flow", "dashboard_url"}  # type: ignore[index]
+    facts = _call(tmp_path, "connect.facts", {"kind": "cloud", "port": 5999, "daemon_pid": 1})["ok"]
+    assert set(facts) == {"required", "repair", "connect_url", "cloud_state", "package_state"}  # type: ignore[arg-type]
     update = control_get("/v1/update/status")["ok"]
     assert update["status"] == 200 and update["no_store"] is True  # type: ignore[index]
     assert "error" in control_get("/v1/settings")
-    assert "error" in control_get("/v1/cloud/connect", query=1)
+    assert "error" in control_get("/v1/runtime", query=1)
 
 
 def test_worker_passes_answer_ok(tmp_path: Path) -> None:

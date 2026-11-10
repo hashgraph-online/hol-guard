@@ -24,7 +24,6 @@ _NO_STORE_VALUES = frozenset({"no-store", "no-store, max-age=0"})
 
 
 def _host_class() -> type:
-    from ..daemon.server_control_cloud_connect import _CloudConnectRoutes
     from ..daemon.server_control_headless import _HeadlessRoutes
     from ..daemon.server_control_health import _ControlHealthRoutes
     from ..daemon.server_control_misc import _ControlMiscRoutes
@@ -35,7 +34,6 @@ def _host_class() -> type:
     class ControlHost(
         _DashboardSupportRoutes,
         _ControlPostRoutes,
-        _CloudConnectRoutes,
         _HeadlessRoutes,
         _ControlMiscRoutes,
         _ControlPolicyRoutes,
@@ -229,7 +227,6 @@ def control_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
 
 CONTROL_GET_PATHS = frozenset(
     {
-        "/v1/cloud/connect",
         "/v1/local-clis",
         "/v1/runtime",
         "/v1/update/status",
@@ -280,8 +277,6 @@ def _dispatch_control_get(host: Any, path: str, query: str) -> None:
         _runtime_read(host, query)
     elif path == "/v1/local-clis":
         handle_local_cli_list(host, query)
-    elif path == "/v1/cloud/connect":
-        host._handle_guard_cloud_connect_status()
     else:
         guard_home = host.server.store.guard_home
         host._write_json(
