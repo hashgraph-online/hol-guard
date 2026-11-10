@@ -104,9 +104,11 @@ impl Evaluation<'_> {
 
     /// Matches a launcher executable, a package token, and a fixed
     /// subcommand suffix, tolerating an npm-style `@<version-or-tag>` suffix
-    /// or a pip/uv-style `==<version>` pin on the package token. Consume launcher options only while matching the
-    /// prefix, then inspect the untouched suffix so a command-level `--` keeps
-    /// subsequent operands from being interpreted as safety flags.
+    /// on the package token, and a pip-style `==<version>` pin when the
+    /// launcher is `uvx`, `uv tool run`, or `pipx run`. Consume launcher
+    /// options only while matching the prefix, then inspect the untouched
+    /// suffix so a command-level `--` keeps subsequent operands from being
+    /// interpreted as safety flags.
     fn versioned_package_subcommand(&self, node: &VersionedPackageSubcommandNode) -> MatchResult {
         let mut prefix: Vec<String> =
             Vec::with_capacity(node.leading_subcommands.len() + 1 + node.subcommands.len());
@@ -145,7 +147,11 @@ impl Evaluation<'_> {
                     }
                 }
                 let is_package = prefix_index == node.leading_subcommands.len()
-                    && is_versioned_package_token(argument, &node.package);
+                    && is_versioned_package_token(
+                        argument,
+                        &node.package,
+                        allows_python_equality_pin(node),
+                    );
                 if !is_package && argument != &prefix[prefix_index] {
                     break;
                 }
@@ -170,12 +176,35 @@ impl Evaluation<'_> {
 }
 
 /// `is_versioned_package_token` - whether `argument` names `package` with a
-/// version suffix: npm-style `package@<version-or-tag>` or a pip/uv-style
-/// `package==<version>` pin. The bare package name is matched separately.
-pub(super) fn is_versioned_package_token(argument: &str, package: &str) -> bool {
+/// version suffix: npm-style `package@<version-or-tag>`, or a pip-style
+/// `package==<version>` pin when `allow_equality_pin` is set. The bare
+/// package name is matched separately.
+pub(super) fn is_versioned_package_token(
+    argument: &str,
+    package: &str,
+    allow_equality_pin: bool,
+) -> bool {
     argument
         .strip_prefix(package)
-        .is_some_and(|rest| rest.starts_with('@') || rest.starts_with("=="))
+        .is_some_and(|rest| rest.starts_with('@') || (allow_equality_pin && rest.starts_with("==")))
+}
+
+/// `allows_python_equality_pin` - whether this matcher is a Python package
+/// launcher that accepts `package==version` pins: `uvx`, `uv tool run`, or
+/// `pipx run`. Other launchers keep the npm `@` form only.
+fn allows_python_equality_pin(node: &VersionedPackageSubcommandNode) -> bool {
+    let stems: BTreeSet<&str> = node
+        .executables
+        .iter()
+        .map(|name| {
+            name.strip_suffix(".exe")
+                .or_else(|| name.strip_suffix(".cmd"))
+                .unwrap_or(name.as_str())
+        })
+        .collect();
+    stems.contains("uvx")
+        || (stems.contains("uv") && node.leading_subcommands == ["tool", "run"])
+        || (stems.contains("pipx") && node.leading_subcommands == ["run"])
 }
 
 /// `deadline_ok` - the shared budget check, usable without an `Evaluation`.
