@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
-from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
+from codex_plugin_scanner.guard.daemon.server_runtime_hook import _RuntimeHookRoutes
 
 
 class _SettledDirectories:
@@ -29,8 +29,8 @@ class _SettledDirectories:
 
 
 class _FakeHandler:
-    _handle_hook_readiness = daemon_server_module._GuardDaemonHandler._handle_hook_readiness
-    _hook_workspace_spelling = staticmethod(daemon_server_module._GuardDaemonHandler._hook_workspace_spelling)
+    _handle_hook_readiness = _RuntimeHookRoutes._handle_hook_readiness
+    _hook_workspace_spelling = staticmethod(_RuntimeHookRoutes._hook_workspace_spelling)
 
     def __init__(self, daemon_server: object) -> None:
         self._fake_daemon_server = daemon_server

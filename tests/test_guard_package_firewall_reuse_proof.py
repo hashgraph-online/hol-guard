@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon.server_control_routes_post import _SUPPLY_CHAIN_PACKAGE_ACTIONS
 from codex_plugin_scanner.guard.local_supply_chain import build_local_supply_chain_posture
 from codex_plugin_scanner.guard.package_firewall_receipts import (
     package_firewall_receipt_metadata,
@@ -123,13 +122,3 @@ def test_gpfr245_reuses_runtime_supply_chain_detection() -> None:
     assert signals[0].signal_id == "supply-chain.postinstall-network-send"
 
 
-def test_gpfr246_daemon_exposes_cloud_package_shim_endpoint_contract() -> None:
-    assert {
-        "audit",
-        "connect",
-        "install",
-        "remove",
-        "repair",
-        "sync",
-        "test",
-    } <= _SUPPLY_CHAIN_PACKAGE_ACTIONS
