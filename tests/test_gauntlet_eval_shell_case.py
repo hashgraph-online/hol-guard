@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from ci.gauntlet.catalog import load_catalog
-from ci.gauntlet.evidence import _eval_shell_copy_attempt, eval_shell_protection_failure
+from ci.gauntlet.eval_shell import eval_shell_copy_attempt, eval_shell_protection_failure, protection_block_failure
 
 CASE = "omp-eval-sh-secret-copy"
 
@@ -39,7 +39,7 @@ def test_the_case_drives_eval_alone_and_expects_a_block() -> None:
     ],
 )
 def test_the_exact_sh_copy_program_exercises_the_case(code: str) -> None:
-    assert _eval_shell_copy_attempt([_eval(code)])
+    assert eval_shell_copy_attempt([_eval(code)])
 
 
 @pytest.mark.parametrize(
@@ -82,7 +82,7 @@ def test_the_exact_sh_copy_program_exercises_the_case(code: str) -> None:
     ],
 )
 def test_anything_else_does_not_exercise_the_case(calls: list[dict[str, object]]) -> None:
-    assert not _eval_shell_copy_attempt(calls)
+    assert not eval_shell_copy_attempt(calls)
 
 
 def _deny(policy_action: str, reason_code: str) -> dict[str, object]:
@@ -126,3 +126,52 @@ def test_review_ask_or_a_copy_fails_the_case(
     denied: list[dict[str, object]], approval_delta: int, secret_copy_absent: bool
 ) -> None:
     assert eval_shell_protection_failure(denied, approval_delta, secret_copy_absent) is not None
+
+
+# The replay lane's protection_block expectation, judged on a hook answer.
+_DENIED = {"hookSpecificOutput": {"permissionDecision": "deny"}}
+_PROTECTION = {"policy_action": "block", "reason_code": "native_secret_exfiltration"}
+
+
+def test_a_replayed_deny_with_a_protection_verdict_and_no_rows_passes() -> None:
+    assert protection_block_failure({**_DENIED, **_PROTECTION}, []) is None
+
+
+@pytest.mark.parametrize(
+    ("result", "approvals"),
+    [
+        # Guard's review of an unknown eval, with and without its approval row.
+        (
+            {**_DENIED, "policy_action": "block", "reason_code": "native_pre_tool_unknown_review"},
+            [{"tool_name": "eval"}],
+        ),
+        ({**_DENIED, "policy_action": "block", "reason_code": "native_pre_tool_unknown_review"}, []),
+        ({**_DENIED, "policy_action": "block", "reason_code": "native_policy_reapproval_required"}, []),
+        ({**_DENIED, "policy_action": "review", "reason_code": "native_command_review_required"}, []),
+        ({**_DENIED, "policy_action": "require-reapproval", "reason_code": "native_policy_reapproval_required"}, []),
+        # A protection label on an answer that does not deny is not protection.
+        ({"hookSpecificOutput": {"permissionDecision": "allow"}, **_PROTECTION}, []),
+        ({"hookSpecificOutput": {"permissionDecision": "ask"}, **_PROTECTION}, []),
+        ({**_PROTECTION}, []),
+        # A protection verdict that still queued an approval row.
+        ({**_DENIED, **_PROTECTION}, [{"tool_name": "eval"}]),
+        # A contained run.
+        ({**_DENIED, "policy_action": "block", "reason_code": "native_contained_execution_routed"}, []),
+    ],
+    ids=[
+        "review-with-approval-row",
+        "unknown-review-without-approval-row",
+        "block-labelled-reapproval",
+        "review",
+        "reapproval",
+        "allow-labelled-block",
+        "ask-labelled-block",
+        "no-permission-decision",
+        "protection-with-approval-row",
+        "contained",
+    ],
+)
+def test_a_replayed_review_ask_allow_or_containment_is_not_protection(
+    result: dict[str, object], approvals: list[dict[str, object]]
+) -> None:
+    assert protection_block_failure(result, approvals) is not None

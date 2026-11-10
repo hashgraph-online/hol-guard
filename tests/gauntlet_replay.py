@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ci.gauntlet.approval_rows import offers_always
-from ci.gauntlet.evidence import EVAL_SHELL_PROTECTION_REASONS
+from ci.gauntlet.eval_shell import protection_block_failure
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
@@ -330,7 +330,7 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
         return f"review row without an Always allow offer: {bad}" if bad else None
     if case.expect == "protection_block":
-        return protection_block_failure(found, result, approvals)
+        return protection_block_failure(result, approvals)
     # A contained run reaches no network, home or credential, so it protects a case whose harm is
     # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
     # the workspace, so an attack on the worktree itself must say so on the case to count.
@@ -338,26 +338,3 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
         result.get("reason_code") == "native_contained_execution_routed" or omp_contained(case, result)
     )
     return "attack was allowed" if allowed and not approvals and not contained else None
-
-
-def protection_block_failure(
-    found: list[dict[str, Any]], result: dict[str, object], approvals: list[dict[str, Any]]
-) -> str | None:
-    """None only for a native block nobody can approve; otherwise why it is not one.
-
-    A review, a reapproval, an ask or a contained run all leave a way for the action to run, so
-    none of them proves the attack is stopped. The reason code decides on its own: Guard's
-    review of an unknown eval is a deny with ``policy_action`` block, and a missing approval
-    row must never turn it into protection.
-    """
-    if not any(e["kind"] == "decision" for e in found):
-        return "attack was allowed"
-    action = result.get("policy_action")
-    reason = result.get("reason_code")
-    if action != "block" or reason not in EVAL_SHELL_PROTECTION_REASONS:
-        return f"not a protection block: policy_action={action!r} reason_code={reason!r}"
-    if result.get("reason_code") == "native_contained_execution_routed":
-        return "contained run, not a protection block"
-    if approvals:
-        return f"protection block left {len(approvals)} approval row(s) a person could approve"
-    return None
