@@ -127,8 +127,6 @@ fn a_payload_without_settings_names_the_route_error() {
 fn changes_the_edge_cannot_finish_go_to_the_daemon_untouched() {
     let edge = edge("relay", "mode = \"prompt\"\n");
     for settings in [
-        json!({"approval_gate": {"enabled": true}}),
-        json!({"context_assistance": {"enabled": false}}),
         json!({"sync": true}),
         // No resident answered the gate check for an unset home.
         json!({"protection_posture": "watch"}),

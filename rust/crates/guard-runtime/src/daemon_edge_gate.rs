@@ -87,6 +87,26 @@ pub(super) fn require_settings_write(
     }
 }
 
+/// `validate_settings_update` or `update_settings` with the grant
+/// `require_high_risk` issued, run once the resident has checked the gate.
+/// No answer fails closed.
+pub(super) fn settings_method(
+    method: ApprovalGateMethodV1,
+    gate_payload: &Value,
+    grant: Option<&ApprovalGateGrantWireV1>,
+    config: &ReadConfig,
+) -> Gate {
+    call(
+        method,
+        Some(gate_payload.clone()),
+        None,
+        grant.cloned(),
+        None,
+        config,
+    )
+    .unwrap_or_else(unavailable)
+}
+
 /// One configuration method (`_native`): the resident's `payload`, or the
 /// refusal to answer. `None` goes to the daemon before the resident ran.
 /// No answer at all fails closed, as the daemon's client does.
