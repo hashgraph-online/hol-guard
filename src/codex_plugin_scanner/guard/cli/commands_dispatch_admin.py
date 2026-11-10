@@ -450,7 +450,8 @@ def _run_guard_doctor_command(
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
     payload["protection_basis"] = "configured_posture_and_hook_registration"
     payload["protection_health_note"] = (
-        "Live protection_health is a separate runtime check; trust it for current enforcement health."
+        "Run `hol-guard approvals list --json` to inspect live protection_health; "
+        "trust it for current enforcement health."
     )
     # A doctor run that reports a broken or partial registration must not also
     # report the posture as though something were applying it. Judge the one
