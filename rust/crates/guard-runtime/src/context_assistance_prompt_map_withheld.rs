@@ -2,18 +2,22 @@
 //! context for what they hold, such as a line its secret check takes for a
 //! credential. The map gives each one's lines and name, never the file's
 //! text, so the agent opens those lines itself instead of searching for them.
-use super::{file, named_definitions, Asked, Entry, Rendered, Sought, HEADER};
+use super::{file, named_definitions, Asked, Entry, File, Rendered, Sought, HEADER};
+use std::time::Instant;
 
 const WITHHELD_TITLE: &str = "Definitions this request names, in files Guard keeps out of this \
 context (open these lines yourself):";
+/// The most of the note's text: it comes after the map's own budget.
+const MAX_WITHHELD_CHARS: usize = 600;
 
 /// `mapped` with the lines of each named definition the files in `withheld`
-/// hold, or `mapped` as it is when they hold none.
+/// hold, or `mapped` as it is when they hold none or `until` passes.
 pub(super) fn added(
     mapped: Option<Rendered>,
     withheld: &[(String, String)],
     sought: &[Sought],
     asked: &Asked,
+    until: Instant,
 ) -> Option<Rendered> {
     let names: Vec<(&str, bool)> = (sought.iter())
         .filter(|item| item.name && !item.phrase)
@@ -22,12 +26,26 @@ pub(super) fn added(
     if withheld.is_empty() || names.is_empty() {
         return mapped;
     }
-    let files: Vec<_> = (withheld.iter())
-        .map(|(path, text)| file(path, text))
-        .collect();
+    let mut files: Vec<File> = Vec::with_capacity(withheld.len());
+    for (path, text) in withheld {
+        if Instant::now() >= until {
+            return mapped;
+        }
+        files.push(file(path, text));
+    }
+    if Instant::now() >= until {
+        return mapped;
+    }
+    // Only a definition the prompt names: with none found, the picker falls
+    // back to a named file's unfinished functions, which may be unrelated.
+    let named = |file: &File, at: usize| {
+        let name = file.sections[at].name.as_deref();
+        names.iter().any(|(sought, _)| name == Some(*sought))
+            || asked.spellings.contains(&file.qualified(at))
+    };
     let entries: Vec<Entry> = named_definitions(&files, &names, asked, false)
         .into_iter()
-        .filter(|pick| !pick.base)
+        .filter(|pick| !pick.base && named(&files[pick.file], pick.at))
         .map(|pick| {
             let file = &files[pick.file];
             let section = &file.sections[pick.at];
@@ -35,10 +53,18 @@ pub(super) fn added(
             Entry::plain(format!("{range} {}", file.qualified(pick.at)))
         })
         .collect();
-    if entries.is_empty() {
+    let mut list: Vec<String> = Vec::new();
+    let mut chars = WITHHELD_TITLE.chars().count();
+    for entry in entries {
+        chars += 1 + entry.text.chars().count();
+        if chars > MAX_WITHHELD_CHARS {
+            break;
+        }
+        list.push(entry.text);
+    }
+    if list.is_empty() {
         return mapped;
     }
-    let list: Vec<String> = entries.into_iter().map(|entry| entry.text).collect();
     let note = format!("\n\n{WITHHELD_TITLE}\n{}", list.join("\n"));
     Some(match mapped {
         Some(Rendered { text, shown }) => Rendered {

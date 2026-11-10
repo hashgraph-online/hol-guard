@@ -211,9 +211,9 @@ pub(super) fn mapped(
         renames: renames(prompt),
     };
     // A file kept out for what it holds still places what the prompt names.
-    let withheld = withheld_texts(home, root, app, &files, &texts, until);
     let mapped = map(&texts, &sought, &asked, until);
-    withheld::added(mapped, &withheld, &sought, &asked)
+    let withheld = withheld_texts(home, root, app, &files, &texts, until);
+    withheld::added(mapped, &withheld, &sought, &asked, until)
 }
 
 /// The tests that use `names`, the definitions a change touched, from the

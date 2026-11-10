@@ -50,3 +50,21 @@ fn a_file_refused_by_its_path_is_not_placed() {
         "{map:?}"
     );
 }
+
+/// With no named definition in the withheld file, its unfinished functions
+/// are not listed in their place: they need not be what the prompt means.
+#[test]
+fn an_unnamed_function_in_a_withheld_file_is_not_placed() {
+    let text = lexer() + "\n\ndef pending_step():\n    raise NotImplementedError\n";
+    let list = [
+        ("src/lexer.py", text.as_str()),
+        ("src/utils.py", "def helper():\n    return 1\n"),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Add a `missing_name` helper to `src/lexer.py`.";
+    let map = prompt_map(home.path(), &root, prompt);
+    assert!(
+        map.as_ref().is_none_or(|map| !map.contains("pending_step")),
+        "{map:?}"
+    );
+}
