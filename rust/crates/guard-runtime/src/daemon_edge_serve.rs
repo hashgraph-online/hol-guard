@@ -288,6 +288,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
                 .map(std::time::Duration::from_secs_f64),
         );
     }
+    warm_hook_worker(&reads, port, pid);
     println!("{}", json!({"port": port, "pid": pid}));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
@@ -307,6 +308,29 @@ pub(crate) fn run(args: &[String]) -> i32 {
 
 /// Ensures the Guard home's discovery key and auth secret, then writes the
 /// signed daemon state naming this process. Returns the auth secret.
+/// Builds the resident's hook worker in the background, so the first hook
+/// does not pay for the library's start inside its own deadline.
+fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32) {
+    let Some(config) = reads.config() else {
+        return;
+    };
+    let _ = std::thread::Builder::new()
+        .name("hook-warm".to_owned())
+        .spawn(move || {
+            let args = json!({
+                "port": port,
+                "daemon_pid": pid,
+                "home_dir": config.user_home.clone(),
+            });
+            let _ = super::library::call_resident_within(
+                &config,
+                "hook.warm",
+                args,
+                std::time::Duration::from_secs(60),
+            );
+        });
+}
+
 pub(super) fn publish(
     home: &Path,
     config: &LaunchConfig,

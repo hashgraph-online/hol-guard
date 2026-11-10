@@ -65,7 +65,7 @@ struct Handshake {
     #[serde(default)]
     dashboard_build: Option<String>,
     #[serde(default)]
-    user_home: Option<String>,
+    pub(super) user_home: Option<String>,
     #[serde(default)]
     session_signals: Option<Vec<String>>,
     #[serde(default)]
@@ -103,7 +103,7 @@ pub(super) struct ReadConfig {
     busy_timeout_ms: u64,
     dashboard_build: Option<String>,
     /// `str(Path.home())` in the daemon, which evidence reads shorten to `~`.
-    user_home: Option<String>,
+    pub(super) user_home: Option<String>,
     /// The daemon's local OS-session facts, which approval-gate checks bind a
     /// recent TOTP proof to. The edge runs in a session of its own.
     session_signals: Option<Vec<String>>,

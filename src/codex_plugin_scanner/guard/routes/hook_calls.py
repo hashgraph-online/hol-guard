@@ -107,6 +107,14 @@ def hook_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     return {"capacity_harness": capacity_harness}
 
 
+def hook_warm(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Builds the resident's hook worker before the first hook needs it."""
+
+    server = _server(store, args)
+    _ = server.hook_worker
+    return {}
+
+
 def hook_path_rejected(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Audits a directory the daemon refused to take from a hook request."""
 
@@ -193,5 +201,6 @@ HOOK_CALLS = {
     "hook.path_rejected": hook_path_rejected,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
+    "hook.warm": hook_warm,
     "hook.review": hook_review,
 }

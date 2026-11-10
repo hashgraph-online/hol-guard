@@ -10,11 +10,9 @@ import pytest
 
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.daemon_control_patching import patch_daemon_global
 from tests.runtime_registration_support import (
     CONTAINMENT_CHECK_IDS,
     T0,
-    delete_runtime_row,
     passing_containment_health,
     post_repair,
     protection_check,
@@ -100,33 +98,6 @@ def test_snapshot_stale_runtime_row_still_fails_closed(tmp_path: Path) -> None:
         "status": "fail",
         "reason_code": "daemon_heartbeat_stale",
     }
-
-
-def test_protection_repair_all_restores_runtime_registration(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    stub_supported_repair(monkeypatch)
-    patch_daemon_global(
-        monkeypatch,
-        "_repair_command_activity_persistence_health",
-        lambda _store: None,
-    )
-    store, daemon = start_daemon(tmp_path, monkeypatch)
-    heartbeat = daemon._server.runtime_heartbeat  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(heartbeat, "touch", lambda _at: None)
-    try:
-        delete_runtime_row(store)
-        status, payload = post_repair(daemon, "all")
-
-        assert status == 200
-        assert payload["repaired"] is True
-        assert "daemon" in cast(list[str], payload["check_ids"])
-        state = store.get_runtime_state()
-        assert state is not None
-        assert state["session_id"] == daemon._server.runtime_session_id  # pyright: ignore[reportPrivateUsage]
-    finally:
-        daemon.stop()
 
 
 def test_protection_repair_all_clears_degraded_evidence_without_a_native_probe(

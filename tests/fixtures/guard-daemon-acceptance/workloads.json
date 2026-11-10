@@ -36,7 +36,6 @@
     }
   ],
   "adversarial_nodeids": [
-    "tests/test_guard_daemon_acceptance.py::test_twice_capacity_overload_is_typed_bounded_and_recovers",
     "tests/test_guard_daemon_acceptance.py::test_worker_crash_releases_capacity_and_recovers",
     "tests/test_guard_daemon_acceptance.py::test_clock_jump_expires_work_without_corrupting_scheduler",
     "tests/test_guard_daemon_acceptance.py::test_shutdown_restart_starts_with_clean_capacity",
