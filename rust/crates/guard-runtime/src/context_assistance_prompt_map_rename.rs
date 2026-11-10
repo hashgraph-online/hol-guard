@@ -7,6 +7,10 @@ use super::{Asked, File, Kind, Pick, Sought, Span, CHECK_EVERY};
 use crate::context_assistance_prompt_words::term_form;
 use std::time::Instant;
 
+#[path = "context_assistance_prompt_map_rewrite.rs"]
+mod rewrite;
+use rewrite::Rewrite;
+
 /// Names listed for one prompt: the old name, and at most one more.
 const MAX_NAMES: usize = 2;
 /// Lines listed with their text for a rename, and their length.
@@ -30,18 +34,19 @@ pub(in super::super) const STUB_MARKS: [&str; 4] = [
 ];
 
 /// For a rename, a block per name the prompt writes as code that a file
-/// read holds: its title, and per file the lines naming it. Empty for any
+/// read holds: its title, and per file the lines naming it, with the one
+/// command making the rename when a single name is renamed. Empty for any
 /// other prompt, or once `until` passes.
 pub(super) fn blocks(
     files: &[File],
     sought: &[Sought],
     asked: &Asked,
     until: Instant,
-) -> Vec<(String, Vec<String>)> {
+) -> (Blocks, Option<Rewrite>) {
     if !asked.everywhere {
-        return Vec::new();
+        return (Vec::new(), None);
     }
-    (sought.iter())
+    let found: Vec<_> = (sought.iter())
         .filter(|item| item.name && !item.phrase && !owner_only(&asked.spellings, &item.text))
         .filter_map(|item| {
             // `_batched` is renamed, not `batched` beside it: the lines
@@ -54,9 +59,19 @@ pub(super) fn blocks(
             found.or_else(|| every_line(files, item, None, None, until))
         })
         .take(MAX_NAMES)
-        .flatten()
-        .collect()
+        .collect();
+    let rewrite = match &found[..] {
+        [(_, rewrite)] if asked.renames.len() == 1 => rewrite.clone(),
+        _ => None,
+    };
+    (
+        found.into_iter().flat_map(|(blocks, _)| blocks).collect(),
+        rewrite,
+    )
 }
+
+/// Titled blocks of lines.
+type Blocks = Vec<(String, Vec<String>)>;
 
 /// The name the prompt renames `old` to: "rename `a` to `b`".
 fn renamed_to<'a>(renames: &'a [(String, String)], old: &str) -> Option<&'a str> {
@@ -181,7 +196,7 @@ fn every_line(
     exact: Option<&str>,
     new: Option<&str>,
     until: Instant,
-) -> Option<Vec<(String, Vec<String>)>> {
+) -> Option<(Blocks, Option<Rewrite>)> {
     let mut written = None;
     let mut holding = 0;
     let mut entries = Vec::new();
@@ -199,10 +214,14 @@ fn every_line(
     let mut others = Vec::new();
     let mut building = Vec::new();
     let mut extended: Vec<String> = Vec::new();
+    let mut holders: Vec<&File> = Vec::new();
     for file in files {
         let found = naming(file, &item.text, exact, until)?;
         written = written.or(found.written);
         holding += usize::from(found.held);
+        if !found.lines.is_empty() {
+            holders.push(file);
+        }
         for number in found.lines {
             let count = entries.len();
             whole &= fits(line_entry(file, number), &mut entries, count);
@@ -231,6 +250,14 @@ fn every_line(
     } else {
         format!("Lines naming `{name}` in the files read; other files may hold it too:")
     };
+    // Only for a list that is whole and builds no longer name, which one
+    // replacement would break.
+    let rewrite = if whole && building.is_empty() {
+        exact.zip(new)
+    } else {
+        None
+    };
+    let rewrite = rewrite.and_then(|(old, new)| Rewrite::new(old, new, &holders));
     let mut blocks = vec![(title, entries)];
     // `f"_get_default_module{choose_async('_async')}"` also calls
     // `_get_default_module_async`, which renaming only the first breaks.
@@ -270,7 +297,7 @@ fn every_line(
             longer,
         ));
     }
-    Some(blocks)
+    Some((blocks, rewrite))
 }
 
 /// For a rename of a definition no test names, the source definitions
