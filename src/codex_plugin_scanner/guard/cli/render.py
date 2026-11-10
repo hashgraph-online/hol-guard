@@ -996,6 +996,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 border_style="red" if protection_off else "cyan",
             )
         )
+        health_note = payload.get("protection_health_note")
+        if isinstance(health_note, str) and health_note.strip():
+            console.print(f"Live health: {health_note}")
         console.print(build_doctor_harness_table(adapters))
         print_approval_gate_nudge(console, payload)
         print_connector_setup_line(console, payload)
