@@ -16,7 +16,7 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHttpServer
+from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -71,18 +71,18 @@ def test_refresh_rebinds_the_control_api_to_the_registry_the_authority_was_read_
     runtime = ExtensionControlRuntime(_protected(core.catalog_digest))
     api = ExtensionControlApiService(store=store, registry=core, runtime=runtime)
     server = cast(
-        _GuardDaemonHttpServer,
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
                 store=store,
-                extension_control_runtime=runtime,
-                extension_control_api=api,
+                runtime=runtime,
+                api=api,
                 _installed_authority_pending=False,
                 # Startup read the core registry through the ordinary path,
                 # because the activation was not committed yet. That path never
                 # sets the recovery flag.
-                _extension_control_on_core_registry=False,
+                _on_core_registry=False,
             ),
         ),
     )
@@ -97,7 +97,7 @@ def test_refresh_rebinds_the_control_api_to_the_registry_the_authority_was_read_
         lambda registry, *, read_only=False, **_kwargs: _protected(registry.catalog_digest),
     )
 
-    snapshot = _GuardDaemonHttpServer.refresh_extension_control_runtime(server)
+    snapshot = ExtensionControlHost.refresh(server)
 
     assert snapshot.catalog_digest == delivered.catalog_digest
     assert api.catalog_digest == delivered.catalog_digest

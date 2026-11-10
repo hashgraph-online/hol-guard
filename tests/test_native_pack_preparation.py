@@ -479,15 +479,15 @@ def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_pat
     # optional enable; rebinding to the core catalog changes the same revision.
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHTTPServer
+    from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
 
-    refreshed = _GuardDaemonHTTPServer.refresh_extension_control_runtime(
+    refreshed = ExtensionControlHost.refresh(
         SimpleNamespace(
             store=store,
-            extension_control_runtime=service._runtime,
-            extension_control_api=service,
+            runtime=service._runtime,
+            api=service,
             _installed_authority_pending=False,
-            _extension_control_on_core_registry=False,
+            _on_core_registry=False,
         )
     )
     assert refreshed.revision == service._runtime.current().revision
@@ -499,13 +499,13 @@ def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_pat
     with monkeypatch.context() as patches:
         patches.setattr(projection, "capture", lambda store: before_capture)
         with pytest.raises(NativePolicySnapshotError, match="native_command_pack_projection_changed"):
-            _GuardDaemonHTTPServer.refresh_extension_control_runtime(
+            ExtensionControlHost.refresh(
                 SimpleNamespace(
                     store=store,
-                    extension_control_runtime=service._runtime,
-                    extension_control_api=service,
+                    runtime=service._runtime,
+                    api=service,
                     _installed_authority_pending=False,
-                    _extension_control_on_core_registry=False,
+                    _on_core_registry=False,
                 )
             )
     assert service._runtime.current() == refreshed

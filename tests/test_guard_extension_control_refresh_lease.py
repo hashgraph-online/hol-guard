@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.daemon.extension_control_api import (
     EFFECTIVE_LOCK_WAIT_SECONDS,
     ExtensionControlApiService,
 )
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHttpServer
+from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     hold_command_control_authority_lock,
     require_command_control_mutation_lease,
@@ -37,17 +37,15 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
     store = GuardStore(tmp_path / "guard-home")
     initial = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     server = cast(
-        _GuardDaemonHttpServer,
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
                 store=store,
-                extension_control_runtime=ExtensionControlRuntime(initial),
-                extension_control_api=SimpleNamespace(
-                    catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-                ),
+                runtime=ExtensionControlRuntime(initial),
+                api=SimpleNamespace(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest),
                 _installed_authority_pending=False,
-                _extension_control_on_core_registry=False,
+                _on_core_registry=False,
             ),
         ),
     )
@@ -83,7 +81,7 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
 
     monkeypatch.setattr(store, "_read_authority_locked", paused_read)
     with ThreadPoolExecutor(max_workers=1) as executor:
-        refresh = executor.submit(_GuardDaemonHttpServer.refresh_extension_control_runtime, server)
+        refresh = executor.submit(ExtensionControlHost.refresh, server)
         try:
             assert entered.wait(timeout=5)
             # A separate thread and file descriptor exercise the actual OS
@@ -128,14 +126,14 @@ def test_busy_refresh_retains_the_installed_authority_even_during_migration(
     runtime = ExtensionControlRuntime(initial)
     installed = runtime.current()
     server = cast(
-        _GuardDaemonHttpServer,
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
                 store=store,
-                extension_control_runtime=runtime,
+                runtime=runtime,
                 _installed_authority_pending=False,
-                _extension_control_on_core_registry=False,
+                _on_core_registry=False,
             ),
         ),
     )
@@ -148,7 +146,7 @@ def test_busy_refresh_retains_the_installed_authority_even_during_migration(
         raise NativeCommandControlAuthorityUnavailableError(shared=read_only)
 
     monkeypatch.setattr(store, "read_extension_control_authority_for_registry", busy)
-    assert _GuardDaemonHttpServer.refresh_extension_control_runtime(server) is installed
+    assert ExtensionControlHost.refresh(server) is installed
     assert runtime.current() is installed
     assert attempts == [(initial.catalog_digest, True)] + (
         [(initial.catalog_digest, False)] if mutation_required else []

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.extension_control_host import host_for
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -305,7 +306,7 @@ def test_daemon_rebinds_control_api_when_activated_catalog_changes_after_startup
         server = daemon._server
         # Startup read a healthy authority, so the core-registry fallback flag
         # that used to be the only rebind trigger stays off.
-        assert not server._extension_control_on_core_registry
+        assert not host_for(store)._on_core_registry
         assert server.extension_control_api.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
 
         activated = GeneratedCommandCatalog(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[:-1])

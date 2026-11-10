@@ -67,11 +67,6 @@ from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..routes.context_assistance_versions_http import request_body_limit as context_request_body_limit
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
-from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
-from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
-from ..runtime.extension_control_runtime import (
-    ExtensionControlRuntimeSnapshot,
-)
 from ..runtime.network_status import project_network_supervisor_health
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.surface_server import GuardSurfaceRuntime
@@ -80,7 +75,6 @@ from ..store import GuardStore
 from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
 from .audit_persistence import WRITTEN as AUDIT_WRITTEN
 from .audit_persistence import AuditPersistence
-from .background_diagnostics import failure_detail, record_background_event
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
 from .command_activity_api import (
     parse_command_activity_event_cursor,
@@ -120,7 +114,6 @@ from .runtime_heartbeat import RuntimeHeartbeatWriter
 from .runtime_hook_deadline import PROMPT_ADMISSION_SECONDS, RuntimeHookDeadline, remaining_hint_from_payload
 from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane, RuntimeHookScheduler
 from .server_common import (
-    _LOGGER,
     _build_local_url,
     _now,
 )
@@ -182,10 +175,6 @@ _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _PLUGIN_TELEMETRY_FIRST_CHECK_SECONDS = 300.0
 _PLUGIN_TELEMETRY_CHECK_INTERVAL_SECONDS = 6 * 60 * 60.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
-
-
-class _InstalledAuthorityMigrationError(Exception):
-    """The installed release's command-pack authority is not migrated yet."""
 
 
 class _HookPathValidationError(ValueError):
@@ -292,11 +281,6 @@ _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbor
 
 class _GuardDaemonHTTPServer:
     request_queue_size = _MAX_CONCURRENT_DAEMON_CONNECTIONS
-    # Set while the installed release's authority still awaits migration.
-    _installed_authority_pending: bool = False
-    # Set while the control API serves the core registry because startup could
-    # not read the installed authority.
-    _extension_control_on_core_registry: bool = False
     # Set once the HTTP superclass has bound the listening socket.
     _socket_bound: bool = False
     store: GuardStore
@@ -397,146 +381,6 @@ class _GuardDaemonHTTPServer:
         ):
             return
         self.diagnostics.record_exception("http_request_failed")
-
-    def _migrate_installed_authority(self) -> None:
-        """Admit the installed release, or report why it cannot be admitted yet.
-
-        A failure leaves the migration pending. The daemon then starts on a
-        tampered authority, so every hook fails closed instead of the daemon
-        exiting, and each refresh retries it before reading anything newer.
-        """
-
-        try:
-            self.store.migrate_installed_command_pack_authority()
-        except Exception as error:
-            self._installed_authority_pending = True
-            # A packaged daemon has no stderr sink, so this warning reached
-            # nothing on the installs that needed it most. The diagnostics log
-            # is the support artifact; record the failure there as well.
-            record_background_event("installed_authority_migration_failed", failure_detail(error))
-            _LOGGER.warning("Installed command-pack authority could not be migrated: %s", error, exc_info=True)
-            raise _InstalledAuthorityMigrationError from error
-        self._installed_authority_pending = False
-
-    def _enroll_authority_by_default(self) -> None:
-        """Enroll a fresh install so its controls are protected without a setup step.
-
-        Without an enrolled authority, reviews that need protected controls,
-        such as a dashboard-approved GitHub workflow command, stay unavailable.
-        A failure here leaves the home unenrolled, exactly as before, and is
-        recorded for support; it never stops the daemon.
-        """
-
-        try:
-            view = self.store.enroll_extension_control_authority_by_default(
-                BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-            )
-        except Exception as error:
-            record_background_event("default_authority_enrollment_failed", failure_detail(error))
-            _LOGGER.warning("Extension-control authority could not be enrolled by default: %s", failure_detail(error))
-            return
-        if view.health is not AuthorityHealth.PROTECTED:
-            record_background_event("default_authority_enrollment_skipped", f"health={view.health.value}")
-
-    def _startup_extension_control_view(
-        self, registry: CommandSafetyExtensionRegistry
-    ) -> ExtensionControlAuthorityView:
-        """Read the authority for startup without letting a busy lease stop the daemon.
-
-        A lease timeout reports that the authority was not read, never that it
-        is unhealthy, so this falls back to the shared lease that a reader can
-        always join. Only if that is unobtainable too does the daemon start on
-        a view with no layers, which the next refresh replaces. Refusing to
-        start would take the hook worker down with it, and a daemon that is not
-        there protects nothing.
-
-        Both attempts take the same exclusive entry gate, so they share one
-        acquisition budget rather than waiting it twice in sequence. The
-        exclusive attempt gets half of it, which leaves the shared fallback a
-        span to run in instead of arriving after the budget is already spent.
-        """
-
-        from ..native_command_control_authority_io import (
-            AUTHORITY_LOCK_TIMEOUT_SECONDS,
-            NativeCommandControlAuthorityUnavailableError,
-            NativeCommandControlMutationRequiredError,
-        )
-
-        deadline = time.monotonic() + AUTHORITY_LOCK_TIMEOUT_SECONDS
-        with suppress(NativeCommandControlAuthorityUnavailableError):
-            return self.store.read_extension_control_authority_for_registry(
-                registry, lock_timeout_seconds=AUTHORITY_LOCK_TIMEOUT_SECONDS / 2
-            )
-        remaining = deadline - time.monotonic()
-        if remaining > 0.0:
-            with suppress(NativeCommandControlAuthorityUnavailableError, NativeCommandControlMutationRequiredError):
-                return self.store.read_extension_control_authority_for_registry(
-                    registry, read_only=True, lock_timeout_seconds=remaining
-                )
-        return self.store.extension_control_authority_unreadable_view(registry.catalog_digest)
-
-    def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
-        from ..catalog_delivery.projection import capture, require_current
-        from ..native_command_control_authority_io import (
-            NativeCommandControlAuthorityUnavailableError,
-            NativeCommandControlMutationRequiredError,
-            hold_command_control_authority_lock,
-        )
-        from ..native_command_control_authority_store import _key
-
-        def read(*, shared: bool) -> ExtensionControlRuntimeSnapshot:
-            _, registry, activation_digest = capture(self.store)
-            with hold_command_control_authority_lock(self.store.guard_home, shared=shared):
-                require_current(self.store, _key(self.store), activation_digest)
-                view = self.store.read_extension_control_authority_for_registry(registry, read_only=shared)
-                snapshot = self.extension_control_runtime.refresh(view)
-            # The runtime now holds a view read for `registry`. Serve the same
-            # registry from the control API, whether startup fell back to the
-            # core one or a pack activation landed after startup (an upgrade
-            # settling its transition, another process's activation).
-            # Otherwise the effective controls and the catalog read model
-            # report different digests until the daemon restarts. Rebind after
-            # the authority lease is released: apply() takes the API lock
-            # before that lease. The API skips the rebind if an apply installed
-            # a newer snapshot in the meantime.
-            if (
-                self._extension_control_on_core_registry
-                or registry.catalog_digest != self.extension_control_api.catalog_digest
-            ) and self.extension_control_api.rebind_registry(registry, installed=snapshot):
-                self._extension_control_on_core_registry = False
-            return snapshot
-
-        if self._installed_authority_pending:
-            try:
-                self._migrate_installed_authority()
-            except _InstalledAuthorityMigrationError:
-                # Nothing newer is admitted until the release is migrated.
-                return self.extension_control_runtime.current()
-            # Startup enrolls only after the migration it skipped, so a fresh
-            # home whose migration failed is still unenrolled here. Enroll it
-            # now that the release is admitted, before reading the refreshed
-            # authority, rather than leaving it unprotected until a restart.
-            self._enroll_authority_by_default()
-        try:
-            try:
-                snapshot = read(shared=True)
-            except NativeCommandControlMutationRequiredError:
-                # Release the shared lease before migration and recapture the
-                # active projection under the exclusive mutation fence.
-                return read(shared=False)
-            if snapshot.health is AuthorityHealth.RECOVERY_REQUIRED:
-                # A save that failed before anchoring leaves a prepared
-                # transition that only a writer may roll back, and a shared
-                # read only reports it. Read again as the writer so the
-                # authority heals here instead of refusing every save and
-                # holding every extension blocked until someone repairs it.
-                return read(shared=False)
-            return snapshot
-        except NativeCommandControlAuthorityUnavailableError:
-            # Nothing was read, so there is nothing to refresh from. Keeping the
-            # snapshot already installed beats replacing a known authority with
-            # the absence of a reading.
-            return self.extension_control_runtime.current()
 
     @staticmethod
     def _request_capacity_kind(path: str) -> str:

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -32,6 +33,16 @@ def _runtime_binary(guard_home: Path) -> Path:
     if executable is None:
         raise RuntimeError("The native daemon needs HOL Guard's native runtime (set HOL_GUARD_NATIVE_BINARY).")
     return executable
+
+
+def _stop_with_parent() -> None:
+    """Have Linux stop the daemon if the test process dies before stop()."""
+
+    import ctypes
+    import signal
+
+    pr_set_pdeathsig = 1
+    ctypes.CDLL(None, use_errno=True).prctl(pr_set_pdeathsig, signal.SIGTERM)
 
 
 class NativeGuardDaemon:
@@ -79,9 +90,10 @@ class NativeGuardDaemon:
         guard_home = self.store.guard_home
         config = launch_configuration(guard_home, 0, user_home=self.home_dir)
         config["workers"] = self.workers
-        # The daemon names this process as its launcher and stops when its
-        # standard input closes, so a test that dies cannot leak it.
-        config["launcher_pid"] = os.getpid()
+        if os.name == "nt":
+            # As on an installed Windows Guard, the daemon names its launcher
+            # as its pid and stops when the launcher's standard input closes.
+            config["launcher_pid"] = os.getpid()
         line = json.dumps(config, separators=(",", ":")).encode("utf-8") + b"\n"
         argv = [
             str(_runtime_binary(guard_home)),
@@ -102,7 +114,12 @@ class NativeGuardDaemon:
         # file: a full pipe would stall every request that logs.
         self._log = tempfile.TemporaryFile()  # noqa: SIM115 -- closed in stop()
         process = subprocess.Popen(
-            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._log, env=environment
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=self._log,
+            env=environment,
+            preexec_fn=_stop_with_parent if sys.platform == "linux" else None,
         )
         self._process = process
         assert process.stdin is not None and process.stdout is not None
@@ -124,6 +141,10 @@ class NativeGuardDaemon:
         self._process = None
         if process.stdin is not None:
             process.stdin.close()
+        if os.name != "nt":
+            # Elsewhere the daemon is its own process, stopped as `daemon
+            # stop` stops it.
+            process.terminate()
         try:
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:

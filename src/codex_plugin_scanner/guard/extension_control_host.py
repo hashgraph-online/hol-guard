@@ -99,7 +99,8 @@ class ExtensionControlHost:
             )
         except Exception as error:
             record_background_event("default_authority_enrollment_failed", failure_detail(error))
-            _LOGGER.warning("Extension-control authority could not be enrolled by default: %s", failure_detail(error))
+            # The redacted detail is in the background event; the log names the class only.
+            _LOGGER.warning("Extension-control authority could not be enrolled by default: %s", type(error).__name__)
             return
         if view.health is not AuthorityHealth.PROTECTED:
             record_background_event("default_authority_enrollment_skipped", f"health={view.health.value}")
