@@ -53,6 +53,13 @@ def test_memory_note_cases_stay_on_oh_my_pi(harness: str) -> None:
     assert not notes, f"{harness} has no memory-note tool: {notes}"
 
 
+@pytest.mark.parametrize("harness", ["claude-code", "codex", "cursor"])
+def test_eval_shell_cases_stay_on_oh_my_pi(harness: str) -> None:
+    selected = {s.id for s in lane_catalog(harness)}
+    cases = sorted(s.id for s in load_catalog() if s.oracle == "blocked-eval-shell" and s.id in selected)
+    assert not cases, f"{harness} has no eval sh helper: {cases}"
+
+
 def _granted(scenario) -> set[str]:
     """The catalog tool names Claude Code is handed for one case."""
     names = {"Bash": "bash", "Read": "read", "Write": "write", "Edit": "edit"}
