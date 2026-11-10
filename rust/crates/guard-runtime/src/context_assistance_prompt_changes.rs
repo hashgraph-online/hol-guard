@@ -487,6 +487,8 @@ fn clean(text: &str) -> bool {
 mod code;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
+#[path = "context_assistance_prompt_changes_removed.rs"]
+pub(super) mod removed;
 #[path = "context_assistance_prompt_changes_used.rs"]
 pub(super) mod used;
 

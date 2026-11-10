@@ -229,8 +229,8 @@ fn attach(
     let deadline = Instant::now() + wait;
     let home = store.guard_home();
     // The map of where the request's code is comes first, from the matched
-    // files CIGAR would accept. Project context is checked again after the
-    // read, so a stop meanwhile sends nothing.
+    // files CIGAR would accept, and a stub's old body. Project context is
+    // checked again after the read and Git, so a stop meanwhile sends nothing.
     let mapped = service
         .prompt_context_chosen()
         .then(|| {
@@ -248,6 +248,7 @@ fn attach(
             )
         })
         .flatten()
+        .map(|context| changes::removed::added(context, home, envelope, &root, harness, deadline))
         .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
     if let Some(context) = mapped {
         if let Some(session) = &session {
