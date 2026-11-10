@@ -394,8 +394,50 @@ pub(super) fn answer(
         if let Some(response) = early_delete_refusal(client, config, reads) {
             return write_answer(client, &response, reads, stalled_write);
         }
-        return Outcome::Relay(Vec::new());
+        if !reads.is_standalone() {
+            return Outcome::Relay(Vec::new());
+        }
+        // A request still arriving when the peek window closed: read it the
+        // way the daemon's handler would, then answer it here as well.
+        let Some(read) = super::replay::read_request(client, SLOW_REQUEST_READ_TIMEOUT) else {
+            let _ = client.shutdown(std::net::Shutdown::Both);
+            return Outcome::Answered;
+        };
+        let Some(head_len) = whole_request(&read) else {
+            return Outcome::Relay(read);
+        };
+        return answer_request(client, read, head_len, config, reads, stalled_write);
     };
+    answer_request(client, bytes, head_len, config, reads, stalled_write)
+}
+
+/// How long a client still sending its request has to finish it.
+const SLOW_REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The head length of `read` when it holds one whole request: a head and
+/// exactly the body it declares, sent without chunking.
+fn whole_request(read: &[u8]) -> Option<usize> {
+    let head_len = super::replay::find_head_end(read)?;
+    let head = parse_request(&read[..head_len])?;
+    if head.has_header("Transfer-Encoding") {
+        return None;
+    }
+    let body = read.len() - head_len;
+    match super::replay::content_length(&read[..head_len]) {
+        Some(length) => (length == body).then_some(head_len),
+        None => (body == 0 && !head.has_header("Content-Length")).then_some(head_len),
+    }
+}
+
+/// Answers the request `bytes` holds, whose head is `head_len` bytes long.
+fn answer_request(
+    client: &TcpStream,
+    bytes: Vec<u8>,
+    head_len: usize,
+    config: &ReadConfig,
+    reads: &NativeReads,
+    stalled_write: Duration,
+) -> Outcome {
     let (head, body) = bytes.split_at(head_len);
     let request = parse_request(head);
     if reads.is_standalone() && request.as_ref().is_some_and(is_public_health_probe) {
@@ -438,7 +480,20 @@ pub(super) fn answer(
         if let Some(response) = direct_hook::respond(request, body, config) {
             return write_answer(client, &response, reads, stalled_write);
         }
+        if let Some(response) = hook_review_response(client, request, body, config, reads) {
+            return write_answer(client, &response, reads, stalled_write);
+        }
         return Outcome::Relay(bytes);
+    }
+    if let Some(request) = request.as_ref().filter(|request| {
+        reads.is_standalone() && request.method == "POST" && hook_review::owns(request.path)
+    }) {
+        // A Codex or Claude Code hook without a redeemed proof, and every
+        // hook readiness check.
+        let Some(response) = hook_review_response(client, request, body, config, reads) else {
+            return Outcome::Relay(bytes);
+        };
+        return write_answer(client, &response, reads, stalled_write);
     }
     if let Some(request) = request
         .as_ref()
@@ -495,7 +550,7 @@ pub(super) fn answer(
         // A standalone daemon has no server behind it to refuse a caller
         // without the token or from a disallowed origin.
         let request = request.as_ref().filter(|_| reads.is_standalone())?;
-        let refusal = refusals::refusal(request, &config.token)?;
+        let refusal = refusals::refusal(request, body, &config.token)?;
         let (status, body, cors_origin) =
             refusals::respond(request, &refusal, client.local_addr().ok(), config, reads);
         Some((status, body, cors_origin, false))
@@ -706,6 +761,18 @@ fn discovery_response(
 
 /// The response the daemon's `_write_json` writes: HTML-safe JSON, `nosniff`,
 /// the dashboard build stamp and, for an allowed `Origin`, its CORS headers.
+/// The daemon's own review of a hook its connection did not prove.
+fn hook_review_response(
+    client: &TcpStream,
+    request: &Request<'_>,
+    body: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<Vec<u8>> {
+    let port = client.local_addr().ok()?.port();
+    hook_review::respond(request, body, port, config, reads, false)
+}
+
 pub(super) fn json_response(
     status: u16,
     body: &Value,
@@ -797,6 +864,9 @@ mod evidence;
 
 #[path = "daemon_edge_identity.rs"]
 mod identity;
+
+#[path = "daemon_edge_hook_review.rs"]
+mod hook_review;
 
 #[path = "daemon_edge_direct_hook.rs"]
 mod direct_hook;

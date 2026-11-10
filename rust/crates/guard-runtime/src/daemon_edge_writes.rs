@@ -53,6 +53,19 @@ pub(super) fn respond(
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value, Option<String>, bool)> {
+    if request.method == "POST"
+        && matches!(
+            request.path,
+            "/v1/connect/requests" | "/v1/connect/complete" | "/v1/connect/result"
+        )
+    {
+        // Retired device pairing, refused before any caller check.
+        let body = serde_json::json!({
+            "error": "legacy_pairing_disabled",
+            "message": "Use hol-guard connect for browser OAuth.",
+        });
+        return Some((410, body, None, false));
+    }
     if request.method == "POST" && resolve::owns(request.path) {
         if request.has_header("Transfer-Encoding") {
             return None;
@@ -75,6 +88,20 @@ pub(super) fn respond(
         let args = route_calls::extension_control_args("POST", request.path);
         let (status, body, no_store) =
             route_calls::respond(args, &payload, route_calls::extension_control(config))?;
+        return Some((status, body, caller.cors_origin, no_store));
+    }
+    if let Some((name, args)) = (request.method == "POST")
+        .then(|| route_calls::resident_route(request.path))
+        .flatten()
+    {
+        if request.has_header("Transfer-Encoding") {
+            return None;
+        }
+        let caller = authorize_write(request, &config.token)?;
+        let payload = json_payload(request, body)?;
+        reads.report_activity();
+        let (status, body, no_store) =
+            route_calls::respond(args, &payload, route_calls::call_resident(config, name))?;
         return Some((status, body, caller.cors_origin, no_store));
     }
     if let Some((name, args)) = (request.method == "POST")
@@ -239,19 +266,20 @@ pub(super) fn respond(
     if request.method == "DELETE" {
         return delete(request, body, config, reads);
     }
-    if request.has_header("Transfer-Encoding")
-        || !matches!(
-            route,
-            (
-                "POST",
-                "/v1/read-state"
-                    | "/v1/command-activity/feedback"
-                    | "/v1/requests/clear"
-                    | "/v1/plugins/updates/dismiss"
-            )
-        )
-    {
+    if request.has_header("Transfer-Encoding") {
         return None;
+    }
+    if !matches!(
+        route,
+        (
+            "POST",
+            "/v1/read-state"
+                | "/v1/command-activity/feedback"
+                | "/v1/requests/clear"
+                | "/v1/plugins/updates/dismiss"
+        )
+    ) {
+        return control_post(request, body, config, reads);
     }
     let caller = authorize_token(request, &config.token)?;
     if route.1 == "/v1/plugins/updates/dismiss" {
@@ -278,6 +306,39 @@ pub(super) fn respond(
         }
     };
     answer.map(|(status, body)| (status, body, caller.cors_origin, false))
+}
+
+/// Every other control `POST`: the daemon's control handlers answer it in
+/// the resident library process, with the server state they share loaded
+/// from the Guard home, and `404` a path none of them names. Hook posts are
+/// the hook path's, never a control handler's.
+fn control_post(
+    request: &Request<'_>,
+    body: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value, Option<String>, bool)> {
+    if request.method != "POST" || request.path.starts_with("/v1/hooks/") {
+        return None;
+    }
+    let caller = authorize_write(request, &config.token)?;
+    let payload = json_payload(request, body)?;
+    let port = reads.published_state()?.get("port")?.as_u64()?;
+    reads.report_activity();
+    let mut args = serde_json::Map::new();
+    args.insert("path".to_owned(), Value::from(request.path));
+    args.insert("port".to_owned(), Value::from(port));
+    args.insert("daemon_pid".to_owned(), Value::from(reads.daemon_pid()));
+    args.insert(
+        "home_dir".to_owned(),
+        config.user_home.as_deref().map_or(Value::Null, Value::from),
+    );
+    let (status, body, no_store) = route_calls::respond(
+        args,
+        &payload,
+        route_calls::call_resident(config, "route.control_post"),
+    )?;
+    Some((status, body, caller.cors_origin, no_store))
 }
 
 /// Every `DELETE`, as `do_DELETE` answered it: the header token or, on a

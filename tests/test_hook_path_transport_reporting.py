@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as module
+from codex_plugin_scanner.guard.daemon import server_runtime_hook as module
 
 
 @pytest.mark.parametrize("label", ["exec-workdir", "workspace-payload", "workspace-query"])
@@ -23,6 +23,6 @@ def test_unavailable_resident_reports_workspace_not_internal_label(
     )
     handler = SimpleNamespace(_daemon_server=lambda: daemon_server)
     with pytest.raises(module._HookPathValidationError) as error:
-        module._GuardDaemonHandler._settled_hook_directories(handler, (label, "project", "hook-workspace"))
+        module._RuntimeHookRoutes._settled_hook_directories(handler, (label, "project", "hook-workspace"))
     assert error.value.parameter == "workspace"
     assert error.value.reason == module._DIRECTORY_TRUST_UNAVAILABLE

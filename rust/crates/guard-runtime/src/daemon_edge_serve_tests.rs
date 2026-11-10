@@ -181,9 +181,15 @@ fn a_waiting_launcher_is_named_as_the_daemon() {
 fn echoing_daemon() -> (tempfile::TempDir, SocketAddr) {
     let dir = private_home();
     let home = fs::canonicalize(dir.path()).unwrap();
-    let echo = json!({"cli_command": [
-        "/bin/sh", "-c", "cat >/dev/null; printf 'HTTP/1.0 200 OK\\r\\n\\r\\n%s' \"$*\"", "sh"
-    ]});
+    // A replay echoes its arguments; a hook review answers whether the edge
+    // told it the proof checked out.
+    let script = concat!(
+        "if [ \"$2\" = library-call ]; then ",
+        "if grep -q '\"proof_verified\":true'; then v=true; else v=false; fi; ",
+        "printf '{\"ok\":{\"status\":200,\"body\":{\"proof_verified\":%s},\"no_store\":false}}' $v; ",
+        "else cat >/dev/null; printf 'HTTP/1.0 200 OK\\r\\n\\r\\n%s' \"$*\"; fi"
+    );
+    let echo = json!({"cli_command": ["/bin/sh", "-c", script, "sh"]});
     let config = LaunchConfig::parse(&launch(&home, echo)).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
@@ -261,7 +267,10 @@ fn a_standalone_daemon_proves_its_identity_on_the_hook_connection() {
         .unwrap();
     let mut response = String::new();
     client.read_to_string(&mut response).unwrap();
-    assert!(response.ends_with("--daemon-proof-verified"), "{response}");
+    assert!(
+        response.ends_with(r#"{"proof_verified":true}"#),
+        "{response}"
+    );
 }
 
 #[test]
@@ -307,6 +316,7 @@ fn a_hook_without_the_issued_proof_reaches_the_handler_unverified() {
         client.read_to_string(&mut response).unwrap();
         assert!(response.starts_with("HTTP/1.0 200 OK"), "{response}");
         assert!(!response.contains("--daemon-proof-verified"), "{response}");
+        assert!(!response.contains(r#""proof_verified":true"#), "{response}");
     }
 }
 
@@ -335,4 +345,21 @@ fn a_malformed_or_foreign_challenge_is_refused() {
         assert!(response.starts_with(&format!("HTTP/1.0 {status} ")), "{response}");
         assert!(response.ends_with(&format!("{{\"error\":\"{error}\"}}")), "{response}");
     }
+}
+
+#[test]
+fn a_standalone_daemon_answers_a_request_that_arrives_slowly_itself() {
+    let (_dir, address) = echoing_daemon();
+    let request = "GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+    let (first, rest) = request.split_at(12);
+    let mut client = std::net::TcpStream::connect(address).unwrap();
+    client.write_all(first.as_bytes()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    client.write_all(rest.as_bytes()).unwrap();
+    let mut response = String::new();
+    client.read_to_string(&mut response).unwrap();
+    assert!(
+        response.ends_with("{\"compatibility_version\":2,\"ok\":true}"),
+        "{response}"
+    );
 }

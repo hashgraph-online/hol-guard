@@ -6,7 +6,7 @@ const SECRET: &[u8] = b"s3cret";
 fn decide(head: &str) -> Option<Refusal> {
     let bytes = format!("{head}\r\n\r\n");
     let request = parse_request(bytes.as_bytes()).expect("request parses");
-    refusal(&request, SECRET)
+    refusal(&request, b"", SECRET)
 }
 
 #[test]
@@ -82,4 +82,25 @@ fn decision_refusal_names_the_reconnect_page() {
         body["recovery"]["reconnect_url"],
         "http://127.0.0.1:5474/#/reconnect"
     );
+}
+
+#[test]
+fn a_body_without_a_session_header_is_refused_once_it_reads() {
+    for (body, refused) in [("{}", true), ("{bad", false), ("a=1", true)] {
+        let content_type = if body == "a=1" {
+            "application/x-www-form-urlencoded"
+        } else {
+            "application/json"
+        };
+        let head = format!(
+            "POST /v1/update/reconnect/prepare HTTP/1.1\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        let request = parse_request(head.as_bytes()).unwrap();
+        assert_eq!(
+            refusal(&request, body.as_bytes(), SECRET).is_some(),
+            refused,
+            "{body}"
+        );
+    }
 }

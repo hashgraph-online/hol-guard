@@ -19,8 +19,11 @@ from typing import Any
 from .control_route_calls import ROUTE_CALLS
 from .extension_control_host import EXTENSION_CONTROL_CALLS
 from .routes.calls import HANDLER_CALLS
+from .routes.control_host import CONTROL_HOST_CALLS
+from .routes.hook_host import HOOK_HOST_CALLS
 from .routes.offline import DISPATCH_CALLS
 from .routes.reads import READ_CALLS
+from .routes.service_calls import SERVICE_CALLS
 from .store import GuardStore
 from .workers.ticks import WORKER_CALLS
 
@@ -213,6 +216,9 @@ REGISTRY: dict[str, LibraryCall] = {
     "approval.resolve": _approval_resolve,
     **ROUTE_CALLS,
     **HANDLER_CALLS,
+    **SERVICE_CALLS,
+    **CONTROL_HOST_CALLS,
+    **HOOK_HOST_CALLS,
     **DISPATCH_CALLS,
     **READ_CALLS,
     **WORKER_CALLS,

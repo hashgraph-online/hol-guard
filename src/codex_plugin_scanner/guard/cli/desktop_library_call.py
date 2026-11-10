@@ -13,6 +13,7 @@ and the process exits when its standard input closes.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -32,6 +33,14 @@ def run_library_call(guard_home: Path) -> int:
     out = sys.stdout.buffer
     out.write(json.dumps(result, separators=(",", ":"), default=str).encode("utf-8"))
     out.flush()
+    # The daemon reads the answer to end of file; close it before letting
+    # work the call started after answering (evidence, audit) finish.
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, sys.stdout.fileno())
+    os.close(devnull)
+    from ..daemon.request_replay import wait_for_background_work
+
+    wait_for_background_work()
     return 0
 
 

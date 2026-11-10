@@ -22,9 +22,20 @@ fn routes_name_their_library_calls() {
             "/v1/policy/cloud-exception-requests",
             "route.cloud_exception_request_create",
         ),
+        ("/v1/operations/block", "route.operation_block"),
+        ("/v1/cloud-review", "route.cloud_review_update"),
+        (
+            "/v1/command-queue/worker/refresh",
+            "route.command_queue_refresh",
+        ),
+        ("/v1/cloud-actions/status", "route.cloud_actions_check"),
     ] {
         assert_eq!(route(path), Some((name, Map::new())), "{path}");
     }
+    let (name, args) = resident_route("/v1/local-clis/preview").unwrap_or_else(|| unreachable!());
+    assert_eq!(name, "route.local_cli_post");
+    assert_eq!(args["path"], "/v1/local-clis/preview");
+    assert_eq!(resident_route("/v1/extension-controls/preview"), None);
     let (name, args) = route("/v1/requests/r-1/resume").unwrap_or_else(|| unreachable!());
     assert_eq!(name, "route.request_resume_retry");
     assert_eq!(args["request_id"], "r-1");

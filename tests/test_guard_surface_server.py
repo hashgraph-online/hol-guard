@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import protection_repair_retry
 from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon import server_runtime_hook as runtime_hook_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.daemon.request_replay import _republish_trust_status
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
@@ -1253,7 +1254,7 @@ class TestGuardSurfaceServer:
         workspace_dir.mkdir(parents=True, exist_ok=True)
         store = GuardStore(home_dir)
         (home_dir / "config.toml").write_text('blocked_request_mode = "ask"\n', encoding="utf-8")
-        monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
+        monkeypatch.setattr(runtime_hook_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
         monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 8.0)
         monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
         # This endpoint test owns shutdown; worker readiness can exceed the
@@ -1923,7 +1924,7 @@ class TestGuardSurfaceServer:
                 ]
 
             monkeypatch.setattr(native_directory_trust_module, "native_directory_trust", settled_reference)
-            monkeypatch.setattr(daemon_server_module, "prepare_native_hook_policy", lambda *_args, **_kwargs: True)
+            monkeypatch.setattr(runtime_hook_module, "prepare_native_hook_policy", lambda *_args, **_kwargs: True)
             monkeypatch.setattr(daemon_server_module._GuardDaemonHandler, "_handle_runtime_hook_fast", native_dispatch)
             daemon.start()
 

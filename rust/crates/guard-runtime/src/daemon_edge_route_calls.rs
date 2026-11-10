@@ -20,6 +20,10 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
         "/v1/requests/bulk-allow-once" => "route.bulk_allow_once",
         "/v1/insights/share" => "route.insights_share",
         "/v1/policy/cloud-exception-requests" => "route.cloud_exception_request_create",
+        "/v1/operations/block" => "route.operation_block",
+        "/v1/cloud-review" => "route.cloud_review_update",
+        "/v1/command-queue/worker/refresh" => "route.command_queue_refresh",
+        "/v1/cloud-actions/status" => "route.cloud_actions_check",
         "/v1/repair" | "/v1/protection/remove-hooks" => {
             let mut args = Map::new();
             args.insert("path".to_owned(), Value::String(path.to_owned()));
@@ -33,6 +37,28 @@ pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<Str
         _ => return segment_route(path),
     };
     Some((name, Map::new()))
+}
+
+/// The resident library call that answers `POST path`, for services whose
+/// state outlives one request: a custom-extension discovery job runs on in
+/// the resident after the request that started it.
+pub(in crate::daemon_edge) fn resident_route(
+    path: &str,
+) -> Option<(&'static str, Map<String, Value>)> {
+    if crate::daemon_route_paths::route_class(path) != "local_cli" {
+        return None;
+    }
+    let mut args = Map::new();
+    args.insert("path".to_owned(), Value::String(path.to_owned()));
+    Some(("route.local_cli_post", args))
+}
+
+/// Runs `name` with its arguments in the resident library process.
+pub(in crate::daemon_edge) fn call_resident<'a>(
+    config: &'a super::super::ReadConfig,
+    name: &'a str,
+) -> impl FnOnce(Value) -> Result<Value, CallError> + 'a {
+    move |args| library::call_resident(config, name, args)
 }
 
 /// `POST` paths the extension-control service answers in the resident

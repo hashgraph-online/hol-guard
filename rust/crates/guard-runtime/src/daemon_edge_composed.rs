@@ -67,6 +67,7 @@ pub(super) fn routed(path: &str) -> bool {
                 | "/v1/policy"
                 | "/v1/cloud-review"
                 | "/v1/cloud-actions/status"
+                | "/v1/desktop/bootstrap"
         )
 }
 
@@ -117,6 +118,16 @@ pub(super) fn respond(
         }
         "/v1/cloud-review" => whole_reply(call("read.cloud_review_status", json!({}))),
         "/v1/cloud-actions/status" => whole_reply(call("read.cloud_actions_status", json!({}))),
+        "/v1/desktop/bootstrap" => {
+            let port = reads.published_state()?.get("port")?.as_u64()?;
+            whole_reply(call(
+                "route.desktop_bootstrap",
+                json!({
+                    "daemon_url": format!("http://127.0.0.1:{port}"),
+                    "home_dir": config.user_home.as_deref(),
+                }),
+            ))
+        }
         path if HANDLER_READS.contains(&path) || path == FIX_PROPOSALS => whole_reply(call(
             "route.handler_get",
             json!({ "path": path, "query": request.query }),

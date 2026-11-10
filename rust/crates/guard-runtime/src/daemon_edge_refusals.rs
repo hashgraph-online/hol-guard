@@ -50,6 +50,37 @@ fn refuses_query_token(path: &str) -> bool {
         )
 }
 
+/// The longest body the edge refuses on: every route reads at least this much.
+const REFUSED_BODY_LIMIT: usize = 64 * 1024;
+
+/// Whether `_load_request_body` reads `body` without an error, so the
+/// daemon's next answer is the caller check's. A body only the route could
+/// judge is left to the route.
+fn body_reads_as_the_daemon_does(request: &Request<'_>, body: &[u8]) -> bool {
+    if request.has_header("Transfer-Encoding") || body.len() > REFUSED_BODY_LIMIT {
+        return false;
+    }
+    let declared = request
+        .single_header("Content-Length")
+        .and_then(|length| length.trim().parse::<usize>().ok());
+    if declared != Some(body.len()) || CHALLENGE_HOOK_PATHS.contains(&request.path) {
+        return false;
+    }
+    let Ok(text) = std::str::from_utf8(body) else {
+        return false;
+    };
+    if request.has_header("Content-Type") && request.single_header("Content-Type").is_none() {
+        return false;
+    }
+    let json = request
+        .single_header("Content-Type")
+        .is_some_and(|value| value.contains("application/json"));
+    !json || serde_json::from_str::<serde_json::Value>(text).is_ok()
+}
+
+/// `CHALLENGE_HOOK_PATHS`: hooks a body's identity proof can admit.
+const CHALLENGE_HOOK_PATHS: [&str; 2] = ["/v1/hooks/codex", "/v1/hooks/claude-code"];
+
 fn carries_body(request: &Request<'_>) -> bool {
     if request.has_header("Transfer-Encoding") {
         return true;
@@ -101,7 +132,11 @@ fn header_secret_matches(request: &Request<'_>, secret: &[u8]) -> bool {
 }
 
 /// Whether the daemon would refuse this request before any route ran.
-pub(in crate::daemon_edge) fn refusal(request: &Request<'_>, secret: &[u8]) -> Option<Refusal> {
+pub(in crate::daemon_edge) fn refusal(
+    request: &Request<'_>,
+    body: &[u8],
+    secret: &[u8],
+) -> Option<Refusal> {
     let public = request.path == "/"
         || request.path == "/healthz"
         || PUBLIC_PREFIXES
@@ -123,9 +158,14 @@ pub(in crate::daemon_edge) fn refusal(request: &Request<'_>, secret: &[u8]) -> O
         "GET" => request.path.starts_with("/v1/") || request.path.starts_with("/v2/"),
         // A body can carry a dashboard session or a hook challenge proof,
         // which only the route reads.
+        // A route outside the `none` class checks the header before it reads
+        // the body; any other reads the body first, which only a hook's
+        // challenge proof can authorize.
         "POST" | "DELETE" => {
-            !carries_body(request)
-                && (requires_header_token(request.path) || route_class(request.path) != "none")
+            route_class(request.path) != "none"
+                && (request.method == "POST" || !carries_body(request))
+                || requires_header_token(request.path)
+                    && (!carries_body(request) || body_reads_as_the_daemon_does(request, body))
         }
         _ => false,
     };

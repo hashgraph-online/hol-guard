@@ -10,7 +10,7 @@ from typing import Protocol, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon import server_runtime_hook as runtime_hook_module
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from tests.coverage_ci import under_coverage_scale
 from tests.guard_daemon_acceptance_fixtures import (
@@ -45,9 +45,9 @@ def test_packaged_correctness_workloads(
     # (deny/allow/fairness) stay the assertion target, not tracer overhead.
     coverage_scale = under_coverage_scale(3.0)
     monkeypatch.setattr(
-        daemon_server_module,
+        runtime_hook_module,
         "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS",
-        daemon_server_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
+        runtime_hook_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
     )
     result = run_workload(workload, root=tmp_path)
     reporter = pytestconfig.pluginmanager.get_plugin("terminalreporter")

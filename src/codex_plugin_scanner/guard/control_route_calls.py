@@ -360,6 +360,83 @@ def repair(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     return _reply(result, no_store=True)
 
 
+def _string_dict(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        return value
+    return None
+
+
+def operation_block(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Queue a blocked operation for approval and surface it to the user."""
+
+    from .approvals import _append_guard_token_to_url, build_approval_browser_url
+    from .browser_opener import open_browser_url
+    from .daemon.auth_token import load_guard_daemon_auth_token
+    from .runtime.surface_server import GuardSurfaceRuntime
+    from .workers.host import DurableApprovalAttention
+
+    payload = _payload(args)
+    session_id = _optional_string(payload.get("session_id"))
+    operation_type = _optional_string(payload.get("operation_type"))
+    harness = _optional_string(payload.get("harness"))
+    approval_center_url = _optional_string(payload.get("approval_center_url"))
+    approval_surface_policy = _optional_string(payload.get("approval_surface_policy"))
+    detection = _string_dict(payload.get("detection"))
+    evaluation = _string_dict(payload.get("evaluation"))
+    if (
+        session_id is None
+        or operation_type is None
+        or harness is None
+        or approval_center_url is None
+        or approval_surface_policy is None
+        or detection is None
+        or evaluation is None
+    ):
+        return _reply({"error": "missing_required_fields"}, 400)
+    auth_token = load_guard_daemon_auth_token(store.guard_home) or ""
+    try:
+        response = GuardSurfaceRuntime(store).queue_blocked_operation(
+            session_id=session_id,
+            operation_type=operation_type,
+            harness=harness,
+            metadata=_string_dict(payload.get("metadata")) or {},
+            detection=detection,
+            evaluation=evaluation,
+            approval_center_url=approval_center_url,
+            browser_url=_append_guard_token_to_url(approval_center_url, auth_token),
+            approval_surface_policy=approval_surface_policy,
+            open_key=_optional_string(payload.get("open_key")),
+            opener=open_browser_url,
+            redaction_level=_optional_string(payload.get("redaction_level")) or "full",
+        )
+    except ValueError as error:
+        return _reply({"error": str(error)}, 400)
+    surface = response.get("surface")
+    operation = response.get("operation")
+    requests = response.get("approval_requests")
+    if (
+        isinstance(surface, dict)
+        and surface.get("reason") == "attention-deferred"
+        and isinstance(operation, dict)
+        and isinstance(operation.get("operation_id"), str)
+        and isinstance(requests, list)
+    ):
+        typed_requests = [request for request in requests if _string_dict(request) is not None]
+        first_url = next(
+            (url for request in typed_requests if isinstance(url := request.get("approval_url"), str)),
+            None,
+        )
+        browser_url = build_approval_browser_url(first_url, auth_token=auth_token)
+        if browser_url is not None:
+            # The worker host opens the browser when the operation still waits.
+            DurableApprovalAttention(store).schedule(
+                operation_id=str(operation["operation_id"]),
+                requests=typed_requests,
+                browser_url=browser_url,
+            )
+    return _reply(response)
+
+
 ROUTE_CALLS: dict[str, RouteCall] = {
     "route.policy_clear": policy_clear,
     "route.policy_upsert": policy_upsert,
@@ -371,6 +448,7 @@ ROUTE_CALLS: dict[str, RouteCall] = {
     "route.cloud_exception_request_create": cloud_exception_request_create,
     "route.harness_action": harness_action,
     "route.repair": repair,
+    "route.operation_block": operation_block,
 }
 
 

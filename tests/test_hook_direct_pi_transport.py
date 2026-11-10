@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server
+from codex_plugin_scanner.guard.daemon import server, server_runtime_hook
 from codex_plugin_scanner.guard.daemon.hook_direct_pi_transport import PI_DIRECT_SWITCH, pi_direct_answer
 
 PAYLOAD = {"tool_name": "bash", "tool_input": {"command": "pwd"}, "cwd": "/work", "guard_remaining_ms": 4000}
@@ -260,7 +260,7 @@ def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
     client = _Client(DEFER)
 
     def reject(*candidates: object, **kwargs: object) -> object:
-        raise server._HookPathValidationError("workspace", "outside_roots")  # pyright: ignore[reportPrivateUsage]
+        raise server_runtime_hook._HookPathValidationError("workspace", "outside_roots")  # pyright: ignore[reportPrivateUsage]
 
     worker = _worker(client, tmp_path)
     responses: list[dict[str, object]] = []

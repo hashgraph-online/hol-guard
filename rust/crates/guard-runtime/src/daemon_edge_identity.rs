@@ -80,6 +80,9 @@ pub(in crate::daemon_edge) fn serve(
             return write_answer(client, &response, reads, stalled_write);
         }
     }
+    if let Some(response) = reviewed_answer(client, &request, config, reads, verified) {
+        return write_answer(client, &response, reads, stalled_write);
+    }
     replay::replay_with(
         client,
         config,
@@ -200,6 +203,21 @@ fn direct_answer(request: &[u8], config: &ReadConfig) -> Option<Vec<u8>> {
     let head_len = replay::find_head_end(request)?;
     let head = parse_request(&request[..head_len])?;
     super::direct_hook::respond(&head, &request[head_len..], config)
+}
+
+/// The daemon's own review of the hook that followed the challenge, told
+/// whether it redeemed the proof.
+fn reviewed_answer(
+    client: &TcpStream,
+    request: &[u8],
+    config: &ReadConfig,
+    reads: &NativeReads,
+    verified: bool,
+) -> Option<Vec<u8>> {
+    let head_len = replay::find_head_end(request)?;
+    let head = parse_request(&request[..head_len])?;
+    let port = client.local_addr().ok()?.port();
+    super::hook_review::respond(&head, &request[head_len..], port, config, reads, verified)
 }
 
 /// Writes the challenge answer as an HTTP/1.1 response the client can reuse

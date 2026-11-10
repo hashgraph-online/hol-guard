@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import recovery_worker
-from codex_plugin_scanner.guard.daemon import server as server_module
+from codex_plugin_scanner.guard.daemon import server_runtime_hook as hook_module
 from tests.native_runtime_fixtures import patch_popen_past_native_runtime
 
 
@@ -25,7 +25,7 @@ def test_invalid_remaining_seconds_falls_back_to_valid_milliseconds() -> None:
         "guard_remaining_ms": 1250,
     }
 
-    assert server_module._runtime_hook_remaining_hint(payload) == 1.25  # pyright: ignore[reportPrivateUsage]
+    assert hook_module._runtime_hook_remaining_hint(payload) == 1.25  # pyright: ignore[reportPrivateUsage]
     assert "guard_remaining_seconds" not in payload
     assert "guard_remaining_ms" not in payload
 
@@ -37,7 +37,7 @@ def test_nonfinite_remaining_seconds_falls_back_to_valid_milliseconds(invalid_se
         "guard_remaining_ms": 1250,
     }
 
-    assert server_module._runtime_hook_remaining_hint(payload) == 1.25  # pyright: ignore[reportPrivateUsage]
+    assert hook_module._runtime_hook_remaining_hint(payload) == 1.25  # pyright: ignore[reportPrivateUsage]
 
 
 def test_valid_remaining_seconds_consumes_millisecond_fallback() -> None:
@@ -46,7 +46,7 @@ def test_valid_remaining_seconds_consumes_millisecond_fallback() -> None:
         "guard_remaining_ms": 1250,
     }
 
-    assert server_module._runtime_hook_remaining_hint(payload) == 2.0  # pyright: ignore[reportPrivateUsage]
+    assert hook_module._runtime_hook_remaining_hint(payload) == 2.0  # pyright: ignore[reportPrivateUsage]
     assert "guard_remaining_ms" not in payload
 
 
@@ -56,8 +56,8 @@ def test_boolean_deadline_hints_use_default() -> None:
         "guard_remaining_ms": False,
     }
 
-    assert server_module._runtime_hook_remaining_hint(payload) == (  # pyright: ignore[reportPrivateUsage]
-        server_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
+    assert hook_module._runtime_hook_remaining_hint(payload) == (  # pyright: ignore[reportPrivateUsage]
+        hook_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS  # pyright: ignore[reportPrivateUsage]
     )
 
 
