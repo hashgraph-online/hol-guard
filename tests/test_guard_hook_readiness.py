@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
-from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 from codex_plugin_scanner.guard.daemon.server_runtime_hook import _RuntimeHookRoutes
+from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
 
 class _SettledDirectories:

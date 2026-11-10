@@ -29,6 +29,7 @@ from .routes.repair_calls import REPAIR_CALLS
 from .routes.service_calls import SERVICE_CALLS
 from .routes.settings_calls import SETTINGS_CALLS
 from .routes.supply_chain_calls import SUPPLY_CHAIN_CALLS
+from .routes.update_calls import UPDATE_CALLS
 from .store import GuardStore
 from .workers.ticks import WORKER_CALLS
 
@@ -230,6 +231,7 @@ REGISTRY: dict[str, LibraryCall] = {
     **CONNECT_CALLS,
     **REPAIR_CALLS,
     **SUPPLY_CHAIN_CALLS,
+    **UPDATE_CALLS,
     **WORKER_CALLS,
     **EXTENSION_CONTROL_CALLS,
     **CATALOG_CALLS,

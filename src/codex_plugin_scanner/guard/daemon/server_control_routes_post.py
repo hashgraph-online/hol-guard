@@ -14,9 +14,6 @@ class _ControlPostRoutes:
 
     def _dispatch_control_post(self, parsed: Any, path_parts: list[str], payload: dict[str, Any], route: Any) -> None:
         del route
-        if parsed.path == "/v1/update":
-            self._handle_dashboard_update(payload)
-            return
         if (
             len(path_parts) == 4
             and path_parts[:3] == ["v1", "audit", "remediations"]

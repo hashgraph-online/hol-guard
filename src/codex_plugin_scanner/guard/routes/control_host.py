@@ -229,7 +229,6 @@ CONTROL_GET_PATHS = frozenset(
     {
         "/v1/local-clis",
         "/v1/runtime",
-        "/v1/update/status",
     }
 )
 
@@ -269,20 +268,12 @@ def _runtime_read(host: Any, query: str) -> None:
 
 
 def _dispatch_control_get(host: Any, path: str, query: str) -> None:
-    from ..cli.update_commands import build_guard_update_status_payload
-    from ..daemon.dashboard_update import merge_dashboard_update_progress
     from ..daemon.local_cli_http import handle_local_cli_list
 
     if path == "/v1/runtime":
         _runtime_read(host, query)
-    elif path == "/v1/local-clis":
-        handle_local_cli_list(host, query)
     else:
-        guard_home = host.server.store.guard_home
-        host._write_json(
-            merge_dashboard_update_progress(guard_home, build_guard_update_status_payload(guard_home=guard_home)),
-            extra_headers={"Cache-Control": "no-store, max-age=0"},
-        )
+        handle_local_cli_list(host, query)
 
 
 def control_get(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:

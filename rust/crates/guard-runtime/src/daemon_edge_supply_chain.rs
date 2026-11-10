@@ -550,7 +550,7 @@ fn repair_all(host: &mut Host<'_, '_>, payload: &Map<String, Value>) -> Result<R
 }
 
 /// Python truthiness for a JSON value.
-fn truthy(value: Option<&Value>) -> bool {
+pub(super) fn truthy(value: Option<&Value>) -> bool {
     match value {
         None | Some(Value::Null) => false,
         Some(Value::Bool(flag)) => *flag,

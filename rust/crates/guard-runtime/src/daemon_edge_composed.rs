@@ -57,11 +57,12 @@ const EXTENSION_CONTROL_READS: [&str; 3] = [
 
 /// `GET` paths whose Guard library handler reads the server state the
 /// daemon keeps on disk: its address, runtime identity and connect state.
-const CONTROL_READS: [&str; 3] = ["/v1/local-clis", "/v1/runtime", "/v1/update/status"];
+const CONTROL_READS: [&str; 2] = ["/v1/local-clis", "/v1/runtime"];
 
-/// `GET` paths the native supply-chain routes answer.
-const SUPPLY_CHAIN_READS: [&str; 3] = [
+/// `GET` paths the native supply-chain, connect and update routes answer.
+const SUPPLY_CHAIN_READS: [&str; 4] = [
     "/v1/cloud/connect",
+    "/v1/update/status",
     "/v1/supply-chain/entitlement",
     "/v1/supply-chain/package-shims",
 ];
@@ -154,6 +155,10 @@ pub(super) fn respond(
                 "home_dir".to_owned(),
                 config.user_home.as_deref().map_or(Value::Null, Value::from),
             );
+            if let Some(answer) = super::writes::update::get(path, config, args.clone()) {
+                let (status, body) = answer?;
+                return Some((status, body, true));
+            }
             let (status, body) = match super::writes::cloud_connect::get(path, config, args.clone())
             {
                 Some(answer) => answer?,

@@ -252,8 +252,8 @@ def test_control_get_answers_live_reads_from_the_daemon_state(tmp_path: Path) ->
 
     facts = _call(tmp_path, "connect.facts", {"kind": "cloud", "port": 5999, "daemon_pid": 1})["ok"]
     assert set(facts) == {"required", "repair", "connect_url", "cloud_state", "package_state"}  # type: ignore[arg-type]
-    update = control_get("/v1/update/status")["ok"]
-    assert update["status"] == 200 and update["no_store"] is True  # type: ignore[index]
+    update = _call(tmp_path, "update.status", {"progress": True})["ok"]
+    assert "current_version" in update  # type: ignore[operator]
     assert "error" in control_get("/v1/settings")
     assert "error" in control_get("/v1/runtime", query=1)
 

@@ -54,6 +54,8 @@ mod sessions;
 mod settings_write;
 #[path = "daemon_edge_supply_chain.rs"]
 pub(super) mod supply_chain;
+#[path = "daemon_edge_update.rs"]
+pub(super) mod update;
 
 /// The value a body read, or the daemon's answer for a body it cannot read.
 macro_rules! read_body {
@@ -354,6 +356,10 @@ fn control_post(
         config.user_home.as_deref().map_or(Value::Null, Value::from),
     );
     if let Some(answer) = supply_chain::post(request.path, &payload, config, args.clone()) {
+        let (status, body) = answer?;
+        return Some((status, body, caller.cors_origin, false));
+    }
+    if let Some(answer) = update::post(request.path, &payload, config, args.clone()) {
         let (status, body) = answer?;
         return Some((status, body, caller.cors_origin, false));
     }
