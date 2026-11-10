@@ -365,6 +365,7 @@ mod daemon_lifecycle_unit_tests;
 mod daemon_lifecycle_vectors_tests;
 mod daemon_manage;
 mod daemon_policy_authority;
+mod daemon_recovery;
 mod daemon_route_op;
 mod daemon_route_paths;
 mod daemon_route_resolve;

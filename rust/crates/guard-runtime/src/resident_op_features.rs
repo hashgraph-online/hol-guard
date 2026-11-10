@@ -312,6 +312,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-grok-executable-v1",
     "native-process-identity-v1",
     "daemon-manage-v1",
+    "daemon-recovery-v1",
     "native-macos-code-signing-v1",
     "native-local-risk-report-v1",
     "native-business-source-current-fence-v2",
