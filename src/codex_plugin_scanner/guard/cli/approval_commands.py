@@ -42,21 +42,6 @@ _HARNESS_RETRY_COPY: dict[str, str] = {
     "grok": "Grok is resuming this action",
 }
 _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
-_APPROVAL_SCOPES = frozenset(("artifact", "publisher", "workspace", "harness", "global"))
-
-
-def _requested_approval_scope(
-    explicit_scope: object,
-    request: dict[str, object] | None,
-    action: str = "allow",
-) -> str:
-    if explicit_scope is not None:
-        return str(explicit_scope)
-    by_action = request.get("recommended_scope_by_action") if request else None
-    recommended_scope = by_action.get(action) if isinstance(by_action, dict) else None
-    if recommended_scope is None and action == "allow" and request:
-        recommended_scope = request.get("recommended_scope")
-    return recommended_scope if recommended_scope in _APPROVAL_SCOPES else "artifact"
 
 
 def _build_retry_hint(action: str, harness: str) -> dict[str, str]:
@@ -176,11 +161,7 @@ def run_approval_command(
             "next_action": "Open the original Guard request in the local approval center or native harness prompt.",
             "exit_code": 4,
         }
-    requested_scope = getattr(args, "scope", None)
-    if requested_scope is None and command in {"approve", "deny"}:
-        request_for_scope = store.get_approval_request(args.request_id)
-        requested_scope = _requested_approval_scope(requested_scope, request_for_scope, str(args.approval_action))
-    requested_scope = _requested_approval_scope(requested_scope, None, str(getattr(args, "approval_action", "allow")))
+    requested_scope = str(getattr(args, "scope", None) or "artifact")
     try:
         trust_local_tool = bool(getattr(args, "trust_local_tool", False))
         if trust_local_tool and (requested_scope != "artifact" or bool(getattr(args, "remember", False))):
