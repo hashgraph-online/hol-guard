@@ -147,20 +147,26 @@ def test_future_broader_detector_cannot_cross_an_exempted_region(path, content, 
 
 def test_dummy_secrets_in_test_files_are_skipped():
     from pathlib import Path
-    from codex_plugin_scanner.checks.security import _should_skip_secret_match, SecretPattern, SECRET_PATTERNS
-    # Find a generic pattern
-    generic = next(d for d in SECRET_PATTERNS if d.kind == "generic")
+    from codex_plugin_scanner.checks.security import _first_hardcoded_secret_line
+
+    # Dummy exact values on test surfaces should be skipped.
     content = 'const TOKEN = "fake-not-a-real-token";\n'
-    match = generic.pattern.search(content)
-    assert match is not None
-    assert _should_skip_secret_match(
-        Path("tests/foo_test.ts"),
-        content,
-        generic,
-        match,
-        lines=content.splitlines(),
-        offsets=(),
-        field_name_spans=(),
-        python_reference_spans=(),
-        shell_read_spans=(),
-    )
+    assert _first_hardcoded_secret_line(Path("tests/foo_test.ts"), content) is None
+
+    # Realistic credentials on README/docs/test paths must still be reported.
+    for path, value in [
+        ("README.md", "prodsecret"),
+        ("docs/guide.md", "opensesame"),
+        ("tests/foo_test.ts", "mysecretP4ssword2026"),
+        ("tests/foo_test.ts", "live_token_9f8a7b6c5d"),
+    ]:
+        content = f'password = "{value}"\n'
+        assert _first_hardcoded_secret_line(Path(path), content) is not None, (path, value)
+
+    # Dummy markers remain reportable on production paths.
+    content = 'const TOKEN = "fake-not-a-real-token";\n'
+    assert _first_hardcoded_secret_line(Path("src/app.ts"), content) is not None
+
+    # Interpolated mixed value stays a finding.
+    content = 'TOKEN = "$(TOKEN)actual-secret-937"\n'
+    assert _first_hardcoded_secret_line(Path("tests/foo_test.ts"), content) is not None

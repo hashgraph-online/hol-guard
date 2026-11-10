@@ -69,6 +69,7 @@ PLACEHOLDER_MARKERS = (
 EXAMPLE_GENERIC_VALUES = {
     "admin123",
     "adminpass123",
+    "fake-not-a-real-token",
     "mypassword123",
     "password123",
     "secret-value",
@@ -442,16 +443,7 @@ def _looks_like_incomplete_provider_candidate(value: str) -> bool:
 
 def _looks_like_example_generic_secret(value: str) -> bool:
     normalized = _normalize_secret_candidate(value).lower()
-    if normalized in EXAMPLE_GENERIC_VALUES:
-        return True
-    # Common dummy/test tokens on example/test surfaces
-    dummy_markers = ("fake", "dummy", "test", "example", "sample", "not-a-real", "not_a_real", "placeholder", "swordfish", "secret", "token", "xyz", "env-token", "must-not", "not-escape", "from-env", "installation")
-    if any(marker in normalized for marker in dummy_markers):
-        return True
-    # short low-entropy tokens commonly used as dummies in tests
-    if len(normalized) < 16 and normalized.isalpha():
-        return True
-    return False
+    return normalized in EXAMPLE_GENERIC_VALUES
 
 
 def _newline_offsets(content: str) -> tuple[int, ...]:
@@ -579,6 +571,9 @@ def _should_skip_secret_match(
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):
+        return True
+    # Exact dummy installation token used in docs/tests; keep before provider promotion.
+    if _normalize_secret_candidate(candidate).lower() == "ghs_installation":
         return True
     effective_kind = detector.kind
     if effective_kind == "generic" and _provider_payload(candidate) is not None:
