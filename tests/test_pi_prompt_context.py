@@ -170,3 +170,38 @@ def test_prompt_resumed_while_the_agent_is_busy_is_queued_without_context(tmp_pa
     # A queued follow-up starts no turn of its own, so its files are not kept.
     assert result["sent"] == [{"deliverAs": "followUp"}]
     assert result["resumedTurn"] == {"input": {"action": "continue"}}
+
+
+HEADLESS_STEPS = """
+const aborted = [];
+const headless = {...ctx, abort: () => aborted.push(true)};
+// Print mode and the SDK start a turn without an "input" event.
+const begin = (prompt, reason = 'prompt') =>
+  callbacks.before_agent_start({type: 'before_agent_start', reason, prompt}, headless);
+const matched = await begin('fix the cart total');
+const empty = await begin('no match');
+const blocked = await begin('protected');
+const stopped = aborted.length;
+const revived = await begin('fix the cart total', 'revive');
+// Once the host emits "input", prompts are reviewed there and only there.
+const typed = await turn('fix the theme');
+const later = await begin('fix the cart total');
+console.log(JSON.stringify({matched, empty, blocked, stopped, revived, typed, later, payloads}));
+"""
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@node_required
+def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harness: str) -> None:
+    result = run_handlers(tmp_path, harness, HEADLESS_STEPS)
+    assert result["matched"] == context_message("fix the cart total")
+    assert "empty" not in result
+    assert "blocked" not in result
+    assert result["stopped"] == 1, "a denied headless prompt stops its turn"
+    assert "revived" not in result
+    assert result["typed"] == {"input": {"action": "continue"}, "start": context_message("fix the theme")}
+    assert "later" not in result
+    reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
+    assert reviewed == ["fix the cart total", "no match", "protected", "fix the theme"]
+    assert all(payload["guard_prompt_context"] is True for payload in result["payloads"])
+    assert all(payload["session_id"] == "session-a" for payload in result["payloads"])
