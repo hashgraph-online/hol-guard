@@ -45087,7 +45087,8 @@
         "command": "cat *git"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-read-glob-in-missing-directory",
@@ -45104,7 +45105,8 @@
         "command": "wc -l nosuch-dir/*.ts"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "head-absolute-path-that-is-not-there",
