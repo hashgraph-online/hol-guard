@@ -124,7 +124,6 @@ pub(crate) fn benign_command_segments(
                     | "uptime"
                     | "pgrep"
                     | "ps"
-                    | "launchctl"
                     | "lsof"
                     | "pg_isready"
                     | "psql"
