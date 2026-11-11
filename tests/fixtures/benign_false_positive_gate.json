@@ -36155,7 +36155,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cat docs/auth-evidence/phase-e-auth-schema.md docs/secrets/auth-notes.md"
+        "command": "cat docs/auth-evidence/phase-e-auth-schema.md deploy/app-secrets.yaml"
       },
       "cwd": "worktree",
       "expect": "not_allow"
