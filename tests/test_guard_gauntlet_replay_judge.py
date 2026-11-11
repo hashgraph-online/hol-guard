@@ -302,6 +302,12 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-stderr-credential-location-read",
         "neg-tr-file-operand",
         "neg-uniq-output-operand-in-worktree",
+        # An interpreter run that is more than a version probe: `perl -V` prints
+        # the build configuration and `ruby -v script.rb` runs the script after
+        # the banner. A contained run has no network and no home access, so the
+        # script reaches nothing outside the workspace copy.
+        "neg-perl-config-summary",
+        "neg-ruby-version-then-script",
         # A removal git reads as the trailing part of a sibling checkout's registration: the
         # checkout it would take away stands outside the workspace, so a contained run removes
         # nothing of it.
