@@ -96,7 +96,7 @@ pub(crate) fn apply(
 }
 
 /// A review a user's explicit Allow could settle.
-fn liftable(result: &PreToolResultV1) -> bool {
+pub(crate) fn liftable(result: &PreToolResultV1) -> bool {
     result.minimum_action == "review"
         && result.policy_action == "review"
         && result.action.bounded
