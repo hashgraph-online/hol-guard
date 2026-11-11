@@ -119,7 +119,19 @@ pub(super) fn safe_df_arguments(arguments: &[String]) -> bool {
     operands <= MAX_OPERANDS
 }
 
-pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
+/// `diff` of two readable files, or of two directories that pass the
+/// recursive search screen.
+///
+/// After a pipe one operand may be `-`, which compares what the proven
+/// producer printed against a file: `git show HEAD:a.rs | diff - a.rs`. The
+/// dash reads only that output, the way `sed` and `comm` read it, so the
+/// other operand takes the ordinary file proof. Both operands as `-`, or a
+/// dash with nothing piped into the segment, keeps the review.
+pub(super) fn safe_diff_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
     let mut operands = Vec::new();
     let mut after_options = false;
     let mut values = arguments.iter();
@@ -140,6 +152,9 @@ pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathCont
     let [left, right] = operands.as_slice() else {
         return false;
     };
+    if let Some(file) = piped_comparison_file(left, right, piped_input) {
+        return compared_file_readable(file, context);
+    }
     if *left == "-" || *right == "-" {
         return false;
     }
@@ -199,7 +214,13 @@ fn diff_option(option: &str) -> bool {
 /// first differ, or with `-l`/`-b` the differing bytes. Each file needs the
 /// same proof as a `diff` file operand. Byte counts after the two files only
 /// skip input. A directory makes `cmp` fail, so there is no recursive form.
-pub(super) fn safe_cmp_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
+///
+/// After a pipe one of the two files may be `-`, as for `diff`.
+pub(super) fn safe_cmp_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
     let mut operands = Vec::new();
     let mut after_options = false;
     let mut values = arguments.iter();
@@ -221,17 +242,44 @@ pub(super) fn safe_cmp_arguments(arguments: &[String], context: super::PathConte
     let [left, right] = files else {
         return false;
     };
-    if *left == "-" || *right == "-" || !skips.iter().all(|skip| digits(skip)) {
+    if !skips.iter().all(|skip| digits(skip)) {
         return false;
     }
-    [left, right].iter().all(|operand| {
-        safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
-            || super::chain_temporary::absent_temporary_read_target(
-                operand,
-                context.home_dir,
-                context.cwd,
-            )
-    })
+    if let Some(file) = piped_comparison_file(left, right, piped_input) {
+        return compared_file_readable(file, context);
+    }
+    if *left == "-" || *right == "-" {
+        return false;
+    }
+    [left, right]
+        .iter()
+        .all(|operand| compared_file_readable(operand, context))
+}
+
+/// The file operand of a two-operand comparison whose other operand is `-`
+/// reading a pipe. `None` when nothing is piped in, when neither or both
+/// operands are `-`, so the caller applies its ordinary proof.
+fn piped_comparison_file<'a>(left: &'a str, right: &'a str, piped_input: bool) -> Option<&'a str> {
+    if !piped_input {
+        return None;
+    }
+    match (left == "-", right == "-") {
+        (true, false) => Some(right),
+        (false, true) => Some(left),
+        _ => None,
+    }
+}
+
+/// The read proof a compared file takes. A chain may compare against a
+/// temporary copy it makes first, which is absent when the hook runs; reading
+/// it can only report a missing file.
+fn compared_file_readable(operand: &str, context: super::PathContext<'_>) -> bool {
+    safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
+        || super::chain_temporary::absent_temporary_read_target(
+            operand,
+            context.home_dir,
+            context.cwd,
+        )
 }
 
 /// Report-format options and byte limits. None of them names another file.
