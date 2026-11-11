@@ -12,7 +12,8 @@
 use super::search_pattern_clearance::PatternClearance;
 use super::search_scope_filter::SearchFilter;
 use super::search_scope_walk::{
-    include_scope_proven, walk_scope, walk_scope_cleared, walk_scope_with, Ignores,
+    include_scope_proven, walk_listing_scope, walk_scope, walk_scope_cleared, walk_scope_with,
+    Ignores,
 };
 use serde_json::{Map, Value};
 use std::cell::Cell;
@@ -60,8 +61,22 @@ pub(super) fn claude_grep_directory_scope_proven(
     let Some(root) = verified_directory_root(target, home_dir, cwd) else {
         return false;
     };
+    // Claude prints only matching lines and the names of matching files, so
+    // a sensitive file a plain pattern provably cannot match adds nothing.
+    let clearance = input
+        .get("pattern")
+        .and_then(Value::as_str)
+        .and_then(PatternClearance::new);
     !super::read_paths::inside_agent_state_tree(&root, home_dir)
-        && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None).is_ok()
+        && walk_scope_cleared(
+            &root,
+            &filter,
+            Ignores::Ripgrep,
+            clearance.as_ref(),
+            home_dir,
+            &mut None,
+        )
+        .is_ok()
 }
 
 /// True when a Grok `Grep` directory search cannot reach a sensitive file.
@@ -375,11 +390,12 @@ pub(super) fn content_search_blocker(
 }
 
 fn unfiltered_walk_proven(root: &Path, home: Option<&str>) -> bool {
-    unfiltered_walk_cleared(root, None, home)
+    SearchFilter::from_input(&Map::new())
+        .is_some_and(|filter| walk_listing_scope(root, &filter, home).is_ok())
 }
 
-/// [`unfiltered_walk_proven`], where a sensitive file the `clearance` pattern
-/// provably cannot match does not fail the proof.
+/// The unfiltered content walk, where a sensitive file the `clearance`
+/// pattern provably cannot match does not fail the proof.
 fn unfiltered_walk_cleared(
     root: &Path,
     clearance: Option<&PatternClearance>,

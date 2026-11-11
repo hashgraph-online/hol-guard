@@ -176,6 +176,7 @@ pub(super) fn walk_include_scope(
         false,
         &|_| false,
         None,
+        false,
         home,
         &mut None,
         Some(MAX_INCLUDE_SCOPE_ENTRIES),
@@ -221,8 +222,33 @@ pub(super) fn walk_scope_cleared(
         false,
         &|_| false,
         clearance,
+        false,
         home,
         blocker,
+        None,
+        None,
+    )
+}
+
+/// The unfiltered walk for a host that prints names only, such as Claude
+/// `Glob` or Oh My Pi `glob`. A sensitive file still fails the proof, but a
+/// committed `Secret` manifest is held only for the values it declares, and a
+/// listing prints none of them.
+pub(super) fn walk_listing_scope(
+    root: &Path,
+    filter: &SearchFilter,
+    home: Option<&str>,
+) -> Result<(), ScopeUnproven> {
+    walk_scope_inner(
+        root,
+        filter,
+        Ignores::None,
+        false,
+        &|_| false,
+        None,
+        true,
+        home,
+        &mut None,
         None,
         None,
     )
@@ -246,6 +272,7 @@ pub(super) fn walk_scope_with(
         names,
         outside_link,
         None,
+        false,
         home,
         blocker,
         None,
@@ -261,6 +288,7 @@ fn walk_scope_inner(
     names: bool,
     outside_link: &dyn Fn(&Path) -> bool,
     clearance: Option<&PatternClearance>,
+    listing: bool,
     home: Option<&str>,
     blocker: &mut Option<PathBuf>,
     entries: Option<usize>,
@@ -422,9 +450,12 @@ fn walk_scope_inner(
                 && !match tracked.classify(&path) {
                     Tracked::Clean => true,
                     // A committed `Secret` manifest is held for the values it
-                    // declares; a pattern that cannot occur in it prints none.
+                    // declares; a listing or a pattern that cannot occur in it
+                    // prints none.
                     Tracked::SecretManifest => {
-                        clearance.is_some_and(|clearance| clearance.clears_secret_manifest(&path))
+                        listing
+                            || clearance
+                                .is_some_and(|clearance| clearance.clears_secret_manifest(&path))
                     }
                     Tracked::Unproven => clearance.is_some_and(|clearance| clearance.clears(&path)),
                 }

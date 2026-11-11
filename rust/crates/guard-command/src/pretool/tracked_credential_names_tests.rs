@@ -288,48 +288,13 @@ fn a_linked_worktree_of_the_same_repository_is_proven() {
     assert!(!unproven(&file, cwd(&project)));
 }
 
+#[cfg(test)]
+#[path = "tracked_secret_manifest_walk_tests.rs"]
+mod secret_manifest_walk;
+
 #[cfg(unix)]
 const ORDINARY: &str = "contributions/extensions/command.kubectl-get.json";
 #[cfg(unix)]
-/// A recursive search that reaches a committed `Secret` manifest proceeds
-/// only when its pattern cannot occur in the manifest, as it would for an
-/// `.env` file: the manifest's values are never printed either way.
-#[test]
-fn a_walk_passes_a_secret_manifest_its_pattern_cannot_match() {
-    let (home, project) = fixture();
-    let manifest = "deploy/app-secrets.yaml";
-    write(&project.join("src/one.ts"), "export const one = 1;\n");
-    write(
-        &project.join(manifest),
-        "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\ndata:\n  mode: cHJvZA==\n",
-    );
-    write_index(&project.join(".git"), &["src/one.ts", manifest]);
-    let blocker = |pattern: &str| {
-        let clearance = crate::pretool::search_pattern_clearance::PatternClearance::new(pattern);
-        crate::pretool::search_scope::content_search_blocker(
-            project.to_str().unwrap(),
-            home.to_str(),
-            project.to_str(),
-            clearance.as_ref(),
-        )
-    };
-    assert_eq!(blocker("export"), None);
-    // Words in the manifest, in any letter case, and a pattern the clearance
-    // cannot read keep the manifest in the way.
-    for pattern in ["secret", "Mode", "export|cHJv", "export.*"] {
-        assert_eq!(blocker(pattern), Some(PathBuf::from(manifest)), "{pattern}");
-    }
-    // A store directory or a secret extension is never cleared by content.
-    let stored = "secrets/app.yaml";
-    write(
-        &project.join(stored),
-        "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\n",
-    );
-    write_index(&project.join(".git"), &["src/one.ts", stored]);
-    std::fs::remove_file(project.join(manifest)).unwrap();
-    assert_eq!(blocker("export"), Some(PathBuf::from(stored)));
-}
-
 const MANIFEST: &str = "deploy/app-secrets.yaml";
 
 #[cfg(unix)]
