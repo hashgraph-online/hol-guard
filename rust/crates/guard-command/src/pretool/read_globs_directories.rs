@@ -156,8 +156,8 @@ fn literal_read(word: &str, context: super::super::super::PathContext<'_>) -> bo
 }
 
 /// A literal component of the walk's root: the leading empty component of an
-/// absolute path, a leading `~`, or a visible name.
+/// absolute path, a leading `~` or `.`, or a visible name.
 fn root_component(index: usize, component: &str) -> bool {
-    (index == 0 && (component.is_empty() || component == "~"))
+    (index == 0 && (component.is_empty() || component == "~" || component == "."))
         || (!component.contains(['*', '?']) && super::plain_component(component))
 }

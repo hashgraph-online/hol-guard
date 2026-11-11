@@ -71,6 +71,8 @@ fn wildcard_directories_in_the_workspace_read_like_their_matches() {
         "sed -n 205,245p app/api/claims/*/start/route.ts",
         "head -20 app/*/claims/*/*/route.ts",
         "cat */guard-core/Cargo.toml",
+        "head -5 ./crates/*/Cargo.toml",
+        "cat ./*/guard-core/Cargo.toml",
     ] {
         assert_eq!(
             allowed(command, &home, &project),
@@ -103,6 +105,8 @@ fn wildcard_directories_keep_review_when_a_match_is_not_a_plain_read() {
         "cat crates/[g]*/Cargo.toml",
         "cat crates/**/Cargo.toml",
         "cat .git/*/HEAD",
+        "cat ./.git/*/HEAD",
+        "cat crates/./*/Cargo.toml",
     ] {
         assert_eq!(
             allowed(command, &home, &project),
