@@ -1,8 +1,9 @@
 """`hol-guard settings approval-pulse`: set up, turn off and recover Yanez Pulse.
 
 `show-command on|off` chooses whether the YID app shows the command of a
-paused action (on by default). Secrets are hidden and the home folder shows as
-``~``; the resident builds that text, this module only names the setting.
+paused action. It is off by default; turning it on first explains what is sent
+and asks the user to confirm at the terminal. The resident builds the text the
+phone shows and checks the approval; this module only names the setting.
 
 Every secret (approval password, authenticator code, agent key, recovery code)
 is read with ``getpass`` from an interactive terminal. None is accepted as a
@@ -44,6 +45,14 @@ _SETUP_STEPS = (
     "  2. In the YID app, go to Settings > Agent Keys and create a key named HOL Guard.",
     "  3. Paste that key at the prompt below. It is hidden and stored only in Guard's secret store.",
 )
+# Shown before the user opts in to sending commands to the YID app.
+SHOW_COMMAND_NOTICE = (
+    "Turning this on sends the command an agent wants to run to Yanez Pulse, so the",
+    "YID app can show it before you approve. Guard hides the secrets and user folders it",
+    "recognises (tokens, passwords, keys, your home folder shown as ~), but this filtering",
+    "is best-effort and cannot catch every secret. With it off, the YID app shows only the",
+    "program names, as it does by default.",
+)
 _HELP_LINKS = f"Get the YID app:  {PULSE_SITE_URL}\nHow Pulse works:  {PULSE_DOCS_URL}"
 
 
@@ -81,11 +90,11 @@ def add_approval_pulse_parser(settings_subparsers, add_common_args, parser_class
     )
     show_command = commands.add_parser(
         "show-command",
-        help="Show the agent's command in the YID app (on by default); needs a Pulse approval to change",
+        help="Show the agent's command in the YID app (off by default); needs a Pulse approval to change",
         description=(
-            "Choose whether the YID app shows the command an agent wants to run. "
-            "Secrets are hidden and your home folder shows as ~. "
-            "When off, the YID app shows only the program names."
+            "Choose whether the YID app shows the command an agent wants to run. It is off by default, "
+            "and the YID app shows only the program names. When on, Guard hides the secrets and user "
+            "folders it recognises, but this is best-effort. Turning it on asks you to confirm at the terminal."
         ),
         **links,
     )
@@ -168,7 +177,10 @@ def _show_command(args: argparse.Namespace, guard_home: Path) -> dict[str, objec
             "Yanez Pulse is not the approval factor for this Guard.",
             status=409,
         )
-    change = {"pulse_show_command": args.state == "on"}
+    show = args.state == "on"
+    if show:
+        _confirm_show_command()
+    change = {"pulse_show_command": show}
     gate_input = prompt_for_approval_gate(guard_home, use_cooldown=False, strict=True)
     # One approval covers exactly this change, like a dashboard settings save.
     grant = require_high_risk(
@@ -178,6 +190,15 @@ def _show_command(args: argparse.Namespace, guard_home: Path) -> dict[str, objec
         settings_change={"kind": "save", "settings": {"approval_gate": change}},
     )
     return {"approval_gate": update_settings(guard_home, change, approval_gate_grant=grant).to_dict()}
+
+
+def _confirm_show_command() -> None:
+    """Informed opt-in: explain what is sent, then require a typed yes."""
+    _require_terminal("Turning on command sharing")
+    for line in SHOW_COMMAND_NOTICE:
+        print(line, file=sys.stderr)
+    if input("Type yes to send commands to the YID app: ").strip().lower() != "yes":
+        raise ApprovalGateError("approval_gate_cancelled", "Command sharing stays off.")
 
 
 def _recover(guard_home: Path) -> dict[str, object]:

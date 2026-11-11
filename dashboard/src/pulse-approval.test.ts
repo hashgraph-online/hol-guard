@@ -14,7 +14,7 @@ import { approvalProofCooldownOptionShown, approvalProofModalTitle } from "./app
 import { withLocalProtectionDeadline } from "./guard-api";
 import { PULSE_SITE_URL, pulseSetupCanClose, runPulseEnrollment, type PulseEnrollmentSteps } from "./pulse-setup-modal";
 import { bulkPulsePrompt } from "./queue-bulk-approval-credentials";
-import { PULSE_SHOW_COMMAND_HINT, pulseShowsCommand } from "./pulse-settings-panel";
+import { PULSE_SHOW_COMMAND_NOTICE, pulseShowsCommand } from "./pulse-settings-panel";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
@@ -417,7 +417,7 @@ function pulseModeNeverAsksForAPasswordOrCode(): void {
     "PULSE-14: the password gate keeps its checkbox");
 }
 
-async function theCommandSwitchIsOnByDefaultAndNeedsTheYidApp(): Promise<void> {
+async function theCommandSwitchIsOffByDefaultAndNeedsTheYidApp(): Promise<void> {
   const gate: GuardApprovalGatePublicConfig = {
     enabled: true,
     configured: true,
@@ -429,15 +429,15 @@ async function theCommandSwitchIsOnByDefaultAndNeedsTheYidApp(): Promise<void> {
     strict_all_decisions: false,
     pulse_enabled: true,
   };
-  assert(pulseShowsCommand(gate), "PULSE-17: an older daemon that does not report the switch shows the command");
-  assert(pulseShowsCommand({ ...gate, pulse_show_command: true }), "PULSE-17: on shows the command");
-  assert(!pulseShowsCommand({ ...gate, pulse_show_command: false }), "PULSE-17: only an explicit off hides it");
-  assert(pulseShowsCommand(null), "PULSE-17: on before the settings load");
-  assert(PULSE_SHOW_COMMAND_HINT.includes("Secrets are hidden") && PULSE_SHOW_COMMAND_HINT.includes("~"),
-    "PULSE-17: the toggle says what is hidden");
+  assert(!pulseShowsCommand(gate), "PULSE-17: off when the daemon does not report an opt-in");
+  assert(!pulseShowsCommand({ ...gate, pulse_show_command: false }), "PULSE-17: off");
+  assert(pulseShowsCommand({ ...gate, pulse_show_command: true }), "PULSE-17: only an explicit opt-in shows it");
+  assert(!pulseShowsCommand(null), "PULSE-17: off before the settings load");
+  assert(PULSE_SHOW_COMMAND_NOTICE.includes("Yanez Pulse") && PULSE_SHOW_COMMAND_NOTICE.includes("best-effort"),
+    "PULSE-17: the opt-in says what is sent and that filtering is best-effort");
 
   const daemon = pulseDaemon(["approved"]);
-  const body = pulseShowCommandBody(false);
+  const body = pulseShowCommandBody(true);
   const response = await sendWithPulseApproval(
     daemon.send,
     "/v1/settings",
@@ -473,5 +473,5 @@ theBulkPromptCountsWhatThePhoneShows();
 pulseModeNeverAsksForAPasswordOrCode();
 await closingSetupWhileItStartsNeverTurnsPulseOn();
 theSetupLinkTellsYanezItCameFromGuard();
-await theCommandSwitchIsOnByDefaultAndNeedsTheYidApp();
+await theCommandSwitchIsOffByDefaultAndNeedsTheYidApp();
 console.log("pulse-approval tests passed");

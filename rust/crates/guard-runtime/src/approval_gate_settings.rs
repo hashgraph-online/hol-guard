@@ -149,7 +149,8 @@ pub(crate) fn public_config_locked(
         } else {
             0
         },
-        pulse_show_command: !pulse::pulse_enabled(&state) || pulse::pulse_show_command(&state),
+        pulse_show_command: pulse::pulse_enabled(&state)
+            && crate::approval_gate_pulse_command::pulse_show_command(&state),
     }
 }
 
@@ -170,6 +171,7 @@ fn validate_grant_for_settings(
     approval_gate_grant: Option<&ApprovalGateGrantV1>,
     now: Option<&str>,
     state: &Value,
+    binding: Option<&(String, String)>,
 ) -> Result<(), ApprovalGateErrorV1> {
     let now_epoch = epoch(now);
     let grant_home = guard_home.to_string_lossy();
@@ -182,9 +184,9 @@ fn validate_grant_for_settings(
         expires_epoch,
         Some("settings_write"),
         true,
+        binding.map(|(action, _)| action.as_str()),
         None,
-        None,
-        None,
+        binding.map(|(_, subject)| subject.as_str()),
         None,
         factor_generation(state),
         totp_enabled(state),
@@ -224,7 +226,23 @@ pub(crate) fn next_settings_state(
         }
     }
     if gate_was_enabled {
-        validate_grant_for_settings(guard_home, grants, approval_gate_grant, now, &state)?;
+        // Sending commands to Pulse is a privacy choice, so the resident
+        // itself requires an approval bound to exactly this save.
+        let binding = if payload.get("pulse_show_command").is_some() {
+            Some(crate::approval_gate_settings_binding::gate_save_binding(
+                guard_home, payload,
+            )?)
+        } else {
+            None
+        };
+        validate_grant_for_settings(
+            guard_home,
+            grants,
+            approval_gate_grant,
+            now,
+            &state,
+            binding.as_ref(),
+        )?;
     }
     let np = gate_input.new_password.as_deref();
     if requested_enabled == Some(true) && !gate_was_enabled {
@@ -294,9 +312,8 @@ pub(crate) fn next_settings_state(
         // config sends 0 back; that changes nothing.
     }
     if let Some(show) = payload.get("pulse_show_command") {
-        // Whether the YID app shows the command of a paused action. On by
-        // default; turning it off or on again is a settings change like any
-        // other, so it needs the current approval factor.
+        // Whether the YID app shows the command of a paused action. Off by
+        // default; only the user's approved opt-in turns it on.
         let show = show.as_bool().ok_or_else(|| {
             err(
                 "approval_gate_invalid_pulse_show_command",
@@ -309,15 +326,15 @@ pub(crate) fn next_settings_state(
                 .as_object_mut()
                 .unwrap()
                 .insert("pulse_show_command".into(), Value::Bool(show));
-        } else if !show {
+        } else if show {
             return Err(err(
                 "approval_gate_pulse_not_enabled",
                 "Yanez Pulse is not the approval factor for this Guard.",
                 409,
             ));
         }
-        // Without Pulse the public config reports true, so a saved or
-        // imported config sends true back; that changes nothing.
+        // Without Pulse the public config reports false, so a saved or
+        // imported config sends false back; that changes nothing.
     }
     if requested_enabled == Some(false) && pulse::pulse_enabled(&next_state) {
         // Turning the gate off ends Pulse too. The secrets are deleted by

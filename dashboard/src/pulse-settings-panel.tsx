@@ -11,11 +11,14 @@ type Step = "closed" | "setup" | "recover";
 
 export const PULSE_SHOW_COMMAND_LABEL = "Show the command in the YID app";
 export const PULSE_SHOW_COMMAND_HINT =
-  "See the exact command the agent wants to run before you approve. Secrets are hidden and your home folder shows as ~. Changing this asks the YID app first.";
+  "Off: the YID app shows only the program name, for example rm. Changing this asks the YID app first.";
+/** Shown before the user opts in, so the choice is informed. */
+export const PULSE_SHOW_COMMAND_NOTICE =
+  "Turning this on sends the command an agent wants to run to Yanez Pulse, so the YID app can show it before you approve. Guard hides the secrets and user folders it recognises (tokens, passwords, keys, your home folder shown as ~), but this filtering is best-effort and cannot catch every secret.";
 
-/** The command shows unless the user turned it off. */
+/** Off by default: the command shows only after the user opted in. */
 export function pulseShowsCommand(gateConfig: GuardApprovalGatePublicConfig | null): boolean {
-  return gateConfig?.pulse_show_command !== false;
+  return gateConfig?.pulse_show_command === true;
 }
 
 type PulseSettingsPanelProps = {
@@ -41,6 +44,7 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
   const [error, setError] = useState<string | null>(null);
   const cancelWait = useRef<AbortController | null>(null);
   const [waitingFor, setWaitingFor] = useState<"disable" | "show-command" | null>(null);
+  const [confirmingShowCommand, setConfirmingShowCommand] = useState(false);
 
   // Leaving the page stops waiting for the YID app.
   useEffect(() => () => cancelWait.current?.abort(), []);
@@ -83,10 +87,19 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
 
   const handleDisable = useCallback(() => runWithCancel("disable", disableApprovalGatePulse), [runWithCancel]);
 
-  const handleShowCommand = useCallback(
+  const saveShowCommand = useCallback(
     (show: boolean) => runWithCancel("show-command", (signal) => setApprovalGatePulseShowCommand(show, signal)),
     [runWithCancel],
   );
+
+  // Turning it on is an informed opt-in: explain first. Turning it off is immediate.
+  const handleShowCommand = useCallback((show: boolean) => {
+    if (show) {
+      setConfirmingShowCommand(true);
+      return;
+    }
+    void saveShowCommand(false);
+  }, [saveShowCommand]);
 
   const handleRecover = useCallback(() => run(async () => {
     onSettingsPayload(await recoverApprovalGatePulse({ approval_password: password, pulse_recovery_code: recoveryCode.trim() }));
@@ -138,9 +151,25 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
               label={PULSE_SHOW_COMMAND_LABEL}
               description={PULSE_SHOW_COMMAND_HINT}
               checked={pulseShowsCommand(gateConfig)}
-              disabled={pending}
+              disabled={pending || confirmingShowCommand}
               onChange={handleShowCommand}
             />
+            {confirmingShowCommand ? (
+              <div role="alertdialog" aria-label="Share commands with the YID app?" className="space-y-2 rounded-lg border border-brand-blue/20 bg-white px-3 py-2">
+                <p className="text-xs leading-5 text-slate-600">{PULSE_SHOW_COMMAND_NOTICE}</p>
+                <div className="flex flex-wrap gap-2">
+                  <ActionButton
+                    onClick={() => {
+                      setConfirmingShowCommand(false);
+                      void saveShowCommand(true);
+                    }}
+                  >
+                    Turn on and approve in the YID app
+                  </ActionButton>
+                  <ActionButton variant="outline" onClick={() => setConfirmingShowCommand(false)}>Keep it off</ActionButton>
+                </div>
+              </div>
+            ) : null}
             {waitingFor === "show-command" ? (
               <p role="status" className="text-xs text-slate-600">Approve this change in the YID app…</p>
             ) : null}

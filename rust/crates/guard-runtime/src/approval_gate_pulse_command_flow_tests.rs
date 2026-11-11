@@ -1,5 +1,8 @@
 //! The command row in the YID app, end to end: what reaches Pulse for a
-//! paused action, and the `pulse_show_command` switch that turns it off.
+//! paused action, and the `pulse_show_command` opt-in. Off by default, so
+//! Guards set up before it existed keep sending program names only
+//! (Michael's review of #7541), and only an approval for exactly that
+//! change can turn it on.
 
 use serde_json::json;
 
@@ -79,9 +82,27 @@ fn set_show_command(g: &Gate, show: bool) -> Value {
 }
 
 #[test]
-fn the_phone_sees_the_command_with_secrets_and_user_folders_hidden() {
+fn by_default_the_phone_sees_only_the_program_name() {
+    let (g, _) = pulse_gate("command-default", 0);
+    store_request(&g);
+    let cfg = g.send("public_config", NOW, json!({}));
+    assert_eq!(cfg["payload"]["pulse_show_command"], false, "{cfg}");
+    assert!(load_state(&g.home).get("pulse_show_command").is_none());
+    let sent = sent_to_phone(&g);
+    assert!(!sent.contains("\"Command\""), "{sent}");
+    for hidden in ["client-acme", "-rf", "/Users", "ghp_0123456789"] {
+        assert!(!sent.contains(hidden), "leaked {hidden}: {sent}");
+    }
+    assert!(sent.contains("\"rm\""), "the program name shows: {sent}");
+}
+
+#[test]
+fn after_opting_in_the_phone_sees_the_command_with_secrets_and_user_folders_hidden() {
     let (g, _) = pulse_gate("command-shown", 0);
     store_request(&g);
+    let on = set_show_command(&g, true);
+    assert_eq!(on["status"], "ok", "{on}");
+    assert_eq!(on["payload"]["pulse_show_command"], true, "{on}");
     let sent = sent_to_phone(&g);
     for shown in [
         "\"Command\"",
@@ -94,45 +115,54 @@ fn the_phone_sees_the_command_with_secrets_and_user_folders_hidden() {
     for hidden in ["/Users", "name/", "ghp_0123456789"] {
         assert!(!sent.contains(hidden), "leaked {hidden}: {sent}");
     }
-}
-
-#[test]
-fn the_command_is_shown_by_default() {
-    let (g, _) = pulse_gate("command-default", 0);
-    let cfg = g.send("public_config", NOW, json!({}));
-    assert_eq!(cfg["payload"]["pulse_show_command"], true, "{cfg}");
-    assert!(load_state(&g.home).get("pulse_show_command").is_none());
-}
-
-#[test]
-fn turning_the_command_off_needs_a_pulse_approval_and_hides_it() {
-    let (g, _) = pulse_gate("command-off", 0);
-    store_request(&g);
-    let unapproved = g.send(
-        "update_settings",
-        LATER,
-        json!({"params": {"pulse_show_command": false}}),
-    );
-    assert_ne!(unapproved["status"], "ok", "{unapproved}");
-    assert_eq!(
-        g.send("public_config", NOW, json!({}))["payload"]["pulse_show_command"],
-        true
-    );
 
     let off = set_show_command(&g, false);
-    assert_eq!(off["status"], "ok", "{off}");
     assert_eq!(off["payload"]["pulse_show_command"], false, "{off}");
-    let sent = sent_to_phone(&g);
-    assert!(!sent.contains("\"Command\""), "{sent}");
-    assert!(!sent.contains("client-acme"), "{sent}");
-    assert!(
-        sent.contains("\"rm\""),
-        "the program name still shows: {sent}"
-    );
+    assert!(!sent_to_phone(&g).contains("client-acme"));
+}
 
-    let on = set_show_command(&g, true);
-    assert_eq!(on["payload"]["pulse_show_command"], true, "{on}");
-    assert!(sent_to_phone(&g).contains("rm -rf ~/client-acme/build"));
+#[test]
+fn opting_in_needs_an_approval_for_exactly_that_change() {
+    let (g, _) = pulse_gate("command-binding", 0);
+    store_request(&g);
+    let enable = json!({"pulse_show_command": true});
+    let unapproved = g.send("update_settings", LATER, json!({"params": enable}));
+    assert_ne!(unapproved["status"], "ok", "{unapproved}");
+
+    // A valid grant for another settings save cannot turn sharing on.
+    let other = save_grant(
+        &g,
+        &json!({"approval_gate": {"pulse_cooldown_seconds": 900}}),
+    );
+    let swapped = g.send(
+        "update_settings",
+        LATER,
+        json!({"params": enable, "approval_gate_grant": other}),
+    );
+    assert_ne!(swapped["status"], "ok", "{swapped}");
+    // Nor can an approval to turn it off be used to turn it on.
+    let off_grant = save_grant(&g, &show_command(json!(false)));
+    let flipped = g.send(
+        "update_settings",
+        LATER,
+        json!({"params": enable, "approval_gate_grant": off_grant}),
+    );
+    assert_ne!(flipped["status"], "ok", "{flipped}");
+    // Nor can an extra field ride along with an approved opt-in.
+    let on_grant = save_grant(&g, &show_command(json!(true)));
+    let widened = g.send(
+        "update_settings",
+        LATER,
+        json!({"params": {"pulse_show_command": true, "strict_all_decisions": true},
+               "approval_gate_grant": on_grant}),
+    );
+    assert_ne!(widened["status"], "ok", "{widened}");
+
+    assert_eq!(
+        g.send("public_config", NOW, json!({}))["payload"]["pulse_show_command"],
+        false
+    );
+    assert!(!sent_to_phone(&g).contains("client-acme"));
 }
 
 #[test]
@@ -154,12 +184,12 @@ fn the_switch_is_a_plain_true_or_false() {
 }
 
 #[test]
-fn without_pulse_true_changes_nothing_and_false_is_refused() {
+fn without_pulse_false_changes_nothing_and_true_is_refused() {
     // As for the Pulse cooldown: the public config reports the default while
     // Pulse is off, so a settings save or import sends it back unchanged.
     let home = home("command-no-pulse");
     let cfg = send_from(&home, "sid=tty-1", "public_config", NOW, json!({}));
-    assert_eq!(cfg["payload"]["pulse_show_command"], true, "{cfg}");
+    assert_eq!(cfg["payload"]["pulse_show_command"], false, "{cfg}");
     let validate = |show: bool| {
         send_from(
             &home,
@@ -169,9 +199,9 @@ fn without_pulse_true_changes_nothing_and_false_is_refused() {
             json!({"params": {"cooldown_seconds": 0, "pulse_show_command": show}}),
         )
     };
-    let kept = validate(true);
+    let kept = validate(false);
     assert_eq!(kept["status"], "ok", "{kept}");
-    let off = validate(false);
-    assert_eq!(code(&off), "approval_gate_pulse_not_enabled", "{off}");
+    let on = validate(true);
+    assert_eq!(code(&on), "approval_gate_pulse_not_enabled", "{on}");
     let _ = std::fs::remove_dir_all(&home);
 }

@@ -35,6 +35,7 @@ use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
 use crate::approval_gate_grants::ApprovalGateErrorV1;
+use crate::approval_gate_pulse_command as pulse_command;
 pub(crate) use crate::approval_gate_pulse_store::{
     insert_pending, ledger_error, ledger_reserve, pending_has_room, pulse_busy,
     pulse_cooldown_covers, restore_pending, same_pulse_factor, take_pending,
@@ -48,7 +49,6 @@ pub(crate) use crate::approval_gate_pulse_store::{
     pending_len, TEST_AFTER_TRANSPORT, TEST_MAX_PENDING_PER_HOME, TEST_PULSE_LEDGER_MAX,
     TEST_TRANSPORT,
 };
-use crate::approval_gate_pulse_summary::CommandRow;
 use crate::approval_gate_state::{
     constant_time_eq, epoch, iso_from_epoch, load_state, optional_int, optional_string, write_state,
 };
@@ -110,12 +110,6 @@ pub(crate) fn pulse_cooldown_seconds(state: &Value) -> i64 {
     optional_int(state.get("pulse_cooldown_seconds"))
         .filter(|s| PULSE_ALLOWED_COOLDOWNS.contains(s))
         .unwrap_or(0)
-}
-
-/// Whether the YID app shows the command of a single paused action. On
-/// unless the user turned it off; only an explicit `false` hides it.
-pub(crate) fn pulse_show_command(state: &Value) -> bool {
-    state.get("pulse_show_command") != Some(&Value::Bool(false))
 }
 
 /// The floor when the user does not choose one at enrollment.
@@ -265,14 +259,7 @@ pub(crate) fn pulse_request(
         generation,
     );
     // What the YID app shows comes from Guard's own record of the request.
-    let home = crate::approval_gate_pulse_command::current_home();
-    let command_row = if pulse_show_command(&state) {
-        CommandRow::Shown {
-            home: home.as_deref(),
-        }
-    } else {
-        CommandRow::Hidden
-    };
+    let home = pulse_command::current_home();
     let summary = crate::approval_gate_pulse_summary::summary_with_command(
         guard_home,
         purpose,
@@ -280,7 +267,7 @@ pub(crate) fn pulse_request(
         scope,
         subject,
         batch_ids,
-        command_row,
+        pulse_command::command_row(&state, home.as_deref()),
     );
     let terms = build_terms_with_summary(&config.binding_key, &binding, &summary)
         .map_err(|e| pulse_error(&e))?;

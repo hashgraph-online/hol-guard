@@ -56,7 +56,7 @@ pub struct ApprovalGatePublicConfig {
     pub pulse_enabled: bool,
     pub pulse_cooldown_seconds: i64,
     /// Whether the YID app shows the command of a single paused action.
-    /// `true` while Pulse is off, which is the default it starts with.
+    /// Off by default and always `false` while Pulse is off.
     pub pulse_show_command: bool,
 }
 
@@ -757,13 +757,13 @@ mod tests {
             totp_recent_satisfied: true,
             pulse_enabled: false,
             pulse_cooldown_seconds: 0,
-            pulse_show_command: true,
+            pulse_show_command: false,
         };
         let d = cfg.to_dict();
         assert_eq!(d["cooldown_seconds"], json!(900));
         assert_eq!(d["totp_enabled"], json!(true));
         assert_eq!(d["locked_until"], Value::Null);
-        assert_eq!(d["pulse_show_command"], json!(true));
+        assert_eq!(d["pulse_show_command"], json!(false));
         assert_eq!(d.as_object().unwrap().len(), 14);
     }
 }

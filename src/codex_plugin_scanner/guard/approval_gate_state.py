@@ -31,7 +31,7 @@ class ApprovalGatePublicConfig:
     totp_recent_satisfied: bool = False
     pulse_enabled: bool = False
     pulse_cooldown_seconds: int = 0
-    pulse_show_command: bool = True
+    pulse_show_command: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {

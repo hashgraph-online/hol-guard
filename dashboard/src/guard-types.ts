@@ -977,7 +977,7 @@ export type GuardApprovalGatePublicConfig = {
   totp_pending?: boolean; totp_recent_satisfied?: boolean;
   pulse_enabled?: boolean;
   pulse_cooldown_seconds?: number;
-  /** Whether the YID app shows the agent's command (secrets hidden). On unless turned off. */
+  /** Whether the YID app shows the agent's command. Off unless the user opted in. */
   pulse_show_command?: boolean;
 };
 

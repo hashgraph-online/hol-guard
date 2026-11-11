@@ -116,6 +116,20 @@ fn binding(guard_home: &Path, change: &Value) -> Result<(String, String), Approv
     }
 }
 
+/// The binding of a settings save that names only `approval_gate` fields, as
+/// the dashboard and CLI send the Pulse command switch. The resident checks a
+/// switch change against it, so an approval for another save cannot flip it.
+pub(crate) fn gate_save_binding(
+    guard_home: &Path,
+    gate_payload: &Value,
+) -> Result<(String, String), ApprovalGateErrorV1> {
+    let settings = serde_json::json!({ "approval_gate": gate_payload });
+    Ok((
+        SETTINGS_SAVE_ACTION.to_owned(),
+        save_subject(guard_home, &settings)?,
+    ))
+}
+
 /// `settings:<hmac-sha256>` of the change without its proof fields.
 fn save_subject(guard_home: &Path, settings: &Value) -> Result<String, ApprovalGateErrorV1> {
     let mut changes = settings.as_object().cloned().unwrap_or_default();

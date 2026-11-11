@@ -102,3 +102,108 @@ fn an_empty_command_shows_nothing() {
     assert_eq!(command_preview("", Some("/Users/omar")), None);
     assert_eq!(command_preview(" \n\t", Some("/Users/omar")), None);
 }
+
+// Review of #7541 (Gitar, Qodo): forms the first version let through.
+
+#[test]
+fn a_user_folder_after_a_redirect_at_sign_or_separator_is_hidden() {
+    for (command, expected) in [
+        ("echo x >/Users/bob/log", "echo x >~/log"),
+        ("cmd 2>/home/alice/err", "cmd 2>~/err"),
+        ("cat </Users/bob/in", "cat <~/in"),
+        (
+            "curl -d @/Users/bob/body.json x.test",
+            "curl -d @~/body.json x.test",
+        ),
+        ("tool --paths=/a,/home/carol/b", "tool --paths=/a,~/b"),
+        ("a|/home/dave/bin/x", "a|~/bin/x"),
+        ("a;/home/dave/x&&/Users/erin/y", "a;~/x&&~/y"),
+        (
+            "cat file:///Users/alice/.ssh/id_rsa",
+            "cat file://~/.ssh/id_rsa",
+        ),
+        (
+            "cc -I/home/omar/include -L/Users/omar/lib",
+            "cc -I~/include -L~/lib",
+        ),
+    ] {
+        assert_eq!(
+            command_preview(command, None).as_deref(),
+            Some(expected),
+            "{command}"
+        );
+    }
+    assert_eq!(
+        command_preview("cat >/srv/omar/log -I/srv/omar/inc", Some("/srv/omar")).as_deref(),
+        Some("cat >~/log -I~/inc")
+    );
+}
+
+#[test]
+fn passwords_in_common_command_line_forms_are_hidden() {
+    // Built at run time so secret scanners do not flag the source.
+    let user_pass = format!("admin:{}", "hunter2pw");
+    let curl_u = format!("curl -u {user_pass} https://x.test");
+    let curl_user = format!("curl --user={user_pass} https://x.test");
+    for (command, secret) in [
+        (curl_u.as_str(), "hunter2pw"),
+        (curl_user.as_str(), "hunter2pw"),
+        (
+            "curl --proxy-user admin:hunter2pw https://x.test",
+            "hunter2pw",
+        ),
+        ("mysql -u root -phunter2pw shop", "hunter2pw"),
+        ("mysqldump -h db -phunter2pw shop", "hunter2pw"),
+        ("sshpass -p hunter2pw ssh host", "hunter2pw"),
+        ("sshpass -phunter2pw ssh host", "hunter2pw"),
+        (
+            "docker login -u bob -p hunter2pw registry.test",
+            "hunter2pw",
+        ),
+        ("podman login registry.test -p=hunter2pw", "hunter2pw"),
+        ("redis-cli -h cache -a hunter2pw ping", "hunter2pw"),
+        ("lftp --pass hunter2pw host", "hunter2pw"),
+        ("tool --pwd='hunter2 pw' run", "hunter2 pw"),
+        ("MYSQL_PWD=hunter2pw mysql shop", "hunter2pw"),
+        ("export REDIS_AUTH=\"hunter2pw\"", "hunter2pw"),
+        ("curl -H 'X-Session: hunter2pw' https://x.test", "hunter2pw"),
+        (
+            "curl --header \"Cookie2: sid=hunter2pw\" https://x.test",
+            "hunter2pw",
+        ),
+    ] {
+        let out = shown(command);
+        assert!(!out.contains(secret), "{command} -> {out}");
+        assert!(out.contains("[redacted]"), "{command} -> {out}");
+    }
+    assert_eq!(
+        shown("mysql -u root -phunter2pw shop"),
+        "mysql -u root -p[redacted] shop"
+    );
+    assert_eq!(
+        shown("curl -H 'X-Session: hunter2pw' https://x.test"),
+        "curl -H 'X-Session: [redacted]' https://x.test"
+    );
+}
+
+#[test]
+fn ordinary_flags_and_headers_are_left_alone() {
+    for command in [
+        "mkdir -p build/out",
+        "git push -u origin main",
+        "mysql -u root -p shop",
+        "ssh -p 2222 host",
+        "curl -H 'Content-Type: application/json' -H 'Accept: */*' https://x.test",
+        "ls /data/home/x",
+    ] {
+        assert_eq!(shown(command), command, "{command}");
+    }
+}
+
+#[test]
+fn a_password_split_by_a_line_continuation_is_still_hidden() {
+    let out = shown("curl https://alice:pa\\\nss@example.com/x");
+    assert_eq!(out, "curl https://[redacted]@example.com/x");
+    let out = shown("curl -u admin:hun\\\r\nter2pw \\\n  https://x.test");
+    assert!(!out.contains("hun") && !out.contains("ter2pw"), "{out}");
+}
