@@ -171,6 +171,10 @@
       "state": "review"
     },
     {
+      "name": "ferraus_score",
+      "state": "review"
+    },
+    {
       "name": "other",
       "state": "inherit"
     }
@@ -185,7 +189,7 @@
   "saferAlternatives": [
     "Start the server with --allow set to one music folder: path arguments outside it fail with path_not_allowed, and outputs default to ferraus-out/ inside it.",
     "Keep ferraus_job_start, ferraus_pipeline_run and ferraus_replay on Review: each runs other ferraus tools, so an inherited call could reach a reviewed one.",
-    "Leave models.auto_download off (the default) so ML tools fail with exit code 5 instead of downloading; separate, denoise, tune, analyze_pitch, transcribe, score_read and fx stay on Review either way.",
+    "Leave models.auto_download off (the default). FERRAUS_AUTO_DOWNLOAD=1 or -y can enable model downloads even when the default is off; separate, denoise, tune, analyze_pitch, transcribe, score_read, score and fx stay on Review either way.",
     "Prefer ferraus_convert and the ferraus_media_* tools, whose paths are checked, to ferraus_ffmpeg and ferraus_ffprobe, which pass their arguments straight to FFmpeg.",
     "Plugin tools and plugin:<name> instruments (render, score_perform, hum, vocoder carriers) run installed CLAP/VST3 code in a separate host process with a watchdog.",
     "Models and sounds are SHA-256 checked against Ed25519-signed registries; sounds without a pinned hash are refused unless FERRAUS_ALLOW_UNVERIFIED=1 is set."
