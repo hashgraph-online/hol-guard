@@ -145,8 +145,8 @@ fn redact_credentials(text: &str) -> String {
             format!(r"(?i)(?P<key>\bsshpass\b[^;|&\n]*?\s-p\s*)(?P<value>{WORD})"),
             // The attached -pPASSWORD of the MySQL tools; a bare -p prompts.
             format!(r"(?i)(?P<key>\b(?:mysql|mariadb|mysqldump|mysqladmin)\b[^;|&\n]*?\s-p)(?P<value>{WORD})"),
-            // The -p password of a registry login.
-            format!(r"(?i)(?P<key>\b(?:docker|podman|nerdctl|helm)\s+(?:registry\s+)?login\b[^;|&\n]*?\s-p(?:=|\s+))(?P<value>{WORD})"),
+            // The -p password of a registry login, attached or spaced.
+            format!(r"(?i)(?P<key>\b(?:docker|podman|nerdctl|helm)\s+(?:registry\s+)?login\b[^;|&\n]*?\s-p(?:=|\s+)?)(?P<value>{WORD})"),
             // The -a password of redis-cli.
             format!(r"(?i)(?P<key>\bredis-cli\b[^;|&\n]*?\s-a\s+)(?P<value>{WORD})"),
             // A variable whose name ends in PWD, PASS or AUTH: MYSQL_PWD=x.
@@ -226,12 +226,12 @@ fn user_passwords() -> &'static Regex {
     })
 }
 
-/// `-H`/`--header` and its value.
+/// `-H`/`--header` and its value; `-H` also takes it attached (`-H'X: y'`).
 fn headers() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(&format!(
-            r"(?P<key>(?:^|\s)(?:-H|--header)(?:=|\s+))(?P<value>{WORD})"
+            r"(?P<key>(?:^|\s)(?:-H(?:=|\s+)?|--header(?:=|\s+)))(?P<value>{WORD})"
         ))
         .expect("header pattern")
     })

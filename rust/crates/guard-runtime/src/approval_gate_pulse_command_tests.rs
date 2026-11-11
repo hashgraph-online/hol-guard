@@ -145,7 +145,12 @@ fn passwords_in_common_command_line_forms_are_hidden() {
     let user_pass = format!("admin:{}", "hunter2pw");
     let curl_u = format!("curl -u {user_pass} https://x.test");
     let curl_user = format!("curl --user={user_pass} https://x.test");
+    // Short options with the value attached (Gitar, #7541).
+    let attached_header = format!("curl -H'X-Session: {}' https://x.test", "hunter2pw");
+    let attached_login = format!("docker login -u bob -p{} reg.test", "hunter2pw");
     for (command, secret) in [
+        (attached_header.as_str(), "hunter2pw"),
+        (attached_login.as_str(), "hunter2pw"),
         (curl_u.as_str(), "hunter2pw"),
         (curl_user.as_str(), "hunter2pw"),
         (
