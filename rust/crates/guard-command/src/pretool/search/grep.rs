@@ -153,8 +153,9 @@ struct Scan {
     /// The search operands, after the pattern.
     targets: Vec<String>,
     recursive: bool,
-    /// `--include` appears, so exact exclusions are not part of the proof.
-    includes_present: bool,
+    /// `--include` appears beside an `--exclude` or `--exclude-dir` of any
+    /// shape, which keeps the review however the walk is narrowed.
+    include_beside_exclusion: bool,
     /// Exact names the command leaves out of its walk.
     excluded_files: Vec<String>,
     excluded_directories: Vec<String>,
@@ -393,7 +394,7 @@ fn scan_into(
         return scan_into(arguments, context, stdin_only, absent, true, scan);
     }
     scan.recursive = recursive;
-    scan.includes_present = includes_present;
+    scan.include_beside_exclusion = includes_present && !exclusions.leave_includes_exact();
     scan.excluded_files = exclusions
         .files
         .iter()
