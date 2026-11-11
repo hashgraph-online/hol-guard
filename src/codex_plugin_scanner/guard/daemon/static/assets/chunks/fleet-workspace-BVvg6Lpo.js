@@ -1,5 +1,5 @@
 import { al as isUnsupportedPlatformCheck, h as harnessDisplayName, j as jsxRuntimeExports, am as RECHECK_UNAVAILABLE_SIGNATURE, an as protectionReasonText, r as reactExports, A as ActionButton, ao as HiMiniExclamationCircle, ap as hasRepairableProtectionGap, aq as remainingProtectionRepairParts, ar as protectionGapSignature, as as repairOutcomeIsStalled, at as ProtectionRepairFlowError, au as nextProtectionRepairOutcome, av as waitForAuthorizeUrl, aw as startOrRecoverCloudConnect, ax as safeCloudConnectUrl, ay as openPackageFirewallAuthorizeFallback, az as waitForCloudConnection, aA as activeFailedHarnesses, aB as resetRepairOutcomeTracker, aC as HiMiniWrenchScrewdriver, v as HiMiniCheckCircle, g as HiMiniChevronDown, aD as fetchSettings, aE as harnessPostureRows, aF as selectHarnessPosture, aG as harnessPosturePatch, U as updateSettings, aH as harnessRowTone, aI as PROTECTION_POSTURE_COPY, aJ as harnessPostureOptions, aK as globalPosture, S as SectionLabel, aL as harnessRowStatus, aa as EmptyState, H as HiMiniChevronRight, aM as HiMiniEye, aN as HiMiniXCircle, x as isConnectableAppHarness, X as protectionHealthFor, W as useProtectionPresentationState, aO as GuardHero, aP as ProofStrip, aQ as HiMiniClipboardDocumentCheck, aR as HiMiniClipboard } from "../guard-dashboard.js";
-import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus, s as setupStatusFor, a as versionCompatibilityFor } from "./harness-version-label-CoN0LiqL.js";
+import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, i as inactiveInstallNeedsRepair, r as resolveDetectedAppStatus, s as setupStatusFor, a as versionCompatibilityFor } from "./harness-version-label-xEsgWKwG.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-Xk2GIeZa.js";
 import { a as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog-Ca_M7GbC.js";
 import { G as GuardRepairControl, S as SettingsSaveProofModal, H as HarnessPostureChoiceLabel } from "./settings-save-proof-modal-B1l5ib5t.js";
@@ -948,9 +948,9 @@ function renderReceiptContext(receipt) {
 function formatCount(value) {
   return value.toLocaleString();
 }
-function repairHarnessesFor(installs, health) {
+function repairHarnessesFor(installs, health, setupStatusOf = () => void 0) {
   return Array.from(new Set(
-    installs.filter((install) => install.active !== true || health.apps.find(
+    installs.filter((install) => install.active !== true ? inactiveInstallNeedsRepair(install, setupStatusOf(install.harness)) : health.apps.find(
       (app) => app.harness === install.harness
     )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass").map((install) => install.harness)
   ));
@@ -980,10 +980,13 @@ function FleetWorkspace(props) {
   const protectionHealth = protectionHealthFor(props.runtime);
   const protectionState = useProtectionPresentationState(protectionHealth);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
-  const repairHarness = managedInstalls.find((install) => !install.active)?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
+  const setupStatusOf = (harness) => setupStatusFor(harnessDetection, harness);
+  const repairHarness = managedInstalls.find(
+    (install) => inactiveInstallNeedsRepair(install, setupStatusOf(install.harness))
+  )?.harness ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
     (check) => check.check_id === "harness_hooks" && check.status === "fail"
   )) ?? visibleHarnesses[0];
-  const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
+  const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth, setupStatusOf);
   const postureApps = (() => {
     const activeSet = new Set(activeInstalls.map((install) => install.harness));
     const known = /* @__PURE__ */ new Set([...managedInstalls.map((install) => install.harness), ...visibleHarnesses]);

@@ -8,10 +8,8 @@ import os
 import queue
 import sys
 import threading
-import time
 from contextlib import suppress
 from datetime import datetime, timezone
-from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from types import TracebackType
 from typing import Final, Literal, final
@@ -20,7 +18,6 @@ from typing_extensions import override
 
 _DAEMON_LOG_DIRECTORY: Final = "logs"
 _DAEMON_LOG_FILENAME: Final = "daemon.log"
-_DAEMON_LOG_RETENTION_SECONDS: Final = 7 * 24 * 60 * 60
 _DEFAULT_QUEUE_CAPACITY: Final = 256
 _MAX_RECORDED_EXCEPTION_NAMES: Final = 3
 _OWNER_ONLY_DIRECTORY_MODE: Final = 0o700
@@ -80,70 +77,33 @@ def _secure_directory(path: Path) -> None:
         os.chmod(path, _OWNER_ONLY_DIRECTORY_MODE)
 
 
-def cleanup_expired_daemon_logs(log_directory: Path, *, now: float | None = None) -> None:
-    """Delete rotated daemon logs older than the fixed local retention period."""
-
-    cutoff = (time.time() if now is None else now) - _DAEMON_LOG_RETENTION_SECONDS
-    for candidate in log_directory.glob(f"{_DAEMON_LOG_FILENAME}.*"):
-        try:
-            if candidate.lstat().st_mtime < cutoff:
-                candidate.unlink()
-        except OSError:
-            continue
-
-
 @final
 class DaemonDiagnostics:
-    """Queue daemon diagnostics so hook and request threads never perform file I/O."""
+    """Queue daemon diagnostics so hook and request threads never perform file I/O.
 
-    def __init__(
-        self,
-        guard_home: Path,
-        *,
-        queue_capacity: int = _DEFAULT_QUEUE_CAPACITY,
-        start_worker: bool = True,
-        rotate: bool = True,
-    ) -> None:
+    Records are appended when the caller closes. The native daemon owns daily
+    rotation and retention of ``daemon.log``, so a writer here never renames
+    the live log out from under it.
+    """
+
+    def __init__(self, guard_home: Path, *, queue_capacity: int = _DEFAULT_QUEUE_CAPACITY) -> None:
         self.log_directory = guard_home / _DAEMON_LOG_DIRECTORY
         self.log_path = self.log_directory / _DAEMON_LOG_FILENAME
         self._queue: queue.Queue[logging.LogRecord] = queue.Queue(maxsize=max(1, queue_capacity))
         self._closed = True
         self._close_lock = threading.Lock()
-        self._stop_requested = threading.Event()
         self._handler: logging.Handler | None = None
-        self._thread: threading.Thread | None = None
         try:
             _secure_directory(self.log_directory)
-            # The long-running daemon owns retention. A one-shot hook must not
-            # scan and unlink rotated logs on the fail-closed path.
-            if rotate:
-                cleanup_expired_daemon_logs(self.log_directory)
             if self.log_path.is_symlink():
                 raise OSError("daemon diagnostic log cannot be a symbolic link")
-            # The long-running daemon owns midnight rotation. A one-shot CLI
-            # hook that opens the same file with its own rotating handler can
-            # rename the live log out from under the daemon, and on Windows
-            # that rename fails into the hook's stderr.
-            if rotate:
-                self._handler = TimedRotatingFileHandler(
-                    self.log_path,
-                    when="midnight",
-                    interval=1,
-                    backupCount=7,
-                    encoding="utf-8",
-                    utc=True,
-                )
-            else:
-                self._handler = logging.FileHandler(self.log_path, mode="a", encoding="utf-8")
+            # Opened on first write, so records land in whichever file the
+            # daemon's rotation left live.
+            self._handler = logging.FileHandler(self.log_path, mode="a", encoding="utf-8", delay=True)
             self._handler.setFormatter(_DaemonLogFormatter())
-            with suppress(OSError):
-                os.chmod(self.log_path, 0o600)
         except Exception:
             return
         self._closed = False
-        if start_worker:
-            self._thread = threading.Thread(target=self._run, daemon=True, name="guard-daemon-diagnostics")
-            self._thread.start()
 
     def record(self, event: str, *, detail: str | None = None) -> bool:
         return self._enqueue(self._record(logging.INFO, event, detail=detail))
@@ -194,26 +154,20 @@ class DaemonDiagnostics:
         release_default_sink(self.record_phase)
         release_sink(self.record_background)
         with self._close_lock:
-            if self._handler is None:
+            if self._handler is None or self._closed:
                 return True
-            if self._closed:
-                return self._thread is None or not self._thread.is_alive()
             self._closed = True
-            if self._thread is None:
-                # A stalled write must not hold the fail-closed hook response.
-                # The drain is daemon-threaded so the timeout bounds that write,
-                # and a fast disk still finishes before close returns.
-                drained = threading.Thread(
-                    target=self._finish_pending,
-                    daemon=True,
-                    name="guard-daemon-diagnostics-drain",
-                )
-                drained.start()
-                drained.join(timeout=max(0.0, timeout_seconds))
-                return not drained.is_alive()
-            self._stop_requested.set()
-        self._thread.join(timeout=max(0.0, timeout_seconds))
-        return not self._thread.is_alive()
+        # A stalled write must not hold the fail-closed hook response. The
+        # drain is daemon-threaded so the timeout bounds that write, and a
+        # fast disk still finishes before close returns.
+        drained = threading.Thread(
+            target=self._finish_pending,
+            daemon=True,
+            name="guard-daemon-diagnostics-drain",
+        )
+        drained.start()
+        drained.join(timeout=max(0.0, timeout_seconds))
+        return not drained.is_alive()
 
     def _record(
         self,
@@ -229,16 +183,22 @@ class DaemonDiagnostics:
         return record
 
     def _finish_pending(self) -> None:
+        if not self._queue.empty():
+            # The log is owner-only from its first byte; the handler opens it
+            # only after this.
+            with suppress(OSError):
+                os.close(os.open(self.log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600))
+            with suppress(OSError):
+                os.chmod(self.log_path, 0o600)
         self._drain_pending()
         if self._handler is not None:
             self._handler.close()
 
     def _drain_pending(self) -> None:
-        """Write queued records when no worker thread owns the handler.
+        """Write every queued record.
 
-        Callers that run without a worker (one-shot CLI hooks) would otherwise
-        close the handler with their records still in the queue, which is how a
-        fail-closed deny can reach a harness with nothing written to the log.
+        Closing the handler with records still queued is how a fail-closed
+        deny could reach a harness with nothing written to the log.
         """
 
         handler = self._handler
@@ -264,22 +224,3 @@ class DaemonDiagnostics:
         except queue.Full:
             return False
         return True
-
-    def _run(self) -> None:
-        try:
-            while not self._stop_requested.is_set() or not self._queue.empty():
-                try:
-                    item = self._queue.get(timeout=0.05)
-                except queue.Empty:
-                    continue
-                try:
-                    handler = self._handler
-                    if handler is not None:
-                        handler.emit(item)
-                except Exception:
-                    continue
-                finally:
-                    self._queue.task_done()
-        finally:
-            if self._handler is not None:
-                self._handler.close()

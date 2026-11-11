@@ -112,7 +112,7 @@ def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name:
     """
 
     with suppress(Exception):
-        diagnostics = DaemonDiagnostics(guard_home, start_worker=False, rotate=False)
+        diagnostics = DaemonDiagnostics(guard_home)
         try:
             diagnostics.record_exception(
                 "native_hook_worker_exception",
