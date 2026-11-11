@@ -9,7 +9,7 @@
           "extension_id": "command.rozee",
           "version": "1.0.0",
           "name": "Rozee job-search CLI network requests",
-          "description": "Reviews the Rozee search CLI's public listing search and detail requests before they send query or listing data to Rozee.pk.",
+          "description": "Reviews repository-root invocations of the Rozee search CLI when they send query or listing data to Rozee.pk. It covers bun run and direct bun launches with the .agents/... or ./.agents/... relative script path. Absolute paths and invocations from other working directories are not covered by this extension and remain subject to Guard's base policies.",
           "action_classes": [
             "Rozee public job-search request"
           ],
@@ -70,7 +70,7 @@
               "rule_version": "1.0.0",
               "permission_id": "command.rozee.permission.public-listing-requests",
               "title": "Rozee public listing request",
-              "description": "Reviews only the Rozee CLI search and detail subcommands, which make outbound requests to fetch public job listings. The search query is sent to Rozee.pk.",
+              "description": "Reviews repository-root relative invocations of the Rozee CLI search and detail subcommands, which make outbound requests to fetch public job listings. It covers bun run and direct bun launches using either .agents/... or ./.agents/... script paths. Absolute paths and invocations from other working directories remain subject to Guard's base policies; this extension does not claim universal Rozee coverage.",
               "severity": "medium",
               "risk_classes": [
                 "network_egress"
@@ -84,52 +84,125 @@
               ],
               "default_mode": "review",
               "matcher": {
-                "op": "any.v1",
-                "config": {},
-                "matchers": [
-                  {
-                    "op": "arguments.v1",
-                    "config": {
-                      "executables": [
-                        "bun"
-                      ],
-                      "required_arguments": [
-                        "run",
-                        ".agents/skills/rozee-search/cli/src/cli.ts",
-                        "search"
-                      ]
-                    }
-                  },
-                  {
-                    "op": "arguments.v1",
-                    "config": {
-                      "executables": [
-                        "bun"
-                      ],
-                      "required_arguments": [
-                        "run",
-                        ".agents/skills/rozee-search/cli/src/cli.ts",
-                        "detail"
-                      ]
-                    }
-                  }
-                ]
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "bun"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "paths": [
+                    [
+                      "run",
+                      ".agents/skills/rozee-search/cli/src/cli.ts",
+                      "search"
+                    ],
+                    [
+                      "run",
+                      "./.agents/skills/rozee-search/cli/src/cli.ts",
+                      "search"
+                    ],
+                    [
+                      ".agents/skills/rozee-search/cli/src/cli.ts",
+                      "search"
+                    ],
+                    [
+                      "./.agents/skills/rozee-search/cli/src/cli.ts",
+                      "search"
+                    ],
+                    [
+                      "run",
+                      ".agents/skills/rozee-search/cli/src/cli.ts",
+                      "detail"
+                    ],
+                    [
+                      "run",
+                      "./.agents/skills/rozee-search/cli/src/cli.ts",
+                      "detail"
+                    ],
+                    [
+                      ".agents/skills/rozee-search/cli/src/cli.ts",
+                      "detail"
+                    ],
+                    [
+                      "./.agents/skills/rozee-search/cli/src/cli.ts",
+                      "detail"
+                    ]
+                  ],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": []
+                }
               },
               "safe_variants": [
                 {
                   "variant_id": "local-help",
                   "title": "Show local CLI help without a request",
                   "matcher": {
-                    "op": "arguments.v1",
+                    "op": "executable-path-set.v1",
                     "config": {
+                      "allow_leading_options": false,
                       "executables": [
                         "bun"
                       ],
-                      "required_arguments": [
-                        "run",
-                        ".agents/skills/rozee-search/cli/src/cli.ts",
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--query"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "paths": [
+                        [
+                          "run",
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          "run",
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          "run",
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ],
+                        [
+                          "run",
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ],
+                        [
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ],
+                        [
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ]
+                      ],
+                      "required_flags": [
                         "--help"
-                      ]
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": []
                     }
                   }
                 },
@@ -137,16 +210,68 @@
                   "variant_id": "local-short-help",
                   "title": "Show local CLI help without a request",
                   "matcher": {
-                    "op": "arguments.v1",
+                    "op": "executable-path-set.v1",
                     "config": {
+                      "allow_leading_options": false,
                       "executables": [
                         "bun"
                       ],
-                      "required_arguments": [
-                        "run",
-                        ".agents/skills/rozee-search/cli/src/cli.ts",
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--query",
+                        "-e",
+                        "-l",
+                        "-p",
+                        "-q"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "paths": [
+                        [
+                          "run",
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          "run",
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "search"
+                        ],
+                        [
+                          "run",
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ],
+                        [
+                          "run",
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ],
+                        [
+                          ".agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ],
+                        [
+                          "./.agents/skills/rozee-search/cli/src/cli.ts",
+                          "detail"
+                        ]
+                      ],
+                      "required_flags": [
                         "-h"
-                      ]
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": []
                     }
                   }
                 }
@@ -452,6 +577,78 @@
       "id": "external-extension-is-inactive-by-default",
       "command": "bun run .agents/skills/rozee-search/cli/src/cli.ts search --query \"data analyst\"",
       "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.rozee.public-listing-request",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "search-without-run-is-reviewed",
+      "command": "bun .agents/skills/rozee-search/cli/src/cli.ts search --query \"data analyst\"",
+      "enabled_extensions": [
+        "command.rozee"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.rozee.public-listing-request",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "search-with-dot-relative-path-is-reviewed",
+      "command": "bun run ./.agents/skills/rozee-search/cli/src/cli.ts search --query \"data analyst\"",
+      "enabled_extensions": [
+        "command.rozee"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.rozee.public-listing-request",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "detail-without-run-and-dot-relative-path-is-reviewed",
+      "command": "bun ./.agents/skills/rozee-search/cli/src/cli.ts detail sample-role-lahore-jobs-123456",
+      "enabled_extensions": [
+        "command.rozee"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.rozee.public-listing-request",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "later-search-token-does-not-match-other-subcommand",
+      "command": "bun run .agents/skills/rozee-search/cli/src/cli.ts other search",
+      "enabled_extensions": [
+        "command.rozee"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.rozee.public-listing-request",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "dash-leading-query-prints-help-without-request",
+      "command": "bun run .agents/skills/rozee-search/cli/src/cli.ts search --query '-help'",
+      "enabled_extensions": [
+        "command.rozee"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.rozee.public-listing-request",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "double-dash-query-prints-help-without-request",
+      "command": "bun run .agents/skills/rozee-search/cli/src/cli.ts search --query '--help'",
+      "enabled_extensions": [
+        "command.rozee"
+      ],
       "disabled_permissions": [],
       "expected_action": "review",
       "rule_id": "command.rozee.public-listing-request",
