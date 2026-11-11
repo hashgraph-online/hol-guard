@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
-    "package": "agentic-linkedin"
+    "package": "agentic-linkedin@0.1.0"
   },
   "riskClasses": [
     "external-account-read",
