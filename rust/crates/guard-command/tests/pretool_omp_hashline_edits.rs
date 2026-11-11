@@ -154,8 +154,9 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         let result = evaluate("omp", &input);
         assert_eq!(result.minimum_action, "review", "{input}: {result:?}");
     }
-    // A decorated header names no file Guard can prove, but nothing runs: the
-    // agent is told how to write the header instead of waiting on an approval.
+    // A decorated header names no file Guard can prove. The edit keeps its
+    // review, so a person can still approve it, and the reason tells the
+    // agent how to write a header Guard can prove.
     for (input, shown) in [
         (
             patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
@@ -177,7 +178,7 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         let result = evaluate("omp", &input);
         assert_eq!(
             (result.minimum_action.as_str(), result.reason_code.as_str()),
-            ("block", "native_omp_edit_header_unreadable"),
+            ("review", "native_file_write_review"),
             "{input}"
         );
         assert!(
@@ -271,6 +272,28 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
             "paths": ["REQUEST "],
         })),
         ("block".to_owned(), "native_missing_path".to_owned())
+    );
+    // A decorated header and its copies keep the review, and the reason still
+    // shows the agent the plain header.
+    let result = evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name": "edit", "tool_input": {
+            "input": patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "path": "*** Update File: src/a.ts",
+            "paths": ["*** Update File: src/a.ts"],
+        }}),
+        None,
+        None,
+        root.to_str(),
+        workspace.to_str(),
+    );
+    assert_eq!(result.minimum_action, "review", "{result:?}");
+    assert!(
+        result.reason.contains("`[*** Update File: src/a.ts#0AC4]`")
+            && result.reason.contains("[src/app.py#1A2B]"),
+        "{}",
+        result.reason
     );
     // Fields that are not an exact copy of the headers keep the review.
     for tool_input in [

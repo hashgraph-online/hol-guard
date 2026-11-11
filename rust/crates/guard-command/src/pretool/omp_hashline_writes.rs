@@ -38,11 +38,6 @@ pub(super) enum HashlineEdit {
     /// fix the path rather than wait on an approval. Holds the first missing
     /// path as the header wrote it.
     MissingTarget(String),
-    /// A line opens with a bracket the way a header does but is not a plain
-    /// `[PATH#TAG]` header, such as `[FILE: src/a.ts#0AC4]`. Guard cannot
-    /// tell which file Oh My Pi would open, so it does not run the edit and
-    /// shows how to write the header. Holds that line, shortened.
-    UnreadableHeader(String),
 }
 
 /// Files a hashline `input` edits, each with whether a header carried a
@@ -184,9 +179,7 @@ pub(super) fn evaluate_hashline_edit(
     cwd: Option<&str>,
 ) -> Option<HashlineEdit> {
     let workspace = cwd.and_then(|root| std::fs::canonicalize(root).ok())?;
-    let Some(targets) = hashline_targets(input) else {
-        return unreadable_header(input).map(HashlineEdit::UnreadableHeader);
-    };
+    let targets = hashline_targets(input)?;
     let mut missing: Option<&str> = None;
     for (written, tagged) in &targets {
         let target = &match written.strip_prefix("~/") {
@@ -223,9 +216,22 @@ pub(super) fn evaluate_hashline_edit(
     })
 }
 
+/// The review reason for an edit with a line that opens with a bracket the
+/// way a header does but is not a plain `[PATH#TAG]` header, such as
+/// `[FILE: src/a.ts#0AC4]`. Guard cannot tell which file Oh My Pi would
+/// open, so the edit keeps its review and a person can still approve a path
+/// that really holds `#` or `:`; the reason shows the agent the header Guard
+/// can prove. A `REM` or `MV`, a stray row or anything else the proof does
+/// not read leaves this `None`, so those edits keep the usual reason.
+pub(super) fn unreadable_header_reason(input: &str) -> Option<String> {
+    let line = unreadable_header(input)?;
+    Some(format!(
+        "HOL Guard requires review for this edit because its file header `{line}` is not a plain `[PATH#TAG]` header, so Guard cannot tell which file it changes. To change the file without a review, write each header as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing else inside the brackets."
+    ))
+}
+
 /// The first line that opens with a bracket but is not a plain header,
-/// shortened for a message. A `REM` or `MV`, a stray row or anything else the
-/// proof does not read leaves this `None`, so those edits keep their review.
+/// shortened for a message.
 fn unreadable_header(input: &str) -> Option<String> {
     const SHOWN_CHARS: usize = 120;
     if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
