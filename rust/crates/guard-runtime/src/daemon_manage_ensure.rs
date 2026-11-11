@@ -817,6 +817,10 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         native,
         cfg!(windows) || request.allow_windows_job_breakaway,
     );
+    // The caller reads this process's output to its end, so the handed-off
+    // daemon must not inherit it and hold it open for the daemon's life.
+    #[cfg(windows)]
+    guard_runtime_windows_process::disinherit_standard_handles();
     let spawned = match command.spawn() {
         Ok(child) => Ok(child),
         Err(_) if cfg!(windows) && !request.allow_windows_job_breakaway => {

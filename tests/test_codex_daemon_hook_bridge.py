@@ -836,6 +836,11 @@ def _bridge_github_read(
                 timeout_seconds=30,
             )
         else:
+            # A tool hook is admitted for about three seconds. A direct review
+            # with no time hint first waits for the daemon's library process
+            # to warm, so a slow runner's cold start does not spend the
+            # bridge's budget.
+            _daemon_hook_response(daemon, guard_home, query=query, payload=payload, timeout_seconds=30)
             response = _native_bridge_response(runtime, guard_home, query=query, payload=payload)
     finally:
         daemon.stop()
