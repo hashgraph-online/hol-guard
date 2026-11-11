@@ -987,6 +987,15 @@ fn evaluate_envelope(
         let (reason_code, reason) = result::review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(result.action.clone(), "review", reason_code, reason);
     }
+    if harness == "omp"
+        && signals.tool_name.as_deref() == Some("edit")
+        && result.reason_code == "native_file_write_review"
+    {
+        let input = omp::strict_tool_input(payload).and_then(|input| input.get("input")?.as_str());
+        if let Some(reason) = input.and_then(super::omp_hashline_writes::unreadable_header_reason) {
+            result.reason = reason;
+        }
+    }
     if result.reason_code == "native_file_read_review" {
         if let Some(note) = omp::grep_review_note(payload, &signals, &omp_context) {
             result.reason = format!("{} {note}", result.reason);

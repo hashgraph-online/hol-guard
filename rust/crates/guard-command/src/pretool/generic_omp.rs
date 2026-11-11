@@ -32,6 +32,12 @@ pub(super) fn yield_signal_payload(payload: &Value) -> Option<Value> {
 /// the patch's `[PATH#TAG]` headers. They name no new target, so when they
 /// match the headers exactly they are dropped and the patch keeps its own
 /// proof. Any other value is not Oh My Pi's derivation and stays reviewed.
+/// Oh My Pi trims a header before it cuts the `#TAG`, so the copy keeps any
+/// space written before `#`. The header proof trims that space too.
+fn copies_header(path: &Value, header: &str) -> bool {
+    path.as_str().map(str::trim_end) == Some(header)
+}
+
 pub(super) fn edit_signal_payload(payload: &Value) -> Option<Value> {
     if payload.get("tool_name")?.as_str()? != "edit" {
         return None;
@@ -51,13 +57,13 @@ pub(super) fn edit_signal_payload(payload: &Value) -> Option<Value> {
         || !paths
             .iter()
             .zip(&headers)
-            .all(|(path, header)| path.as_str() == Some(*header))
+            .all(|(path, header)| copies_header(path, header))
     {
         return None;
     }
     match input.get("path") {
         None if headers.len() > 1 => {}
-        Some(path) if headers.len() == 1 && path.as_str() == Some(headers[0]) => {}
+        Some(path) if headers.len() == 1 && copies_header(path, headers[0]) => {}
         _ => return None,
     }
     let projected_input = Map::from_iter([("input".to_owned(), input["input"].clone())]);
