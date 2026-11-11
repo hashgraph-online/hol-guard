@@ -3,7 +3,7 @@
   "id": "mcp.reright",
   "version": "1.0.0",
   "name": "reright",
-  "description": "Hosted MCP server that rewrites text an agent drafted for people (emails, messages, posts, commit and PR text) so it reads human-written, with optional human approval before the agent uses it. rewrite sends the draft text to reright.it and counts against the account's monthly words; rewrite_result and keep_original only act on drafts the agent already sent. The Guard contribution is off by default. Disconnect the MCP server from the agent to prevent its calls.",
+  "description": "Hosted MCP server that rewrites agent-drafted text for people so it reads human-written. rewrite sends draft text to reright.it and uses monthly words; rewrite_result and keep_original only act on drafts already sent. Guard contribution off by default; disconnect the MCP server to stop calls.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -52,6 +52,6 @@
   ],
   "saferAlternatives": [
     "Leave the server off and use the agent's draft as written instead of sending it to reright.",
-    "Use rewrite_result to read the state of a draft already sent. Use keep_original only when an unchecked rewrite changes a fact or reverses meaning, and quote the changed phrases. When review is enabled, reject pending rewrites in the review interface. Neither tool sends new text."
+    "Use rewrite_result to read a draft already sent. Use keep_original when an unchecked rewrite changes a fact; quote the phrases. Reject pending rewrites in review. Neither sends new text."
   ]
 }
