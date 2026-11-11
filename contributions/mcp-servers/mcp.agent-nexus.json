@@ -27,7 +27,9 @@
   "riskClasses": [
     "external-network-read",
     "external-public-data-read",
-    "external-public-listing"
+    "external-public-listing",
+    "external-shared-state-write",
+    "external-account-read"
   ],
   "tools": [
     {
