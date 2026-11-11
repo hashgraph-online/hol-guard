@@ -212,7 +212,7 @@ function isHarnessDetectedItems(items, harness) {
   return items.some((item) => item.harness === harness && item.status !== "not_found");
 }
 function inactiveInstallNeedsRepair(install, setupStatus) {
-  return install.active !== true && (setupStatus === void 0 || setupStatus === "needs_repair");
+  return install.active !== true && setupStatus !== "found" && setupStatus !== "not_found";
 }
 function resolveDetectedAppStatus(install, protectionHealth, hasInventory, hasReceipts, detected, setupStatus) {
   if (setupStatus === "needs_repair") return "needs_repair";

@@ -349,11 +349,16 @@ assert(
   repairHarnessesFor(disconnectedInstalls, emptyFleetHealth).length === 3,
   "without a reported setup status an inactive install record still counts as needing repair",
 );
-for (const status of ["found", "not_found", "protected"] as const) {
+for (const status of ["found", "not_found"] as const) {
   assert(!inactiveInstallNeedsRepair({ active: false }, status), `a disconnected app reported ${status} needs no repair`);
 }
-assert(inactiveInstallNeedsRepair({ active: false }, "needs_repair"), "a reported needs_repair still needs repair");
-assert(inactiveInstallNeedsRepair({ active: false }, undefined), "an unreported inactive record still needs repair");
+for (const status of ["needs_repair", "protected", undefined] as const) {
+  assert(inactiveInstallNeedsRepair({ active: false }, status), `an inactive record reported ${status} still needs repair`);
+}
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, true, "protected") === "needs_repair",
+  "a stale protected status never makes a disconnected app look protected",
+);
 assert(!inactiveInstallNeedsRepair({ active: true }, undefined), "an active install is never repaired for being inactive");
 assert(
   resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, true, "found") === "found_unprotected",

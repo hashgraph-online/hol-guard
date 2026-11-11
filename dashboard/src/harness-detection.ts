@@ -90,14 +90,15 @@ export function isHarnessDetectedItems(
  * Whether an inactive install record still marks its app for repair.
  *
  * Disconnecting an app is what leaves its record inactive, and the daemon's setup status already
- * reconciles that record (a disconnected app comes back as found or not_found). So a reported
- * status decides; only without one does an inactive record still count as needing repair.
+ * reconciles that record: a disconnected app comes back as found or not_found. Only those two clear
+ * it. Any other status, or none yet, keeps the inactive record a repair target, so a stale
+ * "protected" can never make a disconnected app look protected.
  */
 export function inactiveInstallNeedsRepair(
   install: { active?: boolean },
   setupStatus: GuardHarnessSetupItem["status"] | undefined,
 ): boolean {
-  return install.active !== true && (setupStatus === undefined || setupStatus === "needs_repair");
+  return install.active !== true && setupStatus !== "found" && setupStatus !== "not_found";
 }
 
 export function resolveDetectedAppStatus(
