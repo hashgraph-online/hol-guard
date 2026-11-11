@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal
 
 _FEATURE = "native-codex-hook-authority-record-v1"
 _SCHEMA = "codex-hook-authority-record.v1"
@@ -22,10 +22,8 @@ RUNTIME_UNAVAILABLE = "runtime_unavailable"
 RecordKind = Literal["recovery", "receipt", "repair_request", "inverse_request"]
 
 
-class HookKey(Protocol):
-    key: bytes
-    key_id: str
-    installation_id: str
+if TYPE_CHECKING:
+    from .codex_hook_integrity import HookSecretMaterial as HookKey
 
 
 class AuthorityRecordRefusedError(Exception):

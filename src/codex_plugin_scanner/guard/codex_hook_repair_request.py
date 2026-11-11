@@ -196,13 +196,13 @@ def write_codex_hook_repair_request(
     if not inverse:
         plan = _plan_from_payload(plan.payload(), home=plan.guard_home, config=plan.config_path)
     _compare(plan, deadline_monotonic)
-    secret = load_hook_secret(plan.guard_home)
+    material = load_hook_secret(plan.guard_home)
     created = time.monotonic()
     payload: dict[str, object] = {
         "schema": _INVERSE_SCHEMA if inverse else _SCHEMA,
         "guard_home": str(plan.guard_home),
         "config_path": str(plan.config_path),
-        "installation_id": secret.installation_id,
+        "installation_id": material.installation_id,
         "created_monotonic": created,
         "expires_monotonic": created + _REVIEW_SECONDS,
         "plan": plan.payload(),
@@ -210,7 +210,7 @@ def write_codex_hook_repair_request(
     }
     try:
         encoded = seal_authority_record(
-            "inverse_request" if inverse else "repair_request", payload, secret, signed_at=plan.operation_id
+            "inverse_request" if inverse else "repair_request", payload, material, signed_at=plan.operation_id
         )
     except AuthorityRecordRefusedError as exc:
         raise TransitionError(f"authority_repair_request_{exc.reason}") from exc

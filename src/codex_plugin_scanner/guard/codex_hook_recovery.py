@@ -27,6 +27,7 @@ from .codex_hook_authority_record import (
 from .codex_hook_authority_record import repair_proof_matches as native_repair_proof_matches
 from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path, check_hook_validation_deadline
 from .codex_hook_integrity import (
+    HookSecretMaterial,
     atomic_write_bytes,
     authenticate_hook_manifest_text,
     hook_authority_receipt_path,
@@ -254,9 +255,9 @@ def prepare_hook_publication(
     atomic_write_bytes(path, encoded, mode=0o600, private=True)
 
 
-def _seal_record(payload: dict[str, object], secret: object, *, signed_at: str) -> bytes:
+def _seal_record(payload: dict[str, object], secret: HookSecretMaterial, *, signed_at: str) -> bytes:
     try:
-        encoded = seal_authority_record("recovery", payload, secret, signed_at=signed_at)  # type: ignore[arg-type]
+        encoded = seal_authority_record("recovery", payload, secret, signed_at=signed_at)
     except AuthorityRecordRefusedError as exc:
         raise _error(exc.reason) from exc
     if len(encoded) > _MAX_RECORD:
