@@ -46,7 +46,18 @@ fn harness_watch_releases_output_review_but_keeps_credentials_hidden() {
         true,
     );
     assert_eq!(credential["result"]["reason_code"], "output_secret_match");
-    assert_eq!(credential["harness_response"]["decision"], "deny");
+    // Masking stays, verdict continues: allow + redaction excerpt.
+    assert_eq!(credential["result"]["decision"], "allow");
+    assert_eq!(
+        credential["result"]["model_output_action"],
+        "replace_with_reviewed_excerpt"
+    );
+    assert_eq!(credential["harness_response"]["decision"], "allow");
+    // omp is decision-style: the full verdict (excerpt action) passes through.
+    assert_eq!(
+        credential["harness_response"]["model_output_action"],
+        "replace_with_reviewed_excerpt"
+    );
 }
 
 // `guard_rules::MAX_OUTPUT_CHARS`: past it the scanner reviews only an excerpt.
@@ -89,9 +100,16 @@ fn watched_review(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
 fn harness_watch_keeps_truncated_output_with_a_credential_hidden() {
     let token = format!("{}{}", ["gh", "p_"].concat(), "d".repeat(30));
     let watched = watched_review(&truncated_bash_output(&token));
-    assert_eq!(watched.decision, "deny");
+    // Masking stays (unscanned tail never released) but the verdict
+    // continues: allow + redaction excerpt instead of deny.
+    assert_eq!(watched.decision, "allow");
     assert_eq!(watched.reason_code, "output_too_large");
-    assert_ne!(watched.model_output_action, "allow_original");
+    assert_eq!(watched.model_output_action, "replace_with_reviewed_excerpt");
+    assert!(watched
+        .reviewed_excerpt
+        .as_deref()
+        .is_some_and(|text| !text.is_empty()));
+    assert!(watched.observe_mode);
 }
 
 #[test]

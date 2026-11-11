@@ -406,6 +406,45 @@ pub fn post_tool(harness: &str, response: &Object) -> Object {
             ("hookSpecificOutput", specific),
         ]);
     }
+    // Watch redaction: an allow carrying a reviewed excerpt (never the
+    // original output) continues the turn with the excerpt — but only on
+    // harnesses with an excerpt-substitution seam (pi/omp managed
+    // extensions, cline plugin). Every other harness keeps the masking
+    // block: without a seam the excerpt fields are unread, the original
+    // output would reach the model, and Codex's block already continues
+    // the turn.
+    let excerpt_seam = matches!(canonical.as_str(), "pi" | "omp" | "cline");
+    if excerpt_seam
+        && is_allow(response)
+        && is_str(
+            response,
+            "model_output_action",
+            "replace_with_reviewed_excerpt",
+        )
+    {
+        let excerpt = text(response, "reviewed_excerpt").unwrap_or_default();
+        let reason = text_or(response, "reason", POST_BLOCK_REASON);
+        let reason_code = text_or(response, "reason_code", "native_hook_edge_block");
+        return object(vec![
+            ("decision", json!("allow")),
+            ("reason", json!(reason.clone())),
+            ("reason_code", json!(reason_code)),
+            (
+                "policy_action",
+                json!(text_or(response, "policy_action", "warn")),
+            ),
+            (
+                "model_output_action",
+                json!("replace_with_reviewed_excerpt"),
+            ),
+            ("reviewed_excerpt", json!(excerpt)),
+            ("notice", json!(text_or(response, "notice", "warning"))),
+            (
+                "hookSpecificOutput",
+                json!({ "hookEventName": "PostToolUse", "additionalContext": reason }),
+            ),
+        ]);
+    }
     post_tool_block(
         &text_or(response, "reason", POST_BLOCK_REASON),
         &text_or(response, "reason_code", "native_hook_edge_block"),

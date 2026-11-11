@@ -155,6 +155,55 @@ fn post_tool_policy_floor_warning_on_a_proven_allow_renders_no_text() {
         );
     }
 }
+#[test]
+fn post_tool_watch_excerpt_continues_only_harnesses_with_a_substitution_seam() {
+    let redacted = obj(&json!({
+        "decision": "allow",
+        "model_output_action": "replace_with_reviewed_excerpt",
+        "reviewed_excerpt": "HOL Guard withheld this tool output in Watch mode.",
+        "policy_action": "warn",
+        "reason_code": "output_secret_match",
+        "reason": "HOL Guard blocked this output because it contains sensitive content.",
+        "notice": "warning",
+    }));
+    // pi/omp managed extensions and the cline plugin substitute the
+    // excerpt, so the turn continues with redacted content.
+    for harness in ["pi", "omp", "cline"] {
+        let rendered = Value::Object(post_tool(harness, &redacted));
+        assert_eq!(rendered["decision"], "allow", "{harness}");
+        assert_eq!(
+            rendered["model_output_action"], "replace_with_reviewed_excerpt",
+            "{harness}"
+        );
+        assert!(
+            rendered["reviewed_excerpt"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty()),
+            "{harness}"
+        );
+    }
+    // Every other harness keeps the masking block: without a seam the
+    // excerpt fields are unread and the original output would reach the
+    // model. Codex's block already continues the turn.
+    for harness in [
+        "codex",
+        "claude-code",
+        "cursor",
+        "copilot",
+        "grok",
+        "opencode",
+        "devin",
+    ] {
+        let rendered = Value::Object(post_tool(harness, &redacted));
+        assert_eq!(rendered["decision"], "block", "{harness}");
+        assert_eq!(rendered["model_output_action"], "block", "{harness}");
+        let text = rendered.to_string();
+        assert!(
+            !text.contains("HOL Guard withheld this tool output in Watch mode."),
+            "{harness}"
+        );
+    }
+}
 
 #[test]
 fn every_watched_ecosystems_package_permission_keeps_the_containment_receipt() {

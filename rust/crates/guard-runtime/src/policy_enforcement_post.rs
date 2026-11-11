@@ -16,6 +16,11 @@ const WATCH_KEPT_DENIAL_CODES: [&str; 6] = [
     "output_too_large",
     "no_output_to_review",
 ];
+/// Static notice delivered as the reviewed excerpt when Watch withholds
+/// output. It carries no tool output bytes, so it is model-safe by
+/// construction; the original output stays hidden and the turn continues.
+const WATCH_REDACTED_OUTPUT_NOTICE: &str =
+    "HOL Guard withheld this tool output in Watch mode because it may contain sensitive content.";
 
 fn plain_inline_output(payload: &Value) -> bool {
     match payload.get("tool_response") {
@@ -140,13 +145,37 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
             response.reviewed_output_sha256 = canonical_digest;
             return Ok(response);
         }
-        // The action has already run, so withholding output that may carry a
-        // credential stops nothing. A reviewed excerpt is all the scanner
-        // vouched for. Watch records every other verdict.
-        if (response.decision == "deny"
-            && WATCH_KEPT_DENIAL_CODES.contains(&response.reason_code.as_str()))
-            || (response.decision == "allow"
-                && response.model_output_action == "replace_with_reviewed_excerpt")
+        // The action has already run, so the harness verdict must continue:
+        // a deny here queues an approval Watch never writes and fails the
+        // call. What Watch keeps is the masking, not the block. A kept
+        // denial becomes an allow carrying a redaction notice as its
+        // reviewed excerpt: the receipt records the block via
+        // `observed_policy_action`, the original output never reaches the
+        // model, and the turn continues. A reviewed excerpt the scanner
+        // already vouched for passes through unchanged.
+        if response.decision == "deny"
+            && WATCH_KEPT_DENIAL_CODES.contains(&response.reason_code.as_str())
+        {
+            let excerpt = match response.reviewed_excerpt.take() {
+                Some(text) if !text.is_empty() => text,
+                _ => WATCH_REDACTED_OUTPUT_NOTICE.to_owned(),
+            };
+            let kept_reason = response.reason_code.clone();
+            response = HookReviewResponseV1::reviewed_excerpt(
+                kept_reason,
+                response
+                    .reason
+                    .take()
+                    .unwrap_or_else(|| WATCH_REDACTED_OUTPUT_NOTICE.to_owned()),
+                excerpt,
+            );
+            response.policy_action = Some("warn".to_owned());
+            response.observed_policy_action = Some(intrinsic);
+            response.observe_mode = true;
+            return Ok(response);
+        }
+        if response.decision == "allow"
+            && response.model_output_action == "replace_with_reviewed_excerpt"
         {
             return Ok(response);
         }

@@ -221,7 +221,7 @@ fn an_envelope_without_a_view_keeps_the_response_the_edge_rendered() {
 }
 
 #[test]
-fn only_an_allowed_pi_post_tool_use_is_mediated() {
+fn watch_redaction_continues_the_turn_but_still_withholds_structured_output() {
     let locked = locked_view_declaring_note();
     // Another harness answers the same hook without mediation.
     let other = answer(post_tool_use(
@@ -239,9 +239,12 @@ fn only_an_allowed_pi_post_tool_use_is_mediated() {
     before.structured_output_config = Some(locked.clone());
     let before = answer(before);
     assert_eq!(mediation(&before), &Value::Null, "{before}");
-    // A native denial leaves no model-visible content to project.
+    // A Watch redaction keeps the credential out of the model but the
+    // verdict continues: allow + redaction excerpt. The structured
+    // destination still withholds: only the notice is vouched for, so the
+    // JSON cannot be proven clean.
     let token = format!("{}{}", ["gh", "p_"].concat(), "c".repeat(30));
-    let denied = answer(post_tool_use(
+    let redacted = answer(post_tool_use(
         "omp",
         json!({
             "hook_event_name": "PostToolUse",
@@ -252,6 +255,15 @@ fn only_an_allowed_pi_post_tool_use_is_mediated() {
         }),
         Some(locked),
     ));
-    assert_eq!(denied["result"]["decision"], "deny", "{denied}");
-    assert_eq!(mediation(&denied), &Value::Null, "{denied}");
+    assert_eq!(redacted["result"]["decision"], "allow", "{redacted}");
+    assert_eq!(
+        redacted["result"]["model_output_action"], "replace_with_reviewed_excerpt",
+        "{redacted}"
+    );
+    assert_eq!(mediation(&redacted)["action"], "withhold", "{redacted}");
+    assert_eq!(
+        mediation(&redacted)["reason_code"],
+        "structured_content_unproved",
+        "{redacted}"
+    );
 }

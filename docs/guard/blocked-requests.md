@@ -19,7 +19,10 @@ the existing scope, expiry, and replay checks. Watch mode keeps recording withou
 stopping actions, whether it is set for every app or for one app. Tool output
 that Guard's scanner matches as credential-shaped, that comes from a sensitive
 path, or that it could not scan in full stays hidden from the agent in Watch
-too; the action has already run, so hiding the text stops nothing.
+too; the action has already run, so hiding the text stops nothing. The harness
+verdict still continues: instead of a deny (which would queue an approval Watch
+never writes and fail the call), Watch delivers a redaction notice as the
+reviewed excerpt, records the block for audit, and lets the turn continue.
 
 The device setting is `blocked_request_mode = "safe-alternative"` (default) or
 `blocked_request_mode = "ask"` in the local Guard configuration. Workspace

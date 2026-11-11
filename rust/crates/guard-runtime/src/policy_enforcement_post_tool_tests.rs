@@ -668,9 +668,12 @@ fn observe_keeps_credential_block_but_does_not_enforce_policy_only_floor() {
     assert_eq!(intrinsic.observed_policy_action.as_deref(), Some("block"));
     assert!(intrinsic.observe_mode);
 
-    // It never hands output that may carry a credential to the model. The
-    // edge reviews output with observe off, so the join sees the scanner's
-    // own denial.
+    // Watch keeps credential-shaped output out of the model, but the harness
+    // verdict must continue: a deny queues an approval Watch never writes
+    // and fails the call. Kept denials become allow + redaction excerpt;
+    // the receipt records the block via observed_policy_action. The edge
+    // reviews output with observe off, so the join sees the scanner's own
+    // denial.
     for code in [
         "source_secret_match",
         "output_secret_match",
@@ -686,9 +689,26 @@ fn observe_keeps_credential_block_but_does_not_enforce_policy_only_floor() {
             HookReviewResponseV1::deny(code, "blocked"),
         )
         .unwrap();
-        assert_eq!(credential.decision, "deny", "{code}");
+        assert_eq!(credential.decision, "allow", "{code}");
         assert_eq!(credential.reason_code, code);
-        assert_ne!(credential.model_output_action, "allow_original", "{code}");
+        assert_eq!(
+            credential.model_output_action, "replace_with_reviewed_excerpt",
+            "{code}"
+        );
+        assert!(
+            credential
+                .reviewed_excerpt
+                .as_deref()
+                .is_some_and(|text| !text.is_empty()),
+            "{code}"
+        );
+        assert_eq!(
+            credential.observed_policy_action.as_deref(),
+            Some("block"),
+            "{code}"
+        );
+        assert!(credential.observe_mode, "{code}");
+        assert!(!credential.output_masked, "{code}");
     }
 }
 
@@ -761,8 +781,27 @@ fn harness_watch_keeps_credential_output_from_the_model() {
             HookReviewResponseV1::deny(code, "blocked"),
             true,
         );
-        assert_eq!(watched.decision, "deny", "{code}");
+        // Masking stays (output never reaches the model) but the verdict
+        // continues: allow + redaction excerpt, block recorded for audit.
+        assert_eq!(watched.decision, "allow", "{code}");
         assert_eq!(watched.reason_code, code);
+        assert_eq!(
+            watched.model_output_action, "replace_with_reviewed_excerpt",
+            "{code}"
+        );
+        assert!(
+            watched
+                .reviewed_excerpt
+                .as_deref()
+                .is_some_and(|text| !text.is_empty()),
+            "{code}"
+        );
+        assert_eq!(
+            watched.observed_policy_action.as_deref(),
+            Some("block"),
+            "{code}"
+        );
+        assert!(watched.observe_mode, "{code}");
     }
 }
 
