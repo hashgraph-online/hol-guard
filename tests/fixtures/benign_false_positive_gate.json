@@ -50768,7 +50768,8 @@
         "command": "cat dashboard/*/*"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-group-pnpm-store-add",
