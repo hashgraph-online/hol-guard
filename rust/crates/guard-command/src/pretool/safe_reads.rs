@@ -384,7 +384,14 @@ fn safe_byte_dump_with_targets(
 ) -> bool {
     let mut options = true;
     let mut target = false;
+    let mut pending: Option<char> = None;
     for argument in arguments {
+        if let Some(option) = pending.take() {
+            if !byte_dump_option_value(option, argument) {
+                return false;
+            }
+            continue;
+        }
         if options && argument == "--" {
             options = false;
             continue;
@@ -392,23 +399,27 @@ fn safe_byte_dump_with_targets(
         if options
             && matches!(
                 argument.as_str(),
-                "-a" | "-b"
-                    | "-c"
-                    | "-d"
-                    | "-f"
-                    | "-o"
-                    | "-s"
-                    | "-v"
-                    | "-x"
-                    | "-An"
-                    | "-Ad"
-                    | "-Ao"
-                    | "-Ax"
-                    | "-tc"
-                    | "-tx1"
+                "-a" | "-b" | "-c" | "-d" | "-f" | "-o" | "-s" | "-v" | "-x"
             )
         {
             continue;
+        }
+        if options {
+            if let Some(option @ ('A' | 'j' | 'N' | 't' | 'w')) = argument
+                .strip_prefix('-')
+                .and_then(|rest| rest.chars().next())
+            {
+                let value = &argument[2..];
+                if value.is_empty() {
+                    // `-w` alone takes no value; the others read the next word.
+                    if option != 'w' {
+                        pending = Some(option);
+                    }
+                } else if !byte_dump_option_value(option, value) {
+                    return false;
+                }
+                continue;
+            }
         }
         if target {
             return false;
@@ -427,7 +438,42 @@ fn safe_byte_dump_with_targets(
         options = false;
         target = true;
     }
-    target || piped_input
+    pending.is_none() && (target || piped_input)
+}
+
+/// The value of an `od` option that only shapes the dump: an address radix,
+/// a byte count or offset, an output type, or a line width. None of them
+/// names a file, so the dumped file is still the one operand checked below.
+fn byte_dump_option_value(option: char, value: &str) -> bool {
+    match option {
+        'A' => matches!(value, "n" | "d" | "o" | "x"),
+        'j' | 'N' => {
+            let digits = value
+                .strip_prefix("0x")
+                .or_else(|| value.strip_prefix("0X"))
+                .map_or((value, false), |hex| (hex, true));
+            !digits.0.is_empty()
+                && digits.0.len() <= 20
+                && digits.0.bytes().all(|byte| {
+                    if digits.1 {
+                        byte.is_ascii_hexdigit()
+                    } else {
+                        byte.is_ascii_digit()
+                    }
+                })
+        }
+        't' => {
+            !value.is_empty()
+                && value.len() <= 16
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || b"acdfouxzCSILD".contains(&byte))
+        }
+        'w' => {
+            !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => false,
+    }
 }
 
 fn safe_word_count_with_targets(
