@@ -405,10 +405,17 @@ impl NativeReads {
         let Value::Object(args) = args else {
             return Err(false);
         };
+        // One budget covers the storage gate and SQLite's busy wait together.
+        let started = Instant::now();
         let wait = Duration::from_millis(busy_timeout_ms);
         let _gate =
             crate::hook_evidence_store_gate::hold_storage_gate(Path::new(&config.guard_home), wait)
                 .map_err(|_| false)?;
+        let busy_timeout_ms =
+            u64::try_from(wait.saturating_sub(started.elapsed()).as_millis()).unwrap_or(u64::MAX);
+        if busy_timeout_ms == 0 {
+            return Err(false);
+        }
         let request = GuardStoreRequestV1 {
             schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
             request_id: format!(

@@ -244,8 +244,22 @@ def onefile_reclaim(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
     return {"ok": True}
 
 
+def cloud_workspace(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """The Guard Cloud workspace queued review events sync to, or ``None`` without a usable profile."""
+
+    del args
+    try:
+        profile = store.get_cloud_sync_profile()
+    except Exception:
+        # Queued events stay durable in guard.db; do not pin the daemon alive.
+        profile = None
+    workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
+    return {"ok": True, "workspace_id": workspace_id if isinstance(workspace_id, str) else None}
+
+
 WORKER_CALLS = {
     "worker.cloud_sync": cloud_sync,
+    "worker.cloud_workspace": cloud_workspace,
     "worker.bundle_refresh": bundle_refresh,
     "worker.plugin_telemetry": plugin_telemetry,
     "worker.extension_catalog": extension_catalog,

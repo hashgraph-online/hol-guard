@@ -12,7 +12,7 @@
 //! integrity lock in Python, so the daemon hands the plan the op returned to
 //! the `hook.claude_question_save` library step.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use guard_contracts::{HookAuthorityStateRequestV1, HOOK_AUTHORITY_STATE_REQUEST_SCHEMA};
 use serde_json::{json, Map, Value};
@@ -296,7 +296,12 @@ impl Hook<'_> {
         if serde_json::to_vec(&request).ok()?.len() > MAX_REQUEST_BYTES {
             return None;
         }
-        crate::hook_authority_state_op::evaluate(&request).ok()
+        // The store wait shares what is left of the hook's deadline.
+        let wait = super::budget_left(expires);
+        if wait < Duration::from_millis(1) {
+            return None;
+        }
+        crate::hook_authority_state_op::evaluate_within(&request, wait).ok()
     }
 }
 

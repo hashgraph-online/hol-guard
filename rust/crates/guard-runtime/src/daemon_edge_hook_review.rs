@@ -50,6 +50,20 @@ const REFERENCE_CODE: &str = "invalid_hook_payload_reference";
 const READINESS_WAIT: Duration = Duration::from_secs(60);
 /// How long past its deadline a hook still waits for a review to finish.
 const LATE_ANSWER_GRACE: Duration = Duration::from_millis(400);
+
+/// What is left of a hook's deadline, plus the grace a late answer still
+/// counts within.
+fn budget(expires: f64) -> Duration {
+    let remaining = (expires - hook_scheduler::shared().now()).max(0.0);
+    Duration::from_secs_f64(remaining) + LATE_ANSWER_GRACE
+}
+
+/// What is left of the deadline and its grace together, so a step after a
+/// late one does not get a fresh grace of its own.
+fn budget_left(expires: f64) -> Duration {
+    let deadline = expires + LATE_ANSWER_GRACE.as_secs_f64();
+    Duration::from_secs_f64((deadline - hook_scheduler::shared().now()).max(0.0))
+}
 /// How long a refused-directory audit waits for a store another writer
 /// holds, as the Python daemon's one inline attempt did.
 const AUDIT_BUSY_MS: u64 = 250;
@@ -215,12 +229,7 @@ impl Hook<'_> {
     /// A library step bounded by the hook's own deadline, plus the grace a
     /// review that finishes late is still answered within.
     fn call_by(&self, name: &str, extra: Value, expires: f64) -> Option<Map<String, Value>> {
-        let remaining = (expires - hook_scheduler::shared().now()).max(0.0);
-        self.call_within(
-            name,
-            extra,
-            Duration::from_secs_f64(remaining) + LATE_ANSWER_GRACE,
-        )
+        self.call_within(name, extra, budget(expires))
     }
 
     fn call_within(&self, name: &str, extra: Value, wait: Duration) -> Option<Map<String, Value>> {

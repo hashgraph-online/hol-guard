@@ -65,8 +65,9 @@ fn heartbeat(reads: &NativeReads, config: &ReadConfig, args: &Value) -> Option<V
 }
 
 /// Whether durable work keeps an idle daemon alive: a pending review or a
-/// review event still queued for Guard Cloud. A store that cannot be read
-/// holds nothing; the rows stay durable either way.
+/// review event still queued for the bound Guard Cloud workspace. Events for
+/// a workspace no usable profile names never drain, so they hold nothing. A
+/// store that cannot be read holds nothing; the rows stay durable either way.
 pub(super) fn idle_holds(reads: &NativeReads, config: &ReadConfig) -> bool {
     let pending = reads
         .store_write(
@@ -80,11 +81,29 @@ pub(super) fn idle_holds(reads: &NativeReads, config: &ReadConfig) -> bool {
     if pending {
         return true;
     }
+    // The sync profile depends on OAuth credential health, which the library
+    // owns.
+    let Some(workspace_id) =
+        super::super::super::library::call_resident(config, "worker.cloud_workspace", json!({}))
+            .ok()
+            .and_then(|reply| {
+                reply
+                    .get("workspace_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+    else {
+        return false;
+    };
     let Some(now) = isoformat(now_micros()) else {
         return false;
     };
     reads
-        .store_write(config, "review_event_outbox_status", json!({"now": now}))
+        .store_write(
+            config,
+            "review_event_outbox_status",
+            json!({"now": now, "workspace_id": workspace_id}),
+        )
         .ok()
         .and_then(|status| status.get("depth").and_then(Value::as_i64))
         .is_some_and(|depth| depth > 0)
@@ -93,13 +112,14 @@ pub(super) fn idle_holds(reads: &NativeReads, config: &ReadConfig) -> bool {
 /// One storage-maintenance pass: a command-activity batch, then one batch
 /// across the evidence tables. `true` once storage work is complete.
 pub(super) fn maintain(reads: &NativeReads, config: &ReadConfig) -> bool {
+    let now = now_micros();
+    // The log rotates whatever the evidence settings say.
+    crate::storage_retention::daemon_log::rotate(config.guard_home(), now);
     let Ok((retain_days, receipt_limit, event_limit)) =
         crate::guard_config_load::evidence_retention(config.guard_home())
     else {
         return false;
     };
-    let now = now_micros();
-    crate::storage_retention::daemon_log::rotate(config.guard_home(), now);
     let Some(args) = activity_args(now, retain_days) else {
         return false;
     };

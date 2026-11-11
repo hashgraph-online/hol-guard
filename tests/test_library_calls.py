@@ -276,6 +276,7 @@ def test_worker_aibom_and_onefile_passes_answer(tmp_path: Path) -> None:
     payload = GuardStore(tmp_path).get_sync_payload("aibom_inventory_daemon")
     assert isinstance(payload, dict) and payload["status"] == "missing_workspace_context"
     assert _call(tmp_path, "worker.onefile_reclaim", {})["ok"] == {"ok": True, "skipped": True}
+    assert _call(tmp_path, "worker.cloud_workspace", {})["ok"] == {"ok": True, "workspace_id": None}
 
 
 def test_replayed_attention_reaches_the_worker_host_without_the_daemon_key(tmp_path: Path) -> None:
