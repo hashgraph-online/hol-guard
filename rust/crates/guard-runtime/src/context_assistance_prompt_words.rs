@@ -1,8 +1,11 @@
 //! The words, quoted phrases and file names a typed prompt gives, which the
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
+pub(crate) use no_change::asks_no_change;
 use paths::without_paths;
 
+#[path = "context_assistance_prompt_no_change.rs"]
+mod no_change;
 #[path = "context_assistance_prompt_paths.rs"]
 mod paths;
 
@@ -480,20 +483,4 @@ pub(crate) fn in_path(relative: &str, terms: &[String]) -> Vec<bool> {
         .iter()
         .map(|term| lower.contains(term.as_str()))
         .collect()
-}
-
-/// Phrases of a prompt that asks for an answer and no change to the code.
-const NO_CHANGE: [&str; 6] = [
-    "no code change",
-    "no changes",
-    "change anything",
-    "changing anything",
-    "don't edit",
-    "do not edit",
-];
-
-/// True when the prompt says not to change anything, as a question does.
-pub(crate) fn asks_no_change(prompt: &str) -> bool {
-    let lower = prompt.to_lowercase().replace('\u{2019}', "'");
-    NO_CHANGE.iter().any(|phrase| lower.contains(phrase))
 }

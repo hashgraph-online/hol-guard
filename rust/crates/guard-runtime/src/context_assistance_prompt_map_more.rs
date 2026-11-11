@@ -458,13 +458,13 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
     } else {
         MAX_SHOWN_DEFINITION_CHARS
     };
-    let mut hint = true;
+    let mut said = docstring::Said::default();
     for pick in chosen {
         let mut item = Entry::plain(entry(files, pick));
-        let code = (pick.whole).then(|| docstring::shown(&files[pick.file], pick.at, asked, hint));
+        let code = (pick.whole).then(|| docstring::shown(&files[pick.file], pick.at, asked, said));
         if let Some((span, code, note)) = code.flatten() {
             if code.len() <= room && !asked.earlier.contains(&span) {
-                hint &= !note.contains("doctest");
+                said = said.and(&note);
                 room -= code.len();
                 let shown = fenced(&code);
                 item.code += shown.len();

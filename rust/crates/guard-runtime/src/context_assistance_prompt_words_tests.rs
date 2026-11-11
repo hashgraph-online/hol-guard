@@ -186,6 +186,7 @@ fn a_prompt_that_asks_for_no_change_is_told_apart() {
         "quick question, don\u{2019}t change anything: where is the parser?",
         "Explain how retries work without changing anything.",
         "Do not edit files, just tell me where the cache is cleared.",
+        "Don't change anything at all. Where is the cache cleared?",
     ] {
         assert!(asks_no_change(prompt), "{prompt}");
     }
@@ -193,6 +194,13 @@ fn a_prompt_that_asks_for_no_change_is_told_apart() {
         "Find every root cause and fix them all without changing the tests.",
         "Rename `a` to `b` everywhere. Behavior must not change.",
         "Implement it again so the existing tests pass.",
+        // A prohibition on part of the project limits a fix.
+        "Fix the bug in the library code; don't edit the tests.",
+        "Fix the parser but don't change anything else.",
+        "Make no changes to the public API, just fix the off-by-one.",
+        "Don't edit files in tests/, fix the parser.",
+        "Change anything needed to fix this.",
+        "Tune the piano changes in score.py.",
     ] {
         assert!(!asks_no_change(prompt), "{prompt}");
     }
