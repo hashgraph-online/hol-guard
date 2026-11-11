@@ -303,6 +303,20 @@ pub(crate) fn desktop_notifications(
     )
 }
 
+/// Effective evidence retention for storage maintenance: detail retention
+/// days and the receipt-detail and guard-event row limits, each limit
+/// defaulting to 250,000 when unset.
+pub(crate) fn evidence_retention(guard_home: &Path) -> Result<(i64, i64, i64), String> {
+    const DEFAULT_LIMIT: i64 = 250_000;
+    let config = effective_config(guard_home, None, &ManagedPolicySource::native())?;
+    let int = |key: &str| config.get(key).and_then(Value::as_i64);
+    Ok((
+        int("evidence_retain_days").unwrap_or(90),
+        int("receipt_detail_limit").unwrap_or(DEFAULT_LIMIT),
+        int("guard_event_limit").unwrap_or(DEFAULT_LIMIT),
+    ))
+}
+
 pub(crate) fn approval_browser_allowed_under(
     guard_home: &Path,
     source: &ManagedPolicySource,

@@ -44,6 +44,7 @@ mod gate_config;
 pub(super) mod headless;
 #[path = "daemon_edge_protection_repair.rs"]
 mod protection_repair;
+pub(super) use protection_repair::record_diagnostic;
 #[path = "daemon_edge_reconnect.rs"]
 mod reconnect;
 #[path = "daemon_edge_resolve.rs"]
@@ -102,6 +103,7 @@ pub(super) fn respond(
             &payload,
             local,
             !link_bound,
+            resolve::replay_stored(config, reads),
             resolve::call_library(config),
         )?;
         return Some((status, body, caller.cors_origin, no_store));

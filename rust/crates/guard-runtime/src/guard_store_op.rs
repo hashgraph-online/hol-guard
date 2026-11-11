@@ -570,6 +570,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "mark_guard_events_v1_uploaded"
         | "maintain_storage"
         | "managed_keyring_reconcile"
+        | "upsert_runtime_state"
         | "record_local_cli_observation"
         | "replace_local_cli_commands"
         | "apply_custom_extension_continuity"
