@@ -117,27 +117,44 @@ Then, in the resident (`approval_gate_pulse.rs`):
 
 ## What the YID app shows
 
-Commands are not sent to Pulse. For a single queued approval, the runtime
-reads Guard's own stored request (`approval_requests` in `guard.db`, read
-only), keyed by the `approval-request:<id>` subject the approval is already
-bound to. It never takes these values from the caller, so a caller cannot make
-the phone describe a different action from the one the grant is issued for.
+For a single queued approval, the runtime reads Guard's own stored request
+(`approval_requests` in `guard.db`, read only), keyed by the
+`approval-request:<id>` subject the approval is already bound to. It never
+takes these values from the caller, so a caller cannot make the phone describe
+a different action from the one the grant is issued for.
 
 | Row | Value | How it is made safe |
 | --- | --- | --- |
 | Request | The purpose label, for example "Approve an agent action Guard paused" | Fixed text per purpose |
 | Program | The names of the programs being run, for example `rm` or `curl \| sh` | Guard's shell parser; file names only, no flags, arguments, paths, redirects or environment values; at most 4 parts |
+| Command | The command the agent wants to run, for example `rm -rf ~/client-acme/build --token=[redacted]`. Shown unless the user turns it off (see below) | Guard's Guard Cloud secret filter (`cloud_scrub_text`) runs on the whole command before anything is cut; the user's home folder, and any other folder under `/Users`, `/home` or `C:\Users`, becomes `~`; control and invisible characters are dropped; at most 300 characters |
 | Agent | The harness, for example "Codex" | Known harnesses mapped to names; other ids only if they are plain identifiers |
 | Request type | For example "Tool call" or "Package install" | Mapped from a closed list of Guard request kinds; others left out |
 | Risk level | high, medium or low | Same rule Guard uses for Guard Cloud (`review_contracts._risk_category`) |
 | Reason | Guard's risk headline, for example "Deletes files." | Through Guard's Guard Cloud secret filter (`cloud_scrub_text`) |
 | Match code | Six characters from the binding HMAC | Random, shown on both screens |
 
-Each value is one line of at most 120 characters, so the terms stay well
-inside Pulse's 4 KB limit. For example, `rm -rf /Users/name/client-acme/build
---token=…` appears on the phone only as `rm`. Settings changes, policy clears
-and other Guard-internal purposes show only their purpose label; a bulk
-approval shows its label without a per-action summary.
+Every other value is one line of at most 120 characters. If the command would
+take the terms over Pulse's 4 KB limit, the Command row is left out and the
+request is still sent. The notification headline stays the short program
+summary. Settings changes, policy clears and other Guard-internal purposes show
+only their purpose label. A bulk approval shows its count, programs, agents,
+request types and highest risk level, never the commands.
+
+### Turning the command off
+
+The Command row is on by default. A user who prefers the phone to show only
+the program names turns it off on the Yanez Pulse card in Settings ("Show the
+command in the YID app") or with
+`hol-guard settings approval-pulse show-command off`. Both send a settings save
+that names only `pulse_show_command`, so it needs a YID app approval bound to
+exactly that change, like any other settings save; an agent cannot turn it
+off or on quietly. The setting lives in the approval gate state
+(`pulse_show_command`; only an explicit `false` hides the row) and is reported
+in the public gate config. While Pulse is off the config reports `true`, and
+saving `false` is refused with `approval_gate_pulse_not_enabled`. Turning
+Pulse off clears it with the other Pulse settings, so a new setup starts with
+the command shown.
 
 ## Changes and why
 
@@ -149,7 +166,8 @@ approval shows its label without a per-action summary.
 | `src/jws.rs` | Ed25519 compact-JWS verification (via `ring`) and JWK-set parsing | Verify Yanez's signature offline; pin `EdDSA`; select by `kid`; refuse ambiguous `kid`s |
 | `src/user_sig.rs` | BLS12-381 verification (via `blst`) over the exact signed bytes | Pulse requires verifying the approver's own device signature, not just Yanez's |
 | `src/strict_json.rs` | Duplicate-key-rejecting parser; Pulse structural equality; safe-integer rules | Pulse requires these exact parse and compare rules; works with the workspace's `arbitrary_precision` serde_json |
-| `src/terms.rs` | Builds terms from an action binding and an `ActionSummary` (one-line, length-capped rows); HMAC binding; match code; consumer token | Bind each receipt to the exact action; show a short summary without sending commands, paths or secrets to Pulse |
+| `src/terms.rs` | Builds terms from an action binding and an `ActionSummary` (one-line, length-capped rows, and a Command row of up to 300 characters that is dropped first if the terms would pass 4 KB); HMAC binding; match code; consumer token | Bind each receipt to the exact action; show a short summary, and the filtered command when the user allows it, without sending secrets to Pulse |
+| `src/terms_command_tests.rs` (new) | 5 tests: row order, length, one line, never for a batch, dropped before the size limit | See Tests |
 | `src/receipt.rs` | `verify_receipt`: the ordered checks above | One auditable place for every receipt check |
 | `src/client.rs` | `PulseTransport` trait and the HTTPS client (`ureq`, rustls, HTTPS only, no proxy, no redirects, capped bodies, short timeouts); only the production Yanez host, `yid.yanez.ai` | Nothing an agent writes can point Guard at another server; outages map to `approval_gate_pulse_unavailable` (503) |
 | `src/testkit.rs` (feature `testkit`) | Fake Yanez deployment that signs with real Ed25519 and BLS keys | Acceptance tests exercise real cryptography, not mocks |
@@ -165,6 +183,9 @@ approval shows its label without a per-action summary.
 | `approval_gate_settings_binding.rs` (new) | Derives the `action` and `subject` of a settings write from `params.settings_change` | What an approval for a settings change covers is decided in the resident, not by the caller |
 | `approval_gate_pulse_summary.rs` (new) | Reads the stored approval request and reduces it to the YID app summary | What the phone shows comes from Guard's own record, never from the caller |
 | `approval_gate_pulse_summary_tests.rs` (new) | 12 tests: program names, risk level, secret filter, closed lists, store lookup | See Tests |
+| `approval_gate_pulse_command.rs` (new) | The command the YID app shows: secret filter on the whole command, user folders as `~`, one line, cut at 300 characters | The user sees what they approve; secrets and the account name stay on the machine |
+| `approval_gate_pulse_command_tests.rs`, `approval_gate_pulse_command_flow_tests.rs` (new) | The filter and folder rules, and end to end: what reaches Pulse, the default, the switch needing a YID approval, and the switch without Pulse | See Tests |
+| `approval_gate_settings.rs`, `approval_gate_state.rs`, `approval_gate_pulse.rs` | `pulse_show_command` in the settings save and the public config; the Pulse request adds the command only while it is on | One switch, changed only through an approved settings save |
 | `approval_gate_pulse_tests.rs` (new), `approval_gate_pulse_review_tests.rs`, `approval_gate_pulse_binding_tests.rs`, `approval_gate_settings_binding_tests.rs` | Acceptance tests through the real wire op, plus the cases found in review | See Tests |
 | `approval_gate_verify.rs` | Pulse branch at the top of `verify_or_raise_locked`; Pulse fields on the gate input | Pulse replaces both factors, the way TOTP replaces the password |
 | `approval_gate_grants.rs` | A strict check accepts `["pulse"]` as well as `["password"]` | Strict purposes (settings, policy clear and similar) must work in Pulse mode. A Pulse grant can only exist in the factor generation Pulse was enrolled in |
@@ -194,7 +215,7 @@ Python and dashboard grant decoders keep working.
 | `approval_gate_state.py` | Public config Pulse fields | Parity with Rust |
 | `native_approval_gate.py` | Sends the Pulse input fields; new config-returning methods | Bridge |
 | `cli/approval_gate_prompt.py` | In Pulse mode, returns a "wait" input and prints the match code | `hol-guard approvals approve` and every other prompt get Pulse automatically |
-| `cli/approval_pulse_commands.py` (new), `commands_parser_policy.py`, `commands_dispatch_records.py` | `hol-guard settings approval-pulse status / enroll [--min-tier medium\|high] / disable / recover`. Setup sends new users to `https://pulse.yanez.ai/?referrer_id=holguard` for the YID app, the same link as the dashboard; every Pulse command's `--help` also links Yanez's Pulse docs | Secrets read only with `getpass`; never from arguments or environment variables. The `referrer_id` only names HOL Guard as the source of the visit; it carries nothing about the user or the machine |
+| `cli/approval_pulse_commands.py` (new), `commands_parser_policy.py`, `commands_dispatch_records.py` | `hol-guard settings approval-pulse status / enroll [--min-tier medium\|high] / disable / recover / show-command on\|off`. Setup sends new users to `https://pulse.yanez.ai/?referrer_id=holguard` for the YID app, the same link as the dashboard; every Pulse command's `--help` also links Yanez's Pulse docs | Secrets read only with `getpass`; never from arguments or environment variables. The `referrer_id` only names HOL Guard as the source of the visit; it carries nothing about the user or the machine |
 | `cli/approval_gate_prompt.py`, `cli/extension_controls_commands.py` | `submit_with_pulse`: a daemon-bound CLI command asks for a Pulse request for the exact mutation, waits for the YID app and sends the same payload again | Extension changes from the CLI work in Pulse mode |
 | `daemon/server_control_pulse.py` (new), `server.py`, `server_control_routes_post.py` | Daemon routes for setup (passing `min_tier`), poll, disable and recover; dispatch matches only the five exact paths the token check covers | Dashboard setup flow; no other path reaches a Pulse handler |
 | `daemon/server_control_repair.py`, `config.py` | Settings save, update channel and reset name their `settings_change` | Each settings change is its own approval |
@@ -206,7 +227,7 @@ Python and dashboard grant decoders keep working.
 | --- | --- | --- |
 | `pulse-approval.ts` (new) | Inside `fetchWithGuardAuth`: on `approval_gate_pulse_required`, retry once in defer mode, wait for the YID app, resubmit with the request id; rejection, expiry and outage become errors | Every gated request gets Pulse with no per-call-site change, and a 202 is never mistaken for success |
 | `pulse-approval-overlay.tsx` (new), `app.tsx` | Toast with the match code and status | The user can check that the YID app shows the same request |
-| `pulse-settings-panel.tsx`, `pulse-setup-modal.tsx` (new), `settings-workspace.tsx` | "Yanez Pulse" card below the authenticator card, and a three-step setup window styled like the authenticator one: 1) approval password, plus the authenticator code when it is on; 2) the YID steps, the hidden agent key field, the face scan ("Standard face scan (recommended)" sends `min_tier: medium`, "Strict face scan" sends `high`) and the cooldown, with the YID app link `https://pulse.yanez.ai/?referrer_id=holguard` (the `referrer_id` names only HOL Guard as the source of the visit); 3) the match code while Guard waits for the scan, then the one-time recovery code. Turn off and recovery stay on the card | Pulse is the named third option in Settings, set up the same way as the authenticator |
+| `pulse-settings-panel.tsx`, `pulse-setup-modal.tsx` (new), `settings-workspace.tsx` | "Yanez Pulse" card below the authenticator card, and a three-step setup window styled like the authenticator one: 1) approval password, plus the authenticator code when it is on; 2) the YID steps, the hidden agent key field, the face scan ("Standard face scan (recommended)" sends `min_tier: medium`, "Strict face scan" sends `high`) and the cooldown, with the YID app link `https://pulse.yanez.ai/?referrer_id=holguard` (the `referrer_id` names only HOL Guard as the source of the visit); 3) the match code while Guard waits for the scan, then the one-time recovery code. Turn off and recovery stay on the card, with the "Show the command in the YID app" switch (on by default; changing it asks the YID app, with Cancel while it waits) | Pulse is the named third option in Settings, set up the same way as the authenticator |
 | `approval-proof-inline.tsx` | In Pulse mode, no password or code field; a "you will approve in the YID app" notice; no credentials sent | No local secret is needed or sent |
 | `guard-api.ts`, `guard-types.ts` | Pulse API calls and config fields | |
 | `pulse-approval.test.ts` (new), `package.json` | Dashboard tests, added to `npm test` | |
@@ -230,7 +251,7 @@ Python and dashboard grant decoders keep working.
 | Verify Pulse and user signatures, pinned YID and issuer, tier, single use | Checks 1–10, the ledger, and introspect-consume |
 | Minimum assurance chosen by the user | `min_tier` at setup (medium by default, or high), saved and checked on every approval; an unreadable value counts as high |
 | One approval covers one settings change | `settings_change` bindings derived in the resident and checked when the request is verified and when the change is applied |
-| No sensitive data to Pulse | No commands: only program names, the agent, the request type, the risk level, the filtered headline, a match code, an HMAC and a nonce (tested end to end) |
+| No sensitive data to Pulse | The command only after the secret filter and with user folders as `~`, and only while the user allows it (on by default, turned off with an approved settings save); otherwise program names, the agent, the request type, the risk level, the filtered headline, a match code, an HMAC and a nonce (tested end to end) |
 | Fresh approval per action by default; cooldown explicit and tightly scoped; high-impact always fresh | Cooldown defaults to 0. A cooldown covers only the same purpose, scope, session and factor generation, its record is MAC'd, and strict purposes never use it |
 | Rejection, expiry and outage fail closed | Tested in Rust, Python and the dashboard |
 | Recovery without an agent-accessible bypass | Password (PBKDF2 verifier) plus a one-time recovery code stored only as a SHA-256 hash; secrets only through `getpass` or the dashboard form |
@@ -242,11 +263,11 @@ Python and dashboard grant decoders keep working.
 
 | Suite | Count | Result |
 | --- | --- | --- |
-| `cargo test -p guard-yanez-pulse` (receipt vectors, parsers, terms and summary rows, client parsing) | 50 | pass |
-| `cargo test -p hol-guard-runtime --lib approval_gate` (Pulse acceptance, review cases, minimum face scan, settings-change bindings, summary, and all existing gate parity vectors) | 137 | pass |
-| `pytest tests/test_guard_approval_gate_pulse.py` (CLI/dashboard parity, defer, wait, cooldown, fixed scopes, secret handling, settings saves, minimum face scan, settings-change bindings, extension changes, CLI links) | 38 | pass |
-| The Python approval-gate, Pulse, native parity, daemon-route, bridge, cooldown prompt, nudge and settings API suites together | 243 | pass |
-| `tsx src/pulse-approval.test.ts` (resubmission, reject, expire, outage, pass-through, deadline, a stalled check, proof fields, face scan choice, setup refusals, short request deadlines, overlapping approvals, closing setup, closing setup while it starts, the setup link, bulk count, Pulse-mode wording) | 19 cases | pass |
+| `cargo test -p guard-yanez-pulse` (receipt vectors, parsers, terms and summary rows, the command row, client parsing) | 55 | pass |
+| `cargo test -p hol-guard-runtime --lib approval_gate` (Pulse acceptance, review cases, minimum face scan, settings-change bindings, summary, the command shown and its switch, and all existing gate parity vectors) | 147 | pass |
+| `pytest tests/test_guard_approval_gate_pulse.py` (CLI/dashboard parity, defer, wait, cooldown, fixed scopes, secret handling, settings saves, minimum face scan, settings-change bindings, extension changes, CLI links, the show-command switch) | 44 | pass |
+| The Python approval-gate, Pulse, native parity, daemon-route, bridge, cooldown prompt, nudge and settings API suites together | 249 | pass |
+| `tsx src/pulse-approval.test.ts` (resubmission, reject, expire, outage, pass-through, deadline, a stalled check, proof fields, face scan choice, setup refusals, short request deadlines, overlapping approvals, closing setup, closing setup while it starts, the setup link, bulk count, Pulse-mode wording, the show-command switch) | 20 cases | pass |
 | Existing dashboard tests: approval-gate, guard-api, queue-bulk-approve, settings-workspace, settings-save-proof-modal, approval-retry-ux | | pass |
 
 Acceptance cases covered in Rust: accept; reject; expiry; pending is not

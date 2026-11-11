@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
-import { disableApprovalGatePulse, recoverApprovalGatePulse } from "./guard-api";
+import { disableApprovalGatePulse, recoverApprovalGatePulse, setApprovalGatePulseShowCommand } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardSettingsPayload } from "./guard-types";
 import { PulseSetupModal, pulseCooldownLabel } from "./pulse-setup-modal";
+import { SettingsToggleRow } from "./settings/settings-row-primitives";
 
 export { PULSE_SITE_URL, pulseCooldownLabel } from "./pulse-setup-modal";
 
 type Step = "closed" | "setup" | "recover";
+
+export const PULSE_SHOW_COMMAND_LABEL = "Show the command in the YID app";
+export const PULSE_SHOW_COMMAND_HINT =
+  "See the exact command the agent wants to run before you approve. Secrets are hidden and your home folder shows as ~. Changing this asks the YID app first.";
+
+/** The command shows unless the user turned it off. */
+export function pulseShowsCommand(gateConfig: GuardApprovalGatePublicConfig | null): boolean {
+  return gateConfig?.pulse_show_command !== false;
+}
 
 type PulseSettingsPanelProps = {
   gateConfig: GuardApprovalGatePublicConfig | null;
@@ -29,10 +39,11 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
   const [recoveryCode, setRecoveryCode] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const cancelDisable = useRef<AbortController | null>(null);
+  const cancelWait = useRef<AbortController | null>(null);
+  const [waitingFor, setWaitingFor] = useState<"disable" | "show-command" | null>(null);
 
   // Leaving the page stops waiting for the YID app.
-  useEffect(() => () => cancelDisable.current?.abort(), []);
+  useEffect(() => () => cancelWait.current?.abort(), []);
 
   const reset = useCallback(() => {
     setStep("closed");
@@ -53,16 +64,29 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
     }
   }, []);
 
-  const handleDisable = useCallback(() => run(async () => {
-    const controller = new AbortController();
-    cancelDisable.current = controller;
-    try {
-      onSettingsPayload(await disableApprovalGatePulse(controller.signal));
-      reset();
-    } finally {
-      cancelDisable.current = null;
-    }
-  }), [onSettingsPayload, reset, run]);
+  /** Run a change that waits on the YID app; Cancel stops waiting. */
+  const runWithCancel = useCallback(
+    (kind: "disable" | "show-command", change: (signal: AbortSignal) => Promise<GuardSettingsPayload>) => run(async () => {
+      const controller = new AbortController();
+      cancelWait.current = controller;
+      setWaitingFor(kind);
+      try {
+        onSettingsPayload(await change(controller.signal));
+        reset();
+      } finally {
+        cancelWait.current = null;
+        setWaitingFor(null);
+      }
+    }),
+    [onSettingsPayload, reset, run],
+  );
+
+  const handleDisable = useCallback(() => runWithCancel("disable", disableApprovalGatePulse), [runWithCancel]);
+
+  const handleShowCommand = useCallback(
+    (show: boolean) => runWithCancel("show-command", (signal) => setApprovalGatePulseShowCommand(show, signal)),
+    [runWithCancel],
+  );
 
   const handleRecover = useCallback(() => run(async () => {
     onSettingsPayload(await recoverApprovalGatePulse({ approval_password: password, pulse_recovery_code: recoveryCode.trim() }));
@@ -110,12 +134,22 @@ export function PulseSettingsPanel({ gateConfig, savedGateConfig, onSettingsPayl
               Cooldown:{" "}
               {pulseCooldownLabel(gateConfig?.pulse_cooldown_seconds ?? 0)}. Changes to Guard itself always ask again.
             </p>
+            <SettingsToggleRow
+              label={PULSE_SHOW_COMMAND_LABEL}
+              description={PULSE_SHOW_COMMAND_HINT}
+              checked={pulseShowsCommand(gateConfig)}
+              disabled={pending}
+              onChange={handleShowCommand}
+            />
+            {waitingFor === "show-command" ? (
+              <p role="status" className="text-xs text-slate-600">Approve this change in the YID app…</p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <ActionButton variant="outline" disabled={pending} onClick={handleDisable}>
-                {pending ? "Waiting for the YID app…" : "Turn off Pulse"}
+                {waitingFor === "disable" ? "Waiting for the YID app…" : "Turn off Pulse"}
               </ActionButton>
               {pending ? (
-                <ActionButton variant="outline" onClick={() => cancelDisable.current?.abort()}>Cancel</ActionButton>
+                <ActionButton variant="outline" onClick={() => cancelWait.current?.abort()}>Cancel</ActionButton>
               ) : (
                 <ActionButton variant="outline" onClick={() => setStep("recover")}>Lost the YID app?</ActionButton>
               )}

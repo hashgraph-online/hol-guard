@@ -25,6 +25,9 @@ pub const MAX_TERMS_BYTES: usize = 4 * 1024;
 
 /// Longest summary value shown in the YID app; longer values are cut.
 pub const MAX_SUMMARY_VALUE_CHARS: usize = 120;
+/// Longest command shown in the YID app. A command gets more room than the
+/// other rows so most fit whole; a longer one is cut and ends with "…".
+pub const MAX_COMMAND_CHARS: usize = 300;
 
 const BINDING_DOMAIN: &[u8] = b"hol-guard-pulse-binding-v1";
 const CONSUMER_DOMAIN: &[u8] = b"hol-guard-pulse-consumer-v1";
@@ -68,6 +71,10 @@ pub struct ActionSummary {
     /// The decision the grant is bound to, for example "Allow, this item
     /// only" or "Block, every item from this publisher".
     pub decision: Option<String>,
+    /// The command the agent wants to run, already passed through Guard's
+    /// secret filter with the home folder shown as `~`. Set only for a single
+    /// action and only while the user lets the YID app show commands.
+    pub command: Option<String>,
 }
 
 /// Invisible characters that change how text is drawn without being seen:
@@ -89,6 +96,16 @@ fn is_invisible_format(c: char) -> bool {
 /// dropped, whitespace collapsed, cut to `MAX_SUMMARY_VALUE_CHARS`. `None`
 /// when nothing is left.
 pub fn summary_value(value: &str) -> Option<String> {
+    display_line(value, MAX_SUMMARY_VALUE_CHARS)
+}
+
+/// A command as one line, cleaned like `summary_value` but cut to
+/// `MAX_COMMAND_CHARS`.
+pub fn command_value(value: &str) -> Option<String> {
+    display_line(value, MAX_COMMAND_CHARS)
+}
+
+fn display_line(value: &str, max_chars: usize) -> Option<String> {
     let collapsed = value
         .chars()
         .map(|c| {
@@ -105,13 +122,10 @@ pub fn summary_value(value: &str) -> Option<String> {
     if collapsed.is_empty() {
         return None;
     }
-    if collapsed.chars().count() <= MAX_SUMMARY_VALUE_CHARS {
+    if collapsed.chars().count() <= max_chars {
         return Some(collapsed);
     }
-    let cut: String = collapsed
-        .chars()
-        .take(MAX_SUMMARY_VALUE_CHARS - 1)
-        .collect();
+    let cut: String = collapsed.chars().take(max_chars - 1).collect();
     Some(format!("{}…", cut.trim_end()))
 }
 
@@ -194,10 +208,29 @@ pub fn build_terms(key: &[u8], binding: &ActionBinding<'_>) -> Result<Value, Pul
 }
 
 /// Build the terms object, including the safe action summary rows.
+///
+/// The command row is dropped, not the request, when it would take the terms
+/// over Pulse's size cap.
 pub fn build_terms_with_summary(
     key: &[u8],
     binding: &ActionBinding<'_>,
     summary: &ActionSummary,
+) -> Result<Value, PulseError> {
+    let command = summary.command.as_deref().and_then(command_value);
+    if command.is_some() {
+        match terms_with_rows(key, binding, summary, command) {
+            Err(PulseError::InvalidRequest("terms_size")) => {}
+            built => return built,
+        }
+    }
+    terms_with_rows(key, binding, summary, None)
+}
+
+fn terms_with_rows(
+    key: &[u8],
+    binding: &ActionBinding<'_>,
+    summary: &ActionSummary,
+    command: Option<String>,
 ) -> Result<Value, PulseError> {
     let label = purpose_label(binding.purpose).ok_or(PulseError::InvalidRequest("purpose"))?;
     let batch = summary
@@ -215,12 +248,15 @@ pub fn build_terms_with_summary(
     let code = match_code(&digest);
     let clean = |value: &Option<String>| value.as_deref().and_then(summary_value);
     let programs = clean(&summary.programs);
+    // A batch approves several commands; the phone shows only its summary.
+    let command = command.filter(|_| batch.is_none());
     let mut details = vec![json!({"label": "Request", "value": label, "emphasized": true})];
     if let Some(decision) = clean(&summary.decision) {
         details.push(json!({"label": "Decision", "value": decision, "emphasized": true}));
     }
     for (row, value, emphasized) in [
         (plural("Program", "Programs"), programs.clone(), true),
+        ("Command", command, true),
         (plural("Agent", "Agents"), clean(&summary.agent), false),
         (
             plural("Request type", "Request types"),
@@ -343,6 +379,7 @@ mod tests {
             programs: Some("rm".into()),
             action_count: None,
             decision: None,
+            command: None,
         }
     }
 
@@ -460,6 +497,7 @@ mod tests {
             programs: Some("e".repeat(5000)),
             action_count: Some(usize::MAX),
             decision: Some("f".repeat(5000)),
+            command: Some("g".repeat(5000)),
         };
         let terms = build_terms_with_summary(&KEY, &binding("a"), &huge).unwrap();
         assert!(serde_json::to_vec(&terms).unwrap().len() <= MAX_TERMS_BYTES);
@@ -507,3 +545,7 @@ mod tests {
             .starts_with("Approve an agent action Guard paused: "));
     }
 }
+
+#[cfg(test)]
+#[path = "terms_command_tests.rs"]
+mod command_tests;

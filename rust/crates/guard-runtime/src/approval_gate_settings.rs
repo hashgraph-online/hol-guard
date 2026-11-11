@@ -149,6 +149,7 @@ pub(crate) fn public_config_locked(
         } else {
             0
         },
+        pulse_show_command: !pulse::pulse_enabled(&state) || pulse::pulse_show_command(&state),
     }
 }
 
@@ -291,6 +292,32 @@ pub(crate) fn next_settings_state(
         }
         // Without Pulse the public config reports 0, so a saved or imported
         // config sends 0 back; that changes nothing.
+    }
+    if let Some(show) = payload.get("pulse_show_command") {
+        // Whether the YID app shows the command of a paused action. On by
+        // default; turning it off or on again is a settings change like any
+        // other, so it needs the current approval factor.
+        let show = show.as_bool().ok_or_else(|| {
+            err(
+                "approval_gate_invalid_pulse_show_command",
+                "pulse_show_command must be true or false.",
+                400,
+            )
+        })?;
+        if pulse::pulse_enabled(&next_state) {
+            next_state
+                .as_object_mut()
+                .unwrap()
+                .insert("pulse_show_command".into(), Value::Bool(show));
+        } else if !show {
+            return Err(err(
+                "approval_gate_pulse_not_enabled",
+                "Yanez Pulse is not the approval factor for this Guard.",
+                409,
+            ));
+        }
+        // Without Pulse the public config reports true, so a saved or
+        // imported config sends true back; that changes nothing.
     }
     if requested_enabled == Some(false) && pulse::pulse_enabled(&next_state) {
         // Turning the gate off ends Pulse too. The secrets are deleted by

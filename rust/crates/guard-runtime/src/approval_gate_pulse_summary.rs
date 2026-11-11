@@ -21,6 +21,10 @@
 //!   them unchanged
 //! - the decision the grant is bound to (allow or block, and its scope),
 //!   mapped from closed lists
+//! - for a single action, and only while the user lets the YID app show it
+//!   (`pulse_show_command`, on by default), the command itself after the
+//!   Guard Cloud secret filter, with user folders shown as `~`
+//!   (`approval_gate_pulse_command`). A batch never shows commands.
 //!
 //! Anything Guard cannot read or reduce is left out rather than guessed.
 
@@ -34,6 +38,7 @@ use guard_yanez_pulse::terms::ActionSummary;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 
+use crate::approval_gate_pulse_command::command_preview;
 use crate::local_store_read::{open_read_only, STORE_FILE_NAME};
 
 const REQUEST_SUBJECT_PREFIX: &str = "approval-request:";
@@ -58,10 +63,16 @@ pub(crate) struct StoredRequest {
     pub command: Option<String>,
 }
 
-/// The summary for one Pulse request. Empty for every purpose other than
-/// queued approval requests. The decision row comes from the `action` and
-/// `scope` the grant is bound to, so it is shown even when the stored
-/// request cannot be read.
+/// Whether the summary includes the command, and the home folder to show as
+/// `~` when it does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CommandRow<'a> {
+    Hidden,
+    Shown { home: Option<&'a str> },
+}
+
+/// The summary for one Pulse request, without the command. See
+/// `summary_with_command`.
 pub(crate) fn summary_for(
     guard_home: &Path,
     purpose: &str,
@@ -69,6 +80,31 @@ pub(crate) fn summary_for(
     scope: Option<&str>,
     subject: Option<&str>,
     batch_ids: &[String],
+) -> ActionSummary {
+    summary_with_command(
+        guard_home,
+        purpose,
+        action,
+        scope,
+        subject,
+        batch_ids,
+        CommandRow::Hidden,
+    )
+}
+
+/// The summary for one Pulse request. Empty for every purpose other than
+/// queued approval requests. The decision row comes from the `action` and
+/// `scope` the grant is bound to, so it is shown even when the stored
+/// request cannot be read. The command is added only for a single request
+/// and only when `command` is `Shown`.
+pub(crate) fn summary_with_command(
+    guard_home: &Path,
+    purpose: &str,
+    action: Option<&str>,
+    scope: Option<&str>,
+    subject: Option<&str>,
+    batch_ids: &[String],
+    command: CommandRow<'_>,
 ) -> ActionSummary {
     if purpose != "approval_decision" {
         return ActionSummary::default();
@@ -80,7 +116,16 @@ pub(crate) fn summary_for(
             .unwrap_or_default()
     } else if let Some(request_id) = subject.and_then(|s| s.strip_prefix(REQUEST_SUBJECT_PREFIX)) {
         read_request(guard_home, request_id)
-            .map(|stored| summarize(&stored))
+            .map(|stored| ActionSummary {
+                command: match command {
+                    CommandRow::Shown { home } => stored
+                        .command
+                        .as_deref()
+                        .and_then(|text| command_preview(text, home)),
+                    CommandRow::Hidden => None,
+                },
+                ..summarize(&stored)
+            })
             .unwrap_or_default()
     } else {
         ActionSummary::default()
@@ -189,6 +234,7 @@ pub(crate) fn summarize_batch(rows: &[StoredRequest]) -> ActionSummary {
         programs: distinct(|s| s.programs.as_ref()),
         action_count: Some(rows.len()),
         decision: None,
+        command: None,
     }
 }
 
@@ -246,6 +292,7 @@ pub(crate) fn summarize(stored: &StoredRequest) -> ActionSummary {
         programs: stored.command.as_deref().and_then(program_names),
         action_count: None,
         decision: None,
+        command: None,
     }
 }
 

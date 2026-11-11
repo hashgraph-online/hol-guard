@@ -5,6 +5,7 @@ import {
   nextPulseToasts,
   pulseEnrollmentBody,
   pulseSetupRefusalMessage,
+  pulseShowCommandBody,
   sendWithPulseApproval,
   waitForPulseApproval,
   type PulseApprovalDetail,
@@ -13,6 +14,7 @@ import { approvalProofCooldownOptionShown, approvalProofModalTitle } from "./app
 import { withLocalProtectionDeadline } from "./guard-api";
 import { PULSE_SITE_URL, pulseSetupCanClose, runPulseEnrollment, type PulseEnrollmentSteps } from "./pulse-setup-modal";
 import { bulkPulsePrompt } from "./queue-bulk-approval-credentials";
+import { PULSE_SHOW_COMMAND_HINT, pulseShowsCommand } from "./pulse-settings-panel";
 import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
@@ -415,6 +417,43 @@ function pulseModeNeverAsksForAPasswordOrCode(): void {
     "PULSE-14: the password gate keeps its checkbox");
 }
 
+async function theCommandSwitchIsOnByDefaultAndNeedsTheYidApp(): Promise<void> {
+  const gate: GuardApprovalGatePublicConfig = {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+    pulse_enabled: true,
+  };
+  assert(pulseShowsCommand(gate), "PULSE-17: an older daemon that does not report the switch shows the command");
+  assert(pulseShowsCommand({ ...gate, pulse_show_command: true }), "PULSE-17: on shows the command");
+  assert(!pulseShowsCommand({ ...gate, pulse_show_command: false }), "PULSE-17: only an explicit off hides it");
+  assert(pulseShowsCommand(null), "PULSE-17: on before the settings load");
+  assert(PULSE_SHOW_COMMAND_HINT.includes("Secrets are hidden") && PULSE_SHOW_COMMAND_HINT.includes("~"),
+    "PULSE-17: the toggle says what is hidden");
+
+  const daemon = pulseDaemon(["approved"]);
+  const body = pulseShowCommandBody(false);
+  const response = await sendWithPulseApproval(
+    daemon.send,
+    "/v1/settings",
+    { method: "POST", body: JSON.stringify(body) },
+    fast,
+  );
+  assert(response.status === 200, "PULSE-17: the change goes through once the YID app approves");
+  const posts = daemon.calls.filter((c) => c.input === "/v1/settings");
+  assert(posts.length === 3, "PULSE-17: original, defer, resubmit");
+  const last = posts[2].body as { settings?: { approval_gate?: Record<string, unknown> } };
+  assert(JSON.stringify(last.settings) === JSON.stringify(body.settings),
+    "PULSE-17: the resubmission sends exactly the approved change");
+  assert(Object.keys(last.settings?.approval_gate ?? {}).join() === "pulse_show_command",
+    "PULSE-17: the save names only the switch");
+}
+
 await approvedRequestIsResubmittedWithTheSameBody();
 await resubmissionDropsThePasswordAndCode();
 await rejectionAndExpiryFailClosed();
@@ -434,4 +473,5 @@ theBulkPromptCountsWhatThePhoneShows();
 pulseModeNeverAsksForAPasswordOrCode();
 await closingSetupWhileItStartsNeverTurnsPulseOn();
 theSetupLinkTellsYanezItCameFromGuard();
+await theCommandSwitchIsOnByDefaultAndNeedsTheYidApp();
 console.log("pulse-approval tests passed");

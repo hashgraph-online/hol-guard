@@ -859,37 +859,6 @@ fn enrolling_pulse_ends_older_grants() {
 }
 
 #[test]
-fn the_phone_sees_a_summary_of_the_stored_request_but_not_the_command() {
-    let (g, _) = pulse_gate("summary", 0);
-    let connection = rusqlite::Connection::open(g.home.join("guard.db")).unwrap();
-    connection
-        .execute_batch(
-            "create table approval_requests (request_id text primary key, harness text, \
-             artifact_type text, risk_headline text, risk_summary text, policy_action text, \
-             raw_command_text text, action_envelope_json text);
-             insert into approval_requests values ('r1', 'codex', 'tool_action_request', \
-             'Deletes files.', null, 'require-reapproval', \
-             'rm -rf /Users/name/client-acme/build --token=s3cr3t', null);",
-        )
-        .unwrap();
-    drop(connection);
-    let created = g.send(
-        "pulse_request",
-        NOW,
-        json!({"purpose": "approval_decision",
-               "params": {"action": "allow", "scope": "artifact", "subject": "approval-request:r1"}}),
-    );
-    assert_eq!(created["payload"]["status"], "pending", "{created}");
-    let sent = g.fake.created.borrow().values().last().unwrap().to_string();
-    for shown in ["rm", "Codex", "Tool call", "medium", "Deletes files."] {
-        assert!(sent.contains(shown), "missing {shown}: {sent}");
-    }
-    for hidden in ["client-acme", "/Users", "s3cr3t", "--token", "-rf"] {
-        assert!(!sent.contains(hidden), "leaked {hidden}: {sent}");
-    }
-}
-
-#[test]
 fn a_zero_pulse_cooldown_without_pulse_changes_nothing() {
     // The public config reports `pulse_cooldown_seconds: 0` while Pulse is off,
     // so a settings save or import sends it back. Only a real cooldown needs Pulse.
@@ -915,3 +884,6 @@ mod review;
 
 #[path = "approval_gate_pulse_binding_tests.rs"]
 mod binding;
+
+#[path = "approval_gate_pulse_command_flow_tests.rs"]
+mod command_flow;
