@@ -68,26 +68,6 @@ def _params(args: Mapping[str, Any]) -> dict[str, list[str]]:
     return parse_qs(query) if isinstance(query, str) else {}
 
 
-def hook_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Counts the hook the daemon received and names the harness its capacity counts under."""
-
-    from ..adapters import get_adapter
-    from ..hook_review.hook_direct_counters import note_hook_received
-
-    server = _server(store, args)
-    harness = _text(args.get("harness")) or ""
-    note_hook_received(
-        getattr(server, "hook_worker", None),
-        _text(args.get("count_harness")) or harness,
-        _text(args.get("direct_miss")),
-    )
-    try:
-        capacity_harness = get_adapter(_text(args.get("capacity_harness")) or harness).harness
-    except ValueError:
-        capacity_harness = "other"
-    return {"capacity_harness": capacity_harness}
-
-
 def hook_warm(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Builds the resident's hook worker before the first hook needs it."""
 
@@ -171,7 +151,6 @@ def hook_review(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 
 
 HOOK_CALLS = {
-    "hook.begin": hook_begin,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.warm": hook_warm,

@@ -26,6 +26,8 @@ use admission::{
 
 #[path = "daemon_edge_hook_admission.rs"]
 mod admission;
+#[path = "daemon_edge_hook_counters.rs"]
+mod counters;
 
 /// The daemon's fixed hook replies, declared once for every harness.
 const ENVELOPES: &str = include_str!(
@@ -395,22 +397,12 @@ impl Hook<'_> {
         // The daemon's direct lane (`direct_hook`) already asked the resident
         // before this route ran; what reaches here is the daemon's own review.
         let guard_home_query = self.param("guard-home");
-        let Some(begin) = self.call_by(
-            "hook.begin",
-            json!({
-                "count_harness": runtime_harness.as_deref().unwrap_or(self.harness),
-                "direct_miss": direct_miss,
-                "capacity_harness": reply_harness,
-            }),
-            expires,
-        ) else {
-            return unavailable();
-        };
-        let capacity_harness = begin
-            .get("capacity_harness")
-            .and_then(Value::as_str)
-            .unwrap_or("other")
-            .to_owned();
+        counters::note_received(
+            Path::new(&self.config.guard_home),
+            runtime_harness.as_deref().unwrap_or(self.harness),
+            direct_miss,
+        );
+        let capacity_harness = counters::capacity_harness(&reply_harness);
 
         let (workdir_named, workdir) = exec_workdir(&payload);
         let directories = self.settle(&[
@@ -500,7 +492,7 @@ impl Hook<'_> {
             .reserve_bytes(bytes, expires)
             .and_then(|reservation| {
                 scheduler.acquire(
-                    &capacity_harness,
+                    capacity_harness,
                     &client,
                     hook_scheduler::lane_index(lane(&event)),
                     reservation,
@@ -510,7 +502,7 @@ impl Hook<'_> {
         let mut permit = match admitted {
             Ok(permit) => permit,
             Err(code) => {
-                scheduler.record_harness_rejection(&capacity_harness);
+                scheduler.record_harness_rejection(capacity_harness);
                 return fail(capacity_reason(code), code);
             }
         };
