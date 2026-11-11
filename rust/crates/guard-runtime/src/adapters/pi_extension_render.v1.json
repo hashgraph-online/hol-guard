@@ -20,7 +20,6 @@
 "const GUARD_HOME = @@guard_home@@;",
 "const GUARD_HOME_DIR = @@home_dir@@;",
 "const GUARD_HOME_DIR_IS_DEFAULT = @@home_dir_is_default@@;",
-"// Watch posture is read locally; an unreadable or missing Guard config",
 "// Local posture read: the daemon verdict carries no posture signal,",
 "// so the extension re-reads its own config. Any read failure or",
 "// falls back to enforcement (fail closed), never to record-only.",
