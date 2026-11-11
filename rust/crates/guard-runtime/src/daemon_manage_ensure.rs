@@ -131,8 +131,8 @@ pub(super) fn ensure(
     let home = context.home().to_path_buf();
     let initial_pending = records::load_pending(&home);
     let initial_progress = load_progress(&home);
-    // A launch that recorded start progress is settled under the start lock,
-    // where an expired one is retired instead of blocking every later start.
+    // Recorded start progress is settled under the start lock, where an
+    // expired launch is retired instead of blocking every later start.
     if initial_progress.is_none()
         && records::is_generation_bound(initial_pending.as_ref())
         && !records::pending_is_resolved(&home)
@@ -227,12 +227,21 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             return Ok(url);
         }
     }
+    let progress = load_progress(&home);
+    let progress_live = progress
+        .as_ref()
+        .is_some_and(|progress| progress_is_live(caller, progress));
     if let Some(stale) = records::load_state_unverified(&home) {
         let pid = int(&stale, "pid").unwrap_or(0);
         if runtime_matches(context, &stale) {
             if pid > 0 && host::pid_is_running(pid) {
                 if let Some(url) = wait_live(context) {
+                    clear_progress(&home);
                     return Ok(url);
+                }
+                // Published state, not yet healthy: still inside its window.
+                if progress_live {
+                    return Err(still_starting(&home));
                 }
                 retire::retire_all(caller, None, deadline);
                 if !retire::retirement_is_complete(caller) {
@@ -243,19 +252,14 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             return Err(runtime("Stale Guard daemon could not be retired safely."));
         }
     }
-    let progress = load_progress(&home);
-    let mut progress_live = false;
     if let Some(progress) = progress {
-        if progress_is_live(caller, &progress) {
-            progress_live = true;
+        if progress_live {
             if let Some(url) = wait_live(context) {
                 clear_progress(&home);
                 return Ok(url);
             }
-            // `retire_all` never signals a launch whose pending receipt is
-            // still open, so a launch inside its start window survives this
-            // caller's shorter deadline. Its marker stays and the caller is
-            // told to wait; once the window passes, a later start retires it.
+            // `retire_all` never signals a launch whose receipt is open; its
+            // marker stays until the window passes and a later start retires it.
             retire::retire_all(caller, None, deadline);
             if !retire::retirement_is_complete(caller) {
                 return Err(still_starting(&home));
