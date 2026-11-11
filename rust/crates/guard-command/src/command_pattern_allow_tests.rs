@@ -174,7 +174,12 @@ fn the_literal_head_is_a_plain_word_the_shell_passes_through() {
 
 #[test]
 fn slash_switches_and_runner_subcommands_cannot_open_a_wildcard() {
-    for value in ["cmd /c *", "cmd.exe /k *", "pwsh /Command *"] {
+    for value in [
+        "cmd /c *",
+        "cmd.exe /k *",
+        "pwsh /Command *",
+        "deno --quiet eval *",
+    ] {
         assert_eq!(
             pattern("glob", value).map(|_| ()),
             Err("command_pattern_allow_interpreter_option".to_owned()),
@@ -195,6 +200,12 @@ fn slash_switches_and_runner_subcommands_cannot_open_a_wildcard() {
         "pipx run *",
         "poetry run *",
         "go run *",
+        "npm --silent exec *",
+        "pnpm --silent dlx *",
+        "uv --quiet run *",
+        "yarn --silent dlx *",
+        "git -c *",
+        "git -C *",
     ] {
         assert_eq!(
             pattern("glob", value).map(|_| ()),
@@ -215,6 +226,7 @@ fn slash_switches_and_runner_subcommands_cannot_open_a_wildcard() {
         );
     }
     assert!(pattern("glob", "npm test *").is_ok());
+    assert!(pattern("glob", "git push *").is_ok());
     assert!(pattern("glob", "cmd scripts/run.bat *").is_ok());
 }
 

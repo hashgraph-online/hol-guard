@@ -77,11 +77,14 @@ const WRAPPERS: &[&str] = &[
 ];
 
 /// Subcommands that run a program, script or code given in the words after
-/// them, so `npm exec *` could allow anything.
+/// them, so `npm exec *` could allow anything. These programs may not start
+/// with an option either, or the wildcard could supply the subcommand
+/// (`npm --silent exec *`) or a setting that runs code (`git -c *`).
 const RUNNER_SUBCOMMANDS: &[(&str, &[&str])] = &[
     ("bun", &["exec", "run", "x"]),
     ("conda", &["run"]),
     ("deno", &["eval", "run"]),
+    ("git", &[]),
     ("go", &["run"]),
     ("hatch", &["run"]),
     ("mise", &["exec", "x"]),
@@ -168,10 +171,9 @@ pub fn validate_allow_pattern(expression: &CommandExpressionV1) -> Result<String
         if INTERPRETERS.contains(&base.as_str()) && option {
             return Err("command_pattern_allow_interpreter_option".to_owned());
         }
-        if RUNNER_SUBCOMMANDS
-            .iter()
-            .any(|(runner, subcommands)| *runner == base && subcommands.contains(&words[1]))
-        {
+        if RUNNER_SUBCOMMANDS.iter().any(|(runner, subcommands)| {
+            *runner == base && (words[1].starts_with('-') || subcommands.contains(&words[1]))
+        }) {
             return Err("command_pattern_allow_runner".to_owned());
         }
     }
