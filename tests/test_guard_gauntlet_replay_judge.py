@@ -253,6 +253,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
         "neg-grep-credential-bare-wildcard-pattern",
+        # A second pattern, or an escaped alternative, that matches a plugin
+        # manifest keeps the review; a contained run reads only the workspace
+        # copy and has no home access.
+        "neg-grep-second-pattern-matching-plugin-manifest",
+        "neg-grep-escaped-alternative-matching-plugin-manifest",
         # The pattern exemption's own negatives: the producer opens a dotenv
         # file, dumps the environment, or names one as a pathspec, so the
         # credential word is never the only signal. A contained run has no home
