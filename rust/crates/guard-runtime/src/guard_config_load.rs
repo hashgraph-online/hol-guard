@@ -317,6 +317,16 @@ pub(crate) fn evidence_retention(guard_home: &Path) -> Result<(i64, i64, i64), S
     ))
 }
 
+pub(crate) fn approval_browser_allowed_under(
+    guard_home: &Path,
+    source: &ManagedPolicySource,
+) -> Result<bool, String> {
+    Ok(effective_config(guard_home, None, source)?
+        .get("approval_surface_policy")
+        .and_then(Value::as_str)
+        != Some("native-only"))
+}
+
 fn effective_config(
     guard_home: &Path,
     workspace: Option<&Path>,
