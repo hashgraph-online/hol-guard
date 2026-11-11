@@ -35,7 +35,7 @@ fn request(root: &Path) -> Value {
     let now = now_ms();
     json!({
         "schema": "guard-native-policy-materialize.v1", "version": 1, "verifier_key": KEY.to_vec(),
-        "guard_home": root, "lock_wait_ms": 0,
+        "guard_home": root,
         "runtime_identity": "a".repeat(64), "rule_digest": "b".repeat(64),
         "mode": "enforce", "issued_at_ms": now, "expires_at_ms": now + 60_000,
         "scope_contract": {"schema":"guard-native-scope.v1","kind":"guard-home",

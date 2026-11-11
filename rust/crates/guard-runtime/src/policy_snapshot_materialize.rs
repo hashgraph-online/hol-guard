@@ -62,6 +62,9 @@ pub(crate) struct MaterializeRequest {
     expires_at_ms: u64,
     #[serde(default)]
     pub(crate) renew_after_generation: Option<u64>,
+    /// The publisher sets this from its own remaining budget, so its caller
+    /// leaves it out.
+    #[serde(default)]
     pub(crate) lock_wait_ms: u64,
 }
 
