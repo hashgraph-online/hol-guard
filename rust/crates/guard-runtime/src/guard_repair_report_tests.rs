@@ -176,7 +176,12 @@ fn onefile_leaks_report_reclaimed_folders_and_budget() {
             "reclaimed_count": 0, "reclaimed_bytes": 0, "unmarked_count": 9,
             "unmarked_scan": "complete", "budget_exhausted": true, "error_count": 0}}]),
     );
-    assert_eq!(report["status"], "healthy");
+    // The scan stopped at its budget: not healthy, and another run continues it.
+    assert_eq!(report["status"], "partial");
+    assert!(report["summary"]
+        .as_str()
+        .unwrap()
+        .contains("Run `hol-guard repair` again to continue"));
     let unavailable = only_step(
         false,
         json!({"step": "onefile_leaks", "result": {
@@ -300,12 +305,24 @@ fn reconcile_reports_missing_status_and_failures() {
     assert_eq!(failed["errors"], json!(["package:reconciliation_failed"]));
     let failed_after_read = run(json!({
         "schema": SCHEMA, "op": "reconcile",
-        "package": {"initial": {"manifest_state": "corrupt", "installed_managers": ["npm"]}, "failed": true}
+        "package": {"initial": {"manifest_state": "corrupt", "installed_managers": ["npm"]},
+                    "repaired": ["npm"], "failed": true}
     }));
     assert_eq!(
         failed_after_read["errors"],
         json!(["package:manifest:corrupt", "package:reconciliation_failed"])
     );
+    assert_eq!(
+        failed_after_read["repaired_package_managers"],
+        json!(["npm"])
+    );
+    let dropped = run(json!({
+        "schema": SCHEMA, "op": "reconcile",
+        "package": {"initial": {"manifest_state": "valid", "installed_managers": ["npm", "pnpm"]},
+                    "repaired": [], "verified": {"manager_details": [
+                        {"manager": "npm", "integrity": "ok", "path_active": true}]}}
+    }));
+    assert_eq!(dropped["errors"], json!(["package:pnpm:status_missing"]));
     let absent = run(json!({
         "schema": SCHEMA, "op": "reconcile",
         "package": {"initial": {"manifest_state": "absent", "installed_managers": []}}

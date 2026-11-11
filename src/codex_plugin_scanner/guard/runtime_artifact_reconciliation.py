@@ -351,9 +351,9 @@ def reconcile_runtime_artifacts(
         return RuntimeArtifactReconciliation(
             refreshed_launchers=launcher_result.refreshed,
             repaired_harnesses=repaired_harnesses,
-            repaired_package_managers=(),
+            repaired_package_managers=_names(package.get("repaired")),
             failed_harnesses=failed_harnesses,
-            errors=("runtime:reconcile_unanswered",),
+            errors=(*(f"launcher:{error}" for error in launcher_result.errors), "runtime:reconcile_unanswered"),
         )
     return RuntimeArtifactReconciliation(
         refreshed_launchers=launcher_result.refreshed,

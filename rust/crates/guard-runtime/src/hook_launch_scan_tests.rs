@@ -424,7 +424,17 @@ fn a_manifest_walk_keeps_document_order_and_its_bounds() {
 }
 
 #[test]
-fn a_batch_with_bad_manifest_or_too_many_installs_is_refused() {
+fn a_bad_manifest_needs_repair_without_failing_the_batch() {
+    let answer = batch(json!([
+        {"harness": "codex", "manifest_json": "{", "hooks_ready": true},
+        {"harness": "cursor", "manifest_json": null, "hooks_ready": true},
+    ]));
+    assert_eq!(answer["installs"]["codex"]["needs_repair"], true);
+    assert_eq!(answer["installs"]["cursor"]["needs_repair"], false);
+}
+
+#[test]
+fn a_batch_with_too_many_installs_is_refused() {
     let request = |installs: Value| {
         serde_json::to_vec(&json!({
             "schema": BATCH_SCHEMA, "runtime_digest": null,
@@ -432,8 +442,6 @@ fn a_batch_with_bad_manifest_or_too_many_installs_is_refused() {
         }))
         .unwrap()
     };
-    let broken = request(json!([{"harness": "codex", "manifest_json": "{", "hooks_ready": true}]));
-    assert!(run_command(broken.as_slice()).is_err());
     let many: Vec<Value> = (0..=MAX_INSTALLS)
         .map(|index| json!({"harness": format!("h{index}"), "hooks_ready": true}))
         .collect();

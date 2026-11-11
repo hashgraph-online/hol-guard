@@ -145,9 +145,14 @@ struct Install {
 fn scan_installs(request: &BatchRequest) -> Result<Value, String> {
     let mut answers = Map::new();
     for install in &request.installs {
-        let mut paths = match install.manifest_json.as_deref() {
-            Some(text) => manifest_file_paths(text)?,
-            None => Vec::new(),
+        // A manifest that does not parse is this install's problem, not the
+        // batch's: its hooks get reinstalled and the rest still scan.
+        let (mut paths, unreadable) = match install.manifest_json.as_deref() {
+            Some(text) => match manifest_file_paths(text) {
+                Ok(paths) => (paths, false),
+                Err(_) => (Vec::new(), true),
+            },
+            None => (Vec::new(), false),
         };
         for extra in &install.extra_paths {
             if !paths.contains(extra) {
@@ -170,7 +175,7 @@ fn scan_installs(request: &BatchRequest) -> Result<Value, String> {
             json!({
                 "stale_runtime": scanned["stale_runtime"],
                 "foreign_interpreter": scanned["foreign_interpreter"],
-                "needs_repair": stale_client || !install.hooks_ready,
+                "needs_repair": unreadable || stale_client || !install.hooks_ready,
             }),
         );
     }
