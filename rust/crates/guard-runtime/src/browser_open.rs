@@ -79,6 +79,10 @@ pub(crate) fn open_browser_url(url: &str) -> bool {
 /// scheme. `open` and `xdg-open` answer well inside this.
 const APP_LINK_VERDICT: Duration = Duration::from_millis(1500);
 
+#[cfg(test)]
+#[path = "approval_browser_policy_tests.rs"]
+mod policy_tests;
+
 /// Open an app link such as `hol-guard-desktop://...` and report whether an
 /// app took it. Unlike a web link, nothing may own the scheme: `open` and
 /// `xdg-open` then exit non-zero, so the launcher is waited for a bounded

@@ -45,6 +45,10 @@ pub(crate) fn fail_closed_managed_policy() -> ManagedPolicy {
         settings.insert(action.to_owned(), Value::from("block"));
     }
     settings.insert("sync".to_owned(), Value::Bool(false));
+    settings.insert(
+        "approval_surface_policy".to_owned(),
+        Value::from("native-only"),
+    );
 
     let mut hashed = Map::new();
     hashed.insert(
