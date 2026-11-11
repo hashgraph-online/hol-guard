@@ -21,9 +21,9 @@
 //!   them unchanged
 //! - the decision the grant is bound to (allow or block, and its scope),
 //!   mapped from closed lists
-//! - for a single action, and only while the user lets the YID app show it
-//!   (`pulse_show_command`, on by default), the command itself after the
-//!   Guard Cloud secret filter, with user folders shown as `~`
+//! - for a single action, and only after the user opts in
+//!   (`pulse_show_command`, off by default), the command itself after
+//!   best-effort secret filtering, with user folders shown as `~`
 //!   (`approval_gate_pulse_command`). A batch never shows commands.
 //!
 //! Anything Guard cannot read or reduce is left out rather than guessed.
