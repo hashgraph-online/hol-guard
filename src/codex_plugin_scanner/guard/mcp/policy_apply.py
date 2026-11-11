@@ -126,8 +126,10 @@ def apply_pending_policy_request(
     else:
         # The resident re-checks the request, the candidate, the imported rows
         # behind the current digest and the generation, then writes the rows
-        # and resolves the request in one transaction.
-        with hold_command_control_authority_lock(store.guard_home):
+        # and resolves the request in one transaction. The generation lock
+        # spans that write and the finalize after it, as it does for a
+        # document import, so no other advance lands between them.
+        with store.hold_policy_integrity_generation_lock(), hold_command_control_authority_lock(store.guard_home):
             fingerprint = store._native_store_call("policy_rows_fingerprint", {})
             rows_fingerprint = fingerprint.get("fingerprint") if isinstance(fingerprint, dict) else None
             if not isinstance(rows_fingerprint, str):
