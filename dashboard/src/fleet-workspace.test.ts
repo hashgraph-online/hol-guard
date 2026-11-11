@@ -8,7 +8,12 @@ import { defaultConnectHarness } from "./apps/app-catalog";
 import { activeFailedHarnesses, ProtectionRepairFlowError } from "./protection-repair-flow";
 import { repairHarnessesFor } from "./fleet-workspace";
 import { resolveFleetHeroCopy } from "./fleet-hero-copy";
-import { isHarnessDetectedItems, resolveDetectedAppStatus, visibleHarnessesFor } from "./harness-detection";
+import {
+  inactiveInstallNeedsRepair,
+  isHarnessDetectedItems,
+  resolveDetectedAppStatus,
+  visibleHarnessesFor,
+} from "./harness-detection";
 import type { FleetHeroCopy } from "./fleet-hero-copy";
 import type { GuardProtectionCheck } from "./guard-types";
 
@@ -307,6 +312,60 @@ const targetedRepairs = repairHarnessesFor(
 assert(
   targetedRepairs.length === 2 && targetedRepairs[0] === "grok" && targetedRepairs[1] === "cursor",
   "F8: fleet repair must reinstall inactive apps and active apps with failed hook proof",
+);
+
+// Disconnecting an app leaves its install record inactive. Once the daemon reports the app's
+// setup status, that status decides whether the inactive record still needs repair.
+const emptyFleetHealth = {
+  schema_version: "guard.protection-health.v1" as const,
+  state: "protected" as const,
+  label: "Protected",
+  detail: "",
+  evidence_gap: false,
+  checks: [],
+  reason_codes: [],
+  apps: [],
+};
+const disconnectedInstalls = [
+  { harness: "codex", active: false },
+  { harness: "grok", active: false },
+  { harness: "cursor", active: false },
+];
+const reportedStatus: Record<string, "found" | "not_found" | "needs_repair"> = {
+  codex: "found",
+  grok: "not_found",
+  cursor: "needs_repair",
+};
+const disconnectedRepairs = repairHarnessesFor(
+  disconnectedInstalls,
+  emptyFleetHealth,
+  (harness) => reportedStatus[harness],
+);
+assert(
+  disconnectedRepairs.length === 1 && disconnectedRepairs[0] === "cursor",
+  "fleet repair must not reinstall an app the user disconnected unless its setup check says it needs repair",
+);
+assert(
+  repairHarnessesFor(disconnectedInstalls, emptyFleetHealth).length === 3,
+  "without a reported setup status an inactive install record still counts as needing repair",
+);
+for (const status of ["found", "not_found", "protected"] as const) {
+  assert(!inactiveInstallNeedsRepair({ active: false }, status), `a disconnected app reported ${status} needs no repair`);
+}
+assert(inactiveInstallNeedsRepair({ active: false }, "needs_repair"), "a reported needs_repair still needs repair");
+assert(inactiveInstallNeedsRepair({ active: false }, undefined), "an unreported inactive record still needs repair");
+assert(!inactiveInstallNeedsRepair({ active: true }, undefined), "an active install is never repaired for being inactive");
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, true, "found") === "found_unprotected",
+  "a disconnected app the daemon reports as found shows as observed, not Needs repair",
+);
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, false, "not_found") === "not_found",
+  "a disconnected app the daemon no longer finds is not listed as needing repair",
+);
+assert(
+  resolveDetectedAppStatus({ active: false }, noProtectionHealth, false, false, true) === "needs_repair",
+  "without a reported setup status an inactive install record still shows Needs repair",
 );
 
 const watchModeCodexHealth = {

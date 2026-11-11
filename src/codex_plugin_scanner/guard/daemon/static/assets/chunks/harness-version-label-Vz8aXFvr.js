@@ -211,9 +211,12 @@ function isHarnessDetected(state, harness) {
 function isHarnessDetectedItems(items, harness) {
   return items.some((item) => item.harness === harness && item.status !== "not_found");
 }
+function inactiveInstallNeedsRepair(install, setupStatus) {
+  return install.active !== true && (setupStatus === void 0 || setupStatus === "needs_repair");
+}
 function resolveDetectedAppStatus(install, protectionHealth, hasInventory, hasReceipts, detected, setupStatus) {
   if (setupStatus === "needs_repair") return "needs_repair";
-  if (install !== void 0) {
+  if (install !== void 0 && (install.active === true || inactiveInstallNeedsRepair(install, setupStatus))) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
     if (!install.active || hookCheck?.status !== "pass") return "needs_repair";
     if (protectionHealth.state === "protected") return "protected";
@@ -264,7 +267,8 @@ export {
   refreshVersionCompatibility as e,
   acknowledgeUntestedVersion as f,
   clearVersionAcknowledgement as g,
-  isHarnessDetected as i,
+  isHarnessDetected as h,
+  inactiveInstallNeedsRepair as i,
   resolveDetectedAppStatus as r,
   setupStatusFor as s,
   useHarnessDetection as u,
