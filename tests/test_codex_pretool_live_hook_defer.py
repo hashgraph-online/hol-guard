@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import codex_resume as resume
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import local_approval_continuation as continuation
+from codex_plugin_scanner.guard import continuation_runtime_local as continuation
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
@@ -55,10 +56,10 @@ def test_codex_approve_pretooluse_defers_within_bridge_wait(
         command_text="npm install minimist@1.2.8",
         hook_event_name="PreToolUse",
         waits_for_browser_approval=True,
-        browser_wait_deadline_at="2026-05-19T10:00:05+00:00",
+        # The daemon runs out of process, so the hold is live by wall clock.
+        browser_wait_deadline_at=(datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
         status="waiting_on_approval",
     )
-    patch_daemon_global(monkeypatch, "_now", lambda: _FROZEN_NOW)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 

@@ -239,8 +239,8 @@ def _pretool_gate() -> None:
     ):
         raise RuntimeError("native PreToolUse transport still carries a Python policy floor")
     _assert_containment_routed_by_resident()
-    hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker.py"))
-    native_hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py"))
+    hook = _read(Path("src/codex_plugin_scanner/guard/hook_review/hook_worker.py"))
+    native_hook = _read(Path("src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py"))
     if "return self._review_native_edge(" not in hook:
         raise RuntimeError("PreToolUse hook path is not bound to the native runtime")
     if "_review_pre_tool_http" in native_hook or "_mode_surface_response" in native_hook:
@@ -273,7 +273,7 @@ def _pretool_gate() -> None:
 
 
 def _posttool_gate() -> None:
-    hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker.py"))
+    hook = _read(Path("src/codex_plugin_scanner/guard/hook_review/hook_worker.py"))
     if re.search(
         r"if response is None:\s*response = self\.engine\.review\(request\)",
         hook,
@@ -388,7 +388,7 @@ def _ordered_call_names(node: ast.AST) -> list[str]:
 
 
 _CONTAINMENT_ADAPTER = Path("src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py")
-_CONTAINMENT_DAEMON = Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py")
+_CONTAINMENT_DAEMON = Path("src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py")
 _CONTAINMENT_TRANSPORT = Path("src/codex_plugin_scanner/guard/native_hook_containment_route.py")
 # The routing tables the resident's ``containment_route``/``containment_sink`` replaced.
 _RETIRED_CONTAINMENT_TABLES = frozenset(

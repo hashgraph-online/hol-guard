@@ -16,8 +16,9 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_manage as manager
+from codex_plugin_scanner.guard import native_daemon_peer as runtime_peer
 from codex_plugin_scanner.guard.cli import update_commands
-from codex_plugin_scanner.guard.daemon import live_identity, manager, runtime_peer
 
 # Relative on purpose: availability checks keep relative fixture paths
 # matching by shape, so this stays a Desktop-owned source on every runner.
@@ -41,55 +42,6 @@ def _desktop_identity(guard_home: Path, *, port: int) -> dict[str, object]:
         "source_root": _DESKTOP_SOURCE_ROOT,
         "daemon_url": f"http://127.0.0.1:{port}",
     }
-
-
-def test_retained_newer_runtime_payload_keeps_only_newer_verified_daemon(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    identity = {**_desktop_identity(guard_home, port=8240), "package_version": "3.0.99"}
-    monkeypatch.setattr(
-        live_identity,
-        "verified_live_guard_daemon_identity",
-        lambda _home: identity,
-    )
-
-    payload = runtime_peer.retained_newer_runtime_payload(guard_home, minimum_version="3.0.73")
-
-    assert payload == {
-        "status": "retained_newer_runtime",
-        "daemon_url": "http://127.0.0.1:8240",
-        "daemon_version": "3.0.99",
-        "cli_version": "3.0.73",
-        "runtime_verified": True,
-    }
-    same_version = {**identity, "package_version": "3.0.73"}
-    monkeypatch.setattr(
-        live_identity,
-        "verified_live_guard_daemon_identity",
-        lambda _home: same_version,
-    )
-    assert runtime_peer.retained_newer_runtime_payload(guard_home, minimum_version="3.0.73") is None
-
-
-def test_retained_desktop_owner_payload_gates_on_minimum_version(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    monkeypatch.setattr(
-        runtime_peer,
-        "live_desktop_owned_daemon",
-        lambda _home: _desktop_identity(guard_home, port=8241),
-    )
-
-    assert runtime_peer.retained_desktop_owner_payload(guard_home) is not None
-    assert runtime_peer.retained_desktop_owner_payload(guard_home, minimum_version="3.0.70") is not None
-    assert runtime_peer.retained_desktop_owner_payload(guard_home, minimum_version="3.0.73") is None
-    assert runtime_peer.retained_desktop_owner_payload(guard_home, minimum_version="not.a.version") is None
 
 
 @pytest.mark.parametrize(
@@ -140,8 +92,8 @@ def _exec_refresh_script(
         lambda _guard_home: retirement_completes,
     )
     monkeypatch.setattr(
-        live_identity,
-        "verified_live_guard_daemon_identity",
+        runtime_peer,
+        "live_desktop_owned_daemon",
         lambda home: _desktop_identity(home, port=8231),
     )
     monkeypatch.setattr(
@@ -237,10 +189,16 @@ def test_refresh_prefers_live_desktop_daemon_without_running_the_refresh_script(
         raise AssertionError("the refresh script must not run while a Desktop daemon owns the home")
 
     monkeypatch.setattr(update_commands, "_standalone_update_context", fail_if_refresh_runs)
+    monkeypatch.setattr(update_commands, "_verified_newer_guard_daemon", lambda _home, **_kwargs: None)
     monkeypatch.setattr(
-        live_identity,
-        "verified_live_guard_daemon_identity",
-        lambda home: _desktop_identity(home, port=8232),
+        update_commands,
+        "retained_desktop_owner_payload",
+        lambda _home: {
+            "status": "retained_desktop_owner",
+            "daemon_url": "http://127.0.0.1:8232",
+            "daemon_version": "3.0.70",
+            "runtime_verified": True,
+        },
     )
 
     payload, note = refresh_guard_daemon_after_update(
@@ -284,27 +242,3 @@ def test_refresh_prefers_live_desktop_daemon_without_running_the_refresh_script(
 )
 def test_daemon_source_is_desktop_core_recognizes_every_desktop_shape(source_root: object, expected: bool) -> None:
     assert runtime_peer.daemon_source_is_desktop_core(source_root) is expected
-
-
-def test_bundled_linux_core_source_is_available_when_executable_exists(tmp_path: Path) -> None:
-    source_root = (
-        tmp_path
-        / "home"
-        / ".local"
-        / "share"
-        / "org.hol.guard.desktop"
-        / "core"
-        / "bundled"
-        / "3.0.86"
-        / "lib"
-        / "hol-guard-core"
-        / "hol-guard"
-    )
-    source_root.parent.mkdir(parents=True)
-    source_root.write_text("synthetic Desktop Core", encoding="utf-8")
-
-    assert runtime_peer.daemon_desktop_core_source_available(str(source_root)) is True
-    assert (
-        runtime_peer.daemon_desktop_core_source_available(str(source_root.parent.parent / "other-core" / "hol-guard"))
-        is False
-    )

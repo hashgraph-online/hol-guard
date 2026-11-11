@@ -179,7 +179,7 @@ def _capture_query(case: dict) -> dict:
 
 
 def _oracle(cases: list[dict]) -> list[dict]:
-    from codex_plugin_scanner.guard.daemon import server as srv
+    from codex_plugin_scanner.guard.native_daemon_manage import server as srv
 
     return [_oracle_case(case, srv) for case in cases]
 

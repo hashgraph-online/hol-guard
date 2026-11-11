@@ -93,7 +93,7 @@ pub(crate) fn upsert_policy(connection: &Connection, args: &Args) -> StoreResult
             material.key_id,
             now,
             material.current_generation,
-            decision_id,
+            Some(decision_id),
         )?,
         _ => Value::Null,
     };
@@ -101,16 +101,16 @@ pub(crate) fn upsert_policy(connection: &Connection, args: &Args) -> StoreResult
 }
 
 /// The key, its id and the generation to advance from.
-struct SigningMaterial<'a> {
-    key: Zeroizing<Vec<u8>>,
-    key_id: &'a str,
-    current_generation: i64,
+pub(crate) struct SigningMaterial<'a> {
+    pub(crate) key: Zeroizing<Vec<u8>>,
+    pub(crate) key_id: &'a str,
+    pub(crate) current_generation: i64,
 }
 
 /// The signing material, when the caller shipped all three parts. A partial
 /// set is a caller contract error, not a quiet unsigned write: the Python
 /// store only ships the key once it has resolved every part.
-fn signing_material<'a>(args: &Args<'a>) -> StoreResult<Option<SigningMaterial<'a>>> {
+pub(crate) fn signing_material<'a>(args: &Args<'a>) -> StoreResult<Option<SigningMaterial<'a>>> {
     let encoded = args.opt_str("integrity_key_b64")?;
     let key_id = args.opt_str("integrity_key_id")?;
     let generation = match args.raw("current_generation") {
@@ -138,13 +138,13 @@ fn signing_material<'a>(args: &Args<'a>) -> StoreResult<Option<SigningMaterial<'
 
 /// `_advance_policy_integrity_generation` (`store_secret_policy_integrity.py`)
 /// without the control-state writes the caller owns.
-fn advance_generation(
+pub(crate) fn advance_generation(
     connection: &Connection,
     key: &[u8],
     key_id: &str,
     now: &str,
     current_generation: i64,
-    forced_decision_id: i64,
+    forced_decision_id: Option<i64>,
 ) -> StoreResult<Value> {
     let next_generation = current_generation
         .checked_add(1)
@@ -157,7 +157,7 @@ fn advance_generation(
             .and_then(Value::as_i64)
             .ok_or(StoreError::Invalid("native_guard_store_cell_invalid"))?;
         let row = Value::Object(row);
-        if decision_id != forced_decision_id
+        if Some(decision_id) != forced_decision_id
             && verify_local_policy_row(
                 &row,
                 Some(key),
@@ -212,4 +212,4 @@ fn local_rows(connection: &Connection) -> StoreResult<Vec<Row>> {
 
 #[cfg(test)]
 #[path = "guard_store_policy_upsert_tests.rs"]
-mod tests;
+pub(crate) mod tests;

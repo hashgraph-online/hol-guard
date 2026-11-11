@@ -6,7 +6,7 @@ from copy import deepcopy
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool
+from codex_plugin_scanner.guard.hook_review.hook_fail_closed import render_pre_tool
 
 
 def result() -> dict[str, object]:

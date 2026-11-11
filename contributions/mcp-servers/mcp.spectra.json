@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.spectra",
+  "version": "1.0.0",
+  "name": "Spectra",
+  "description": "Dual-instrument optical UI verification referee over stdio (Meta SAM 3.1 segmentation + Pixel NCC template matching). Verification and check tools can upload local MP4 video to Meta when an API key is configured, invariant compilation can write output files, and closed-loop repair requests external model patches, so all tools require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "bhav-ikkk",
+    "displayName": "Bhavik Joshi",
+    "url": "https://github.com/Bhav-ikkk"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#181816"
+  },
+  "homepage": "https://github.com/Bhav-ikkk/spectra",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "spectra-referee-mcp"
+  },
+  "riskClasses": [
+    "local-media-read",
+    "local-file-read",
+    "external-model-request",
+    "source-code-write"
+  ],
+  "tools": [
+    {
+      "name": "spectra_verify",
+      "state": "review"
+    },
+    {
+      "name": "spectra_check",
+      "state": "review"
+    },
+    {
+      "name": "spectra_compile_invariant",
+      "state": "review"
+    },
+    {
+      "name": "spectra_closed_loop",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/Bhav-ikkk/spectra",
+    "https://spectra-lyart.vercel.app"
+  ],
+  "saferAlternatives": [
+    "Run spectra_verify over stdio as a pre-commit or pre-merge optical gate on settled UI clips (.mp4); accept only the verdict value \"pass\", and fail closed on errors, \"fail\", and \"inconclusive\".",
+    "Keep spectra_closed_loop and spectra_compile_invariant in review state so disk writes and CSS repair patches synthesized via remote inference are inspected before modifying repository stylesheets.",
+    "Configuring META_API_KEY or BASETEN_API_KEY enables uploading local MP4 clips to external model APIs; omit API keys to restrict evaluation strictly to local cached deterministic fixtures in CI."
+  ]
+}

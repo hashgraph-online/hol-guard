@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
     CUSTOM_EXTENSION_CONTINUITY_SCHEMA,
     CUSTOM_EXTENSION_CONTINUITY_STATE_KEY,
@@ -15,7 +15,7 @@ def test_recognize_reads_help_and_lists_commands(tmp_path: Path, monkeypatch) ->
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     script = home / "ship.py"
@@ -50,7 +50,7 @@ def test_recognize_never_runs_a_script_that_ignores_help(tmp_path: Path, monkeyp
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     ran = tmp_path / "ran"
@@ -81,7 +81,7 @@ def test_list_items_exposes_continuity_only_when_every_production_flag_is_enable
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     identity = UnlistedCliIdentity(
@@ -135,7 +135,7 @@ def test_list_items_returns_stored_grants_when_discovery_fails(tmp_path: Path, m
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     identity = UnlistedCliIdentity(
@@ -180,7 +180,7 @@ def test_discover_items_refreshes_package_scripts_from_cwd(tmp_path: Path, monke
     )
     (project / "pnpm-lock.yaml").write_text("{}\n", encoding="utf-8")
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     monkeypatch.chdir(project)
@@ -205,7 +205,7 @@ def test_discover_items_falls_back_to_store_when_refresh_fails(tmp_path: Path, m
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     identity = UnlistedCliIdentity(
@@ -229,7 +229,7 @@ def test_discover_items_falls_back_to_store_when_refresh_fails(tmp_path: Path, m
         raise RuntimeError("refresh failed")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.refresh_package_script_catalogs",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.refresh_package_script_catalogs",
         fail_refresh,
     )
     payload = service.discover_items()
@@ -246,12 +246,12 @@ def test_discover_items_falls_back_to_store_when_refresh_fails(tmp_path: Path, m
 def test_discover_items_reports_observed_catalog_limit_with_other_items(tmp_path: Path, monkeypatch) -> None:
     service = LocalCliApiService(store=GuardStore(tmp_path / "home"))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_observed_mcp_tools",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_observed_mcp_tools",
         lambda *_args, **_kwargs: 1,
     )
     monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda **_kwargs: {})
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.refresh_package_script_catalogs",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.refresh_package_script_catalogs",
         lambda *_args, **_kwargs: [],
     )
     payload = service.discover_items()
@@ -263,7 +263,7 @@ def test_discover_items_rereads_store_after_partial_refresh_failure(tmp_path: Pa
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     existing = UnlistedCliIdentity(
@@ -300,7 +300,7 @@ def test_discover_items_rereads_store_after_partial_refresh_failure(tmp_path: Pa
 
     monkeypatch.setattr(service, "_observe_harness_mcp_servers", lambda **_kwargs: {})
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.refresh_package_script_catalogs",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.refresh_package_script_catalogs",
         persist_then_fail_refresh,
     )
     payload = service.discover_items()
@@ -318,7 +318,7 @@ def test_list_items_fallback_hides_unset_package_scripts_without_a_project(
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     project = tmp_path / "gone-app"
@@ -347,7 +347,7 @@ def test_list_items_keeps_granted_package_scripts_after_project_is_gone(
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     project = tmp_path / "ads-app"

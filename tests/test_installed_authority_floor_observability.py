@@ -15,11 +15,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import background_diagnostics
-from codex_plugin_scanner.guard.daemon.server import (
-    _GuardDaemonHTTPServer,
+from codex_plugin_scanner.guard.extension_control_host import (
+    ExtensionControlHost,
     _InstalledAuthorityMigrationError,
 )
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -56,7 +56,7 @@ def test_a_failed_startup_migration_is_recorded(recorded) -> None:
     )
 
     with pytest.raises(_InstalledAuthorityMigrationError):
-        _GuardDaemonHTTPServer._migrate_installed_authority(server)
+        ExtensionControlHost._migrate_installed_authority(server)
 
     assert server._installed_authority_pending is True
     assert recorded == [
@@ -76,7 +76,7 @@ def test_the_recorded_startup_detail_carries_no_path(tmp_path, recorded) -> None
     )
 
     with pytest.raises(_InstalledAuthorityMigrationError):
-        _GuardDaemonHTTPServer._migrate_installed_authority(server)
+        ExtensionControlHost._migrate_installed_authority(server)
 
     (_event, detail) = recorded[0]
     assert "<path>" in detail

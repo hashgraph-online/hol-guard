@@ -448,7 +448,6 @@ def native_runtime_section(
     produced: the native resident remains the only authority.
     """
 
-    from ..daemon.bounded_http import daemon_admission_snapshot
     from .update_commands import bundled_native_runtime_report
 
     availability = doctor_native_availability(guard_home)
@@ -468,9 +467,6 @@ def native_runtime_section(
         resident["serving"] = native_resident_health(guard_home=guard_home)
     section: dict[str, object] = {
         "availability": availability,
-        # The HTTP gate counts this process only; a fresh CLI invocation
-        # reports its own zeros, not the daemon's totals.
-        "daemon_http": daemon_admission_snapshot(),
         "resident": resident,
     }
     # Shared, unlike the counters above: the pause the budget records refuses

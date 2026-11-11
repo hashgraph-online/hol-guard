@@ -283,7 +283,7 @@ fn prune_quarantine(guard_home: &Path, policy: &Retention) -> u64 {
     removed
 }
 
-fn quarantine_summary(guard_home: &Path) -> Value {
+pub(crate) fn quarantine_summary(guard_home: &Path) -> Value {
     let mut total_bytes: u64 = 0;
     let mut forensic_record_count: u64 = 0;
     let mut events: Vec<(String, f64)> = Vec::new();
@@ -402,6 +402,21 @@ fn components_unlinked(path: &Path) -> bool {
 
 /// `st_mtime` as Python reads it: seconds since the epoch, negative before
 /// it. An unreadable time reads as the epoch.
+/// The sweeps a completed storage-maintenance pass runs, under the default
+/// policy: keep the newest two quarantine events, older ones for seven days
+/// within 2 GiB, and update staging for seven days.
+pub(crate) fn sweep_after_maintenance(guard_home: &Path) {
+    let now = epoch_seconds(SystemTime::now());
+    let policy = Retention {
+        now,
+        min_keep: 2,
+        max_age_seconds: ACTIVITY_WINDOW_SECONDS,
+        max_total_bytes: 2 * 1024 * 1024 * 1024,
+    };
+    let _ = prune_quarantine(guard_home, &policy);
+    prune_staging(guard_home, ACTIVITY_WINDOW_SECONDS, now);
+}
+
 fn modified_seconds(metadata: &Metadata) -> f64 {
     metadata.modified().map(epoch_seconds).unwrap_or(0.0)
 }
@@ -419,6 +434,9 @@ fn epoch_seconds(time: SystemTime) -> f64 {
 fn invalid() -> String {
     "storage_retention_request_invalid".to_owned()
 }
+
+#[path = "daemon_log_retention.rs"]
+pub(crate) mod daemon_log;
 
 #[cfg(test)]
 #[path = "storage_retention_tests.rs"]

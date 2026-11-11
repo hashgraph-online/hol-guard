@@ -6,10 +6,12 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
+from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_artifact_content_hash as content_hash_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -17,7 +19,6 @@ from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import detect_all
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -848,7 +849,7 @@ args = ["workspace-skill.js", "--changed"]
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
-        daemon = GuardDaemonServer(GuardStore(home_dir), host="127.0.0.1", port=0)
+        daemon = NativeGuardDaemon(GuardStore(home_dir), home_dir=tmp_path, workers=True)
 
         install_rc = main(
             [
@@ -892,6 +893,7 @@ args = ["workspace-skill.js", "--changed"]
 
         daemon.start()
         try:
+            _wait_for_runtime_heartbeat(GuardStore(home_dir), daemon.port)
             status_rc = main(
                 [
                     "guard",
@@ -1074,3 +1076,15 @@ def test_harness_summary_survives_an_unavailable_registration_check(tmp_path: Pa
     summary = product_module._summarize_harness(detection, GuardStore(tmp_path / "guard-home"), tmp_path)
 
     assert summary["guard_registered"] is False
+
+
+def _wait_for_runtime_heartbeat(store: GuardStore, port: int) -> None:
+    """The daemon's workers record its heartbeat shortly after it starts."""
+
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        state = store.get_runtime_state()
+        if state is not None and state.get("daemon_port") == port:
+            return
+        time.sleep(0.05)
+    raise AssertionError("the daemon recorded no runtime heartbeat")

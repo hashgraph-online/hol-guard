@@ -12,6 +12,10 @@ use std::time::Instant;
 
 /// Files read for one prompt, so the read stays inside the hook's budget.
 const MAX_FILES: usize = 3;
+/// Files kept out for what they hold that one prompt reads to place lines in,
+/// and the most of each, the size Guard's own read takes.
+const MAX_WITHHELD_FILES: usize = 4;
+const MAX_WITHHELD_BYTES: usize = 262_144;
 /// Words that open a definition line, after any modifiers.
 const DEFINERS: [&str; 13] = [
     "def ",
@@ -270,6 +274,51 @@ pub(crate) fn screened_texts(
         };
         let text: String = file.documents.iter().map(|doc| doc.text.as_str()).collect();
         texts.push((relative.clone(), text));
+    }
+    texts
+}
+
+/// The text of each of `found` that `screened_texts` keeps out only for what
+/// it holds, such as a line Guard's secret check takes for a credential, and
+/// is not already in `read`. A file whose path the checks refuse is left
+/// out. The text places definitions by line and is never shown.
+pub(crate) fn withheld_texts(
+    home: &Path,
+    workspace: &Path,
+    app: &str,
+    found: &[String],
+    read: &[(String, String)],
+    until: Instant,
+) -> Vec<(String, String)> {
+    let Some(root) = screened(home, workspace, app) else {
+        return Vec::new();
+    };
+    let Ok(canonical) = std::fs::canonicalize(root.path()) else {
+        return Vec::new();
+    };
+    let chosen = kept_to(home, root.path(), app);
+    let mut texts = Vec::new();
+    for relative in found {
+        if Instant::now() >= until || texts.len() >= MAX_WITHHELD_FILES {
+            break;
+        }
+        let picked = chosen.as_ref().is_none_or(|files| files.contains(relative));
+        if !picked || read.iter().any(|(path, _)| path == relative) {
+            continue;
+        }
+        let decision = guard_secure_fs::classify_project_document(relative, root.path());
+        let allowed = decision.allowed;
+        let path = (decision.resolved_path).filter(|path| allowed && path.starts_with(&canonical));
+        let Some(path) = path else {
+            continue;
+        };
+        if !matches!(root.read(relative), Err(RuntimeError::ScopeDenied)) {
+            continue;
+        }
+        let bounded = guard_secure_fs::read_bounded(&path, MAX_WITHHELD_BYTES).ok();
+        if let Some(text) = bounded.and_then(|file| String::from_utf8(file.bytes).ok()) {
+            texts.push((relative.clone(), text));
+        }
     }
     texts
 }

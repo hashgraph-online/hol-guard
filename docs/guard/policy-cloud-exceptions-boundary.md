@@ -145,7 +145,7 @@ dashboard/src/guard-api.ts
 dashboard/src/guard-types.ts
 dashboard/src/workspace-page-header.tsx
 dashboard/src/app.tsx                    # policy route wiring only
-src/codex_plugin_scanner/guard/daemon/server.py
+src/codex_plugin_scanner/guard/routes/request_handler.py
 src/codex_plugin_scanner/guard/policy_bundle_*.py
 src/codex_plugin_scanner/guard/store_approvals.py
 docs/guard/policy-cloud-exceptions*.md

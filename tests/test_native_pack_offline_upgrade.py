@@ -23,9 +23,9 @@ from codex_plugin_scanner.guard.catalog_delivery import (
     transport as remote,
 )
 from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import MANIFEST, descriptor
-from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY

@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_extension_control as bridge
-from codex_plugin_scanner.guard.daemon import extension_control_semantic_preview as preview
+from codex_plugin_scanner.guard.extension_controls import extension_control_semantic_preview as preview
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlTargetKind
 from tests.native_extension_control_support import (

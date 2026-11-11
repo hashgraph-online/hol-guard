@@ -413,6 +413,7 @@ pub(super) fn exact_safe_segment_with_context(
         "printenv" => super::safe_scalar::safe_printenv_arguments(&segment.arguments),
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
+        "launchctl" => super::safe_scalar::safe_launchctl_arguments(&segment.arguments),
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
         "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
         // Signal 0 is delivered to nothing. The kernel performs the
@@ -474,8 +475,8 @@ pub(super) fn exact_safe_segment_with_context(
         "dd" => super::dd_reads::safe_dd_arguments(&segment.arguments, context),
         "du" => super::metadata_reads::safe_du_arguments(&segment.arguments, context),
         "df" => super::metadata_reads::safe_df_arguments(&segment.arguments),
-        "diff" => super::metadata_reads::safe_diff_arguments(&segment.arguments, context),
-        "cmp" => super::metadata_reads::safe_cmp_arguments(&segment.arguments, context),
+        "diff" => super::metadata_reads::safe_diff_arguments(segment, context),
+        "cmp" => super::metadata_reads::safe_cmp_arguments(segment, context),
         "file" => super::metadata_reads::safe_file_arguments(&segment.arguments, context),
         "stat" => super::metadata_reads::safe_stat_arguments(&segment.arguments, context),
         "dirname" | "basename" => {

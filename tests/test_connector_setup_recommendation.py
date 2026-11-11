@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import json
-import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import approval_connector_recommendation as recommendation
-from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
+from codex_plugin_scanner.guard.hook_review import approval_connector_recommendation as recommendation
+from codex_plugin_scanner.guard.hook_review.approval_connector_recommendation import (
     CONNECTOR_RECOMMENDATION_SCHEMA,
     build_approval_connector_recommendation,
     safe_connector_recommendation,
@@ -317,7 +314,7 @@ def test_the_resident_of_the_stores_home_decides_the_caution(
 
 
 def test_no_resident_answer_means_no_recommendation_never_no_caution(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.daemon.approval_extension_recommendation import (
+    from codex_plugin_scanner.guard.hook_review.approval_extension_recommendation import (
         NativeApprovalExtensionRecommendationError,
     )
 
@@ -399,28 +396,3 @@ def test_store_keeps_the_connector_hint_private(tmp_path: Path) -> None:
     listed = next(item for item in store.list_approval_requests() if item["request_id"] == "req-connector")
     assert listed["queue_group_id"] == _GROUP
     assert listed.get("extension_allow_hint") is None
-
-
-def test_daemon_request_detail_carries_the_live_recommendation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _items(monkeypatch)
-    store = GuardStore(tmp_path / "guard")
-    store.add_approval_request(_request(), "2026-10-17T10:00:00+00:00")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/requests/req-connector",
-            headers={"X-Guard-Token": daemon._server.auth_token},
-            method="GET",
-        )
-        with urllib.request.urlopen(request, timeout=5) as response:
-            detail = json.loads(response.read().decode("utf-8"))
-    finally:
-        daemon.stop()
-
-    assert "extension_allow_hint" not in detail
-    assert "extension_recommendation" not in detail
-    connector = detail["connector_recommendation"]
-    assert connector["schema"] == CONNECTOR_RECOMMENDATION_SCHEMA
-    assert connector["cli_id"] == _CLI_ID
-    assert connector["status"] in {"available", "authority_unavailable", "approval_gate_required"}

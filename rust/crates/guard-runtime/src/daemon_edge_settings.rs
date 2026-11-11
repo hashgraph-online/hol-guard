@@ -382,6 +382,6 @@ pub(super) fn protection_capabilities() -> Option<Value> {
         .map(Value::Array)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_settings_tests.rs"]
 mod tests;

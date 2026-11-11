@@ -19,24 +19,19 @@ import subprocess
 import threading
 from collections.abc import Iterator
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import local_supply_chain
 from codex_plugin_scanner.guard import native_supply_chain_egress as egress_module
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.daemon_control_patching import patch_daemon_global
 from tests.native_workspace import bind_workspace
 from tests.test_guard_phase06_workspace_audit import WORKSPACE_AUDIT_NOW
 from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
@@ -381,67 +376,3 @@ def test_a_relative_dependency_outside_the_root_is_never_read(
     run = _latest(store, keys)
     assert all(item["package_version"] != AFFECTED for item in _minimist(run))
     assert _encoded(outside) not in json.dumps(assessments.latest_assessed_runs(store))
-
-
-def test_restoring_protection_leaves_the_known_risk_open(
-    tmp_path: Path, native_binary: None, offline: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    clock = Clock()
-    store = _store(tmp_path)
-    root = tmp_path / "workspace"
-    _write_project(root, AFFECTED)
-    keys = _admit(store, root, clock)
-    assert _run_all(store, clock) == 1
-    before = _latest(store, keys)
-    assert len(_minimist(before)) == 1
-    lock = (root / "package-lock.json").read_bytes()
-
-    # Drive the daemon's Restore protection handler with its real workspace
-    # context and intelligence sync. Only the device-level package tool steps
-    # are stubbed, since they install shims into the user's real profile.
-    handler = object.__new__(_GuardDaemonHandler)
-    handler.server = SimpleNamespace(store=store)
-    responses: list[dict[str, Any]] = []
-    shim_contexts: list[HarnessContext] = []
-    monkeypatch.setattr(handler, "_enforce_package_firewall_rate_limit", lambda *args: True)
-    monkeypatch.setattr(handler, "_supply_chain_entitlement", lambda: {"allowed": True})
-    monkeypatch.setattr(handler, "_write_json", lambda payload, status=200: responses.append(payload))
-    monkeypatch.setattr(handler, "_record_headless_receipt", lambda **kwargs: None)
-    patch_daemon_global(monkeypatch, "require_high_risk", lambda *args, **kwargs: None)
-    patch_daemon_global(monkeypatch, "package_shim_status", lambda context: {"installed_managers": ["npm"]})
-    patch_daemon_global(
-        monkeypatch,
-        "_repair_detected_package_shims",
-        lambda context, **kwargs: shim_contexts.append(context),
-    )
-    patch_daemon_global(monkeypatch, "_activate_package_firewall_runtime", lambda context: (200, {}))
-    patch_daemon_global(monkeypatch, "_resolve_guard_sync_auth_context", lambda _store: {"sync_url": "local"})
-
-    def refresh_bundle(actual: GuardStore, *, auth_context: dict[str, object]) -> dict[str, object]:
-        _cache_feed(actual, blocked=True, bundle_version="1747699200000-feedface")
-        return {"status": "synced"}
-
-    def reject_workspace_audit(*_args: object, **_kwargs: object) -> dict[str, object]:
-        pytest.fail("restore must not audit the workspace inline")
-
-    monkeypatch.setattr(local_supply_chain, "sync_supply_chain_bundle", refresh_bundle)
-    monkeypatch.setattr(local_supply_chain, "sync_managed_workspace_audits", reject_workspace_audit)
-
-    handler._handle_supply_chain_repair({"workspace_dir": str(root)})
-
-    [response] = responses
-    assert response["status"] == "completed"
-    assert response["result"]["repaired"] is True
-    assert [context.workspace_dir for context in shim_contexts] == [root.resolve()]
-    # Restore protection repairs package tools and routing and refreshes the
-    # advisory feed; it never edits the project, so it is not a fix.
-    assert (root / "package-lock.json").read_bytes() == lock
-
-    assert worker.observe(store, clock=clock) == 1
-    [queued] = _queued(store, keys)
-    assert queued["trigger_kind"] == "feed_change"
-    assert _run_all(store, clock) == 1
-    after = _latest(store, keys)
-    assert after["snapshot_digest"] == before["snapshot_digest"]
-    [finding] = _minimist(after)
-    assert (finding["decision"], finding["package_version"], finding["fix_version"]) == ("block", AFFECTED, FIXED)

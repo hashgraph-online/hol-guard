@@ -66,7 +66,7 @@ _LIVE_DAEMON_URL = "http://127.0.0.1:61234"
 
 
 def _held_package_install_output(tmp_path, capsys, monkeypatch, *, token: bool, daemon_url: str | None):
-    from codex_plugin_scanner.guard.daemon import manager
+    from codex_plugin_scanner.guard import native_daemon_manage as manager
 
     def live_daemon_url(_home):
         if isinstance(daemon_url, Exception):

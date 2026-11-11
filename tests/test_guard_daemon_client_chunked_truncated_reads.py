@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.client import (
+from codex_plugin_scanner.guard.native_daemon_client import (
     GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTimeoutError,

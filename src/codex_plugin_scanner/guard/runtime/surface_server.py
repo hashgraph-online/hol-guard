@@ -319,7 +319,10 @@ class GuardSurfaceRuntime:
         opener: Callable[[str], object],
         force_open: bool = False,
     ) -> dict[str, object]:
-        if approval_surface_policy in {"notify-only", "never-auto-open", "attention-aware"} and not force_open:
+        if (
+            approval_surface_policy in {"native-only", "notify-only", "never-auto-open", "attention-aware"}
+            and not force_open
+        ):
             if approval_surface_policy == "attention-aware":
                 return {"surface": surface, "opened": False, "reason": "attention-deferred", "open_key": open_key}
             return {"surface": surface, "opened": False, "reason": "policy-disabled", "open_key": open_key}

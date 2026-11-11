@@ -18,8 +18,8 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_remote import (
     _remote_servers,
     remote_scan_harnesses,
 )
-from codex_plugin_scanner.guard.daemon import local_cli_api
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis import local_cli_api
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 

@@ -176,7 +176,7 @@ def _renewal_refused(store: GuardStore) -> str | None:
     the only way doctor can notice a revoked connection.
     """
 
-    from ..daemon.cloud_actions_status import _live_pairing_checker  # pyright: ignore[reportPrivateUsage]
+    from ..cloud_control.cloud_actions_status import _live_pairing_checker  # pyright: ignore[reportPrivateUsage]
 
     refused = _live_pairing_checker(store)
     return refused.message if refused is not None else None

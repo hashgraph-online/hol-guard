@@ -368,7 +368,7 @@ fn identity(decision: &Map<String, Value>) -> Option<Identity> {
 
 /// `device_display_name`: the stored label, unless it is still a generic one
 /// nobody chose, which yields to the host name.
-fn device_display_name(connection: &Connection, label: &str) -> Option<String> {
+pub(crate) fn device_display_name(connection: &Connection, label: &str) -> Option<String> {
     let chosen = matches!(
         sync_payload(connection, DEVICE_LABEL_CHOICE_KEY),
         Some(Some(Value::Object(choice))) if choice.get("label").and_then(Value::as_str) == Some(label)

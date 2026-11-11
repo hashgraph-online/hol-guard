@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
-from codex_plugin_scanner.guard.daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
+from codex_plugin_scanner.guard.native_daemon_manage import GUARD_DAEMON_COMPATIBILITY_VERSION
 from tests.pi_continuation_support import (
     _decode_json_object,
     _node_executable,

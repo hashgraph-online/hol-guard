@@ -6,7 +6,7 @@
 //! "this step matched this extension". It projects the stored coverage hint
 //! onto the catalog labels the dashboard needs, with no decision in it: it
 //! changes nothing about what Guard allows, denies or asks, and the card it
-//! feeds has no approve button. Ported from `daemon/approval_extension_coverage.py`.
+//! feeds has no approve button. Ported from the retired Python `approval_extension_coverage.py`.
 //!
 //! Catalog identifiers are the contract, so an id this catalog no longer
 //! carries is dropped rather than labelled from a neighbouring entry, and a

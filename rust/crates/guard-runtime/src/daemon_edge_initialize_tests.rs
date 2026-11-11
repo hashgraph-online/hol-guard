@@ -61,7 +61,7 @@ impl Store {
         let PyVal::Dict(payload) = pyjson::parse(body).unwrap() else {
             panic!("{body}");
         };
-        respond(&payload, &self.config, &self.reads)
+        respond(&payload, true, &self.config, &self.reads)
     }
 }
 

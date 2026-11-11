@@ -130,9 +130,7 @@ Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let text = map(
         &files(&[
@@ -175,7 +173,7 @@ def test_other():\n    return 1\n";
 
 /// The few tests that use the request's rare word come before the many that
 /// only use the class it names, and are shown whole, once a session. A rename
-/// or a review asks where code is, so it gets their lines only.
+/// a review or a question asks where code is, so it gets their lines only.
 #[test]
 fn tests_using_a_rare_word_come_first() {
     let mut many = String::new();
@@ -217,7 +215,11 @@ tests/test_many.py: 6 related tests"
         changes: true,
         ..Asked::default()
     };
-    for asked in [again, rename, review] {
+    let question = Asked {
+        lookup: true,
+        ..Asked::default()
+    };
+    for asked in [again, rename, review, question] {
         let text = map(&list, &terms, &asked, later()).unwrap().text;
         assert!(
             text.contains("tests/test_rare.py: 2 related tests") && !text.contains("```"),
@@ -431,9 +433,7 @@ fn a_named_changelog_stays_on_the_map() {
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(

@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Any
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 _PAYLOAD = {
@@ -37,7 +37,7 @@ def _worker(tmp_path: Any, monkeypatch: Any, action: str) -> HookWorker:
 
     monkeypatch.setattr(worker, "_review_native_edge_with_snapshot", slow_review)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker_native._record_unavailable_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native._record_unavailable_native",
         lambda _host, _payload, *, reason_code, **_k: {"unavailable": reason_code},
     )
     monkeypatch.setattr(worker, "_apply_structured_unavailable_overlay", lambda response, **_k: response)
@@ -86,7 +86,7 @@ def _unleased_worker(tmp_path: Any, monkeypatch: Any, tokens: list[object]) -> H
         lambda **_k: ({"policy_action": "allow", "reason_code": "native_allow_fixture"}, True),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker_native_review.published_binding_token",
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native_review.published_binding_token",
         lambda _publisher: tokens.pop(0),
     )
     return worker
@@ -125,7 +125,7 @@ def test_an_unleased_allow_on_an_unchanged_binding_is_delivered(tmp_path, monkey
 
 
 def test_durable_control_token_changes_without_a_publisher_generation_change() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_native_review_fence import published_binding_token
+    from codex_plugin_scanner.guard.hook_review.hook_native_review_fence import published_binding_token
 
     committed = {"epoch": 1, "mutation_revision": 7, "phase": "committed", "effective_digest": "digest-1"}
 
@@ -158,7 +158,7 @@ def test_durable_control_token_changes_without_a_publisher_generation_change() -
 
 
 def test_a_durable_control_read_that_fails_leaves_no_token() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_native_review_fence import published_binding_token
+    from codex_plugin_scanner.guard.hook_review.hook_native_review_fence import published_binding_token
 
     class Publisher:
         def _committed_control_authority(self) -> dict[str, object]:
@@ -174,7 +174,7 @@ def test_a_durable_control_read_that_fails_leaves_no_token() -> None:
 
 
 def test_a_marker_frozen_mid_mutation_leaves_no_token() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_native_review_fence import published_binding_token
+    from codex_plugin_scanner.guard.hook_review.hook_native_review_fence import published_binding_token
 
     marker = {"epoch": 1, "mutation_revision": 8, "phase": "closed", "effective_digest": None}
 
@@ -198,7 +198,7 @@ def test_a_marker_frozen_mid_mutation_leaves_no_token() -> None:
 
 
 def test_a_home_without_control_authority_still_has_a_token() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_native_review_fence import published_binding_token
+    from codex_plugin_scanner.guard.hook_review.hook_native_review_fence import published_binding_token
 
     class Publisher:
         def _committed_control_authority(self) -> None:
