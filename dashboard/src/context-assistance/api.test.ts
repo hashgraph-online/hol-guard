@@ -41,14 +41,14 @@ try {
     assert.ok(attempts.every((attempt) => new Headers(attempt.init?.headers).get("X-Guard-Dashboard-Session") === "context-test-session"));
   }
   for (const action of ["activate", "recheck", "stop"] as const) {
-    const before = calls.length;
+    const before: number = calls.length;
     replies.push({ payload: busy, status: 409 });
     await assert.rejects(controlContextAssistance(action), (error: unknown) =>
       error instanceof ContextAssistanceApiError && error.code === busy.code);
     assert.equal(calls.length, before + 1, "a busy control must never replay itself");
   }
   for (const reply of [{ payload: busy, status: 403 }, { payload: { code: "native_context_assistance_context_scope_denied" }, status: 409 }]) {
-    const before = calls.length;
+    const before: number = calls.length;
     replies.push(reply);
     await assert.rejects(fetchContextAssistance(), ContextAssistanceApiError);
     assert.equal(calls.length, before + 1, "other refusals must not retry");
