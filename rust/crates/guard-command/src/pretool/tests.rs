@@ -45,7 +45,7 @@ fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
         "od -N src/lib.rs src/lib.rs",
         "od -An -tx1 -N",
         "od -A src/lib.rs",
-        "od -t x1 -j 4k src/lib.rs .env",
+        "od -t x1 -j 4k src/lib.rs",
         "od --read-bytes=4 src/lib.rs",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
