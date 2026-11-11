@@ -202,6 +202,6 @@
   "saferAlternatives": [
     "Set LINKEDIN_READ_ONLY=1 to block every write tool in the server itself; reads keep working.",
     "Use plan or dry_run to preview writes (field diffs, rendered posts and messages) and keep approve on review.",
-    "Writes are paced and budgeted (AGENTIC_LINKEDIN_BUDGET_PER_SIGNIN, default 3; AGENTIC_LINKEDIN_BUDGET_PER_HOUR, default 60); lower them to cap account activity."
+    "Writes are paced and budgeted (AGENTIC_LINKEDIN_BUDGET_PER_HOUR, default 60); lower it to cap account activity."
   ]
 }
