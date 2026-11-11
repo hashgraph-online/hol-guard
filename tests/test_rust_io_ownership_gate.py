@@ -93,7 +93,7 @@ def test_gate_rejects_python_content_read_on_native_edge(tmp_path: Path) -> None
 
 def test_gate_rejects_native_branch_semantic_fallback(tmp_path: Path) -> None:
     _copy_gate_sources(tmp_path)
-    worker = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+    worker = tmp_path / "src/codex_plugin_scanner/guard/hook_review/hook_worker.py"
     source = worker.read_text(encoding="utf-8")
     marker = "            return self._review_native_edge(\n"
     assert marker in source
@@ -245,7 +245,7 @@ def test_the_remainder_block_says_the_unclassified_io_is_off_the_decision_path(t
     [
         ("src/codex_plugin_scanner/guard/store.py", "<top-level>"),
         ("src/codex_plugin_scanner/guard/cli/commands_hook.py", "cli"),
-        ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "daemon"),
+        ("src/codex_plugin_scanner/guard/hook_review/hook_worker.py", "hook_review"),
     ],
 )
 def test_the_remainder_groups_by_subpackage(path: str, expected: str) -> None:

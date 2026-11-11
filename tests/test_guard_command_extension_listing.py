@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.cli import extension_controls_commands as contro
 from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.command_extension_listing import command_extensions_title
 from codex_plugin_scanner.guard.cli.extension_catalog_reads import CATALOG_LIST_SCHEMA
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardDaemonResponseSchemaError
+from codex_plugin_scanner.guard.native_daemon_client import GuardDaemonRequestError, GuardDaemonResponseSchemaError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
 DELIVERED_ONLY_ID = "command.master-of"

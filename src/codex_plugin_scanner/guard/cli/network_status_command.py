@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.client import (
+from codex_plugin_scanner.guard.native_daemon_client import (
     GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTimeoutError,

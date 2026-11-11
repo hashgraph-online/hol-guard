@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import store_extension_control_authority_transitions as transitions
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -116,9 +116,7 @@ def test_read_only_reads_keep_enforcing_while_a_prepared_row_waits(
     # however long the row has sat there.
     monkeypatch.setattr(store, "_roll_back_abandoned_transition", lambda *_args, **_kwargs: False)
 
-    view = store.read_extension_control_authority_for_registry(
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True
-    )
+    view = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True)
 
     assert view.health is AuthorityHealth.PROTECTED
     assert view.revision == 0

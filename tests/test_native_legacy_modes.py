@@ -9,7 +9,7 @@ import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
 import codex_plugin_scanner.guard.native_runtime_values as native_runtime_values
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import native_mode, native_runtime_status
 from codex_plugin_scanner.guard.store import GuardStore
 

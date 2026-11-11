@@ -122,7 +122,10 @@ fn an_unprovisioned_resident_passes_only_an_unset_gate() {
         answer(&envelope, REQUEST_ID, DIGEST, false, true),
         Some(Gate::Passed(None))
     );
-    assert_eq!(answer(&envelope, REQUEST_ID, DIGEST, true, true), None);
+    assert_eq!(
+        answer(&envelope, REQUEST_ID, DIGEST, true, true),
+        Some(unavailable())
+    );
 }
 
 #[test]
@@ -141,7 +144,10 @@ fn without_the_daemon_session_the_daemon_checks_the_gate() {
 fn a_missing_resident_fails_closed_only_once_the_gate_is_set_up() {
     let home = temp_home("edge-gate-no-resident");
     let config = config(&home, Some(json!(["sid=1"])));
-    assert_eq!(require_high_risk("queue_clear", &Map::new(), &config), None);
+    assert_eq!(
+        require_high_risk("queue_clear", &Map::new(), &config),
+        Some(Gate::Passed(None))
+    );
     std::fs::write(home.join(STATE_FILE), "{}").unwrap();
     assert_eq!(
         require_high_risk("queue_clear", &Map::new(), &config),
@@ -162,7 +168,8 @@ fn clears_the_queue_only_through_the_gate() {
             json!({"error": "invalid_status", "cleared": 0, "status": "open"})
         ))
     );
-    assert_eq!(clear(json!({})), None);
+    // An unset gate with no resident passes, as the daemon's client does.
+    assert!(clear(json!({})).is_some());
     std::fs::write(home.join(STATE_FILE), "{}").unwrap();
     assert_eq!(
         clear(json!({"status": "resolved", "harness": "codex"})),

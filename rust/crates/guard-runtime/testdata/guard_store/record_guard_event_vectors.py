@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 from codex_plugin_scanner.guard.blocked_request_mode import safe_alternative_reason
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = "2026-03-01T12:00:00+00:00"

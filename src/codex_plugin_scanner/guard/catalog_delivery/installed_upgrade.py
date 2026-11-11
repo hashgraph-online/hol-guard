@@ -56,7 +56,7 @@ def migrate_active(store, installed):
         idempotency_key=previous.record_digest,
         nonce=previous.record_digest,
     )
-    from ..daemon.extension_control_prepared import prepare_candidate
+    from ..extension_controls.extension_control_prepared import prepare_candidate
 
     candidate = prepare_candidate(
         store, registry, mutation, effective.layers, managed_revision=effective.managed_revision

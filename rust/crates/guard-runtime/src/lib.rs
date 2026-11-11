@@ -343,7 +343,7 @@ mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
-#[cfg(unix)]
+mod daemon_client;
 mod daemon_edge;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
@@ -364,7 +364,11 @@ mod daemon_lifecycle_text;
 mod daemon_lifecycle_unit_tests;
 #[cfg(test)]
 mod daemon_lifecycle_vectors_tests;
+mod daemon_manage;
 mod daemon_policy_authority;
+mod daemon_recovery;
+mod daemon_recovery_contract;
+mod daemon_recovery_store;
 mod daemon_route_op;
 mod daemon_route_paths;
 mod daemon_route_resolve;
@@ -561,6 +565,7 @@ mod guard_store_local_cli_vectors_tests;
 mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
 mod guard_store_local_once_mint;
+mod guard_store_mcp_policy_requests;
 mod guard_store_mcp_provider_reads;
 #[cfg(test)]
 mod guard_store_mcp_reads_tests;
@@ -614,6 +619,7 @@ mod guard_store_state_ops_vectors_tests;
 mod guard_store_storage_maintenance;
 #[cfg(test)]
 mod guard_store_storage_maintenance_vectors_tests;
+mod guard_store_sync_state;
 mod guard_store_temporary_mcp;
 mod guard_store_tool_call_evidence;
 #[cfg(test)]
@@ -1017,6 +1023,7 @@ mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
+mod supply_chain_bundle_cache_op;
 use guard_runtime_pyjson as pyjson;
 mod receipt_embedded_scripts;
 mod registry_trust;

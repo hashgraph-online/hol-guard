@@ -1,35 +1,15 @@
-//! Native daemon edge (`daemon-edge-v1`).
+//! Native Guard daemon edge: the connection loop behind `daemon-serve`.
 //!
-//! The Guard daemon binds its public loopback port and starts
-//! `guard-runtime daemon-edge --upstream-port P --parent-pid N` with that
-//! listening socket as standard input. The edge accepts every connection on
-//! the socket and relays its bytes to the daemon's private loopback port, so
-//! the daemon's routes can move to this runtime one at a time behind an
-//! address that never changes.
-//!
-//! The relay works at the connection level: it never parses HTTP, so
-//! keep-alive, streaming responses and the daemon's own overload replies pass
-//! through untouched. It only accepts a loopback listener and only connects to
-//! the same loopback address, and the daemon still applies its own loopback and
-//! authentication checks to every request.
-//!
-//! Standard output is one end of a socket pair whose other end only the daemon
-//! holds. The edge exits the moment that end closes, so its port stops
-//! accepting as soon as the daemon dies. The daemon keeps its own copy of the
-//! listening socket open, so connections queued while an edge restarts are not
-//! lost.
-//!
-//! Once the daemon sends its handshake on that socket, the edge also answers
-//! a few token-authenticated store reads itself; see [`reads`].
+//! Every connection on the daemon's loopback port is answered here: the
+//! token-authenticated store reads and writes in [`reads`], and everything
+//! else through [`replay`], which answers natively or refuses.
 //!
 //! A write that makes no progress for [`STALLED_WRITE_TIMEOUT`] ends its
 //! connection, so a peer that stops reading cannot hold a slot. Idle
 //! connections are not affected: the timeout only runs while a write waits.
 
-use std::io::{self, Read, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::os::fd::AsFd;
-use std::os::unix::net::UnixStream;
+use std::io;
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -38,146 +18,28 @@ use std::time::Duration;
 mod auth;
 #[path = "daemon_edge_http.rs"]
 mod http;
+#[path = "daemon_edge_library.rs"]
+mod library;
+#[path = "daemon_edge_lifecycle.rs"]
+pub(crate) mod lifecycle;
 #[path = "daemon_edge_reads.rs"]
 mod reads;
+#[path = "daemon_edge_replay.rs"]
+mod replay;
+#[path = "daemon_edge_serve.rs"]
+pub(crate) mod standalone;
 
 use reads::{NativeReads, Outcome};
 
-pub(crate) const EDGE_COMMAND: &str = "daemon-edge";
-pub(crate) const EDGE_FEATURE: &str = "daemon-edge-v1";
-
-/// Connections relayed at once. Each takes two small threads; further
-/// connections wait in the listen backlog until one closes.
+/// Connections served at once; further connections wait in the listen
+/// backlog until one closes.
 const MAX_ACTIVE_CONNECTIONS: usize = 256;
-const UPSTREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
-const RELAY_THREAD_STACK: usize = 64 * 1024;
 // A connection thread may answer from the store, whose page projections need
-// far more than a relay pump.
+// a deep stack.
 const CONNECTION_THREAD_STACK: usize = 2 * 1024 * 1024;
 const STALLED_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
-
-const EXIT_USAGE: i32 = 2;
-const EXIT_LISTENER: i32 = 3;
-
-#[derive(Debug, PartialEq, Eq)]
-struct EdgeArgs {
-    upstream_port: u16,
-    parent_pid: u32,
-}
-
-pub(crate) fn run(args: &[String]) -> i32 {
-    let Some(parsed) = parse_args(args) else {
-        eprintln!("usage: guard-runtime daemon-edge --upstream-port P --parent-pid N");
-        return EXIT_USAGE;
-    };
-    if std::os::unix::process::parent_id() != parsed.parent_pid {
-        return EXIT_USAGE;
-    }
-    let Some((listener, upstream)) = io::stdin()
-        .as_fd()
-        .try_clone_to_owned()
-        .ok()
-        .map(TcpListener::from)
-        .and_then(|listener| {
-            let upstream = upstream_address(&listener, parsed.upstream_port)?;
-            Some((listener, upstream))
-        })
-    else {
-        eprintln!("daemon-edge: standard input is not a loopback listener");
-        return EXIT_LISTENER;
-    };
-    let Ok(liveness) = io::stdout().as_fd().try_clone_to_owned() else {
-        return EXIT_LISTENER;
-    };
-    let liveness = UnixStream::from(liveness);
-    let reads = Arc::new(NativeReads::new(liveness.try_clone().ok()));
-    watch_parent(liveness, Arc::clone(&reads));
-    match serve(
-        &listener,
-        upstream,
-        MAX_ACTIVE_CONNECTIONS,
-        STALLED_WRITE_TIMEOUT,
-        reads,
-    ) {
-        Ok(()) => 0,
-        Err(error) => {
-            eprintln!("daemon-edge: listener failed: {error}");
-            EXIT_LISTENER
-        }
-    }
-}
-
-fn parse_args(args: &[String]) -> Option<EdgeArgs> {
-    let mut upstream_port = None;
-    let mut parent_pid = None;
-    let mut rest = args.iter();
-    while let Some(flag) = rest.next() {
-        let value = rest.next()?;
-        match flag.as_str() {
-            "--upstream-port" if upstream_port.is_none() => {
-                upstream_port = Some(value.parse::<u16>().ok().filter(|port| *port != 0)?);
-            }
-            "--parent-pid" if parent_pid.is_none() => {
-                parent_pid = Some(value.parse::<u32>().ok().filter(|pid| *pid > 1)?);
-            }
-            _ => return None,
-        }
-    }
-    Some(EdgeArgs {
-        upstream_port: upstream_port?,
-        parent_pid: parent_pid?,
-    })
-}
-
-/// The daemon's private port on the listener's own loopback address, or
-/// `None` when the socket is not a loopback TCP listener.
-fn upstream_address(listener: &TcpListener, upstream_port: u16) -> Option<SocketAddr> {
-    let local = listener.local_addr().ok()?;
-    if !local.ip().is_loopback() || local.port() == upstream_port {
-        return None;
-    }
-    Some(SocketAddr::new(local.ip(), upstream_port))
-}
-
-/// Exits the process as soon as the daemon's end of the liveness socket on
-/// standard output closes. The kernel closes it when the daemon exits for any
-/// reason, so a daemon killed outright leaves no edge accepting on its port.
-///
-/// Each line the daemon writes on the socket is a handshake for [`reads`]; a
-/// line too long to be one is dropped.
-fn watch_parent(liveness: UnixStream, native_reads: Arc<NativeReads>) {
-    let _ = thread::Builder::new()
-        .name("daemon-edge-parent".into())
-        .stack_size(RELAY_THREAD_STACK)
-        .spawn(move || {
-            let mut chunk = [0u8; 4096];
-            let mut line = Vec::new();
-            let mut oversized = false;
-            let mut reader = &liveness;
-            loop {
-                match reader.read(&mut chunk) {
-                    Ok(0) => std::process::exit(0),
-                    Ok(read) => {
-                        for &byte in &chunk[..read] {
-                            if byte == b'\n' {
-                                if !oversized {
-                                    native_reads.accept_handshake(&line);
-                                }
-                                line.clear();
-                                oversized = false;
-                            } else if line.len() < reads::MAX_HANDSHAKE_BYTES {
-                                line.push(byte);
-                            } else {
-                                oversized = true;
-                            }
-                        }
-                    }
-                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(_) => std::process::exit(0),
-                }
-            }
-        });
-}
+/// How long a connection accepted just after start waits for the handshake.
+const HANDSHAKE_WAIT: Duration = Duration::from_secs(2);
 
 struct Slots {
     active: Mutex<usize>,
@@ -210,9 +72,28 @@ impl Slots {
     }
 }
 
+/// The Guard package version the launcher named, which outbound requests
+/// identify themselves with; the runtime's own version until it is set.
+static PACKAGE_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn set_package_version(version: &str) {
+    if !version.is_empty() && version.len() <= 64 {
+        let _ = PACKAGE_VERSION.set(version.to_owned());
+    }
+}
+
+/// `hol-guard/<package version>`, the User-Agent of every outbound request.
+pub(crate) fn user_agent() -> String {
+    format!(
+        "hol-guard/{}",
+        PACKAGE_VERSION
+            .get()
+            .map_or(crate::PACKAGE_VERSION, String::as_str)
+    )
+}
+
 fn serve(
     listener: &TcpListener,
-    upstream: SocketAddr,
     limit: usize,
     stalled_write: Duration,
     native_reads: Arc<NativeReads>,
@@ -246,7 +127,9 @@ fn serve(
             .name("daemon-edge-conn".into())
             .stack_size(CONNECTION_THREAD_STACK)
             .spawn(move || {
-                serve_connection(client, upstream, stalled_write, &connection_reads);
+                connection_reads.begin_connection();
+                serve_connection(client, stalled_write, &connection_reads);
+                connection_reads.end_connection();
                 relay_slots.release();
             });
         if spawned.is_err() {
@@ -262,89 +145,37 @@ fn accept_error_is_transient(error: &io::Error) -> bool {
             | io::ErrorKind::ConnectionAborted
             | io::ErrorKind::ConnectionReset
             | io::ErrorKind::WouldBlock
-    ) || matches!(
-        error.raw_os_error(),
+    ) || resource_exhausted(error.raw_os_error())
+}
+
+#[cfg(unix)]
+fn resource_exhausted(code: Option<i32>) -> bool {
+    matches!(
+        code,
         Some(libc::EMFILE | libc::ENFILE | libc::ENOBUFS | libc::ENOMEM)
     )
 }
 
-/// Answers one connection's request natively when it can, and relays the
-/// connection to the daemon otherwise.
-fn serve_connection(
-    client: TcpStream,
-    upstream: SocketAddr,
-    stalled_write: Duration,
-    native_reads: &NativeReads,
-) {
-    let read_ahead = match native_reads.config() {
-        Some(config) => match reads::answer(&client, &config, native_reads, stalled_write) {
-            Outcome::Answered => return,
-            Outcome::Relay(bytes) => bytes,
-        },
-        None => Vec::new(),
-    };
-    relay_connection(client, upstream, stalled_write, &read_ahead);
+/// `WSAEMFILE` and `WSAENOBUFS`.
+#[cfg(windows)]
+fn resource_exhausted(code: Option<i32>) -> bool {
+    matches!(code, Some(10024 | 10055))
 }
 
-/// Relays one connection both ways until each side has finished, sending
-/// `read_ahead`, the bytes already read from the client, first.
-fn relay_connection(
-    client: TcpStream,
-    upstream: SocketAddr,
-    stalled_write: Duration,
-    read_ahead: &[u8],
-) {
-    let Ok(server) = TcpStream::connect_timeout(&upstream, UPSTREAM_CONNECT_TIMEOUT) else {
+/// Answers one connection's request.
+fn serve_connection(client: TcpStream, stalled_write: Duration, native_reads: &NativeReads) {
+    let mut config = native_reads.config();
+    let deadline = std::time::Instant::now() + HANDSHAKE_WAIT;
+    while config.is_none() && std::time::Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(20));
+        config = native_reads.config();
+    }
+    let Some(config) = config else {
         let _ = client.shutdown(Shutdown::Both);
         return;
     };
-    let _ = client.set_nodelay(true);
-    let _ = server.set_nodelay(true);
-    if client.set_write_timeout(Some(stalled_write)).is_err()
-        || server.set_write_timeout(Some(stalled_write)).is_err()
+    if let Outcome::Relay(read_ahead) = reads::answer(&client, &config, native_reads, stalled_write)
     {
-        let _ = client.shutdown(Shutdown::Both);
-        let _ = server.shutdown(Shutdown::Both);
-        return;
+        replay::replay(&client, &config, read_ahead, stalled_write);
     }
-    if !read_ahead.is_empty() && (&server).write_all(read_ahead).is_err() {
-        let _ = client.shutdown(Shutdown::Both);
-        let _ = server.shutdown(Shutdown::Both);
-        return;
-    }
-    let (Ok(client_reader), Ok(server_writer)) = (client.try_clone(), server.try_clone()) else {
-        let _ = client.shutdown(Shutdown::Both);
-        let _ = server.shutdown(Shutdown::Both);
-        return;
-    };
-    // Requests: the client may half-close after its last request and still
-    // read the answer, so only the daemon's read side is closed here.
-    let request = thread::Builder::new()
-        .name("daemon-edge-req".into())
-        .stack_size(RELAY_THREAD_STACK)
-        .spawn(move || {
-            let mut reader = &client_reader;
-            let mut writer = &server_writer;
-            let _ = io::copy(&mut reader, &mut writer);
-            let _ = server_writer.shutdown(Shutdown::Write);
-        });
-    let Ok(request) = request else {
-        let _ = client.shutdown(Shutdown::Both);
-        let _ = server.shutdown(Shutdown::Both);
-        return;
-    };
-    // Responses: once the daemon has finished it reads nothing more, so the
-    // whole connection closes and the request copy above stops too.
-    {
-        let mut reader = &server;
-        let mut writer = &client;
-        let _ = io::copy(&mut reader, &mut writer);
-    }
-    let _ = client.shutdown(Shutdown::Both);
-    let _ = server.shutdown(Shutdown::Both);
-    let _ = request.join();
 }
-
-#[cfg(test)]
-#[path = "daemon_edge_tests.rs"]
-mod tests;

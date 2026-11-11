@@ -10,8 +10,8 @@ import pytest
 from codex_plugin_scanner.guard import native_context_assistance as native
 from codex_plugin_scanner.guard.cli import commands_router
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_parser, add_guard_root_parser
-from codex_plugin_scanner.guard.daemon import context_assistance_http as http
-from codex_plugin_scanner.guard.daemon import context_assistance_versions_http as version_http
+from codex_plugin_scanner.guard.routes import context_assistance_http as http
+from codex_plugin_scanner.guard.routes import context_assistance_versions_http as version_http
 
 
 def state():

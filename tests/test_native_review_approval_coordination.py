@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 from tests.native_review_evidence_support import with_review_evidence
@@ -116,7 +116,7 @@ def _worker(
         return with_review_evidence(rendered, **kwargs)
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         review_raw_hook_native,
     )
     store = GuardStore(tmp_path / "guard-home")

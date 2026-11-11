@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import store as store_module
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from codex_plugin_scanner.guard.store import GuardStore

@@ -26,8 +26,8 @@ from codex_plugin_scanner.guard.catalog_delivery import (
 )
 from codex_plugin_scanner.guard.catalog_delivery.authority import VerifiedDistribution
 from codex_plugin_scanner.guard.catalog_delivery.lifecycle import NativePackLifecycleUnavailableError
-from codex_plugin_scanner.guard.daemon import background_diagnostics
-from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
+from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics
 
 
 @pytest.fixture

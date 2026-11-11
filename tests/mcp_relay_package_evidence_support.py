@@ -15,7 +15,7 @@ from typing import Any, ClassVar
 import pytest
 
 from codex_plugin_scanner.guard import mcp_tool_calls, native_mcp_tool_call_identity
-from codex_plugin_scanner.guard.daemon import mcp_relay_package_evidence_drain
+from codex_plugin_scanner.guard.evidence_drains import mcp_relay_package_evidence_drain
 from codex_plugin_scanner.guard.proxy import runtime_mcp_projection
 from codex_plugin_scanner.guard.runtime import package_intent_common, package_intent_parser
 

@@ -597,15 +597,18 @@ fn skill_reference(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("skill://") else {
         return false;
     };
-    let token = |part: &str| {
-        !part.is_empty()
-            && part.len() <= 128
-            && !part.starts_with('.')
-            && part
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-    };
-    rest.len() <= 512 && rest.split('/').all(token)
+    rest.len() <= 512 && rest.split('/').all(host_name_token)
+}
+
+/// One `/`-separated part of a `skill://` or `local://` name: a bounded,
+/// non-hidden run of letters, digits, `-`, `_` and `.`.
+fn host_name_token(part: &str) -> bool {
+    !part.is_empty()
+        && part.len() <= 128
+        && !part.starts_with('.')
+        && part
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 /// Reason code for host-held reference selectors, `None` for real paths.
@@ -616,9 +619,29 @@ pub(super) fn host_reference_reason(value: &str) -> Option<&'static str> {
         Some("native_omp_skill_read")
     } else if proc_reference(value) {
         Some("native_omp_proc_read")
+    } else if local_reference(value) {
+        Some("native_omp_local_read")
     } else {
         None
     }
+}
+
+/// `local://` lists the session's scratch root and `local://<name>` reads one
+/// file in it, such as the `paste-N.md` a large paste becomes or a plan the
+/// session wrote. The host resolves the name under that root and refuses any
+/// target outside it; the name here is also bounded tokens joined by `/`, so
+/// `..`, absolute, hidden, `~` and percent-encoded names stay reviewed. An
+/// optional line range or `raw` follows, as for `artifact://`.
+fn local_reference(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("local://") else {
+        return false;
+    };
+    if rest.is_empty() {
+        return true;
+    }
+    let mut chunks = rest.split(':');
+    let name = chunks.next().unwrap_or_default();
+    rest.len() <= 512 && name.split('/').all(host_name_token) && selector_chunks_ok(chunks)
 }
 
 /// `artifact://<digits>` names an Oh My Pi session artifact, never a path.

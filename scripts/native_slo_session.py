@@ -16,7 +16,7 @@ from http.client import HTTPConnection, HTTPException, HTTPResponse
 from pathlib import Path
 from typing import cast
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from codex_plugin_scanner.guard.native_runtime import native_runtime_health
 from codex_plugin_scanner.guard.store import GuardStore
@@ -286,7 +286,7 @@ class AdapterSession:
         except BaseException:
             # Capture only aggregate capacity before close() withdraws it.
             with suppress(Exception):
-                stats = self.daemon._server.runtime_hook_scheduler.stats()
+                stats = self.daemon.hook_capacity()
                 counters = {
                     name: value
                     for name in ("active", "active_limit", "queued", "queued_limit", "expired", "cancelled")
@@ -391,9 +391,6 @@ class AdapterSession:
                 self.daemon.stop()
                 self.daemon_stop_contained = getattr(self.daemon, "_finish_service_completed", False) is True
             finally:
-                deadline = time.monotonic() + 2.0
-                while getattr(self.daemon._server, "active_hook_requests", 0) > 0 and time.monotonic() < deadline:
-                    time.sleep(0.01)
                 # An earlier strict failure remains authoritative even when
                 # final cleanup later succeeds. Recovery measurements still
                 # call stop_resident explicitly with their original order.

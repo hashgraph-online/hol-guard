@@ -8,7 +8,7 @@ use super::{clean, Hunk};
 /// The longest definition shown, and the most characters of all of them.
 const MAX_LINES: usize = 40;
 const MAX_CODE: usize = 2_500;
-const TITLE: &str = "Changed definitions as they read now:";
+pub(super) const TITLE: &str = "Changed definitions as they read now:";
 
 /// The lines a change covers in the current text: the first to the last it
 /// adds, or the line it removes at.
@@ -30,7 +30,7 @@ pub(super) fn holding(found: &[Section], (start, end): (usize, usize)) -> Option
 
 /// The current numbers of the lines a change adds, or the line it removes
 /// at when it adds none.
-fn touched(hunk: &Hunk) -> Vec<usize> {
+pub(super) fn touched(hunk: &Hunk) -> Vec<usize> {
     let mut at = hunk.start.max(1);
     let mut added = Vec::new();
     let mut removed = None;

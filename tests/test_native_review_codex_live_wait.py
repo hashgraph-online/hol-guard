@@ -25,9 +25,9 @@ from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalida
 from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer
 from codex_plugin_scanner.guard.continuation_payload import offer_hash
 from codex_plugin_scanner.guard.continuation_runtime import _live_hook_recorded_offer
+from codex_plugin_scanner.guard.continuation_runtime_local import apply_local_approval_continuation
 from codex_plugin_scanner.guard.continuation_snapshot import validated_continuation_snapshot
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.local_approval_continuation import apply_local_approval_continuation
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.live_process_identity import (
     CODEX_BROWSER_WAIT_PROCESS_KEY,
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -86,7 +86,9 @@ def _hook_worker(
         }
         return with_review_evidence(edge, **kwargs)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", review_raw_hook_native)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", review_raw_hook_native
+    )
     store = GuardStore(tmp_path / "guard-home")
     update_guard_settings(
         store.guard_home, {"blocked_request_mode": blocked_request_mode, "approval_wait_timeout_seconds": 300}

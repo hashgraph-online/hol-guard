@@ -392,12 +392,12 @@ def test_lease_timeout_reports_unavailability_rather_than_a_verdict(tmp_path: Pa
 
 
 def _startup_view_with_store(store: object) -> object:
-    from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHTTPServer
+    from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
     from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
-    server = object.__new__(_GuardDaemonHTTPServer)
+    server = object.__new__(ExtensionControlHost)
     server.store = store  # type: ignore[attr-defined]
-    return _GuardDaemonHTTPServer._startup_extension_control_view(server, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    return ExtensionControlHost._startup_view(server, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
 
 
 def test_daemon_startup_falls_back_to_a_shared_read_when_the_lease_is_busy() -> None:
@@ -531,8 +531,8 @@ def test_acknowledging_degraded_mode_refuses_an_unread_authority() -> None:
 
     import pytest
 
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
-    from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
     from codex_plugin_scanner.guard.runtime.extension_control_authority import (
         AuthorityHealth,
         ExtensionControlAuthorityView,
@@ -567,7 +567,7 @@ def test_acknowledging_degraded_mode_refuses_an_unread_authority() -> None:
 def test_refresh_serves_the_held_snapshot_when_the_lease_is_busy(monkeypatch: pytest.MonkeyPatch) -> None:
     """A busy lease leaves the refresh without a reading; the route still answers."""
 
-    from codex_plugin_scanner.guard.daemon import extension_control_api as api_module
+    from codex_plugin_scanner.guard.extension_controls import extension_control_api as api_module
     from codex_plugin_scanner.guard.runtime.extension_control_authority import (
         AuthorityHealth,
         ExtensionControlAuthorityView,

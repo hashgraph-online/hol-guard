@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard import workspace_runtime_findings as runtimes
-from codex_plugin_scanner.guard.daemon import workspace_assessment_api as api
+from codex_plugin_scanner.guard.routes import workspace_assessment_api as api
 from codex_plugin_scanner.guard.native_package_audit_projection import SupplyChainProjection
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.workspace_fix_support import admit_worktree, get_run

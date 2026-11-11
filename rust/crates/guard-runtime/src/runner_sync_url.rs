@@ -111,7 +111,7 @@ fn hex_value(byte: u8) -> Option<u8> {
 }
 
 /// `urllib.parse.unquote` (UTF-8, `errors="replace"`).
-fn unquote(text: &str) -> String {
+pub(crate) fn unquote(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut index = 0;

@@ -326,7 +326,7 @@ def test_doctor_without_an_ai_tool_asks_to_connect_again_after_revocation(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import cloud_actions_status
+    from codex_plugin_scanner.guard.cloud_control import cloud_actions_status
     from codex_plugin_scanner.guard.runtime import runner
 
     def refresh(_store: object, *, force_refresh: bool = False, **_kwargs: object) -> dict[str, object]:

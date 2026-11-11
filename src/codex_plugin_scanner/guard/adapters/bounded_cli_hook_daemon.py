@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ..daemon.auth_token import load_guard_daemon_auth_token as _read_daemon_auth_token
+from ..native_daemon_manage import load_guard_daemon_auth_token as _read_daemon_auth_token
 from ..private_file_io import read_private_regular_text
 from .bounded_cli_hook_envelope import _event_name, _json_object
 from .bounded_cli_hook_failure import failure_payload, grok_observe_event

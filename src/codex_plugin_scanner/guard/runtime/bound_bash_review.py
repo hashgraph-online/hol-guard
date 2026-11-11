@@ -21,7 +21,7 @@ def queue_bound_bash_review(
     home: Path,
     errors: TextIO,
 ) -> None:
-    from ..daemon.hook_native_review_approval import queue_native_pre_tool_review
+    from ..hook_review.hook_native_review_approval import queue_native_pre_tool_review
 
     review = prepared["review"]
     if (

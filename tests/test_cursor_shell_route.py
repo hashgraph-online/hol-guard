@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import cursor_shell_route as route
+from codex_plugin_scanner.guard.hook_review import cursor_shell_route as route
 
 _SHELL = {"hook_event_name": "PreToolUse", "tool_name": "Shell", "tool_input": {"command": "pytest -q"}}
 _PROBE = {**_SHELL, "cursor_route_probe": True}

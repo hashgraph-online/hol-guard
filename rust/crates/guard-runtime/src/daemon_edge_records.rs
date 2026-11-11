@@ -220,7 +220,7 @@ fn integral(value: &Value) -> bool {
 }
 
 /// `datetime.now(timezone.utc).isoformat(timespec="microseconds")`.
-fn now_isoformat() -> Option<String> {
+pub(super) fn now_isoformat() -> Option<String> {
     let micros = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
@@ -234,6 +234,6 @@ fn now_isoformat() -> Option<String> {
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_records_tests.rs"]
 mod tests;

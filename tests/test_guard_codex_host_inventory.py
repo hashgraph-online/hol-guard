@@ -289,7 +289,7 @@ def test_host_refresh_failure_is_visible_and_logs_only_reason_code(tmp_path, mon
 
 
 def test_failed_host_snapshot_marks_background_job_failed(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
     from codex_plugin_scanner.guard.store import GuardStore
 
     def fail(**_kwargs):
@@ -339,7 +339,7 @@ def test_shared_depth_scanner_keeps_each_rpc_limit_and_ignores_string_brackets()
 
 
 def test_background_host_inventory_is_not_persisted_or_enrolled_as_a_grant(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
     from codex_plugin_scanner.guard.store import GuardStore
 
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
@@ -368,7 +368,7 @@ def test_background_host_inventory_is_not_persisted_or_enrolled_as_a_grant(tmp_p
 
 
 def test_stalled_host_snapshot_does_not_delay_configured_discovery(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
     from codex_plugin_scanner.guard.store import GuardStore
 
     store = GuardStore(tmp_path / "guard")

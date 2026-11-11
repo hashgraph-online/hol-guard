@@ -1,6 +1,10 @@
 //! The words, quoted phrases and file names a typed prompt gives, which the
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
+use paths::without_paths;
+
+#[path = "context_assistance_prompt_paths.rs"]
+mod paths;
 
 pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
@@ -14,6 +18,7 @@ const MAX_PHRASE_CHARS: usize = 80;
 /// `MAX_NAMED_MATCHES` files with that name.
 pub(crate) const MAX_NAMED: usize = 4;
 const TEST_WORDS: &[&str] = &["test", "tests", "spec", "e2e", "testing"];
+pub(crate) const TEST_DIRS: &[&str] = &["test", "tests", "__tests__", "spec", "e2e"];
 const STOP_WORDS: &[&str] = &[
     "about", "add", "after", "again", "all", "already", "also", "and", "any", "are", "because",
     "been", "before", "being", "both", "build", "but", "can", "cannot", "change", "could",
@@ -102,8 +107,9 @@ pub(crate) fn terms(prompt: &str) -> Vec<String> {
 
 /// The prompt's `terms`, each marked when the prompt wrote it whole as a
 /// name (`case_sensitive`, `IntRange`), not as a plain word or a piece of a
-/// name.
+/// name. An absolute path such as `/tmp/run-1/out.log` gives none.
 pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
+    let prompt = &without_paths(prompt);
     let mut code: Vec<(String, bool)> = Vec::new();
     let mut plain: Vec<(String, bool)> = Vec::new();
     for (word, shaped) in words(prompt) {
@@ -238,8 +244,9 @@ fn file_name(token: &str) -> Option<(&str, &str)> {
 
 /// The names the prompt writes as code, spelled as written: `_batched`,
 /// which `terms` reads as `batched`, and each dotted name whole as well
-/// (`peekable.prepend`), which names a member.
+/// (`peekable.prepend`), which names a member. An absolute path gives none.
 pub(crate) fn spellings(prompt: &str) -> Vec<String> {
+    let prompt = &without_paths(prompt);
     let dotted = (spans(prompt).into_iter())
         .flat_map(|(span, _)| tokens(span))
         .map(|token| token.trim_matches(['.', '-', '/']))
@@ -292,6 +299,22 @@ pub(crate) fn named(prompt: &str) -> Vec<String> {
 /// True when the search terms ask about tests.
 pub(crate) fn asks_for_tests(terms: &[String]) -> bool {
     terms.iter().any(|term| TEST_WORDS.contains(&term.as_str()))
+}
+
+/// A test or spec file by its usual name or folder in common languages.
+pub(crate) fn test_file(relative: &str) -> bool {
+    let lower = relative.to_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or(&lower);
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    lower.split('/').any(|part| TEST_DIRS.contains(&part))
+        || name.contains(".test.")
+        || name.contains(".spec.")
+        || stem.starts_with("test_")
+        || stem.ends_with("_test")
+        || stem.ends_with("_tests")
+        || stem.ends_with("_spec")
+        || stem == "test"
+        || stem == "tests"
 }
 
 fn prompt_mentions_tests(prompt: &str) -> bool {

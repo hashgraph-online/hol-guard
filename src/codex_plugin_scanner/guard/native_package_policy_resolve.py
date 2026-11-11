@@ -105,7 +105,7 @@ def _hydrate(
             break
     authority = None
     if decision is None and ignored_integrity is not None:
-        from .daemon.policy_authority_client import resolve_package_policy
+        from .hook_review.policy_authority_client import resolve_package_policy
 
         resolution = resolve_package_policy(
             guard_home=store.guard_home,
@@ -162,7 +162,7 @@ def _hydrate(
 
 def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: Any, now: str) -> bool:
     if kind == "daemon" and authority is not None:
-        from .daemon.policy_authority_client import claim_package_policy
+        from .hook_review.policy_authority_client import claim_package_policy
 
         return claim_package_policy(authority, decision)
     if kind == "exact_cloud":

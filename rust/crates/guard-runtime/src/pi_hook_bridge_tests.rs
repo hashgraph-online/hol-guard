@@ -58,7 +58,7 @@ fn configs_name_a_pi_harness_an_absolute_home_a_plain_query_and_a_bounded_timeou
         ("timeout_ms", Some(json!("3100"))),
     ] {
         assert_eq!(
-            parse_config(&config_text(&[change.clone()])),
+            parse_config(&config_text(std::slice::from_ref(&change))),
             None,
             "{change:?}"
         );

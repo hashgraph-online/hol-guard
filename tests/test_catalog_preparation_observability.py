@@ -19,8 +19,8 @@ import pytest
 
 from codex_plugin_scanner.guard import native_catalog_read as native
 from codex_plugin_scanner.guard.catalog_delivery import current_refresh, discovery, installed_bundle
-from codex_plugin_scanner.guard.daemon import background_diagnostics
-from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
+from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics
 
 
 @pytest.fixture

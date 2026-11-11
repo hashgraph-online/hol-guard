@@ -7,8 +7,8 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_lean_sessions as lean
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import codex_lean_http
-from codex_plugin_scanner.guard.daemon import context_assistance_http as http
+from codex_plugin_scanner.guard.routes import codex_lean_http
+from codex_plugin_scanner.guard.routes import context_assistance_http as http
 
 
 class _Handler:

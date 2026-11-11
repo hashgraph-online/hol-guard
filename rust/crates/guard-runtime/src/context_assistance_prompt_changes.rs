@@ -29,14 +29,13 @@ use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+pub(super) use used::Changed;
 
 /// The most this note adds to a prompt, commit diffs included.
 const BUDGET: usize = 2_000;
 /// The longest commit diff shown.
 const MAX_SHOWN_DIFF: usize = 1_500;
 const MAX_SESSIONS: usize = 64;
-/// A Git call starts only with at least this much of the wait left.
-const MIN_LEFT: Duration = Duration::from_millis(150);
 /// The longest one secret scan of a part or subject may take.
 const SCAN_TIME: Duration = Duration::from_millis(50);
 const GLOBAL: [&str; 4] = [
@@ -104,7 +103,7 @@ pub(super) fn since_start(
     session: Option<&Session>,
     prompt: &str,
     until: Instant,
-) -> Option<String> {
+) -> Option<Changed> {
     let mut git = None;
     let mut base = session.and_then(recorded);
     if let (Some(session), None) = (session, &base) {
@@ -121,9 +120,10 @@ pub(super) fn since_start(
         (None, Some(base)) => Since::Start(base),
         (None, None) => Since::Nothing,
     };
-    changes(&git, since, about_others(prompt), until, |paths| {
+    let changed = changes(&git, since, about_others(prompt), until, |paths| {
         screened_texts(guard_home, root, app, paths, paths.len(), until)
-    })
+    })?;
+    Some(fix::led(changed, parent.is_some(), prompt, root))
 }
 
 /// A trusted Git, run in one project with a bare environment.
@@ -147,8 +147,11 @@ impl Git {
         })
     }
 
+    /// Runs `git` with `arguments` while the note's share of the wait lasts.
+    /// A call that starts is bounded by Git's own timeout. The share is short,
+    /// so asking for part of it to be left let only the first calls start.
     fn run(&self, arguments: &[&str], until: Instant) -> Option<String> {
-        if until.saturating_duration_since(Instant::now()) < MIN_LEFT {
+        if Instant::now() >= until {
             return None;
         }
         let all: Vec<&str> = GLOBAL.iter().chain(arguments).copied().collect();
@@ -351,7 +354,7 @@ pub(super) fn changes(
     show_diffs: bool,
     until: Instant,
     screen: impl FnOnce(&[String]) -> Vec<(String, String)>,
-) -> Option<String> {
+) -> Option<Changed> {
     let allowed = allowed(git, until);
     if allowed == Allowed::Nothing {
         return None;
@@ -440,14 +443,16 @@ pub(super) fn changes(
     }
     let pending = pending.map(|names| Named::new(&names, &readable));
     let back = (!against.is_empty() && !back.is_empty()).then(|| Named::new(&back, &readable));
-    render(
+    let text = render(
         since,
         &changed,
         &texts,
         &listed,
         [pending.as_ref(), back.as_ref()],
         whole.as_ref(),
-    )
+    )?;
+    let names = used::names(&changed, &texts);
+    Some(Changed { text, names })
 }
 
 /// Whether every file `diff` changes is one Guard's read accepted. A file
@@ -481,8 +486,14 @@ fn clean(text: &str) -> bool {
 
 #[path = "context_assistance_prompt_changes_code.rs"]
 mod code;
+#[path = "context_assistance_prompt_changes_fix.rs"]
+mod fix;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
+#[path = "context_assistance_prompt_changes_removed.rs"]
+pub(super) mod removed;
+#[path = "context_assistance_prompt_changes_used.rs"]
+pub(super) mod used;
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_changes_tests.rs"]

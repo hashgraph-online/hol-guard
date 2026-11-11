@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import approvals, mcp_tool_calls, native_mcp_tool_call_identity
-from codex_plugin_scanner.guard.daemon.mcp_relay_evidence_drain import _decision, record_mcp_relay_evidence
+from codex_plugin_scanner.guard.evidence_drains.mcp_relay_evidence_drain import _decision, record_mcp_relay_evidence
 from codex_plugin_scanner.guard.proxy import runtime_mcp, runtime_mcp_projection
 from codex_plugin_scanner.guard.tool_decision_evidence import tool_decision_scanner_evidence
 

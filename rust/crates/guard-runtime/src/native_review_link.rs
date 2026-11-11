@@ -165,6 +165,8 @@ const HANDOFF_VERSION: &str = "guard-approval-link.v1";
 const HANDOFF_TTL_SECONDS: i64 = 12 * 60 * 60;
 const HANDOFF_MAC_BYTES: usize = 16;
 const HANDOFF_MAC_HEX: usize = HANDOFF_MAC_BYTES * 2;
+/// `_CLOCK_SKEW_SECONDS` (`approval_handoff_link.py`).
+const HANDOFF_CLOCK_SKEW_SECONDS: i64 = 60;
 
 /// `build_approval_handoff_url`: `<origin>/requests/<id>/<expires>-<mac>` for
 /// a bare request link. Agents relay this whole; they drop the long session
@@ -186,6 +188,83 @@ fn handoff_url(url: &str, auth_token: &str, now_micros: i64) -> Option<String> {
     let digest = mac.finalize().into_bytes();
     let code = hex::encode(digest.get(..HANDOFF_MAC_BYTES)?);
     Some(format!("{url}/{expires}-{code}"))
+}
+
+/// `approval_handoff_location`: where `/requests/<id>/<code>` lands. A valid
+/// code opens the request page with an approval session bound to that
+/// request, started when the code was issued and ending when it does; any
+/// other code lands on the unsigned page. `None` when `path` is not a short
+/// link.
+pub(crate) fn handoff_location(path: &str, auth_key: &str, now_micros: i64) -> Option<String> {
+    let rest = path.strip_prefix("/requests/")?;
+    let (request_id, code) = rest.split_once('/')?;
+    if request_id.len() != 32
+        || !request_id
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        || code.is_empty()
+        || code.contains('/')
+    {
+        return None;
+    }
+    let page = format!("/requests/{request_id}");
+    let Some(expires) = handoff_code_expiry(request_id, code, auth_key, now_micros) else {
+        return Some(page);
+    };
+    let remaining = (expires * 1_000_000 - now_micros)
+        .div_euclid(1_000_000)
+        .max(1);
+    let started = micros_to_utc_isoformat((expires - HANDOFF_TTL_SECONDS) * 1_000_000, "+00:00")?;
+    let ends = micros_to_utc_isoformat(now_micros.checked_add(remaining * 1_000_000)?, "+00:00")?;
+    let payload = format!(
+        "{{\"aud\":\"{SESSION_AUDIENCE}\",\"version\":\"{SESSION_VERSION}\",\"surface\":\"{APPROVAL_CENTER_SURFACE}\",\"expires_at\":\"{ends}\",\"session_started_at\":\"{started}\",\"request_id\":\"{request_id}\"}}"
+    );
+    let encoded = Base64UrlUnpadded::encode_string(payload.as_bytes());
+    let mut mac = <Hmac<Sha256>>::new_from_slice(auth_key.as_bytes()).ok()?;
+    mac.update(encoded.as_bytes());
+    let signature = Base64UrlUnpadded::encode_string(&mac.finalize().into_bytes());
+    Some(format!(
+        "{page}#guard-{}={SESSION_PREFIX}.{encoded}.{signature}",
+        "token"
+    ))
+}
+
+/// `handoff_code_expiry`: the signed expiry, in seconds, of a valid
+/// `<expires>-<mac>` code for `request_id`.
+fn handoff_code_expiry(
+    request_id: &str,
+    code: &str,
+    auth_key: &str,
+    now_micros: i64,
+) -> Option<i64> {
+    let (digits, presented) = code.split_once('-')?;
+    if !(1..=12).contains(&digits.len())
+        || !digits.bytes().all(|byte| byte.is_ascii_digit())
+        || presented.len() != HANDOFF_MAC_HEX
+        || !presented
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+    {
+        return None;
+    }
+    let expires: i64 = digits.parse().ok()?;
+    let expires_micros = expires.checked_mul(1_000_000)?;
+    let latest =
+        now_micros.checked_add((HANDOFF_TTL_SECONDS + HANDOFF_CLOCK_SKEW_SECONDS) * 1_000_000)?;
+    if expires_micros <= now_micros || expires_micros > latest {
+        return None;
+    }
+    let mut mac = <Hmac<Sha256>>::new_from_slice(auth_key.as_bytes()).ok()?;
+    mac.update(format!("{HANDOFF_VERSION}\n{request_id}\n{expires}").as_bytes());
+    let digest = mac.finalize().into_bytes();
+    let expected = hex::encode(digest.get(..HANDOFF_MAC_BYTES)?);
+    crate::resident_transport::constant_time_eq(expected.as_bytes(), presented.as_bytes())
+        .then_some(expires)
+}
+
+#[cfg(test)]
+pub(crate) fn handoff_url_for_tests(url: &str, auth_key: &str, now_micros: i64) -> Option<String> {
+    handoff_url(url, auth_key, now_micros)
 }
 
 /// Whether `reason` already carries `review_url` as a short signed link:

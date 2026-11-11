@@ -154,7 +154,7 @@ class GuardMCPServer:
         origin via the pure registry parser.
         """
         try:
-            from ..daemon.manager import read_approval_center_locator
+            from ..native_daemon_manage import read_approval_center_locator
         except Exception:
             return None
 

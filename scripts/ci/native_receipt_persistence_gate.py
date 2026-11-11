@@ -132,7 +132,7 @@ def _validate_receipt_decoder_and_handoff(root: Path) -> None:
 
 
 def _validate_hook_routes(root: Path) -> None:
-    native_worker = _read(root, "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py")
+    native_worker = _read(root, "src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py")
     _contains_all(native_worker, ("_record_native_decision_receipt", 'edge.get("receipt")'), "HookWorker receipt route")
     cli = _read(root, "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py")
     _contains_all(

@@ -354,7 +354,7 @@ impl Writer<'_> {
         let previous = query_one(
             connection,
             "select identity_hash, state from local_cli_grant where cli_id = ?",
-            &[cli_id.clone()],
+            std::slice::from_ref(&cli_id),
         )?;
         let same_allowed = update.state == "allowed"
             && previous.as_ref().is_some_and(|row| {
@@ -368,7 +368,7 @@ impl Writer<'_> {
             exec(
                 connection,
                 "delete from local_cli_grant_capability where cli_id = ?",
-                &[cli_id.clone()],
+                std::slice::from_ref(&cli_id),
             )?;
         }
         if update.state == "unset" {
@@ -380,7 +380,7 @@ impl Writer<'_> {
                 exec(
                     connection,
                     &format!("delete from {table} where cli_id = ?"),
-                    &[cli_id.clone()],
+                    std::slice::from_ref(&cli_id),
                 )?;
             }
         } else {
@@ -415,7 +415,7 @@ impl Writer<'_> {
                     exec(
                         connection,
                         "delete from local_cli_command_grant where cli_id = ?",
-                        &[cli_id.clone()],
+                        std::slice::from_ref(&cli_id),
                     )?;
                 }
                 self.write_command_states(update.cli_id, states)?;

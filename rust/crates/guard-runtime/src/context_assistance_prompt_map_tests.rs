@@ -125,13 +125,12 @@ fn tests_docs_and_the_newest_changelog_section_follow_the_source() {
 Version 8.1.0\n-------------\n\n- Old case_sensitive fix.\n";
     let asked = Asked {
         docs: true,
+        docstring: false,
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let text = map(
         &files(&[
@@ -425,13 +424,12 @@ fn a_named_changelog_stays_on_the_map() {
     assert!(!unnamed.text.contains("CHANGES.rst"), "{}", unnamed.text);
     let asked = Asked {
         docs: false,
+        docstring: false,
         changelog: false,
         named: vec!["CHANGES.rst".into()],
         changes: false,
         everywhere: false,
-        earlier: Vec::new(),
-        spellings: Vec::new(),
-        renames: Vec::new(),
+        ..Asked::default()
     };
     let named = map(&list, &terms, &asked, later()).unwrap();
     assert!(
