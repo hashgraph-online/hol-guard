@@ -12,8 +12,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from codex_plugin_scanner.guard.shim_refresh import (
-    _existing_shim_harnesses,
-    _launcher_map,
+    _refresh_plan,
+    _shim_entries,
     refresh_stale_harness_shims,
 )
 from codex_plugin_scanner.guard.shims import _build_python_shim, install_guard_shim
@@ -44,21 +44,24 @@ class ShimRefreshTest(unittest.TestCase):
         install_guard_shim(harness, self._context(workspace_dir))
         return self.guard_home / "bin" / f"guard-{harness}"
 
-    def test_launcher_map_resolves_legacy_names(self) -> None:
-        mapping = _launcher_map()
-        self.assertEqual(mapping["claude"], ("claude-code", "claude"))
-        self.assertEqual(mapping["claude-code"], ("claude-code", "claude"))
-        self.assertEqual(mapping["cursor-agent"], ("cursor", "cursor-agent"))
-        self.assertEqual(mapping["cursor"], ("cursor", "cursor-agent"))
-        self.assertEqual(mapping["kimi"], ("kimi", "kimi"))
+    def test_plan_resolves_legacy_names(self) -> None:
+        steps = {
+            step["name"]: (step["action"], step.get("harness"), step.get("canonical"))
+            for step in _refresh_plan(["guard-claude", "guard-claude-code", "guard-cursor", "guard-kimi"])
+        }
+        self.assertEqual(steps["claude"], ("check", "claude-code", "claude"))
+        self.assertEqual(steps["claude-code"], ("drop_legacy", "claude-code", "claude"))
+        self.assertEqual(steps["cursor"], ("check", "cursor", "cursor-agent"))
+        self.assertEqual(steps["kimi"], ("check", "kimi", "kimi"))
 
-    def test_existing_shims_skip_cmd_and_non_guard_files(self) -> None:
+    def test_plan_skips_cmd_and_non_guard_files(self) -> None:
         shim_dir = self.guard_home / "bin"
         shim_dir.mkdir()
         (shim_dir / "guard-kimi").write_text("x", encoding="utf-8")
         (shim_dir / "guard-kimi.cmd").write_text("x", encoding="utf-8")
         (shim_dir / "other").write_text("x", encoding="utf-8")
-        self.assertEqual(_existing_shim_harnesses(shim_dir), ["kimi"])
+        (shim_dir / "guard-dir").mkdir()
+        self.assertEqual([step["name"] for step in _refresh_plan(_shim_entries(shim_dir))], ["kimi"])
 
     def test_current_shim_is_left_unchanged(self) -> None:
         self._install("kimi")
