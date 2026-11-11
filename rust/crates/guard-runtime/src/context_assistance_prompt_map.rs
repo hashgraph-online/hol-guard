@@ -109,11 +109,11 @@ pub(super) struct Asked {
     /// A rename: every use of a named definition is listed, not only the
     /// definition.
     pub(super) everywhere: bool,
-    /// The changes are already listed, so the prompt's plain words, such as
-    /// "original" or "naming", say how to review them, not where.
+    /// The changes are already listed, so the prompt's words say how to review them.
     pub(super) changes: bool,
-    /// What earlier prompts of the session were shown, which is not shown
-    /// again.
+    /// A question that asks for no change: its tests are listed, not shown.
+    pub(super) lookup: bool,
+    /// What earlier prompts of the session showed, which is not shown again.
     pub(super) earlier: Vec<Span>,
     /// Names the prompt writes as code, as written (`_batched`).
     pub(super) spellings: Vec<String>,
@@ -215,6 +215,7 @@ pub(super) fn mapped(
         named: named(prompt),
         changes: about_changes,
         everywhere: more::asks_everywhere(prompt),
+        lookup: crate::context_assistance_prompt_words::asks_no_change(prompt),
         earlier: earlier.to_vec(),
         spellings: spellings(prompt),
         renames: renames(prompt),
