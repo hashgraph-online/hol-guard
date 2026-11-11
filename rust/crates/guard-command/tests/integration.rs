@@ -243,6 +243,7 @@ pub mod pretool_prompt_negation_scope;
 pub mod pretool_prompt_ordinary_verbs;
 pub mod pretool_prompt_secret_requests;
 pub mod pretool_pytest_contained_route;
+pub mod pretool_read_directory_globs;
 pub mod pretool_read_output_scratch;
 pub mod pretool_recoverable_removal;
 pub mod pretool_recursive_copies;
