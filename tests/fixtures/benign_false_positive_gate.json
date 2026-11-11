@@ -54624,7 +54624,8 @@
         "command": "openssl dgst -sha256 -out digest.txt package-lock.json"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-openssl-dgst-hmac-secret",
