@@ -1003,6 +1003,10 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
+            # The first review on a cold runner can spend the hook's few
+            # seconds loading the library, so warm it with one review first.
+            with open_authenticated_claude_request(daemon, hook_request, timeout=30) as response:
+                response.read()
             with open_authenticated_claude_request(daemon, hook_request, timeout=5) as response:
                 hook_payload = json.loads(response.read().decode("utf-8"))
         finally:
