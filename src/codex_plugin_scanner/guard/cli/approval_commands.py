@@ -161,9 +161,10 @@ def run_approval_command(
             "next_action": "Open the original Guard request in the local approval center or native harness prompt.",
             "exit_code": 4,
         }
+    requested_scope = str(getattr(args, "scope", None) or "artifact")
     try:
         trust_local_tool = bool(getattr(args, "trust_local_tool", False))
-        if trust_local_tool and (args.scope != "artifact" or bool(getattr(args, "remember", False))):
+        if trust_local_tool and (requested_scope != "artifact" or bool(getattr(args, "remember", False))):
             return {
                 "resolved": False,
                 "error": "invalid_local_tool_trust_scope",
@@ -171,11 +172,11 @@ def run_approval_command(
                 "exit_code": 2,
             }
         gate_input = (
-            prompt_for_approval_gate(store.guard_home, strict=str(args.scope) == "global")
+            prompt_for_approval_gate(store.guard_home, strict=requested_scope == "global")
             if _approval_resolution_needs_gate(
                 store,
                 action=str(args.approval_action),
-                scope=str(args.scope),
+                scope=requested_scope,
             )
             else None
         )
@@ -199,7 +200,7 @@ def run_approval_command(
             store=store,
             request_id=args.request_id,
             action=args.approval_action,
-            scope=args.scope,
+            scope=requested_scope,
             workspace=str(workspace) if workspace is not None else None,
             reason=args.reason,
             now=_now(),

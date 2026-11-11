@@ -1100,9 +1100,6 @@ class TestGuardSurfaceServer:
         assert hook_payload["approval_request_id"]
 
     def test_guard_daemon_claude_hook_endpoint_requires_auth_and_records_audit(self, tmp_path, monkeypatch) -> None:
-        # This tests audit contents, not the production write deadline. Coverage
-        # tracing can keep a background SQLite writer busy beyond that deadline.
-        monkeypatch.setattr(daemon_server_module, "_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS", 5.0)
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -2002,7 +1999,6 @@ class TestGuardSurfaceServer:
         assert payload["latest_connect_state"]["milestone"] == "first_sync_succeeded"
 
     def test_guard_daemon_receipts_endpoint_requires_auth_and_records_audit(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setattr(daemon_server_module, "_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS", 5.0)
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()

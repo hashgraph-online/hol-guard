@@ -1,8 +1,11 @@
 //! The words, quoted phrases and file names a typed prompt gives, which the
 //! project file search looks for.
 use crate::context_assistance_prompt_files::wanted_file;
+pub(crate) use no_change::asks_no_change;
 use paths::without_paths;
 
+#[path = "context_assistance_prompt_no_change.rs"]
+mod no_change;
 #[path = "context_assistance_prompt_paths.rs"]
 mod paths;
 
