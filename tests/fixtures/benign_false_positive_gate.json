@@ -25306,6 +25306,86 @@
       "expect": "not_allow"
     },
     {
+      "id": "git-staged-names-cursor-terminal-pager",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --cached --name-only"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "PAGER": "sh -c \"head -n 10000 | cat\""
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-cursor-terminal-git-pager",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_PAGER": "sh -c \"head -n 10000 | cat\""
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-staged-names-pager-copies-output",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --cached --name-only"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "PAGER": "sh -c \"head -n 10000 | tee /tmp/hol-guard-gate-pager-copy\""
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-log-pager-runs-a-second-command",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_PAGER": "sh -c \"head -n 10000 | cat; touch /tmp/hol-guard-gate-pager-mark\""
+      },
+      "expect": "not_allow"
+    },
+    {
       "id": "doctl-version-stderr-merged",
       "fix_area": "shell",
       "harnesses": [
