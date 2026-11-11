@@ -70,6 +70,24 @@ fn an_exclusion_after_the_operands_is_read_without_counting_it() {
             "touch -- --exclude-dir=fixtures; grep -rln ordinary src --exclude-dir=fixtures",
             false,
         ),
+        // An include alone narrows the walk to the files it names.
+        ("grep -rln ordinary --include='*.ts' keyed", true),
+        ("grep -rln ordinary --exclude-dir=fixtures src", true),
+        // An exclude before the include widens it under GNU grep, so the key
+        // matching neither list is searched.
+        (
+            "grep -rln ordinary --exclude='*.min.js' --include='*.ts' keyed",
+            false,
+        ),
+        (
+            "grep -rln ordinary --exclude '*.min.js' --include='*.ts' keyed",
+            false,
+        ),
+        // `X='fixtures ../keyed'` splits into one more operand.
+        ("grep -rln ordinary src --exclude-dir=$X", false),
+        ("grep -rln ordinary --exclude-dir=$X src", false),
+        ("grep -rln ordinary --exclude-dir \"$X\" src", false),
+        ("grep -rln ordinary --exclude=$(cat list) src", false),
     ] {
         assert_eq!(allowed(command, &root), vec![expected; 3], "{command}");
     }
