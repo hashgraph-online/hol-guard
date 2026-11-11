@@ -3,6 +3,8 @@ use super::*;
 const KEY_HEX: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 const HOME: &str = "/guard-home";
 const CONFIG: &str = "/codex/config.toml";
+// `Path::is_absolute` needs a drive or UNC prefix on Windows.
+const ROOT: &str = if cfg!(windows) { "C:\\" } else { "/" };
 
 fn call(request: Value) -> Value {
     let bytes = run_command(request.to_string().as_bytes()).expect("answer");
@@ -227,7 +229,7 @@ fn recovery_payload(phase: &str) -> Value {
     json!({
         "schema": Kind::Recovery.schema(),
         "guard_home": HOME,
-        "config_path": "/",
+        "config_path": ROOT,
         "installation_id": "install-1",
         "phase": phase,
     })
@@ -311,7 +313,7 @@ fn repair_payload(phase: &str) -> (Value, Value) {
         "schema": REPAIR_PLAN_SCHEMA,
         "action": REPAIR_ACTION,
         "guard_home": HOME,
-        "config_path": "/",
+        "config_path": ROOT,
         "operation_id": "op-1",
         "native_runtime": {"version": "1"},
     });

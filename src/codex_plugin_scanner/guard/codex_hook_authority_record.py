@@ -91,12 +91,14 @@ def check_receipt_manifest(
 ) -> None:
     """Refuse an authenticated manifest that describes another config or home."""
 
-    _ask(
+    answer = _ask(
         "receipt_manifest",
         "receipt",
         hook_key,
         {"manifest": dict(manifest), "guard_home": guard_home, "config_path": config_path},
     )
+    if answer.get("ok") is not True:
+        raise AuthorityRecordRefusedError(RUNTIME_UNAVAILABLE)
 
 
 def repair_proof_matches(payload: Mapping[str, object], proof: Mapping[str, object]) -> bool:
