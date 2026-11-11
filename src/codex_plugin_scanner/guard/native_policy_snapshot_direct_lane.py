@@ -354,7 +354,7 @@ class NativePolicySnapshotDirectLaneAck:
                 self._direct_lane_evidence_bound = False
                 self._unlink_direct_lane_ack()
                 return
-            if self._acked_value and renewable(self.guard_home, self._direct_lane_ack_target):
+            if self._acked_value and renewable(self._direct_lane_ack_path(), self._direct_lane_ack_target):
                 self._write_direct_lane_ack_locked()
 
     def _recheck_direct_lane_local_cli(self, revision: int | None) -> None:

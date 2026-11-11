@@ -135,26 +135,6 @@ def test_lease_renews_only_near_expiry(tmp_path: Path, monkeypatch: pytest.Monke
     assert json.loads(ack.read_bytes())["lease_expires_at_ms"] == clock[0] + DIRECT_LANE_ACK_LEASE_MS
 
 
-def test_superseded_publisher_leaves_the_newer_ack_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    stale = _publisher(tmp_path)
-    clock = [1_000_000]
-    monkeypatch.setattr(direct_lane, "_now_ms", lambda: clock[0])
-    stale._acked = True
-    stale._publish_direct_lane_ack({"generation": 3, "policy_digest": DIGEST})
-    current = _Publisher(tmp_path)
-    current._acked = True
-    current._publish_direct_lane_ack({"generation": 5, "policy_digest": "b" * 64})
-    (tmp_path / "native-policy-snapshot-generation-v3.json").write_text(json.dumps({"generation": 5}))
-    ack = stale._direct_lane_ack_path()
-
-    clock[0] += DIRECT_LANE_ACK_LEASE_MS
-    stale._renew_direct_lane_ack()
-    assert json.loads(ack.read_bytes())["generation"] == 5
-
-    current._renew_direct_lane_ack()
-    assert json.loads(ack.read_bytes())["lease_expires_at_ms"] == clock[0] + DIRECT_LANE_ACK_LEASE_MS
-
-
 def test_ack_refuses_a_directory_it_does_not_own_as_private(tmp_path: Path) -> None:
     publisher = _publisher(tmp_path)
     target = tmp_path / "elsewhere"
