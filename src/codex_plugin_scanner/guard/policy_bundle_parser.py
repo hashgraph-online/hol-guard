@@ -47,10 +47,42 @@ _CANONICAL_COMPILE_REMEDIATION = {
     "unsupported_policy_lifetime": ("Guard enforces lifetime.mode permanent, or until with an expiresAt time."),
     "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
     "command_expression_requires_guard_3_1_runtime": (
-        "This device does not enforce command expressions, such as a command prefix, so the rule stays "
-        "unapplied. Match the exact command instead, which Guard enforces. A tool match is not a "
+        "This device enforces a command pattern only on an allow rule, so a block or review rule with a "
+        "command expression stays unapplied. Match the exact command instead, which Guard enforces under "
+        "every spelling. A tool match is not a "
         "substitute: it covers every call to that tool, not only this command, so widen the rule only as "
         "a deliberate policy decision."
+    ),
+    "command_pattern_allow_single_condition": (
+        "A command pattern allows with one condition. Write every limit the command must meet into that one "
+        "pattern; use separate rules only for commands that are each acceptable on their own."
+    ),
+    "command_pattern_allow_case_sensitive": "A command pattern must match case-sensitively.",
+    "command_pattern_allow_operator": (
+        "A command pattern matches with exact, startsWith or glob. Contains, endsWith and regex are not "
+        "enforced on this device."
+    ),
+    "command_pattern_allow_wildcard": (
+        "A command pattern's only wildcard is *. Escape ? and [ with a backslash to match them literally."
+    ),
+    "command_pattern_allow_literal_head": (
+        "A command pattern keeps the program and the word after it as plain literal words, with no wildcard, "
+        "quote, escape or expansion, so it cannot allow every use of a program."
+    ),
+    "command_pattern_allow_program_literal": "A command pattern must start with a literal program name.",
+    "command_pattern_allow_wrapper": (
+        "A command pattern cannot start with a program that runs another one, such as env, sudo, xargs or npx. "
+        "Allow the exact command instead."
+    ),
+    "command_pattern_allow_interpreter_option": (
+        "A command pattern cannot follow an interpreter with an option such as -c, -e or /c, which would "
+        "allow any script. Name the script file, or allow the exact command."
+    ),
+    "command_pattern_allow_runner": (
+        "A command pattern cannot follow a tool with the subcommand that runs a program or code it is given, "
+        "such as npm exec, deno eval, uv run or git submodule, or start such a tool with an option, such as "
+        "npm --silent or git -c. After npm run, name the script, as in npm run test *. "
+        "Otherwise allow the exact command."
     ),
     "policy_compilation_limit": (
         "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "

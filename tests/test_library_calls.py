@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard import store_secret_policy_integrity
 from codex_plugin_scanner.guard.library_calls import run_library_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -151,10 +154,81 @@ def test_bulk_allow_rejects_a_malformed_body(tmp_path: Path) -> None:
     assert answer["ok"]["status"] == 400  # type: ignore[index]
 
 
-def test_policy_writes_reject_malformed_bodies(tmp_path: Path) -> None:
-    for name in ("route.policy_clear", "route.policy_upsert"):
-        answer = _call(tmp_path, name, {"payload": {}})
-        assert answer["ok"]["status"] == 400, name  # type: ignore[index]
+def test_policy_integrity_calls_reject_malformed_arguments(tmp_path: Path) -> None:
+    for name, args in (
+        ("policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00"}),
+        ("policy.integrity_begin", {"now": 1, "sign": True}),
+        ("policy.integrity_finalize", {"next_control_state": None}),
+    ):
+        answer = _call(tmp_path, name, args)
+        assert answer["error"]["message"] == "invalid_arguments", name  # type: ignore[index]
+
+
+def test_policy_integrity_begin_answers_the_mode_without_signing(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": False})
+    assert set(answer["ok"]) == {"mode"}  # type: ignore[arg-type]
+
+
+class _MemorySecretStore:
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+        self.writable = True
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        if not self.writable:
+            raise RuntimeError("credential store unavailable")
+        self.values[secret_id] = value
+
+    def get_secret(self, secret_id: str) -> str | None:
+        return self.values.get(secret_id)
+
+    def delete_secret(self, secret_id: str) -> None:
+        self.values.pop(secret_id, None)
+
+
+def _control_states(secrets: _MemorySecretStore) -> list[object]:
+    states = (json.loads(value) for value in secrets.values.values() if value.startswith("{"))
+    return [state for state in states if isinstance(state, dict) and "pending_generation" in state]
+
+
+@pytest.fixture
+def protected_secrets(monkeypatch: pytest.MonkeyPatch) -> _MemorySecretStore:
+    secrets = _MemorySecretStore()
+    monkeypatch.setattr(
+        store_secret_policy_integrity, "_build_policy_integrity_secret_store_compat", lambda *_a, **_k: secrets
+    )
+    monkeypatch.setattr(GuardStore, "_should_skip_policy_integrity_keychain_access", lambda *_a: False)
+    return secrets
+
+
+def test_policy_integrity_begin_and_finalize_advance_the_generation(
+    tmp_path: Path, protected_secrets: _MemorySecretStore
+) -> None:
+    answer = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": True})
+    result = answer["ok"]
+    assert isinstance(result, dict)
+    assert result["mode"] == "protected"
+    assert set(result) == {"mode", "current_generation", "integrity_key_b64", "integrity_key_id"}
+    current = result["current_generation"]
+    assert isinstance(current, int)
+    assert _control_states(protected_secrets) == [
+        {"cutover_complete": True, "generation": current, "pending_generation": current + 1, "version": 1}
+    ]
+
+    final = {"version": 1, "generation": current + 1, "pending_generation": None, "cutover_complete": True}
+    assert _call(tmp_path, "policy.integrity_finalize", {"next_control_state": final}) == {"ok": {"ok": True}}
+    assert _control_states(protected_secrets) == [final]
+
+
+def test_policy_integrity_finalize_reports_a_state_that_did_not_persist(
+    tmp_path: Path, protected_secrets: _MemorySecretStore
+) -> None:
+    begun = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": True})
+    current = begun["ok"]["current_generation"]  # type: ignore[index]
+    protected_secrets.writable = False
+    final = {"version": 1, "generation": current + 1, "pending_generation": None, "cutover_complete": True}
+    answer = _call(tmp_path, "policy.integrity_finalize", {"next_control_state": final})
+    assert answer["error"]["message"] == "policy_integrity_finalize_failed"  # type: ignore[index]
 
 
 def test_harness_action_rejects_an_unknown_harness(tmp_path: Path) -> None:

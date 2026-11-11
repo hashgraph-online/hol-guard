@@ -23,6 +23,14 @@
 //! It changes no policy, approval or harness state, and it takes no root
 //! override, so it cannot point Guard at another home.
 //!
+//! `hol-guard daemon ensure` is the same start without the browser: it asks
+//! the daemon manager to reuse, adopt or launch this home's daemon, the call
+//! `dashboard` makes first. An agent runs it when the approval center does not
+//! answer. Only the bare form is admitted: `--wake-token` clears a hook's wake
+//! reservation, the root overrides point at another home, and `stop`,
+//! `repair`, `recover` and `recovery` change a running daemon, so each keeps
+//! its review.
+//!
 //! `hol-guard approvals`, `approvals list` and `approvals retry-hint <id>` are
 //! admitted too (`approval_inspection`), along with `approvals wait <id>`.
 //! They inspect approval state; waiting observes a decision without consuming it.
@@ -394,6 +402,7 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
         ["--version"]
             | ["status" | "doctor" | "settings"]
             | ["daemon", "status"]
+            | ["daemon", "ensure"]
             | ["status" | "doctor" | "settings", "--json"]
             | ["settings", "list" | "explain" | "doctor"]
             | ["settings", "list" | "explain" | "doctor", "--json"]

@@ -179,6 +179,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # of that path, not of the repository's own mailmap, and a contained
         # run reaches only the sandbox's copy of it.
         "neg-git-check-mailmap-other-file",
+        # An index listing whose `-X` exclude file is named by the caller: the
+        # read keeps its review, and a contained run opens only the workspace
+        # copy of that file.
+        "neg-git-ls-files-glob-with-exclude-file",
         # `--in-place` makes the trailer filter edit the file it names, and a
         # contained run keeps that edit inside the sandbox.
         "neg-git-interpret-trailers-in-place",
@@ -253,6 +257,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # its review. A contained run reads only the workspace copy the sandbox
         # already holds, with no home or network reach.
         "neg-read-glob-wildcard-directory-matches-a-directory",
+        # A recursive grep in the worktree whose late exclusion the scan does not
+        # prove keeps its review. A contained run reads only the workspace copy the
+        # sandbox already holds, with no home or network reach.
+        "neg-grep-late-exclude-dir-separated-value",
+        "neg-grep-late-exclude-beside-include",
         # The pattern exemption's own negatives: the producer opens a dotenv
         # file, dumps the environment, or names one as a pathspec, so the
         # credential word is never the only signal. A contained run has no home
@@ -306,6 +315,12 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-stderr-credential-location-read",
         "neg-tr-file-operand",
         "neg-uniq-output-operand-in-worktree",
+        # An interpreter run that is more than a version probe: `perl -V` prints
+        # the build configuration and `ruby -v script.rb` runs the script after
+        # the banner. A contained run has no network and no home access, so the
+        # script reaches nothing outside the workspace copy.
+        "neg-perl-config-summary",
+        "neg-ruby-version-then-script",
         # A removal git reads as the trailing part of a sibling checkout's registration: the
         # checkout it would take away stands outside the workspace, so a contained run removes
         # nothing of it.
