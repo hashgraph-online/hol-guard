@@ -7,6 +7,8 @@ use serde_json::{Map, Value};
 
 use guard_contracts::ApprovalGateMethodV1;
 
+use crate::guard_store_json::py_strip;
+
 use super::super::settings::{response, Loaded};
 use super::super::ReadConfig;
 use super::gate::{self, Gate};
@@ -84,7 +86,9 @@ pub(super) fn respond(
         }
         Route::Enroll => {
             let label = match payload.get("device_label") {
-                Some(Value::String(label)) if !label.trim().is_empty() => label.trim().to_owned(),
+                Some(Value::String(label)) if !py_strip(label).is_empty() => {
+                    py_strip(label).to_owned()
+                }
                 _ => "local-device".to_owned(),
             };
             (

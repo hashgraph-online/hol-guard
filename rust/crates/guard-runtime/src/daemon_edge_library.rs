@@ -28,9 +28,12 @@ const MAX_ANSWER_BYTES: u64 = 16 * 1024 * 1024;
 /// Why a library call gave no value.
 #[derive(Debug, PartialEq)]
 pub(in crate::daemon_edge) enum CallError {
-    /// No CLI to run, or it did not answer in time with one JSON object.
-    /// Nothing is known to have happened, so the request can be relayed.
+    /// No CLI to run, or the call never reached it. Nothing has happened,
+    /// so the request can be relayed.
     Unavailable,
+    /// The call reached the library but no answer came back in time as one
+    /// JSON object. It may have run, so the request must not be replayed.
+    NoAnswer,
     /// The call raised: `{"kind", "type", "message", ...}`.
     Raised(Map<String, Value>),
 }
@@ -40,7 +43,7 @@ impl CallError {
     /// The kind the library named for a raised error.
     pub(in crate::daemon_edge) fn kind(&self) -> Option<&str> {
         match self {
-            Self::Unavailable => None,
+            Self::Unavailable | Self::NoAnswer => None,
             Self::Raised(error) => error.get("kind").and_then(Value::as_str),
         }
     }
@@ -58,14 +61,14 @@ pub(in crate::daemon_edge) fn call(
 /// The value or error one answer carries.
 pub(in crate::daemon_edge) fn decode(answer: &[u8]) -> Result<Value, CallError> {
     let Ok(Value::Object(mut answer)) = serde_json::from_slice::<Value>(answer) else {
-        return Err(CallError::Unavailable);
+        return Err(CallError::NoAnswer);
     };
     if let Some(value) = answer.remove("ok") {
         return Ok(value);
     }
     match answer.remove("error") {
         Some(Value::Object(error)) => Err(CallError::Raised(error)),
-        _ => Err(CallError::Unavailable),
+        _ => Err(CallError::NoAnswer),
     }
 }
 
@@ -195,7 +198,7 @@ pub(in crate::daemon_edge) fn call_resident_within(
                 pending.remove(&id);
             }
             if written && wait < CALL_TIMEOUT {
-                return Err(CallError::Unavailable);
+                return Err(CallError::NoAnswer);
             }
             let mut residents = residents()
                 .lock()
@@ -208,7 +211,11 @@ pub(in crate::daemon_edge) fn call_resident_within(
             }
             drop(residents);
             resident.stop();
-            Err(CallError::Unavailable)
+            Err(if written {
+                CallError::NoAnswer
+            } else {
+                CallError::Unavailable
+            })
         }
     }
 }

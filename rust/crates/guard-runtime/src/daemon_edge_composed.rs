@@ -306,7 +306,7 @@ fn whole_reply(answer: Result<Value, CallError>) -> Option<(u16, Value, bool)> {
 fn raised(error: CallError) -> Option<(u16, Value, bool)> {
     match error {
         CallError::Unavailable => None,
-        CallError::Raised(_) => Some((DROPPED, Value::Null, false)),
+        CallError::Raised(_) | CallError::NoAnswer => Some((DROPPED, Value::Null, false)),
     }
 }
 

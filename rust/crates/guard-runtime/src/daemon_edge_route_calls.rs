@@ -205,7 +205,7 @@ pub(in crate::daemon_edge) fn respond(
         Ok(answer) => Some(reply(answer)),
         Err(CallError::Unavailable) => None,
         // The daemon's handler raised: the connection closes unanswered.
-        Err(CallError::Raised(_)) => Some((DROPPED, Value::Null, false)),
+        Err(CallError::Raised(_) | CallError::NoAnswer) => Some((DROPPED, Value::Null, false)),
     }
 }
 

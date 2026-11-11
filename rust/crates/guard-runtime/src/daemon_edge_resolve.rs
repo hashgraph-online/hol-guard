@@ -127,7 +127,7 @@ pub(in crate::daemon_edge) fn respond(
     });
     let answer = match call(args) {
         Ok(Value::Object(answer)) => answer,
-        Ok(_) => return Some((DROPPED, Value::Null, false)),
+        Ok(_) | Err(CallError::NoAnswer) => return Some((DROPPED, Value::Null, false)),
         Err(CallError::Unavailable) => return None,
         Err(CallError::Raised(error)) => return Some(raised(error, &queue_url)),
     };

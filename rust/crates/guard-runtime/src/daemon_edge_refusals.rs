@@ -186,6 +186,11 @@ pub(in crate::daemon_edge) fn refusal(
     {
         return Some(Refusal::QueryToken);
     }
+    let name = format!("X-Guard-{}", "Token");
+    if request.has_header(&name) && request.single_header(&name).is_none() {
+        // A repeated header is the daemon's to read, as `Origin` is above.
+        return None;
+    }
     (!header_secret_matches(request, secret)).then_some(Refusal::Unauthorized)
 }
 

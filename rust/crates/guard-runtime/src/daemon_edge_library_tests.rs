@@ -12,7 +12,7 @@ fn answers_decode_to_values_and_raised_errors() {
         Some("not_found")
     );
     for answer in [&b""[..], b"[]", b"{}", b"{\"error\":1}", b"not json"] {
-        assert_eq!(decode(answer), Err(CallError::Unavailable));
+        assert_eq!(decode(answer), Err(CallError::NoAnswer));
     }
 }
 

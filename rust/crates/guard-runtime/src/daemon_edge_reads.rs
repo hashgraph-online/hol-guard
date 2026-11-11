@@ -857,7 +857,7 @@ fn verify_response(
         .rev()
         .find(|(key, _)| key == "nonce")
         .and_then(|(_, value)| value.as_str())
-        .map(str::trim)
+        .map(crate::guard_store_json::py_strip)
         .filter(|nonce| !nonce.is_empty());
     let Some(nonce) = nonce else {
         let body = serde_json::json!({"error": "missing_nonce"});

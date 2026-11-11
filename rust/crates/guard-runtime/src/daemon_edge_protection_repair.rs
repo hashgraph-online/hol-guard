@@ -46,7 +46,7 @@ struct Repair<'a, 'b> {
 fn step(repair: &mut Repair<'_, '_>, name: &str, args: Value) -> Step<Map<String, Value>> {
     match (repair.call)(name, args) {
         Ok(Value::Object(answer)) => Ok(answer),
-        Ok(_) | Err(CallError::Raised(_)) => Err(Stop::Dropped),
+        Ok(_) | Err(CallError::Raised(_) | CallError::NoAnswer) => Err(Stop::Dropped),
         Err(CallError::Unavailable) => Err(Stop::Unavailable),
     }
 }

@@ -83,7 +83,7 @@ impl Host<'_, '_> {
         }
         match (self.call)(name, Value::Object(args)) {
             Ok(Value::Object(answer)) => Ok(answer),
-            Ok(_) | Err(CallError::Raised(_)) => Err(Stop::Dropped),
+            Ok(_) | Err(CallError::Raised(_) | CallError::NoAnswer) => Err(Stop::Dropped),
             Err(CallError::Unavailable) => Err(Stop::Unavailable),
         }
     }

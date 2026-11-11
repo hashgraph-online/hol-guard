@@ -108,6 +108,11 @@ fn malformed_answers_and_raised_calls_close_the_connection() {
         respond(Map::new(), &body, |_| Err(CallError::Unavailable)),
         None
     );
+    // A call that may have run is never replayed.
+    assert_eq!(
+        respond(Map::new(), &body, |_| Err(CallError::NoAnswer)),
+        Some((DROPPED, Value::Null, false))
+    );
     assert_eq!(
         respond(Map::new(), &body, |_| Ok(
             json!({"status": 200, "body": {"x": 1}, "no_store": true})

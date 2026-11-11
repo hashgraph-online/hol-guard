@@ -215,6 +215,10 @@ fn library_answers_map_to_daemon_replies() {
         Some((DROPPED, Value::Null, false))
     );
     assert_eq!(reply(Err(CallError::Unavailable)), None);
+    assert_eq!(
+        reply(Err(CallError::NoAnswer)),
+        Some((DROPPED, Value::Null, false))
+    );
 }
 
 #[test]

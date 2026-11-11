@@ -123,7 +123,8 @@ class _ReplayState:
                 state[field] = value
             encoded = json.dumps(state, separators=(",", ":"), default=str).encode("utf-8")
             if len(encoded) > _STATE_LIMIT_BYTES:
-                return
+                # A consumed nonce that cannot be recorded must not be accepted.
+                raise OSError("replay state exceeds its size limit")
             temporary = self._path.with_name(f".{_STATE_FILENAME}.{os.getpid()}.{threading.get_ident()}")
             with suppress(OSError):
                 temporary.unlink()
@@ -138,6 +139,7 @@ class _ReplayState:
             except OSError:
                 with suppress(OSError):
                     temporary.unlink()
+                raise
 
 
 class _PersistedMapping(dict[str, Any]):
