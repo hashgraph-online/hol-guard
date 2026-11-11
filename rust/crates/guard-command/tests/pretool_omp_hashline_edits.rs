@@ -149,11 +149,42 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         patch(&["[~/.ssh/config]\nPUT >$:\n+Host *\n"]),
         patch(&["[~/project/.env#0AC4]\nPUT >$:\n+EXTRA=1\n"]),
         patch(&["[~/project/AGENTS.md#0AC4]\nPUT >$:\n+more rules\n"]),
-        patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
         "*** Begin Patch\n*** Update File: src/a.ts\n@@\n-export const a = 1;\n+export const a = 3;\n*** End Patch\n".to_owned(),
     ] {
         let result = evaluate("omp", &input);
         assert_eq!(result.minimum_action, "review", "{input}: {result:?}");
+    }
+    // A decorated header names no file Guard can prove, but nothing runs: the
+    // agent is told how to write the header instead of waiting on an approval.
+    for (input, shown) in [
+        (
+            patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Update File: src/a.ts#0AC4]`",
+        ),
+        (
+            patch(&["[FILE: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[FILE: src/a.ts#0AC4]`",
+        ),
+        (
+            patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Begin Patch] [src/a.ts#0AC4]`",
+        ),
+        (
+            patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
+            "`[src/a.ts#NOPE]`",
+        ),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_omp_edit_header_unreadable"),
+            "{input}"
+        );
+        assert!(
+            result.reason.contains(shown) && result.reason.contains("[src/app.py#1A2B]"),
+            "{}",
+            result.reason
+        );
     }
     // Only Oh My Pi's edit tool takes a hashline patch.
     let result = evaluate("claude-code", &patch(&[put_a]));

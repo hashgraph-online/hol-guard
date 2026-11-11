@@ -928,6 +928,16 @@ fn evaluate_envelope(
                 );
                 result
             }
+            // Nothing runs, so the agent can rewrite the header and get the
+            // usual proof; a protected file still goes to review then.
+            super::omp_hashline_writes::HashlineEdit::UnreadableHeader(line) => {
+                let mut result =
+                    generic_result(action, "block", "native_omp_edit_header_unreadable", "");
+                result.reason = format!(
+                    "HOL Guard did not run this edit because its file header `{line}` is not a plain `[PATH#TAG]` header. Write each header as just the path and the tag the read tool showed, for example `[src/app.py#1A2B]`, with nothing else inside the brackets, and try again."
+                );
+                result
+            }
         }
     } else if harness == "omp"
         && event == "PreToolUse"

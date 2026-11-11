@@ -38,6 +38,11 @@ pub(super) enum HashlineEdit {
     /// fix the path rather than wait on an approval. Holds the first missing
     /// path as the header wrote it.
     MissingTarget(String),
+    /// A line opens with a bracket the way a header does but is not a plain
+    /// `[PATH#TAG]` header, such as `[FILE: src/a.ts#0AC4]`. Guard cannot
+    /// tell which file Oh My Pi would open, so it does not run the edit and
+    /// shows how to write the header. Holds that line, shortened.
+    UnreadableHeader(String),
 }
 
 /// Files a hashline `input` edits, each with whether a header carried a
@@ -179,7 +184,9 @@ pub(super) fn evaluate_hashline_edit(
     cwd: Option<&str>,
 ) -> Option<HashlineEdit> {
     let workspace = cwd.and_then(|root| std::fs::canonicalize(root).ok())?;
-    let targets = hashline_targets(input)?;
+    let Some(targets) = hashline_targets(input) else {
+        return unreadable_header(input).map(HashlineEdit::UnreadableHeader);
+    };
     let mut missing: Option<&str> = None;
     for (written, tagged) in &targets {
         let target = &match written.strip_prefix("~/") {
@@ -213,6 +220,30 @@ pub(super) fn evaluate_hashline_edit(
     Some(match missing {
         Some(path) => HashlineEdit::MissingTarget(path.to_owned()),
         None => HashlineEdit::Routine,
+    })
+}
+
+/// The first line that opens with a bracket but is not a plain header,
+/// shortened for a message. A `REM` or `MV`, a stray row or anything else the
+/// proof does not read leaves this `None`, so those edits keep their review.
+fn unreadable_header(input: &str) -> Option<String> {
+    const SHOWN_CHARS: usize = 120;
+    if input.len() > crate::MAX_COMMAND_BYTES || input.contains('\0') {
+        return None;
+    }
+    let line = input
+        .lines()
+        .map(|line| line.strip_suffix('\r').unwrap_or(line).trim_end())
+        .find(|line| line.starts_with('[') && header_path(line).is_none())?;
+    let shown: String = line
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(SHOWN_CHARS)
+        .collect();
+    Some(if line.chars().count() > SHOWN_CHARS {
+        format!("{shown}...")
+    } else {
+        shown
     })
 }
 
