@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from .approval_handoff_link import build_approval_handoff_url
+
 LOCAL_DASHBOARD_SESSION_VERSION = "guard-local-daemon-session.v1"
 LOCAL_DASHBOARD_SESSION_PREFIX = "gld1"
 LOCAL_DASHBOARD_SESSION_AUDIENCE = "guard-local-daemon"
@@ -32,6 +34,10 @@ def build_approval_browser_url(
 
     if not approval_url or auth_token is None:
         return approval_url
+    if surface == "approval-center":
+        handoff = build_approval_handoff_url(approval_url, auth_token=auth_token)
+        if handoff is not None:
+            return handoff
     parsed = urlparse(approval_url)
     fragment_pairs = [
         (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"

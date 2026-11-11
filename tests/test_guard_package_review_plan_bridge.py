@@ -8,7 +8,6 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_package_review_plan as bridge
-from codex_plugin_scanner.guard.daemon.hook_request_parsing import MAX_HOOK_PAYLOAD_REFERENCE_BYTES
 
 ARTIFACT_WIRE = {
     "artifact_id": "codex:project:package-request:npm:abc",
@@ -73,7 +72,7 @@ def test_a_plan_returns_the_artifact_and_whether_it_may_allow(monkeypatch: pytes
     assert artifact.metadata == ARTIFACT_WIRE["metadata"]
     assert sent[0]["operation"] == "package_review_plan"
     assert sent[0]["required_features"] == (bridge._PACKAGE_REVIEW_PLAN_FEATURE,)
-    assert sent[0]["max_request_bytes"] > MAX_HOOK_PAYLOAD_REFERENCE_BYTES
+    assert sent[0]["max_request_bytes"] > 5 * 1024 * 1024  # the most a hook payload reference reserves
     request = sent[0]["request"]
     assert request["schema"] == bridge._REQUEST_SCHEMA
     assert request["payload"] == PAYLOAD

@@ -27,12 +27,16 @@ use serde_json::{json, Map, Value};
 
 use crate::command_tokens::executable_name;
 use crate::env_wrapper::parse_env_wrapper;
+pub use crate::launch_identity_common::package_binding_argv_digest;
 pub use crate::launch_identity_common::package_request_launch_identity_material;
 use crate::launch_identity_common::{
     context_opaque_digest_strict, expand_user, launch_argv_digest, normalized_launch_cwd,
     runtime_launch_argv, sha256_hex, RuntimeLaunchArgv,
 };
 use crate::shell_tokens;
+
+#[path = "launch_identity_node_options.rs"]
+mod node_options;
 
 // Python constants (approval_context.py :47-51, file_identity.py :23-31,
 // native_context.py :377-388).
@@ -1694,16 +1698,31 @@ fn node_runtime_entrypoint_identity(
     launch_cwd: &Path,
     launch_env: Option<&Value>,
 ) -> Value {
-    // NODE_OPTIONS injects a caller-controlled `-r`/`-e` preamble ahead of
-    // the script argv, so any visible value makes the entrypoint unproven.
-    let node_options_nonempty = launch_env
+    // NODE_OPTIONS can inject a caller-controlled `-r`/`--import` preamble
+    // ahead of the script argv, so a value Guard cannot fully classify makes
+    // the entrypoint unproven. Heap-size and diagnostic flags
+    // (`guard_contracts::node_options_inert`) are skipped: none of them loads
+    // code or reads a file, and agent wrappers commonly export one such as
+    // `--max-old-space-size=12288`. A short list of other flags that change
+    // behaviour without loading code is bound by value instead. Treating
+    // either kind as unproven gave every node-script package manager (npm,
+    // pnpm, yarn through corepack) a fresh reuse nonce per launch, so no
+    // approval for it could ever be reused.
+    let node_options = launch_env
         .and_then(|v| v.get("NODE_OPTIONS"))
         .and_then(|v| v.as_str())
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-    if node_options_nonempty {
+        .unwrap_or("");
+    let Some(bound_options) = node_options::launch_binding(node_options) else {
         return unproven_runtime_entrypoint("node-launch", "environment_options_unresolved", None);
+    };
+    let mut identity = node_argv_entrypoint_identity(args, launch_cwd);
+    if !bound_options.is_empty() {
+        identity["environment_options"] = json!(bound_options);
     }
+    identity
+}
+
+fn node_argv_entrypoint_identity(args: &[String], launch_cwd: &Path) -> Value {
     let mut index = 0usize;
     const HARMLESS_FLAGS: &[&str] = &[
         "--abort-on-uncaught-exception",

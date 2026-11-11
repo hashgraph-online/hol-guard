@@ -139,7 +139,12 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::HookDirectEvidenceDrain(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                crate::hook_direct_evidence::drain(&request, policy_store.direct_evidence())
+                let source = policy_store.direct_lane_writer_source();
+                crate::hook_direct_evidence::drain(
+                    &request,
+                    policy_store.direct_evidence(),
+                    source.as_deref(),
+                )
             }
             ResidentOperationV1::McpRelayDecide(request) => {
                 let policy_store =
@@ -534,6 +539,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::ShellHelpers(request) => {
                 crate::shell_helpers_op::evaluate(&request)
+            }
+            ResidentOperationV1::ExactCloudReview(request) => {
+                crate::exact_cloud_review::evaluate_resident_request(request)
             }
             ResidentOperationV1::ApprovalProofDecide(request) => {
                 crate::approval_proof_op::evaluate_approval_proof_request(&request)

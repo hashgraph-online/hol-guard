@@ -181,7 +181,12 @@ pub(super) fn peel(
         let into_sibling_root = root.as_deref() == Some(directory.as_path()) && !within;
         tokens.drain(..3);
         wrapped = true;
-        if into_sibling_root {
+        // A `cd` below a sibling root leaves no single core to peel once a
+        // second command follows, and the edge roots that call's sandbox at
+        // the repository anyway, so the list is rejoined there as it is after
+        // a `cd` to the root itself. A lone command keeps the peel it has.
+        let listed = tokens.iter().any(|token| operator(token) == Some("&&"));
+        if into_sibling_root || (root.is_some() && !within && listed) {
             // `cd <sibling root> && a && b` is re-authorized whole in that
             // root. A filter after `a && b` would apply to `b` alone, so none
             // is peeled there; it stays in the text the root runs.
@@ -321,10 +326,21 @@ fn operator(token: &Token) -> Option<&str> {
     token.1.then_some(token.0.as_str())
 }
 
-/// The repository holding `directory`, as native authority finds it. An
-/// absent home proves no root, as the Python peel's `home is None` did.
+/// The project holding `directory`, as native authority finds it. An absent
+/// home proves no root, as the Python peel's `home is None` did.
+///
+/// A project with a manifest and no repository roots a run here, as it does
+/// for the package-test route, because the sink peels only a command the
+/// classifier already admitted: reading fewer roots than the route that wrote
+/// the receipt would leave that receipt unredeemable and send the run to the
+/// sandbox whole. Admission stays with the classifier, which still needs a
+/// repository for every other route.
 fn sibling_root(directory: &Path, home_dir: Option<&str>) -> Option<PathBuf> {
-    contained_wrapper::sibling_project_root(directory, home_dir?)
+    contained_wrapper::project_root(
+        directory,
+        home_dir?,
+        contained_wrapper::ProjectRoots::RepositoryOrPackage,
+    )
 }
 
 /// Split like a POSIX shell into `(value, is_operator)` pairs, and report
@@ -522,6 +538,17 @@ fn filter_chain(tokens: &[Token]) -> Result<Vec<Vec<String>>, &'static str> {
 /// lexically, as the package manager's `path.resolve` does, then resolved on
 /// disk. Other spellings return `None` and keep the unwrapped path.
 fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathBuf, PathBuf)> {
+    // Leading `NAME=value` assignments belong to the manager call, not to the
+    // directory flag. Native authority carries them across the same rewrite
+    // (`package_directory_flags.rs`), so the sink peels past them here and
+    // keeps them ahead of the manager in the rewritten core. Peeling them off
+    // instead would hand the sandbox a different command from the one the
+    // classifier admitted.
+    let assignments = tokens
+        .iter()
+        .take_while(|token| !token.1 && environment_assignment(word(token)))
+        .count();
+    let (prefix, tokens) = tokens.split_at(assignments);
     let manager = tokens.first().map(word)?;
     let flags = directory_flags(manager);
     let root_flags = workspace_root_flags(manager);
@@ -586,10 +613,18 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
             .filter(|directory| directory.is_dir())?;
         (resolved, lexical(&base.join(value)))
     };
-    let mut rewritten = vec![tokens[0].clone()];
+    let mut rewritten = prefix.to_vec();
+    rewritten.push(tokens[0].clone());
     rewritten.extend(rest.iter().map(|value| ((*value).to_owned(), false)));
     rewritten.extend_from_slice(&tokens[end..]);
     Some((rewritten, resolved, joined))
+}
+
+/// A leading `NAME=value` assignment, read the way the classifier reads one.
+/// `PATH` is not one of them: native authority refuses a command that sets it
+/// (`path_overridden`), so the sink must not peel past it either.
+fn environment_assignment(value: &str) -> bool {
+    crate::parser_executables::assignment_name(value).is_some_and(|name| name != "PATH")
 }
 
 /// Any spelling of a directory flag: `--cwd`, `--cwd=x`, `-C`, `-Cx`.
@@ -868,3 +903,9 @@ fn require_blanks(characters: &[char], index: usize) -> Option<usize> {
     let end = skip_blanks(characters, index);
     (end > index).then_some(end)
 }
+
+// The tests spell the workspace path inside POSIX shell text, and the peel
+// itself is Unix-only, so they run where the arm they cover compiles.
+#[cfg(all(test, unix))]
+#[path = "sink_peel_tests.rs"]
+mod tests;

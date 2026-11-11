@@ -136,3 +136,32 @@ fn the_row_must_answer_its_resolved_request() {
         assert!(peek_with(&connection, Some(KEY)).is_null(), "{change}");
     }
 }
+
+#[test]
+fn an_exact_allow_is_still_reverified_when_spent() {
+    for change in [
+        "update approval_requests set policy_action = 'block'",
+        "update guard_local_once_approvals set expires_at = '2026-10-30T11:59:59+00:00'",
+        "update guard_local_once_approvals set created_at = '2026-10-30T11:58:00+00:00'",
+    ] {
+        let connection = connection();
+        insert_row(
+            &connection,
+            crate::local_once_store::EXACT_CLOUD_INTEGRITY_PURPOSE,
+        );
+        let decision = peek_with(&connection, Some(KEY));
+        connection.execute_batch(change).unwrap();
+        assert!(
+            !crate::continuation_grants::consume_exact_cloud_package(
+                &connection,
+                "req-1",
+                &decision,
+                NOW,
+                KEY,
+                KEY_ID,
+            )
+            .unwrap(),
+            "{change}"
+        );
+    }
+}

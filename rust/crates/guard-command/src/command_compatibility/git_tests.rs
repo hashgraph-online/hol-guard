@@ -650,3 +650,43 @@ fn the_unstaged_index_comparison_reads_what_diff_owns() {
         assert_eq!(rules(command), ["command.git.diff"], "{command}");
     }
 }
+
+/// `-C $HOME/proj` is proved in its `~` spelling, which the shell neither
+/// splits nor matches against the filesystem. The expansion is both, so a
+/// home Git would not receive as one word has to keep its review: with home
+/// named `guard home -c core.pager=x`, the shell hands Git options the tilde
+/// spelling never named.
+#[test]
+fn a_home_variable_route_needs_a_home_that_reaches_git_as_one_word() {
+    let root = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(root.path()).unwrap();
+    let route = |home: &str| {
+        let home = root.join(home);
+        let project = home.join("proj");
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        let model = crate::parse_command(
+            &serde_json::from_value(
+                serde_json::json!({"command": "git -C $HOME/proj status --short"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let home = home.to_string_lossy().into_owned();
+        let cwd = project.to_string_lossy().into_owned();
+        routed_arguments(
+            &model.segments[0].arguments,
+            crate::pretool::PathContext {
+                home_dir: Some(home.as_str()),
+                cwd: Some(cwd.as_str()),
+                ..crate::pretool::PathContext::default()
+            },
+        )
+        .map(<[String]>::to_vec)
+    };
+    assert_eq!(
+        route("guardhome"),
+        Some(vec!["status".to_owned(), "--short".to_owned()])
+    );
+    assert_eq!(route("guard home"), None);
+    assert_eq!(route("guard*home"), None);
+}

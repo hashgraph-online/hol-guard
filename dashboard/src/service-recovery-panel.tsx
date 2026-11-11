@@ -3,8 +3,11 @@ import { HiMiniArrowPath, HiMiniClipboardDocument, HiMiniShieldExclamation } fro
 
 import { ActionButton } from "./approval-center-primitives";
 import {
+  DESKTOP_WINDOW_RECOVERY_MESSAGE,
   getRecoveryCapabilities,
   openRecoveryView,
+  recoveryRunsInDesktopWindow,
+  resolveDesktopWindowRecoveryInstructions,
   resolveRecoveryInstructions,
   type RecoveryCapabilityState,
   type RecoveryHandoffResult,
@@ -35,9 +38,12 @@ export function ServiceRecoveryPanel(props: ServiceRecoveryPanelProps) {
     () => getRecoveryCapabilities({ bridge: props.bridge, installMode: props.installMode }),
     [props.bridge, props.installMode],
   );
+  const inDesktopWindow = useMemo(() => recoveryRunsInDesktopWindow(capability), [capability]);
   const instructions = useMemo(
-    () => resolveRecoveryInstructions(capability.installMode),
-    [capability.installMode],
+    () => inDesktopWindow
+      ? resolveDesktopWindowRecoveryInstructions()
+      : resolveRecoveryInstructions(capability.installMode),
+    [inDesktopWindow, capability.installMode],
   );
   const [showInstructions, setShowInstructions] = useState(capability.kind === "fallback");
   const [opening, setOpening] = useState(false);
@@ -151,7 +157,7 @@ export function ServiceRecoveryPanel(props: ServiceRecoveryPanelProps) {
 
       {capability.kind === "fallback" ? (
         <p className="mt-4 text-sm text-slate-600" role="status" data-testid="service-recovery-fallback">
-          {fallbackMessage(capability)}
+          {inDesktopWindow ? DESKTOP_WINDOW_RECOVERY_MESSAGE : fallbackMessage(capability)}
         </p>
       ) : null}
       {handoffStatus ? (

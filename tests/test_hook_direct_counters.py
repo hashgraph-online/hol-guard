@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_direct_evidence_drain
-from codex_plugin_scanner.guard.daemon.hook_direct_counters import (
+from codex_plugin_scanner.guard.evidence_drains import hook_direct_evidence_drain
+from codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain, _decode_page
+from codex_plugin_scanner.guard.hook_review.hook_direct_counters import (
     DIRECT_MISS_CODES,
     HARNESS_SLOTS,
     HookCounterLog,
@@ -17,7 +18,6 @@ from codex_plugin_scanner.guard.daemon.hook_direct_counters import (
     harness_slot,
     note_hook_received,
 )
-from codex_plugin_scanner.guard.daemon.hook_direct_evidence_drain import DirectHookEvidenceDrain, _decode_page
 
 EPOCH = "1f-2e-0"
 RESIDENT = {"by_harness": {"codex": {"answer": 3, "direct_lane_workspace_unknown": 1}}}

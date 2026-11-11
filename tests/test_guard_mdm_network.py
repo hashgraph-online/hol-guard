@@ -16,7 +16,7 @@ import pytest
 from requests import Request
 from requests.certs import where as requests_ca_bundle
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.mdm import network_diagnostics as diagnostics_module
 from codex_plugin_scanner.guard.mdm import network_transport as transport_module
 from codex_plugin_scanner.guard.mdm import network_trust as trust_module

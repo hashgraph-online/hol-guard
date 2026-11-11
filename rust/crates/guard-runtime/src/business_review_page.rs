@@ -1,6 +1,6 @@
 //! `business_review_page` runner-authority kind: the read-only approval-queue
 //! rows the local dashboard shows for saved native business requests. Ported
-//! from `daemon/business_review_queue.py`.
+//! from the retired Python `business_review_queue.py`.
 //!
 //! The resident discovers the saved requests; the daemon checks that no SQL
 //! approval row shares an id. This projects each summary into the queue's

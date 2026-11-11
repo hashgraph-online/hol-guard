@@ -752,6 +752,76 @@ fn magic_pathspecs_are_screened_by_the_path_they_name() {
     }
 }
 
+/// A `git config --get-regexp` operand is matched against the keys in the
+/// configuration file, so the fixed floor asks of it only what a search
+/// pattern is asked: does the glob's own text name a private file? The wider
+/// questions a path operand faces -- could some longer string this glob
+/// matches hold a credential marker? -- refuse every pattern carrying a `.*`,
+/// and `remote.*url` is the spelling a read of the configured remotes uses.
+#[test]
+fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
+    let model = |command: &str| {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+        )
+        .unwrap()
+    };
+    for command in [
+        "git config --get-regexp remote.*url",
+        "git config --get-regexp '^remote\\..*\\.url$'",
+        "git config --get-regexp 'remote.*url' github",
+        "git config get --regexp remote.*url",
+        "git --no-pager config --get-regexp 'branch.*remote'",
+        "git config --get-regexp 'cookie.*name'",
+        // A bracket class writes its members down, so a class that cannot
+        // produce a leading dash is read as the pattern it spells.
+        "git config --get-regexp '[r]emote.*url'",
+        "git config --get-regexp '[Rr]emote.*url'",
+        "git config --get-regexp '[a-z]emote.*url'",
+        "git config --get-regexp '[^-]emote.*url'",
+        // An unterminated class is literal, so the word opens with `[`.
+        "git config --get-regexp '[remote.*url'",
+    ] {
+        assert!(!fixed_command_floor(&model(command)), "{command}");
+    }
+    for command in [
+        // The pattern's own text still names a private file.
+        "git config --get-regexp '.en*'",
+        "git config --get-regexp '.ssh/*'",
+        // Only a `--get-regexp` operand is a pattern. The shell expands
+        // every other argument before Git sees it.
+        "git config --get-all 'remote.*url'",
+        "git config --get 'remote.*url'",
+        "git config *",
+        // An operand opening with a glob is a pattern here and whatever the
+        // shell expands it to by the time Git reads it, so it keeps the path
+        // screen that refuses a file of the caller's choosing.
+        "git config --get-regexp '[-]-file=*' x",
+        "git config --get-regexp '[+--]-file=*' x",
+        "git config --get-regexp '[^a]-file=*' x",
+        "git config --get-regexp '[[:punct:]]-file=*' x",
+        "git config --get-regexp '[\\-]-file=*' x",
+        // The shell runs an expansion before the class is a class, so these
+        // members are not the ones that run: bash turns the first into
+        // `[!a]-file=*`, which matches a `--file=secret` in the checkout, and
+        // the parameter and substitution forms carry whatever they expand to.
+        "git config --get-regexp '[!{a,-}]-file=*' x",
+        "git config --get-regexp '[{a}]-file=*' x",
+        "git config --get-regexp '[$x]-file=*' x",
+        "git config --get-regexp '[!$x]-file=*' x",
+        "git config --get-regexp '[${x}]-file=*' x",
+        "git config --get-regexp '[$(printf -)]-file=*' x",
+        "git config --get-regexp '[`printf -`]-file=*' x",
+        // Only an ASCII alphanumeric span holds the characters between its
+        // ends whatever the shell's collation. glibc's table puts `-` inside
+        // `[_-z]`, so such a range keeps the path screen.
+        "git config --get-regexp '[_-z]-file=*' x",
+        "git config --get-regexp '[!_-z]-file=*' x",
+    ] {
+        assert!(fixed_command_floor(&model(command)), "{command}");
+    }
+}
+
 #[test]
 fn secret_selecting_globs_are_a_fixed_floor() {
     let model = |command: &str| {

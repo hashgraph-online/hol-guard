@@ -13,7 +13,7 @@ import pytest
 from codex_plugin_scanner.guard import native_supply_chain_archive as archive_module
 from codex_plugin_scanner.guard import native_supply_chain_egress as egress
 from codex_plugin_scanner.guard import native_supply_chain_registry_cache as registry_cache
-from codex_plugin_scanner.guard.daemon import hook_native_package_review as package_review
+from codex_plugin_scanner.guard.hook_review import hook_native_package_review as package_review
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.native_supply_chain_registry_cache import (
     SETTLE_SECONDS,

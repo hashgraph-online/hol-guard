@@ -180,7 +180,7 @@ def test_self_protected_contract_requires_an_owner(monkeypatch: pytest.MonkeyPat
 
 def _copy_pretool_graph_sources(root: Path) -> None:
     for relative in (
-        "src/codex_plugin_scanner/guard/daemon/server.py",
+        "src/codex_plugin_scanner/guard/routes/request_handler.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py",

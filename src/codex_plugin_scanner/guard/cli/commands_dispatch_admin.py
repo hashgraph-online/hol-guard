@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
 from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
-from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..native_aibom_summaries import NativeAibomSummariesError
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status

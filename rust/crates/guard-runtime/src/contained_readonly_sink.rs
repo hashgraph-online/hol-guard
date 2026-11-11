@@ -19,7 +19,7 @@
 
 use serde::Deserialize;
 
-use super::program::{carried_program, plain_program, Carried, Kind, Program};
+use super::program::{carried_program, inline_program, plain_program, Carried, Kind, Program};
 use super::*;
 
 #[path = "contained_readonly_backend.rs"]
@@ -146,8 +146,12 @@ fn plain_call(
 }
 
 /// The read-only run `command` starts, with the settings carried in front
-/// of it when there are any.
+/// of it when there are any. An inline shell is read first: split as raw
+/// text, `bash -ec 'pytest -q'` names `bash`, which no planner runs.
 fn program(command: &str) -> Option<(Option<Carried>, Program)> {
+    if let Some((carried, program)) = inline_program(command) {
+        return Some((Some(carried), program));
+    }
     match plain_program(command) {
         Some(program) => Some((None, program)),
         None => carried_program(command).map(|(carried, program)| (Some(carried), program)),

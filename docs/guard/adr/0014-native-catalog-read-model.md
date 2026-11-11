@@ -51,7 +51,7 @@ Each Python piece on the catalog read path is either a permanent boundary or a t
 | --- | --- | --- |
 | `native_catalog_read.py` (bounded resident transport) | Permanent while Python owns the daemon HTTP boundary | Removed only if HTTP moves out of Python, under a separate ADR |
 | `daemon/catalog_read_v2.py` (auth, raw bounds, status mapping, rollback switch) | Permanent while Python owns the daemon HTTP boundary | Same as above |
-| `daemon/catalog_v2_client.py` and `cli/extension_catalog_reads.py` v2 paths (CLI formatting) | Permanent CLI client | None; they format Rust pages and build no catalog state |
+| `cli/extension_catalog_reads.py` v2 paths (CLI formatting) over the native `daemon-client` catalog ops | Permanent CLI client | None; Rust walks and verifies the pages, the CLI only formats them |
 | `ExtensionControlApi.catalog()` and `GET /v1/extension-controls/catalog` | Temporary bridge, still supported | Every supported CLI, dashboard and desktop release reads v2; wheels without a native runtime are no longer supported; then a deprecation window of at least one minor release with a `Deprecation` header |
 | CLI `_v1_extensions` fallback and dashboard `catalogReadModelFromCatalog`/`localSearch` | Temporary bridge for daemons without v2 and for the rollback switch | Removed together with the v1 route, after the rollback switch has been unused for one release |
 | Cloud v1 catalog metadata and handshake | Separate contract, unchanged | Only a negotiated Cloud protocol version can change it |

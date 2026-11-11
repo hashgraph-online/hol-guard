@@ -11,7 +11,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import cast
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from scripts.native_probe_receipts import receipt_corpus_is_complete, wait_for_receipt_corpus, wait_for_route_corpus
 from scripts.native_slo_activity import SloActivity

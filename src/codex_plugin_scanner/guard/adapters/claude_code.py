@@ -46,7 +46,7 @@ def _aibom_detection_module():
 
 
 def _daemon_module():
-    return importlib.import_module("..daemon", __package__)
+    return importlib.import_module("..native_daemon_manage", __package__)
 
 
 def guard_daemon_url_for_home(guard_home: Path) -> str:

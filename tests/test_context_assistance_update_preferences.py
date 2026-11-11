@@ -7,7 +7,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_context_assistance as native
 from codex_plugin_scanner.guard.cli import context_assistance_versions_commands as cli
-from codex_plugin_scanner.guard.daemon import context_assistance_versions_http as http
+from codex_plugin_scanner.guard.routes import context_assistance_versions_http as http
 
 
 @pytest.mark.parametrize(

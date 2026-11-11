@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
+from codex_plugin_scanner.guard.hook_review import native_review_allow_hint as module
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import validated_extension_allow_hint
 from codex_plugin_scanner.guard.runtime.extension_coverage_hint import validated_extension_coverage_hint
 

@@ -116,6 +116,65 @@ pub(in crate::pretool) fn home_hidden_tool_directory(
     }
 }
 
+/// Whether `expanded` spells a path below a hidden tool directory of the home
+/// directory that does not exist.
+///
+/// A name that is not there prints `No such file or directory` and nothing
+/// else, so what a probe may spell is what a listing of the same path would
+/// be allowed to print if it existed. The screens are
+/// [`home_hidden_tool_directory`]'s, minus the ones that read a directory
+/// that is not there: one hidden component directly below home, nothing
+/// hidden deeper, the credential-store screen over the whole relative path,
+/// and the shared roots (`~/.config`, `~/.local/share`) named only together
+/// with the tool directory below them.
+///
+/// `ancestor` is the deepest part of the path that does exist. It is resolved
+/// and compared with its own spelling, so a link in the existing prefix
+/// cannot dress `~/.aws` as `~/.config`, and the answer to the probe cannot
+/// report on a store the spelling never named.
+pub(in crate::pretool) fn absent_home_hidden_tool_path(
+    expanded: &Path,
+    ancestor: &Path,
+    home_dir: Option<&str>,
+) -> bool {
+    let Some(raw_home) = home_dir else {
+        return false;
+    };
+    let Ok(home) = std::fs::canonicalize(raw_home) else {
+        return false;
+    };
+    let below = |path: &'_ Path| -> Option<PathBuf> {
+        path.strip_prefix(raw_home)
+            .or_else(|_| path.strip_prefix(&home))
+            .ok()
+            .map(Path::to_path_buf)
+    };
+    let (Some(relative), Some(existing)) = (below(expanded), below(ancestor)) else {
+        return false;
+    };
+    if std::fs::canonicalize(ancestor).ok() != Some(home.join(&existing)) {
+        return false;
+    }
+    let Some(first) = relative.components().next() else {
+        return false;
+    };
+    if !first.as_os_str().to_string_lossy().starts_with('.')
+        || relative
+            .components()
+            .skip(1)
+            .any(|name| name.as_os_str().to_string_lossy().starts_with('.'))
+        || !clears_store_screen(&relative)
+    {
+        return false;
+    }
+    let lowered = lowered_names(&relative);
+    match lowered.first().map(String::as_str) {
+        Some(".config") => lowered.len() > 1,
+        Some(".local") => lowered.len() > 2,
+        _ => true,
+    }
+}
+
 /// How many entries of a tool directory are read before the screen below
 /// gives up. A tool keeps tens of entries at its top level; a root holding
 /// thousands is not the inventory this proof is for.

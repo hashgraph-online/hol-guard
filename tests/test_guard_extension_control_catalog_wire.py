@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import extension_control_api as api_module
-from codex_plugin_scanner.guard.daemon.extension_control_api import (
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.extension_controls import extension_control_api as api_module
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
     ExtensionControlApiError,
     ExtensionControlApiService,
 )
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.json_transport import escape_json_for_html
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 )
@@ -97,8 +97,10 @@ def test_catalog_http_body_matches_service_wire_measurement(tmp_path: Path) -> N
         with urllib.request.urlopen(request, timeout=10) as response:
             body = response.read()
         payload = json.loads(body)
-        assert body == _wire_bytes(payload)
-        assert len(body) <= MAX_DAEMON_CATALOG_RESPONSE_BYTES
+        # The native daemon writes compact JSON, never longer than the
+        # measured wire form the limit is checked against.
+        assert len(body) <= len(_wire_bytes(payload)) <= MAX_DAEMON_CATALOG_RESPONSE_BYTES
+        assert b"<" not in body and b"&" not in body and b">" not in body
         assert payload["limits"]["max_body_bytes"] == MAX_DAEMON_CATALOG_RESPONSE_BYTES
         assert payload["limits"]["max_catalog_payload_bytes"] == CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES
     finally:

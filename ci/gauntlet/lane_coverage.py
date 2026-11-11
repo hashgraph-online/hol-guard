@@ -14,14 +14,16 @@ HARNESSES = ("omp", "claude-code", "codex", "cursor")
 PROFILES = ("core", "contained-bun-vitest", "full-tasks", "approval-retry", "connector-setup")
 QUALIFYING_LANE = ("omp", "core")
 
-# Oh My Pi owns the contained Bun/Vitest profile; the approve-then-retry and
-# connector-setup lanes run through an installed harness CLI and so are never
-# Oh My Pi's. The
+# Oh My Pi owns the contained Bun/Vitest profile, and connector-setup runs
+# through an installed harness CLI and so is never Oh My Pi's. The
+# approve-then-retry lane is different: the omp session runner admits it
+# serially and its Oh My Pi session answers the same review cards in-process
+# (approval_retry_omp), so the omp lane is real and belongs in the matrix. The
 # full-task runner reads a normalized transcript back from the CLI it drove,
 # which it knows how to do for Claude Code and Codex, so Cursor has no
 # full-task lane to leave undriven.
 _OMP_ONLY_PROFILES = frozenset({"contained-bun-vitest"})
-_HARNESS_ONLY_PROFILES = frozenset({"approval-retry", "connector-setup"})
+_HARNESS_ONLY_PROFILES = frozenset({"connector-setup"})
 FULL_TASK_LANE_HARNESSES = frozenset({"omp", "claude-code", "codex"})
 
 

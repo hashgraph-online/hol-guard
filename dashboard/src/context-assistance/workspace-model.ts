@@ -6,6 +6,7 @@ export const CIGAR_TABS = [
   { value: "access", label: "Projects" },
   { value: "runtime", label: "Settings" },
   { value: "versions", label: "Updates" },
+  { value: "usage", label: "Usage" },
   { value: "data", label: "Privacy" },
   { value: "guide", label: "Guide" },
 ] as const;
@@ -53,7 +54,7 @@ const NO_FILES_YET = "Prompts get no project files yet, because reading project 
 
 /** One headline and one sentence for the home screen. Only native state proves CIGAR is on. */
 export function cigarHomeCopy(status: ContextAssistanceStatus | null, loading: boolean, running: boolean): CigarHomeCopy {
-  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. You can keep browsing.", setupHint: false };
+  if (running) return { headline: "Turning on CIGAR", detail: "Guard is setting it up. If you leave this page, it finishes when you come back.", setupHint: false };
   if (!status) {
     if (loading) return { headline: "Checking CIGAR", detail: "One moment.", setupHint: false };
     return { headline: "CIGAR status unavailable", detail: "Guard did not answer. Try refreshing the status.", setupHint: false };

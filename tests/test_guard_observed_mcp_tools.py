@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     store = GuardStore(tmp_path / "guard-home")
@@ -63,7 +64,7 @@ def test_permission_mutation_retires_native_readiness_before_writing(
     import threading
     import time
 
-    from codex_plugin_scanner.guard.daemon import local_cli_api as api_module
+    from codex_plugin_scanner.guard.local_clis import local_cli_api as api_module
     from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
     from tests.native_policy_snapshot_test_fixtures import _ack, _status
 
@@ -106,14 +107,18 @@ def test_permission_mutation_retires_native_readiness_before_writing(
         assert entered.wait(10)
         return real_mutation(*args, **kwargs)
 
-    def boundary(stage):
-        if rollback and stage == "after_authority":
-            raise ValueError("forced_permission_rollback")
-
     monkeypatch.setattr(api_module, "record_local_custom_extension_mutation", record_mutation)
     monkeypatch.setattr(api_module, "require_local_cli_trust", lambda *args, **kwargs: object())
     monkeypatch.setattr(api_module, "consume_local_cli_trust_grant", lambda *args, **kwargs: None)
-    monkeypatch.setattr(store, "_custom_extension_continuity_transaction_boundary", boundary)
+    if rollback:
+        # Fail the continuity state row, after the grant rows in the same
+        # native transaction, so the whole permission write rolls back.
+        with store._connect() as connection:
+            connection.execute(
+                "create trigger fail_permission_write before insert on sync_state "
+                "when new.state_key like 'custom_extension_continuity%' "
+                "begin select raise(abort, 'forced_permission_rollback'); end"
+            )
     publisher.start()
     try:
         assert publisher.wait_until_ready(time.monotonic() + 10), publisher._last_error
@@ -130,7 +135,7 @@ def test_permission_mutation_retires_native_readiness_before_writing(
         }
         service = api_module.LocalCliApiService(store=store)
         if rollback:
-            with pytest.raises(api_module.LocalCliApiError):
+            with pytest.raises(sqlite3.IntegrityError, match="forced_permission_rollback"):
                 service.apply(payload)
         else:
             assert service.apply(payload)["revision"] == 2

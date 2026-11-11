@@ -142,6 +142,11 @@ fn listing_a_missing_path_proceeds_outside_hidden_locations() {
             "ls missing-dir".to_owned(),
             // A missing entry inside a skill directory.
             "ls ~/.agents/skills/review-loop/missing".to_owned(),
+            // A tool's own directory that this machine never created. The
+            // same listing of a directory that is there is allowed, so the
+            // probe cannot report by Guard's answer whether it exists.
+            "ls ~/.config/missing".to_owned(),
+            "ls ~/.toolcfg".to_owned(),
         ] {
             assert_eq!(
                 action(&home, harness, &command),
@@ -153,7 +158,11 @@ fn listing_a_missing_path_proceeds_outside_hidden_locations() {
     for command in [
         "ls ~/.ssh/missing",
         "ls ~/work/.hidden-missing",
-        "ls ~/.config/missing",
+        // The stores keep their review whether or not they are there: the
+        // answer to a probe for one of them is itself the account it keeps.
+        "ls ~/.aws/missing",
+        "ls ~/.config/gh/missing",
+        "ls ~/.env.local",
         "ls ~/work/missing/.env",
         "ls ~/work/missing/id_rsa",
         "ls ~/work/missing/../.ssh",

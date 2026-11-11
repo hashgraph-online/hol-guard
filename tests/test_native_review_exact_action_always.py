@@ -15,11 +15,11 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import (
+from codex_plugin_scanner.guard.hook_review.hook_native_saved_approval import (
     EXACT_ACTION_CONTEXT_TOKEN_KEY,
     native_saved_decision_response,
 )
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.models import GuardAction, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import native_launch_evidence_helpers
@@ -449,7 +449,9 @@ def _hook_worker(
         }
         return with_review_evidence(edge, **kwargs)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", review_raw_hook_native)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", review_raw_hook_native
+    )
     store = GuardStore(tmp_path / "guard-home")
     update_guard_settings(store.guard_home, {"blocked_request_mode": "ask"})
     store.upsert_runtime_state(
@@ -575,7 +577,7 @@ def test_native_review_derives_the_exact_action_token_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     """The saved lookup and the queued request share one derivation of the same token."""
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     result, receipt = _verdict()
@@ -713,7 +715,7 @@ def test_unreadable_saved_decision_fails_closed(
 def test_saved_block_wins_over_a_pending_once_approval(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     store = GuardStore(tmp_path / "guard-home")

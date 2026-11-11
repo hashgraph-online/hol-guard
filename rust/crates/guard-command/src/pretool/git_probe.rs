@@ -115,8 +115,16 @@ pub(super) fn output(
     deadline: Instant,
     limit: u64,
 ) -> Option<(ExitStatus, Vec<u8>)> {
+    match output_bounded(command, deadline, limit) {
+        Bounded::Completed(status, bytes) => Some((status, bytes)),
+        Bounded::Overflow | Bounded::Failed => None,
+    }
+}
+
+/// [`output`], keeping an over-bound reply apart from a query that failed.
+pub(super) fn output_bounded(command: &mut Command, deadline: Instant, limit: u64) -> Bounded {
     if Instant::now() >= deadline {
-        return None;
+        return Bounded::Failed;
     }
     let key: QueryKey = (
         command.get_program().to_owned(),
@@ -136,36 +144,57 @@ pub(super) fn output(
                 .map(|(_, result)| result.clone())
         })
     });
-    if cached.is_some() {
-        return cached;
+    if let Some((status, bytes)) = cached {
+        return Bounded::Completed(status, bytes);
     }
-    let result = spawn_output(command, deadline, limit)?;
+    let result = match spawn_output(command, deadline, limit) {
+        Bounded::Completed(status, bytes) => (status, bytes),
+        other => return other,
+    };
     QUERIES.with(|queries| {
         if let Some(entries) = queries.borrow_mut().as_mut() {
             entries.push((key, result.clone()));
         }
     });
-    Some(result)
+    Bounded::Completed(result.0, result.1)
 }
 
-fn spawn_output(
-    command: &mut Command,
-    deadline: Instant,
-    limit: u64,
-) -> Option<(ExitStatus, Vec<u8>)> {
+/// What one bounded query answered.
+///
+/// A caller that only needs the bytes reads [`output`]. A caller whose
+/// decision turns on *why* it has no bytes needs the three cases apart: Git
+/// answering with more than the caller's bound is not Git failing to answer.
+pub(super) enum Bounded {
+    /// Git ran to completion and its reply fitted the caller's bound.
+    Completed(ExitStatus, Vec<u8>),
+    /// Git ran and wrote more than the caller's bound, so none of the reply
+    /// was read. Git itself had no trouble producing it.
+    Overflow,
+    /// Git could not be started, was killed at the deadline, or its output
+    /// could not be read.
+    Failed,
+}
+
+fn spawn_output(command: &mut Command, deadline: Instant, limit: u64) -> Bounded {
     #[cfg(test)]
     SPAWNS.with(|spawns| spawns.set(spawns.get() + 1));
-    let mut child = command
+    let child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let stdout = child.stdout.take()?;
+        .spawn();
+    let Ok(mut child) = child else {
+        return Bounded::Failed;
+    };
+    let Some(stdout) = child.stdout.take() else {
+        return Bounded::Failed;
+    };
+    // One byte past the bound is read deliberately: it is what tells a reply
+    // that exactly fills the bound from one that overran it.
     let reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout.take(limit + 1).read_to_end(&mut bytes).ok()?;
-        (bytes.len() <= limit as usize).then_some(bytes)
+        Some(bytes)
     });
     let status = loop {
         match child.try_wait() {
@@ -178,8 +207,18 @@ fn spawn_output(
             }
         }
     };
-    let bytes = reader.join().ok()??;
-    Some((status?, bytes))
+    let Ok(Some(bytes)) = reader.join() else {
+        return Bounded::Failed;
+    };
+    // A killed process is a failure however much it had written first: the
+    // reply in hand is a prefix, and a helper may sit in the part never read.
+    let Some(status) = status else {
+        return Bounded::Failed;
+    };
+    if bytes.len() > limit as usize {
+        return Bounded::Overflow;
+    }
+    Bounded::Completed(status, bytes)
 }
 
 pub(super) fn submodules_are_inert(

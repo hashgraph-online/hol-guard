@@ -25,9 +25,9 @@ from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalida
 from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer
 from codex_plugin_scanner.guard.continuation_payload import offer_hash
 from codex_plugin_scanner.guard.continuation_runtime import _live_hook_recorded_offer
+from codex_plugin_scanner.guard.continuation_runtime_local import apply_local_approval_continuation
 from codex_plugin_scanner.guard.continuation_snapshot import validated_continuation_snapshot
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.local_approval_continuation import apply_local_approval_continuation
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.live_process_identity import (
     CODEX_BROWSER_WAIT_PROCESS_KEY,
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -55,7 +55,9 @@ def _hook_payload(workspace: Path) -> dict[str, object]:
     }
 
 
-def _hook_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[HookWorker, GuardStore]:
+def _hook_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, blocked_request_mode: str = "ask"
+) -> tuple[HookWorker, GuardStore]:
     from codex_plugin_scanner.guard.config import update_guard_settings
 
     observations = _observations()
@@ -84,9 +86,13 @@ def _hook_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[HookW
         }
         return with_review_evidence(edge, **kwargs)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", review_raw_hook_native)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native", review_raw_hook_native
+    )
     store = GuardStore(tmp_path / "guard-home")
-    update_guard_settings(store.guard_home, {"blocked_request_mode": "ask", "approval_wait_timeout_seconds": 300})
+    update_guard_settings(
+        store.guard_home, {"blocked_request_mode": blocked_request_mode, "approval_wait_timeout_seconds": 300}
+    )
     store.upsert_runtime_state(
         session_id="native-review",
         daemon_host="127.0.0.1",
@@ -254,6 +260,44 @@ def test_an_allow_once_passes_the_daemon_revalidation_and_resumes_the_hook(
         fresh_allow_authorized=fresh_allow_authorized,
     )
 
+    assert fresh_allow_authorized is True
+    assert completed["completed"] is True, completed
+    continuation = completed["continuation"]
+    assert isinstance(continuation, dict)
+    assert continuation["continuationStatus"] == "resumed"
+
+
+def test_a_silent_review_resumes_the_waiting_hook_after_a_cloud_review_allow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    # The default blocked-request mode answers with the silent block. Its
+    # approval link holds the Codex bridge's wait, so the queued row must carry
+    # that wait: otherwise the call times out into a manual retry and an
+    # approval never releases it.
+    workspace = _workspace(tmp_path)
+    worker, store = _hook_worker(tmp_path, monkeypatch, blocked_request_mode="safe-alternative")
+    review = _review(worker, tmp_path, workspace, _live_wait())
+    assert review.get("prompted") is False, review
+    pending = store.list_approval_requests(status="pending")
+    assert len(pending) == 1
+    request_id = str(pending[0]["request_id"])
+    assert request_id in json.dumps(review)
+    row = store.get_approval_request(request_id)
+    assert row is not None
+    snapshot = _snapshot(row)
+    assert snapshot is not None and snapshot["capability"] == "suspended-response", snapshot
+    assert store.get_request_resume(request_id) is not None
+
+    _allow_from_cloud(store, request_id, workspace)
+    fresh_allow_authorized = _daemon_revalidates(worker, store, tmp_path, request_id)
+    resolved = store.get_approval_request(request_id)
+    assert resolved is not None
+    completed = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=str(resolved["resolved_at"]),
+        fresh_allow_authorized=fresh_allow_authorized,
+    )
     assert fresh_allow_authorized is True
     assert completed["completed"] is True, completed
     continuation = completed["continuation"]

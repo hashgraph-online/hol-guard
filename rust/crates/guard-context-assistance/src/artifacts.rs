@@ -67,6 +67,21 @@ pub fn inspect_release_bundle(
     inspect(selection, &release.platform().platform, &expected, None)
 }
 
+/// Same as [`inspect_release_bundle`], but stops between files once `cancel` is set.
+pub fn inspect_release_bundle_cancellable(
+    selection: &RuntimeSelection,
+    release: &ResolvedRelease,
+    cancel: &AtomicBool,
+) -> Result<BundleApproval, RuntimeError> {
+    let expected = RuntimeRelease::catalog(release)?;
+    inspect(
+        selection,
+        &release.platform().platform,
+        &expected,
+        Some(cancel),
+    )
+}
+
 pub(crate) fn inspect_cancellable(
     selection: &RuntimeSelection,
     platform: &str,

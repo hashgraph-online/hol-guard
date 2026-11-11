@@ -264,7 +264,6 @@ def render_runtime_status(section: dict[str, object]) -> str:
         bundled_message = bundled.get("message")
         if isinstance(bundled_message, str) and bundled_message:
             lines.append(f"    {bundled_message}")
-    lines.append(f"  Daemon HTTP gate, this process: {_render_counters(section.get('daemon_http'))}")
     lines.append("Those counters cover this command only. The hook and the daemon keep their own.")
     return "\n".join(lines) + "\n"
 
@@ -325,12 +324,6 @@ def _render_restart(restart: object) -> list[str]:
         f"  Restarts on this account: paused ({attempts} recorded in this window); "
         f"the next one is allowed in {restart.get('retry_in_seconds', 0)}s"
     ]
-
-
-def _render_counters(counters: object) -> str:
-    if not isinstance(counters, dict) or not counters:
-        return "no counters recorded"
-    return ", ".join(f"{key} {counters[key]}" for key in sorted(counters))
 
 
 def _tristate(value: object) -> str:

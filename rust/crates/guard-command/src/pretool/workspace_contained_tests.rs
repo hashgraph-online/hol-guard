@@ -94,12 +94,6 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "kill -SIGTERM %1",
         "kill -- %1",
         "kill %+ %-",
-        // Signal 0 delivers nothing, so these ask whether a process is still
-        // there and leave every process they name running.
-        "kill -0 4821",
-        "kill -s 0 4821",
-        "kill -n 0 4821 7312",
-        "kill -0 %1",
         "rm -f init_repo.py",
         "rm a.py && rm -rf __pycache__",
         "echo hi > scratch.txt && rm scratch.txt",
@@ -136,6 +130,28 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
 /// Every host whose sandbox can start a contained run routes them -- macOS
 /// under Seatbelt, Linux under a bubblewrap mount -- so the profile is asked
 /// of `host()` rather than of one operating system.
+/// Signal 0 is delivered to nothing. The kernel performs the permission check
+/// and returns, so these ask whether a process is still there and leave every
+/// process they name running -- the question `ps -p 4821` asks, which is
+/// proven read-only already. A wait on a build asks it on every pass, so
+/// holding it at containment stopped the wait that carries it.
+#[test]
+fn asking_whether_a_process_is_alive_is_proven_read_only() {
+    let ws = workspace("kill-liveness", true);
+    for command in [
+        "kill -0 4821",
+        "kill -s 0 4821",
+        "kill -n 0 4821 7312",
+        "kill -0 %1",
+    ] {
+        assert_eq!(
+            reason("omp", command, &ws, true),
+            "native_exact_safe_command",
+            "{command}"
+        );
+    }
+}
+
 #[test]
 fn node_commands_with_a_narrower_profile_keep_it() {
     let ws = workspace("node-narrow", true);

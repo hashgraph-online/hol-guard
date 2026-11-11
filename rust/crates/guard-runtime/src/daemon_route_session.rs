@@ -15,6 +15,13 @@ use guard_contracts::{DaemonRoutePayloadV1, DaemonSessionClaimsV1, DaemonSession
 const HOSTED_ORIGINS: &[&str] = &["https://hol.org", "https://www.hol.org"];
 const LOCAL_SURFACES: &[&str] = &["approval-center", "dashboard", "cloud-dashboard"];
 const PROTECTION_REPAIR_SURFACE: &str = "protection-repair";
+const APPROVAL_CENTER_SURFACE: &str = "approval-center";
+/// Writes a request-bound session may make besides deciding its own request:
+/// the dashboard marks what the user has seen while the page is open.
+const BOUND_SESSION_WRITES: &[&str] = &["/v1/read-state"];
+/// Bulk exports the approval page never loads. A session opened from an
+/// agent-handed link must not pull every request's evidence or the settings.
+const BOUND_SESSION_DENIED_READS: &[&str] = &["/v1/evidence/export", "/v1/settings/export"];
 
 /// Host of a transport-normalized origin (`scheme://host[:port]`), without
 /// IPv6 brackets. `None` when the value is not that shape.
@@ -106,6 +113,14 @@ fn decide(request: &SessionRequest<'_>) -> (bool, Option<String>) {
             None,
         );
     }
+    if surface == Some(APPROVAL_CENTER_SURFACE) {
+        if let Some(bound) = claims.request_id.as_deref() {
+            return (
+                bound_request_allowed(request.method, request.path, bound),
+                None,
+            );
+        }
+    }
     if surface.is_some_and(|name| LOCAL_SURFACES.contains(&name)) {
         return (session_path(request.method, request.path), None);
     }
@@ -126,6 +141,34 @@ fn decide(request: &SessionRequest<'_>) -> (bool, Option<String>) {
         return supply_chain_authorize(request, action_path, &action);
     }
     (false, None)
+}
+
+/// What a session opened from an agent-handed approval link may do.
+///
+/// That link is relayed through the agent's transcript, so the session it
+/// opens may read what the approval page shows, but not bulk exports, and
+/// may only decide the one request it names. Every other write the approval center can make
+/// (other requests, bulk approval, policy, settings, repair) needs a session
+/// opened from Guard itself.
+fn bound_request_allowed(method: &str, path: &str, bound: &str) -> bool {
+    if !session_path(method, path) {
+        return false;
+    }
+    if method == "GET" {
+        return !BOUND_SESSION_DENIED_READS.contains(&path);
+    }
+    if method != "POST" {
+        return false;
+    }
+    if BOUND_SESSION_WRITES.contains(&path) {
+        return true;
+    }
+    let parts = segments(path);
+    match parts.as_slice() {
+        ["v1", "requests", id, "approve" | "block" | "resume"] => *id == bound,
+        ["v1", "mcp-policy", "requests", id, "decision"] => *id == bound,
+        _ => false,
+    }
 }
 
 fn read_path_allowed(claims: &DaemonSessionClaimsV1, path: &str) -> bool {

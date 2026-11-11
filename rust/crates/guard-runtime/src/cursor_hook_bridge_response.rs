@@ -24,7 +24,7 @@ use guard_contracts::write_json_string;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::daemon_policy_authority::load_guard_daemon_auth_token;
 use crate::hook_env_stamp::{dumps, json_string};
-use crate::native_review_link::{live_review_url, OPEN_GUARD};
+use crate::native_review_link::{carries_handoff_link, live_review_url, OPEN_GUARD};
 use crate::pyjson;
 
 /// `print(json.dumps({"permission": "allow"}))`.
@@ -158,9 +158,12 @@ fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
         return Some(reason.unwrap_or(DEFAULT_BLOCK_REASON).to_owned());
     };
     // The daemon and the resident already link a paused review with a signed
-    // link; signing its raw prefix again would stack a second token fragment.
+    // link (a session fragment, or the short `/<expires>-<mac>` path); signing
+    // its raw prefix again would stack a second token.
     let signed_prefix = format!("{review_url}#guard-token=");
-    if let Some(reason) = reason.filter(|reason| reason.contains(&signed_prefix)) {
+    if let Some(reason) = reason.filter(|reason| {
+        reason.contains(&signed_prefix) || carries_handoff_link(reason, review_url)
+    }) {
         return Some(crate::desktop_review_link::with_desktop_link(
             reason.to_owned(),
             guard_home,

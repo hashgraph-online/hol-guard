@@ -73,7 +73,7 @@ impl CompiledNativeCommandControls {
         for &index in self.candidate_index.extension_indices() {
             let extension = &self.program.extensions[index];
             if deadline.is_some_and(|limit| Instant::now() >= limit) {
-                return Err("native_command_deadline_exceeded");
+                return Err(crate::native_command_program::NATIVE_COMMAND_DEADLINE_EXCEEDED);
             }
             if !self.active_extensions.contains(&extension.extension_id) {
                 continue;

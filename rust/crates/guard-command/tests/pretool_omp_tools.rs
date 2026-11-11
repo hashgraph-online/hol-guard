@@ -250,6 +250,60 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
 }
 
 #[test]
+fn local_references_are_reads_of_the_sessions_scratch_files() {
+    let f = fixture();
+    for path in [
+        "local://",
+        "local://paste-1.md",
+        "local://paste-1.md:150-230",
+        "local://paste-12.md:raw",
+        "local://paste-1.md:1-40:raw",
+        "local://PLAN.md",
+        "local://plans/release_notes-plan.md",
+        "local://pasted-image-1f2e3d4c.png",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_local_read", "{path}");
+    }
+    for path in [
+        "local://../paste-1.md",
+        "local://plans/../../.ssh/id_rsa",
+        "local:///etc/passwd",
+        "local://.env",
+        "local://plans/.hidden.md",
+        "local://plans//x.md",
+        "local://plans/",
+        "local://~/x.md",
+        "local://%2e%2e/secret",
+        "local://paste 1.md",
+        "local://paste-1.md:5",
+        "local://paste-1.md:a-b",
+        "local://paste-1.md:1-2:3-4",
+        "local://paste-1.md?x=1",
+        "local://paste-1.md#frag",
+        "local://:1-5",
+        "local:/paste-1.md",
+        "LOCAL://paste-1.md",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert_ne!(result.reason_code, "native_omp_local_read", "{path}");
+    }
+    for tool in ["write", "edit"] {
+        let result = omp(
+            &f,
+            tool,
+            json!({"path": "local://paste-1.md", "content": "x"}),
+        );
+        assert_ne!(result.reason_code, "native_omp_local_read", "{tool}");
+    }
+    assert_ne!(
+        run(&f, "codex", "read", json!({"path": "local://paste-1.md"})).reason_code,
+        "native_omp_local_read"
+    );
+}
+
+#[test]
 fn skill_and_note_documents_are_readable_in_bounds() {
     let f = fixture();
     for path in [

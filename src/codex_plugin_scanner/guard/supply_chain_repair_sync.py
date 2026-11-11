@@ -40,11 +40,11 @@ def repair_sync_intelligence(
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     del workspace_dir
-    from .daemon.server import _resolve_guard_sync_auth_context
     from .local_supply_chain import sync_supply_chain_bundle
+    from .runtime import runner
 
     try:
-        auth_context = _resolve_guard_sync_auth_context(store)
+        auth_context = runner._resolve_guard_sync_auth_context(store)  # pyright: ignore[reportPrivateUsage]
     except GuardSyncEndpointUntrustedError:
         raise
     except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:

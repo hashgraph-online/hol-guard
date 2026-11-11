@@ -225,6 +225,36 @@ pub(crate) fn normalized_launch_cwd(cwd: Option<&Path>) -> std::path::PathBuf {
     resolved
 }
 
+// The approval binding digest for a package-manager launch.
+//
+// `argv_sha256` binds the argv exactly as it was typed, which is what the
+// runtime reuse checks compare, so it cannot be normalized in place. A saved
+// package approval must still survive a reporting-only spelling of the same
+// install, so the approval binding is taken over the argv with the manager's
+// presentation options removed. `None` means the strip changed nothing and the
+// launch keeps exactly the binding it has today.
+pub fn package_binding_argv_digest(
+    command: &Value,
+    args: &[Value],
+    structured_command: bool,
+) -> Option<String> {
+    let RuntimeLaunchArgv::Valid(full_argv) =
+        runtime_launch_argv(command, args, structured_command)
+    else {
+        return None;
+    };
+    let (manager, arguments) = full_argv.split_first()?;
+    let stripped =
+        crate::package_manager_command::strip_manager_presentation_arguments(manager, arguments);
+    if stripped.len() == arguments.len() {
+        return None;
+    }
+    let mut binding_argv = Vec::with_capacity(stripped.len() + 1);
+    binding_argv.push(manager.clone());
+    binding_argv.extend(stripped);
+    Some(launch_argv_digest(&binding_argv))
+}
+
 // `_package_launch_approval_identity` (local_supply_chain.py :3109-3124) —
 // ticket name `_package_request_launch_identity_material` (surface-map alias;
 // same argv_sha256 + wrapper_resolution material compose). Pure projection:
@@ -248,13 +278,16 @@ pub fn package_request_launch_identity_material(
             direct.insert("status".into(), json!("direct"));
             Value::Object(direct)
         });
-    out.insert(
-        "argv_sha256".into(),
-        launch_identity
-            .get("argv_sha256")
-            .cloned()
-            .unwrap_or(Value::Null),
-    );
+    // A package launch carries `binding_argv_sha256` when a presentation-only
+    // option made the typed argv differ from the one the approval binds. Every
+    // other caller has only `argv_sha256`, and keeps today's key.
+    let argv_sha256 = launch_identity
+        .get("binding_argv_sha256")
+        .filter(|value| value.is_string())
+        .or_else(|| launch_identity.get("argv_sha256"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    out.insert("argv_sha256".into(), argv_sha256);
     out.insert("wrapper_resolution".into(), wrapper_resolution);
     out
 }

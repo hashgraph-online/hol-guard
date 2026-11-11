@@ -14,8 +14,8 @@ on:
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "src/codex_plugin_scanner/guard/native_resident_client.py"
       - "src/codex_plugin_scanner/guard/native_resident_stream.py"
-      - "src/codex_plugin_scanner/guard/daemon/server.py"
-      - "src/codex_plugin_scanner/guard/daemon/hook_process_*.py"
+      - "src/codex_plugin_scanner/guard/routes/hook_calls.py"
+      - "src/codex_plugin_scanner/guard/hook_review/*.py"
       - ".github/workflows/rust-runtime-performance.yml"
       - ".github/actions/setup-rust/**"
   push:
@@ -31,8 +31,8 @@ on:
       - "src/codex_plugin_scanner/guard/native_runtime.py"
       - "src/codex_plugin_scanner/guard/native_resident_client.py"
       - "src/codex_plugin_scanner/guard/native_resident_stream.py"
-      - "src/codex_plugin_scanner/guard/daemon/server.py"
-      - "src/codex_plugin_scanner/guard/daemon/hook_process_*.py"
+      - "src/codex_plugin_scanner/guard/routes/hook_calls.py"
+      - "src/codex_plugin_scanner/guard/hook_review/*.py"
       - ".github/workflows/rust-runtime-performance.yml"
       - ".github/actions/setup-rust/**"
   workflow_dispatch:

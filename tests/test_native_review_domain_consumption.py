@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard.config import update_guard_settings
-from codex_plugin_scanner.guard.daemon.hook_native_review_approval import pause_native_pre_tool_for_approval
+from codex_plugin_scanner.guard.hook_review.hook_native_review_approval import pause_native_pre_tool_for_approval
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore

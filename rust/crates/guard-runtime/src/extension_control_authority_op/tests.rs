@@ -64,7 +64,7 @@ impl Home {
                 catalog_digest text primary key, manifest_json text not null, record_json text not null,
                 record_digest text not null, record_mac text not null, recorded_at text not null);
              create table sync_state (state_key text primary key, payload_json text not null);
-             create table guard_events (event_name text not null, payload_json text not null);
+             create table guard_events (event_name text not null, payload_json text not null, occurred_at text);
              create table extension_control_authority_proof (
                 proof_id_hash text primary key, mutation_digest text not null,
                 transition_revision integer not null, reserved_at text not null, consumed_at text);",
@@ -98,7 +98,7 @@ impl Home {
         layers: &[ExtensionControlLayer],
         phase: &str,
     ) -> String {
-        self.commit_bound(revision, catalog_digest, layers, phase, None)
+        self.commit_bound(revision, catalog_digest, layers, phase, None, false)
     }
 
     pub(super) fn commit_bound(
@@ -107,7 +107,8 @@ impl Home {
         catalog_digest: &str,
         layers: &[ExtensionControlLayer],
         phase: &str,
-        retained_pack: Option<&str>,
+        pack: Option<&str>,
+        activates: bool,
     ) -> String {
         let layers_json = layers_to_json(layers).unwrap();
         let previous_digest = if revision == 1 {
@@ -128,7 +129,7 @@ impl Home {
             "previous_digest": previous_digest,
             "committed_at": AT,
         }));
-        if let Some(pack) = retained_pack {
+        if let Some(pack) = pack {
             snapshot.insert("command_pack_record_digest".to_owned(), json!(pack));
         }
         let (snapshot_json, snapshot_digest, snapshot_mac) =
@@ -138,7 +139,7 @@ impl Home {
             private_hash(&format!("idem-{revision}"), &KEY, "idempotency"),
             private_hash(&format!("nonce-{revision}"), &KEY, "nonce"),
         ];
-        let transition = object(json!({
+        let mut transition = object(json!({
             "revision": revision,
             "previous_revision": revision - 1,
             "previous_digest": previous_digest,
@@ -150,6 +151,9 @@ impl Home {
             "created_at": AT,
             "phase": "prepared",
         }));
+        if let Some(pack) = pack.filter(|_| activates) {
+            transition.insert("command_pack_record_digest".to_owned(), json!(pack));
+        }
         let (transition_json, transition_digest, transition_mac) =
             authenticated_record(&transition, &KEY, TRANSITION_PURPOSE).unwrap();
         self.db
@@ -228,6 +232,18 @@ pub(super) fn object(value: Value) -> Map<String, Value> {
         unreachable!()
     };
     map
+}
+
+/// `home` with the cloud-event queue a committed change is published to.
+pub(super) fn with_cloud_events(home: Home) -> Home {
+    home.db
+        .execute_batch(
+            "create table guard_cloud_events (
+                event_id text primary key, idempotency_key text, event_type text,
+                payload_json text, occurred_at text, uploaded_at text);",
+        )
+        .unwrap();
+    home
 }
 
 pub(super) fn anchor(revision: i64, snapshot_digest: &str, phase: &str) -> String {

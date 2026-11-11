@@ -9,21 +9,36 @@
 //! Only an allowed prompt gets context, and only for harnesses that show
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
-use crate::context_assistance_engine::{project_context_on, quick_excerpts, PickedExcerpt};
-use crate::context_assistance_prompt_files::{
-    asks_for_tests, candidates, phrases, project_root, terms, test_file,
-};
+use crate::context_assistance_engine::{project_context_on, quick_excerpts};
+use crate::context_assistance_prompt_files::{named, phrases, project_root, walk};
+use crate::context_assistance_prompt_words::marked_terms;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
 use lookup::{lookup, Miss, Request};
+use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+#[path = "context_assistance_prompt_changes.rs"]
+mod changes;
+#[path = "context_assistance_prompt_excerpts.rs"]
+mod excerpts;
+use excerpts::render;
+#[cfg(test)]
+use excerpts::{fence_for, language};
+#[path = "context_assistance_prompt_ending.rs"]
+mod ending;
+use ending::{end_note, prompt_session};
 #[path = "context_assistance_prompt_lookup.rs"]
 mod lookup;
+#[path = "context_assistance_prompt_map.rs"]
+mod map;
+#[path = "context_assistance_prompt_names.rs"]
+mod names;
+#[path = "context_assistance_prompt_sections.rs"]
+mod sections;
 #[path = "context_assistance_prompt_seen.rs"]
 mod seen;
 
@@ -45,6 +60,17 @@ const MATCHED_HEADER: &str = "HOL Guard CIGAR matched these project files to thi
 best first. Open them for context:";
 const REPEATED_HEADER: &str = "HOL Guard CIGAR matched code it already added earlier in this \
 session. Open the files if those excerpts are no longer in view.";
+/// Claude Code models tend to send one tool call per turn, and every turn
+/// re-sends the whole conversation, so the reads and edits a note makes
+/// possible cost least when they go out together.
+const BATCHING: &str = "Each tool call re-sends this whole conversation. When you already know \
+several ranges to read or several edits to make, make those tool calls together in one response, \
+not one per turn.";
+/// Codex models tend to read again lines a note already shows, then patch and
+/// test in separate turns; each turn re-sends the whole conversation.
+const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: work from \
+them instead of reading those lines again. When you can, make the edit and run its check in the \
+same tool call (one exec script can apply the patch and run the tests).";
 
 /// A prompt's context and the excerpts it shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -81,7 +107,10 @@ pub(crate) fn harness_response(
         let _ = crate::hook_direct::claude_prompt_text::brand(&mut response, result);
     }
     if let Some(store) = store {
+        let before = context_len(&response);
         attach(&mut response, envelope, harness, store, started);
+        let session = prompt_session(envelope, harness, store);
+        end_note(&mut response, harness, before, session.as_ref());
     }
     Some(response)
 }
@@ -146,12 +175,50 @@ fn attach(
     let session = session(envelope, &root, harness);
     let earlier = session.as_ref().map(seen::earlier).unwrap_or_default();
     let left = || waiting_time(envelope.deadline_budget_ms).saturating_sub(started.elapsed());
-    let Some(walk) = left().checked_sub(MIN_WAIT) else {
+    // What changed since the session began comes first, for a prompt about
+    // changes; a third of the wait at most, the rest is the search's. Git
+    // runs only while project context is on, checked again after it.
+    let context_on = || {
+        service.prompt_context_chosen() && project_context_on(store.guard_home(), &root, harness)
+    };
+    let until = Instant::now() + left() / 3;
+    let changed = context_on()
+        .then(|| {
+            changes::since_start(
+                store.guard_home(),
+                home,
+                &root,
+                harness,
+                session.as_ref(),
+                prompt,
+                until,
+            )
+        })
+        .flatten()
+        .filter(|_| context_on());
+    if let Some(changed) = &changed {
+        add_context(response, &changed.text);
+    }
+    let Some(budget) = left().checked_sub(MIN_WAIT) else {
         return;
     };
-    let mut words = terms(prompt);
+    let marked = marked_terms(prompt);
+    let mut words: Vec<String> = marked.iter().map(|(term, _)| term.clone()).collect();
     let quoted = phrases(prompt);
-    let found = candidates(&root, &words, &quoted, walk);
+    // A prompt about changes naming no code, file or phrase is answered by
+    // them and their tests; a search would only add code the agent may not need.
+    if changed.is_some()
+        && quoted.is_empty()
+        && named(prompt).is_empty()
+        && !marked.iter().any(|(_, name)| *name)
+    {
+        let at = (store.guard_home(), &*root, harness, session.as_ref());
+        changes::used::add_tests(response, at, changed, &earlier, budget, context_on);
+        return;
+    }
+    let searched = walk(&root, &words, &quoted, &named(prompt), budget);
+    let found = searched.found(&words);
+    let held = held_names(prompt, &words, &searched.spelled);
     if found.is_empty() {
         return;
     }
@@ -160,6 +227,36 @@ fn attach(
         return;
     }
     let deadline = Instant::now() + wait;
+    let home = store.guard_home();
+    // The map of where the request's code is comes first, from the matched
+    // files CIGAR would accept, and a stub's old body. Project context is
+    // checked again after the read and Git, so a stop meanwhile sends nothing.
+    let mapped = service
+        .prompt_context_chosen()
+        .then(|| {
+            map::mapped(
+                home,
+                &root,
+                harness,
+                &searched,
+                &marked,
+                &quoted,
+                prompt,
+                changed.is_some(),
+                &earlier,
+                deadline,
+            )
+        })
+        .flatten()
+        .map(|context| changes::removed::added(context, home, envelope, &root, harness, deadline))
+        .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
+    if let Some(context) = mapped {
+        if let Some(session) = &session {
+            seen::remember(session, &context.shown);
+        }
+        add_context(response, &context.text);
+        return;
+    }
     // An excerpt holding only the quoted text is still about the request.
     words.extend(quoted);
     let request = Request {
@@ -169,9 +266,9 @@ fn attach(
         words: words.clone(),
         found: found.clone(),
         earlier: earlier.clone(),
+        names: held.clone(),
     };
     let until = deadline + HOOK_MARGIN / 2;
-    let home = store.guard_home();
     // CIGAR still starting, busy with another prompt, or still loading the
     // project, as on a session's first prompt: Guard reads the matched files
     // CIGAR would accept and shows their best parts itself, or names them when
@@ -180,7 +277,7 @@ fn attach(
     let own_read = || {
         service
             .prompt_context_chosen()
-            .then(|| read_matched(home, &root, harness, &found, &words, &earlier, until))
+            .then(|| read_matched(home, &root, harness, &found, &words, &earlier, &held, until))
             .flatten()
             .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness))
     };
@@ -207,7 +304,9 @@ fn answered(
 }
 
 /// Guard's own read of the matched files CIGAR would accept: their best
-/// parts, or the names of the files it checked when no part fits.
+/// parts, or the names of the files it checked when no part fits or none
+/// holds the project code the prompt `named`.
+#[allow(clippy::too_many_arguments)]
 fn read_matched(
     home: &Path,
     root: &Path,
@@ -215,10 +314,11 @@ fn read_matched(
     found: &[String],
     words: &[String],
     earlier: &[Span],
+    named: &[String],
     until: Instant,
 ) -> Option<Rendered> {
     let (picked, names) = quick_excerpts(home, root, harness, found, words, MAX_OTHER_FILES, until);
-    render(&picked, &names, words, earlier).or_else(|| matched(&names))
+    render(&picked, &names, words, earlier, named).or_else(|| matched(&names))
 }
 
 /// The harness session this prompt belongs to, when its payload names one.
@@ -284,179 +384,6 @@ fn truncated(text: &str, max_bytes: usize) -> String {
     text[..end].to_owned()
 }
 
-/// Only excerpts that mention something the prompt asked about; nothing at
-/// all when none do, so an unrelated prompt never carries project code. A
-/// file this prompt's search did not rank, which an earlier prompt loaded,
-/// must mention two different things it asked about, when it asked about
-/// more than one. Tests an earlier prompt loaded give way to source here
-/// too, unless this prompt asks about tests. Files this prompt's search
-/// ranked come first, in that order, ahead of files an earlier prompt
-/// loaded. An excerpt that mentions fewer than half as many of the prompt's
-/// words as the best one does is a passing match, such as a progress bar
-/// that only shares the word "error" with a request about choices, and is
-/// left out.
-fn relevant<'a>(
-    picked: &'a [PickedExcerpt],
-    ranked: &[String],
-    words: &[String],
-) -> Vec<&'a PickedExcerpt> {
-    // A quoted word is in `words` twice; each word counts once.
-    let distinct: BTreeSet<&str> = words.iter().map(String::as_str).collect();
-    let mut mentions: Vec<(&PickedExcerpt, usize)> = picked
-        .iter()
-        .map(|excerpt| {
-            let text = excerpt.text.to_lowercase();
-            let path = excerpt.path.to_lowercase().replace(['-', '_'], "");
-            let mentioned = distinct
-                .iter()
-                .filter(|word| text.contains(**word) || path.contains(**word))
-                .count();
-            (excerpt, mentioned)
-        })
-        .filter(|(excerpt, mentioned)| {
-            let needed = if distinct.len() > 1 && !ranked.contains(&excerpt.path) {
-                2
-            } else {
-                1
-            };
-            *mentioned >= needed
-        })
-        .collect();
-    // Tests give way before the best match is measured, so a test that
-    // repeats the prompt's words cannot push the source it covers out.
-    if !asks_for_tests(words)
-        && mentions
-            .iter()
-            .any(|(excerpt, _)| !test_file(&excerpt.path))
-    {
-        mentions.retain(|(excerpt, _)| !test_file(&excerpt.path));
-    }
-    let best = mentions.iter().map(|(_, mentioned)| *mentioned).max();
-    let close = best.unwrap_or_default().div_ceil(2);
-    let mut found: Vec<&PickedExcerpt> = mentions
-        .into_iter()
-        .filter(|(_, mentioned)| *mentioned >= close)
-        .map(|(excerpt, _)| excerpt)
-        .collect();
-    found.sort_by_key(|excerpt| {
-        ranked
-            .iter()
-            .position(|path| *path == excerpt.path)
-            .unwrap_or(usize::MAX)
-    });
-    found
-}
-
-/// The context text, never longer than `MAX_CONTEXT_CHARS`, or `None` when
-/// no relevant excerpt fits. An excerpt an `earlier` prompt of the session
-/// already showed is named rather than sent again.
-fn render(
-    picked: &[PickedExcerpt],
-    found: &[String],
-    words: &[String],
-    earlier: &[Span],
-) -> Option<Rendered> {
-    let mut blocks = String::new();
-    let mut shown: Vec<Span> = Vec::new();
-    let mut repeated: Vec<Span> = Vec::new();
-    for excerpt in relevant(picked, found, words) {
-        let text = excerpt.text.trim_end();
-        let span = Span::new(&excerpt.path, excerpt.start_line, excerpt.end_line, text);
-        if earlier.contains(&span) {
-            repeated.push(span);
-            continue;
-        }
-        let fence = fence_for(text);
-        let block = format!(
-            "\n\n{} (lines {}-{})\n{fence}{}\n{}\n{fence}",
-            excerpt.path,
-            excerpt.start_line,
-            excerpt.end_line,
-            language(&excerpt.path),
-            text,
-        );
-        if HEADER.len() + blocks.len() + block.len() > MAX_CONTEXT_CHARS {
-            continue;
-        }
-        blocks.push_str(&block);
-        shown.push(span);
-    }
-    let mut out = match (shown.is_empty(), repeated.is_empty()) {
-        (false, _) => format!("{HEADER}{blocks}"),
-        (true, false) => REPEATED_HEADER.to_owned(),
-        (true, true) => return None,
-    };
-    let mut before = String::new();
-    for span in &repeated {
-        let item = if before.is_empty() {
-            format!("\n\nAlready shown earlier in this session: {}", lines(span))
-        } else {
-            format!(", {}", lines(span))
-        };
-        if out.len() + before.len() + item.len() > MAX_CONTEXT_CHARS {
-            break;
-        }
-        before.push_str(&item);
-    }
-    out.push_str(&before);
-    let named = |path: &str| shown.iter().chain(&repeated).any(|span| span.path == path);
-    let others = found
-        .iter()
-        .map(String::as_str)
-        .filter(|path| !named(path))
-        .take(MAX_OTHER_FILES);
-    let mut listed = String::new();
-    for path in others {
-        let item = if listed.is_empty() {
-            format!("\n\nOther matching files: {path}")
-        } else {
-            format!(", {path}")
-        };
-        if out.len() + listed.len() + item.len() > MAX_CONTEXT_CHARS {
-            break;
-        }
-        listed.push_str(&item);
-    }
-    out.push_str(&listed);
-    Some(Rendered { text: out, shown })
-}
-
-fn lines(span: &Span) -> String {
-    format!("{} (lines {}-{})", span.path, span.start, span.end)
-}
-
-/// A backtick fence longer than any backtick run in `text`, so file
-/// contents that hold their own fences cannot close the block early.
-fn fence_for(text: &str) -> String {
-    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
-    "`".repeat(longest.max(2) + 1)
-}
-
-fn language(path: &str) -> &'static str {
-    let extension = Path::new(path)
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    match extension.as_str() {
-        "ts" | "mts" | "cts" => "ts",
-        "tsx" => "tsx",
-        "js" | "mjs" | "cjs" => "js",
-        "jsx" => "jsx",
-        "py" => "python",
-        "rs" => "rust",
-        "go" => "go",
-        "css" | "scss" | "sass" | "less" => "css",
-        "html" | "vue" | "svelte" | "astro" => "html",
-        "json" => "json",
-        "md" | "mdx" => "markdown",
-        "sh" => "bash",
-        "yaml" | "yml" => "yaml",
-        "toml" => "toml",
-        _ => "",
-    }
-}
-
 fn add_context(response: &mut Value, context: &str) {
     let Some(output) = response
         .get_mut("hookSpecificOutput")
@@ -469,6 +396,13 @@ fn add_context(response: &mut Value, context: &str) {
         _ => context.to_owned(),
     };
     output.insert("additionalContext".into(), Value::String(combined));
+}
+
+fn context_len(response: &Value) -> usize {
+    response
+        .pointer("/hookSpecificOutput/additionalContext")
+        .and_then(Value::as_str)
+        .map_or(0, str::len)
 }
 
 #[cfg(test)]

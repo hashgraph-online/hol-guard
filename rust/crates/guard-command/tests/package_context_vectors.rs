@@ -3,10 +3,18 @@
 //! The vectors under `fixtures/package_context_vectors.v1.json.gz` were recorded
 //! from the retired Python builder, by a recorder that has since been removed
 //! along with it. They are the only record of what that builder answered, so
-//! they are never regenerated. One deliberate contract change was applied to
-//! them mechanically: the package-manager executable material no longer binds
-//! a digest of the whole PATH, so its `opaque` hook and `search_path_digest`
-//! field were removed and the affected digests recomputed. Each scenario
+//! they are never regenerated. Two deliberate contract changes were applied to
+//! them mechanically, with the affected digests recomputed. First, the
+//! package-manager executable material no longer binds a digest of the whole
+//! PATH, so its `opaque` hook and `search_path_digest` field were removed.
+//! Second, so that a saved approval holds in any checkout while the lockfile
+//! does: the repository material names the normalized `origin` URLs (else
+//! every remote's, else the common Git directory) in place of the common Git
+//! directory plus every remote URL, with a relative local URL resolved against
+//! the directory holding the common Git directory, and `package.json` and
+//! `pyproject.toml` entries digest only their install sections. Third,
+//! `prepublishOnly` is no longer an install hook, since only `npm publish` runs
+//! it, so a manifest whose only lifecycle script it is stays portable. Each scenario
 //! materialises a file tree in a scratch directory, runs the Rust build over
 //! it with replay ports, and requires the same digest, components and
 //! non-portable reason, plus the same ordered log of native hook calls (digest

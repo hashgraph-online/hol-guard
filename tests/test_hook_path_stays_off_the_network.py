@@ -37,7 +37,7 @@ _FORBIDDEN = (
 # too and the check covers what a running daemon has loaded.
 _PROBE = """
 import json, sys
-import codex_plugin_scanner.guard.daemon.hook_worker
+import codex_plugin_scanner.guard.hook_review.hook_worker
 from codex_plugin_scanner.guard.adapters import list_adapters
 list_adapters()
 print(json.dumps(sorted(sys.modules)))
@@ -52,7 +52,7 @@ def test_loading_the_hook_worker_and_its_adapters_loads_no_network_client_or_ass
     # A fresh interpreter, so modules other tests imported do not count.
     completed = subprocess.run([sys.executable, "-c", _PROBE], capture_output=True, text=True, check=True, timeout=120)
     loaded = set(json.loads(completed.stdout))
-    assert "codex_plugin_scanner.guard.daemon.hook_worker" in loaded
+    assert "codex_plugin_scanner.guard.hook_review.hook_worker" in loaded
     reached = sorted(name for name in loaded if _forbidden(name))
     assert not reached, f"the hook path loads network or background assessment code: {reached}"
 

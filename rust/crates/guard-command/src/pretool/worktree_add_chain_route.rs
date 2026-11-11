@@ -247,3 +247,146 @@ fn entered_directory(value: &str, context: super::super::PathContext<'_>) -> Opt
     }
     checkout_path(&target)
 }
+
+/// A relative path after the `cd` names a file of the new checkout, which
+/// the ref supplies. A bare name uses the search path, which
+/// `search_path_outside` screens. The add refuses an existing
+/// destination, so an absolute path that resolves now names a program
+/// outside it; one that does not resolve could only come from the checkout.
+pub(super) fn resolved_outside(later: &CommandSegmentV1, destination: &Path) -> bool {
+    later.executable.as_deref().is_some_and(|value| {
+        !value.contains(['/', '\\'])
+            || (Path::new(value).is_absolute()
+                && std::fs::canonicalize(value)
+                    .is_ok_and(|resolved| !resolved.starts_with(destination)))
+    })
+}
+
+/// A step that only reads and prints writes no configuration, ref or hook a
+/// later Git read in the checkout could pick up, so it leaves the
+/// destination proof standing. `cd`, `pushd` and `popd` would move those
+/// reads out of the checkout the proof answers for, and `rg` runs a
+/// caller-chosen program through `--pre`. A bare name resolves on the
+/// search path, which `search_path_outside` screens, never inside the new
+/// checkout.
+pub(super) fn inert_step(later: &CommandSegmentV1) -> bool {
+    later.executable.as_deref().is_some_and(|value| {
+        super::super::executable_basename(value) == value
+            && !matches!(value, "cd" | "pushd" | "popd" | "rg")
+    }) && later.environment_names.is_empty()
+        && later.wrapper_chain.is_empty()
+        && !later.path_overridden
+        && !super::super::control_flow_flatten::command_word_changes_shell_state(&later.text)
+        && super::super::search::grep::creates_nothing(later)
+}
+
+/// `git checkout -b <name>`, or `git switch -c <name>`, naming no start
+/// point. The chain's add proved this commit's `post-checkout` and
+/// `reference-transaction` hooks inert, and the new worktree shares the
+/// repository those hooks come from. With no start point the step stays on
+/// that commit: it writes one new ref, points `HEAD` at it, and changes no
+/// file of the working tree, so no filter or textconv runs over a tree the
+/// add never read. A start point would name another commit, whose hooks and
+/// tree the add never proved, so a second operand is refused.
+pub(super) fn new_branch_step(segment: &CommandSegmentV1) -> bool {
+    if segment.executable.as_deref() != Some("git")
+        || !segment.environment_names.is_empty()
+        || !segment.wrapper_chain.is_empty()
+        || segment.path_overridden
+    {
+        return false;
+    }
+    let mut arguments = segment.arguments.iter().map(String::as_str);
+    let mut word = arguments.next();
+    while matches!(word, Some("-P" | "--no-pager" | "--no-optional-locks")) {
+        word = arguments.next();
+    }
+    let flag = match word {
+        Some("checkout") => "-b",
+        Some("switch") => "-c",
+        _ => return false,
+    };
+    arguments.next() == Some(flag)
+        && arguments.next().is_some_and(new_branch_name)
+        && arguments.next().is_none()
+}
+
+/// A branch name Git reads as a name rather than an option or a path out of
+/// the repository: no leading dash, no absolute or home spelling, and no
+/// parent step.
+fn new_branch_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && !name.starts_with('/')
+        && !name.starts_with('~')
+        && !name.starts_with('\\')
+        && super::valid_path_text(name)
+        && !Path::new(name)
+            .components()
+            .any(|component| component == Component::ParentDir)
+}
+
+/// A `mkdir` the write screens admit that creates nothing in or below the
+/// new checkout. The screens read the disk before the add runs, so a
+/// tracked symlink the checkout brings (`notes -> ~/.ssh`) could otherwise
+/// lead `mkdir -p` out of it.
+pub(super) fn proven_mkdir(
+    segment: &CommandSegmentV1,
+    destination: &Path,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && !segment
+            .arguments
+            .iter()
+            .any(|argument| super::super::sensitive_path_argument(argument))
+        && super::super::directory_targets::home_targets_unquoted(segment)
+        && super::super::safe_reads::safe_file_mutation_arguments(
+            "mkdir",
+            &segment.arguments,
+            context,
+        )
+        && segment
+            .arguments
+            .last()
+            .is_some_and(|target| created_outside(target, destination, context))
+}
+
+/// Whether `target` resolves outside `destination`: through the deepest
+/// path that exists now, which must not be a dangling link, and then the
+/// names still to be created.
+fn created_outside(
+    target: &str,
+    destination: &Path,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    let expanded = if target.starts_with('~') {
+        super::super::read_paths::expand_home_read_path(target, context.home_dir)
+    } else {
+        Some(target.to_owned())
+    };
+    let (Some(expanded), Some(cwd)) = (
+        expanded,
+        context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok()),
+    ) else {
+        return false;
+    };
+    let mut existing = cwd.join(expanded);
+    let mut missing = Vec::new();
+    while std::fs::symlink_metadata(&existing).is_err() {
+        let Some(name) = existing.file_name().map(ToOwned::to_owned) else {
+            return false;
+        };
+        missing.push(name);
+        if !existing.pop() {
+            return false;
+        }
+    }
+    let Ok(mut resolved) = std::fs::canonicalize(&existing) else {
+        return false;
+    };
+    resolved.extend(missing.iter().rev());
+    !resolved.starts_with(destination)
+}

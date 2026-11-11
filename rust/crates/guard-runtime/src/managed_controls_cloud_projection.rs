@@ -133,7 +133,10 @@ pub(super) fn selected(request: &Obj, document: &Value) -> Result<Vec<Value>, &'
         .ok_or("policy_observation_time_invalid")?;
     let observed = crate::policy_bundle_time::strict_utc_micros(text("observed_at")?)
         .ok_or("policy_observation_time_invalid")?;
-    if now < observed || now - observed > 900_000_000 {
+    // The receipt time comes from the server clock, so allow the same skew the
+    // completion check accepted rather than calling a fresh receipt stale.
+    let skew = guard_command::cloud_catalog::completion::SERVER_CLOCK_SKEW as i64;
+    if observed > now.saturating_add(skew) || now.saturating_sub(observed) > 900_000_000 {
         return Err("policy_observation_stale");
     }
     // Optional selected server metadata can be checked, but can never replace

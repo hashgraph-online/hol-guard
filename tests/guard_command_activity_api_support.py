@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     ActivityApprovalReuseStatus,
     ActivityDecisionReason,

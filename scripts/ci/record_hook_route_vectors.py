@@ -48,7 +48,7 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _canonical_harness_name,
     _is_copilot_permission_request,
 )
-from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
+from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailableError
 

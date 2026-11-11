@@ -42,6 +42,19 @@ const INVALID: &str = "native_hook_decision_payload_invalid";
 pub(crate) const REVIEW_DEFAULT_REASON: &str =
     "HOL Guard requires review before this action can execute.";
 
+/// Whether a queued silent block names its approval link: only when
+/// approving the row can let the agent run the action, and not for a remote
+/// connector's setup reason in the default mode. A Codex bridge holds its
+/// wait exactly when the block names the link.
+pub(crate) fn silent_review_links(
+    approval_can_unblock: bool,
+    ask: bool,
+    has_setup_reason: bool,
+    connector_is_local: bool,
+) -> bool {
+    approval_can_unblock && (ask || !has_setup_reason || connector_is_local)
+}
+
 pub(crate) fn silent_review_block(
     inputs: &SilentReviewBlockInputsV1,
 ) -> Result<SilentReviewBlockV1, String> {
@@ -141,9 +154,12 @@ fn respond(
     // exact-action Always cannot let the agent run the action, so the reason
     // does not send the user to approve it; nor does a remote connector's
     // setup reason in the default mode.
-    let approval_can_unblock = inputs.retry_reuses_approval || inputs.exact_action_allowable;
-    let links =
-        approval_can_unblock && (inputs.ask || setup.is_none() || inputs.connector_is_local);
+    let links = silent_review_links(
+        inputs.retry_reuses_approval || inputs.exact_action_allowable,
+        inputs.ask,
+        setup.is_some(),
+        inputs.connector_is_local,
+    );
     let request_id = inputs.request_id.as_deref().filter(|_| inputs.queued);
     if let Some(id) = request_id.filter(|_| inputs.retry_reuses_approval) {
         let hint = approval_wait_hint_for_home(id, &inputs.guard_home, &inputs.home_dir);

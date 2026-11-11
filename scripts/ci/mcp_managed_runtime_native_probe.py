@@ -82,7 +82,7 @@ if '--exercise' in sys.argv:
 
     from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer, proxy_cli_args
 
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 

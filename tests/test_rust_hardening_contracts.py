@@ -63,7 +63,7 @@ def test_hook_data_plane_ownership_v2_has_one_declared_class_per_node() -> None:
         ids.add(node_id)
         assert node["class"] in allowed_classes
         assert isinstance(node["paths"], list) and node["paths"]
-    managed_install = "src/codex_plugin_scanner/guard/daemon/hook_managed_install_state.py"
+    managed_install = "src/codex_plugin_scanner/guard/hook_review/hook_managed_install_state.py"
     policy = next(node for node in nodes if isinstance(node, dict) and node.get("id") == "policy_and_approval_control")
     launcher = next(node for node in nodes if isinstance(node, dict) and node.get("id") == "native_edge_launcher")
     assert managed_install in policy["paths"]

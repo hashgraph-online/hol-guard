@@ -205,26 +205,33 @@ pub(super) fn safe_sed_arguments(
     }
     // `1,12p;28,40p` prints several line ranges, as the Codex output proof
     // already allows, and `-e 5p -e 9p` is the same program. Every statement
-    // must be a numeric or `$` range print, so no w/W/e/r command, label or
-    // regex address can join it.
-    let statements: Vec<&str> = programs
+    // must print a region named by line numbers, `$` or a `/regex/` address,
+    // so no w/W/e/r command, label or other command can join it. A `;` inside
+    // a pattern belongs to the address, and a program whose delimiter is left
+    // open is one this reading never finished, so it stays unread.
+    let statements: Option<Vec<&str>> = programs
         .iter()
-        .flat_map(|program| program.split(';'))
-        .collect();
+        .map(|program| crate::codex_output_args::sed_statements_split(program))
+        .try_fold(Vec::new(), |mut all, split| {
+            all.extend(split?);
+            Some(all)
+        });
     let bounded_print = quiet
-        && statements.len() <= MAX_PRINT_RANGES
-        && statements
-            .iter()
-            .all(|statement| bounded_print_statement(statement));
-    // Exactly one substitution with inert flags. No e/w commands, program
-    // files, in-place edits, or additional statements can enter this proof.
-    let substitution = !quiet
-        && matches!(programs.as_slice(), [program]
-        if !program.contains(';')
-            && program.strip_prefix("s/").is_some_and(|body| {
-                let parts: Vec<_> = body.split('/').collect();
-                parts.len() == 3 && matches!(parts[2], "" | "g")
-            }));
+        && statements.is_some_and(|statements| {
+            statements.len() <= MAX_PRINT_RANGES
+                && statements
+                    .iter()
+                    .all(|statement| bounded_print_statement(statement))
+        });
+    // Substitutions with inert flags, and nothing else. A redaction spells
+    // its own delimiter inside the pattern -- `s/\\/tmp\\/scratch-[a-z]*/DIR/`
+    // names a path by escaping every slash in it -- so the reading walks the
+    // program and honours that escape rather than counting the delimiters it
+    // finds. No e/w commands, program files, in-place edits or any other
+    // statement can enter this proof.
+    let substitution = programs
+        .iter()
+        .all(|program| crate::sed_substitution::sed_script_is_pure_substitution(program));
     (bounded_print || substitution)
         && (matches!(targets, [target] if (target == "-" && piped_input) || (!target.starts_with('-') && command_read_target(target, context, false)))
             || (targets.is_empty() && piped_input))
@@ -233,8 +240,23 @@ pub(super) fn safe_sed_arguments(
 /// One `sed -n` statement that only names lines: `5p`, `$p`, `36,39p`,
 /// `36, 39p`. A range with no command, such as `36,37`, is a sed syntax error
 /// that prints nothing, so it reads no more than the print does.
+///
+/// A region a reader names rather than counts -- `/export/p`,
+/// `/export/,/^};/p`, `0,/export/p` -- prints from the same file and writes
+/// nothing either, so the read-only filter's reading of a `/regex/` address
+/// decides it here too. That reading takes only the plain slash pair: a
+/// `\%...%` delimiter, a negated address, an empty pattern, a third address
+/// and any command other than `p` stay unread and keep their review.
+///
+/// Only a statement that spells a pattern address is read that way. A
+/// statement of digits alone keeps the stricter line rule above, which
+/// refuses sed's invalid line `0` and a `p` that names no line at all.
 fn bounded_print_statement(statement: &str) -> bool {
     let statement = statement.trim_matches([' ', '\t']);
+    if statement.contains('/') && crate::codex_output_args::sed_print_command_is_bounded(statement)
+    {
+        return true;
+    }
     let range = statement
         .strip_suffix('p')
         .unwrap_or(statement)
@@ -620,6 +642,10 @@ fn safe_head_tail_with_targets(
 #[cfg(test)]
 #[path = "safe_reads_jq_tests.rs"]
 mod jq_stdin_boundary_tests;
+
+#[cfg(test)]
+#[path = "safe_reads_sed_tests.rs"]
+mod sed_context_address_read_tests;
 
 #[cfg(test)]
 mod head_tail_plus_filename_tests {

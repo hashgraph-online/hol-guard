@@ -112,13 +112,13 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
           <p className={versionLead}>Prompts about these folders use the files listed under each one, in every AI app.</p></div>
         {ready ? <div className="flex flex-wrap gap-2">
           <button className={versionQuiet} type="button" disabled={locked} onClick={refreshScopes}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh list</button>
-          <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked || scopes.length === 0} onClick={() => manage("clear")}>Remove all projects</button>
+          {scopes.length > 0 ? <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={locked} onClick={() => manage("clear")}>Remove all projects</button> : null}
         </div> : null}
       </div>
       {!listable ? <p className={empty}>Turn on CIGAR to pick project folders. Folders you already picked come back when it is on.</p> : <>
         {error ? <p role="alert" className="cigar-note">{error}</p> : null}
         {!ready ? <p role="status" className="text-sm text-brand-dark/70">CIGAR is starting. You can change folders once it is running.</p> : null}
-        {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? !error && <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/60">You don't need one: CIGAR finds the project each app is open in. Add one below to pick the exact files.</p></div> : <>
+        {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? !error && <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/60">Add one below only if you want to pick the exact files.</p></div> : <>
           <div><label htmlFor={`${id}-query`} className={fieldLabel}>Try it: what would you ask your AI?</label>
             <input id={`${id}-query`} className={versionField} maxLength={4096} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="For example: how do releases work?" /></div>
           <ul className="space-y-3">{scopes.map((scope) => <li key={scope.scope_id}><section className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white")} aria-label={`Project ${scope.workspace}`}>

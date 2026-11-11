@@ -176,9 +176,7 @@ fn parse_binary(bytes: &[u8]) -> PlistResult<Value> {
     if offset_size == 0 || offset_size > 8 || reference_size == 0 || reference_size > 8 {
         return refuse("managed policy plist has an unreadable object table");
     }
-    let end = table
-        .checked_add(count.checked_mul(offset_size).unwrap_or(usize::MAX))
-        .unwrap_or(usize::MAX);
+    let end = table.saturating_add(count.saturating_mul(offset_size));
     if table < BINARY_HEADER.len() || end > bytes.len() - TRAILER_BYTES || top >= count {
         return refuse("managed policy plist has an unreadable object table");
     }
@@ -243,7 +241,7 @@ impl BinaryPlist<'_> {
             }
             0x6 => {
                 let (at, length) = self.length(start, info)?;
-                let slice = self.slice(at, length.checked_mul(2).unwrap_or(usize::MAX))?;
+                let slice = self.slice(at, length.saturating_mul(2))?;
                 let units: Vec<u16> = slice
                     .chunks_exact(2)
                     .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
@@ -297,7 +295,7 @@ impl BinaryPlist<'_> {
 
     fn references(&self, at: usize, count: usize) -> PlistResult<Vec<usize>> {
         let width = self.reference_size;
-        let slice = self.slice(at, count.checked_mul(width).unwrap_or(usize::MAX))?;
+        let slice = self.slice(at, count.saturating_mul(width))?;
         Ok(slice
             .chunks_exact(width)
             .map(|chunk| be_u64(chunk) as usize)
@@ -333,7 +331,7 @@ impl BinaryPlist<'_> {
     }
 
     fn slice(&self, at: usize, length: usize) -> PlistResult<&[u8]> {
-        let end = at.checked_add(length).unwrap_or(usize::MAX);
+        let end = at.saturating_add(length);
         if end > self.bytes.len().saturating_sub(TRAILER_BYTES) {
             return refuse("managed policy plist is truncated");
         }
