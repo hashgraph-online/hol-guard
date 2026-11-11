@@ -190,7 +190,7 @@ impl Service {
         self.check_epoch(&request.epoch)?;
         let fingerprint = digest(&request)?;
         let mut registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
-        if let Some(agent) = replay(&registry, &request.request_id, &fingerprint)? {
+        if let Some(agent) = replay(&registry, &request.request_id, &fingerprint, false)? {
             return Ok(agent);
         }
         if registry.runs.values().filter(|r| r.active).count() >= MAX_RUNS {
@@ -279,7 +279,13 @@ impl Service {
         self.check_epoch(&request.epoch)?;
         let fingerprint = digest(&request)?;
         let mut registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
-        if let Some(agent) = replay(&registry, &request.request_id, &fingerprint)? {
+        let allow_control_at_capacity = matches!(request.action.as_str(), "interrupt" | "stop");
+        if let Some(agent) = replay(
+            &registry,
+            &request.request_id,
+            &fingerprint,
+            allow_control_at_capacity,
+        )? {
             return Ok(agent);
         }
         let at_capacity = registry.runs.values().filter(|r| r.active).count() >= MAX_RUNS;
@@ -435,7 +441,12 @@ fn digest(value: &impl serde::Serialize) -> Result<String, &'static str> {
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
-fn replay(registry: &Registry, id: &str, fingerprint: &str) -> Result<Option<Agent>, &'static str> {
+fn replay(
+    registry: &Registry,
+    id: &str,
+    fingerprint: &str,
+    allow_control_at_capacity: bool,
+) -> Result<Option<Agent>, &'static str> {
     if let Some((previous, run_id)) = registry.receipts.get(id) {
         if previous != fingerprint {
             return Err("swarm_request_conflict");
@@ -449,7 +460,7 @@ fn replay(registry: &Registry, id: &str, fingerprint: &str) -> Result<Option<Age
     if registry.shutdown {
         return Err("swarm_unavailable");
     }
-    if registry.receipts.len() >= 2048 {
+    if registry.receipts.len() >= 2048 && !allow_control_at_capacity {
         return Err("swarm_request_limit");
     }
     Ok(None)

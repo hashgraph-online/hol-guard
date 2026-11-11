@@ -75,18 +75,16 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         let home = std::path::Path::new(&request.query.guard_home);
         let history_path = home.join("swarm-history.v1.json");
         if !checkpoint.initialized {
-            if let Some(bytes) = crate::policy_store::read_private_file(
+            // History is a best-effort inert summary; a bad file must not block Swarm.
+            if let Ok(Some(bytes)) = crate::policy_store::read_private_file(
                 &history_path,
                 524_288,
                 "swarm_history",
                 home,
-            )? {
-                let history: Vec<guard_swarm::Agent> =
-                    serde_json::from_slice(&bytes).map_err(|_| "swarm_history_invalid")?;
-                swarm
-                    .service
-                    .restore_history(history)
-                    .map_err(str::to_owned)?;
+            ) {
+                if let Ok(history) = serde_json::from_slice::<Vec<guard_swarm::Agent>>(&bytes) {
+                    let _ = swarm.service.restore_history(history);
+                }
             }
             checkpoint.initialized = true;
         }

@@ -30,6 +30,7 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
   const cigar = contextFor(agent, context.enabled, context.scopes);
   async function act(action: AgentAction) {
     if (busy || stale) return;
+    if (pending.current && pending.current.action !== action) return;
     setBusy(true); setError(null); setNotice(null);
     const request = pending.current ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
     pending.current = request;
@@ -38,7 +39,10 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
       if (!alive.current) return;
       pending.current = null;
       if (action === "message") setDraft("");
-      setNotice(action === "stop" ? "Stop requested. Waiting for the process to exit." : action === "interrupt" ? "Interruption requested." : "Instruction accepted by the agent service.");
+      let message = "Instruction accepted by the agent service.";
+      if (action === "stop") message = "Stop requested. Waiting for the process to exit.";
+      else if (action === "interrupt") message = "Interruption requested.";
+      setNotice(message);
       setConfirmStop(false); onRefresh();
     } catch (e) { if (alive.current) { if (e instanceof RejectedAction) pending.current = null; setError(e instanceof Error ? e.message : "The action could not be confirmed."); onRefresh(); } }
     finally { if (alive.current) setBusy(false); }
@@ -51,7 +55,11 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
     <div className="swarm-detail-tabs" role="tablist" aria-label="Agent information" onKeyDown={(e) => {
       const names = ["Activity", "Context", "Details"];
       const index = names.indexOf(tab);
-      const next = e.key === "ArrowRight" ? (index + 1) % 3 : e.key === "ArrowLeft" ? (index + 2) % 3 : e.key === "Home" ? 0 : e.key === "End" ? 2 : -1;
+      let next = -1;
+      if (e.key === "ArrowRight") next = (index + 1) % 3;
+      else if (e.key === "ArrowLeft") next = (index + 2) % 3;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = 2;
       if (next >= 0) { e.preventDefault(); setTab(names[next]); e.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next]?.focus(); }
     }}>{["Activity", "Context", "Details"].map((name) => <button key={name} id={`swarm-tab-${name}`} aria-controls={`swarm-panel-${name}`} type="button" role="tab" aria-selected={tab === name} tabIndex={tab === name ? 0 : -1} onClick={() => setTab(name)}>{name}{name === "Context" && agent.context_calls > 0 ? <span>{agent.context_calls}</span> : null}</button>)}</div>
     <div role="tabpanel" id="swarm-panel-Details" aria-labelledby="swarm-tab-Details" hidden={tab !== "Details"}>
@@ -86,6 +94,6 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
       {agent.origin === "observed" ? <button className="swarm-button" type="button" onClick={() => onNavigate(`/apps/${encodeURIComponent(agent.harness)}`)}>App setup</button> : null}
     </div>
     {pending.current && !busy ? <button className="swarm-text-button" disabled={stale} type="button" onClick={() => void act(pending.current!.action)}>Check unconfirmed action</button> : null}
-    {confirmStop ? <div className="swarm-stop-confirm" role="group" aria-label="Confirm stop"><p>Stop this agent and the work it is running? Changes already made to files will remain.</p><button className="swarm-button swarm-button--danger" disabled={stale || busy} type="button" onClick={() => void act("stop")}>Stop this agent</button><button className="swarm-text-button" type="button" disabled={busy} onClick={() => setConfirmStop(false)}>Keep working</button></div> : null}
+    {confirmStop ? <div className="swarm-stop-confirm" role="group" aria-label="Confirm stop"><p>Stop this agent and the work it is running? Changes already made to files will remain.</p><button className="swarm-button swarm-button--danger" disabled={stale || busy || (pending.current !== null && pending.current.action !== "stop")} type="button" onClick={() => void act("stop")}>Stop this agent</button><button className="swarm-text-button" type="button" disabled={busy} onClick={() => setConfirmStop(false)}>Keep working</button></div> : null}
   </aside>;
 }
