@@ -186,6 +186,31 @@ fn a_tracked_file_holding_a_credential_keeps_review() {
 }
 
 #[test]
+fn a_tracked_document_under_a_feature_directory_is_proven() {
+    let (_, project) = fixture();
+    // `auth-evidence` names a feature, as `auth-service` does. A store
+    // directory such as `secrets/` or `api-tokens/` keeps the review.
+    let feature = "docs/auth-evidence/phase-e-auth-schema.md";
+    let stores = [
+        "docs/secrets/auth-notes.md",
+        "docs/api-tokens/auth-notes.md",
+    ];
+    for name in [feature].iter().chain(&stores) {
+        write(&project.join(name), "# Phase E schema\n");
+    }
+    let mut names = vec![feature];
+    names.extend(stores);
+    write_index(&project.join(".git"), &names);
+    assert!(guard_secure_fs::credential_named_path(
+        &project.join(feature)
+    ));
+    assert!(!unproven(&project.join(feature), cwd(&project)));
+    for name in stores {
+        assert!(unproven(&project.join(name), cwd(&project)), "{name}");
+    }
+}
+
+#[test]
 fn another_repository_beside_the_workspace_is_not_proven() {
     let (home, project) = fixture();
     let other = home.join("other");

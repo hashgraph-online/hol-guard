@@ -66,14 +66,17 @@ impl TrackedFiles {
         let Ok(relative) = path.strip_prefix(repository) else {
             return false;
         };
+        // The directories are judged by the directory rule, not the file-name
+        // rule: `auth-evidence/` names a feature, while `secrets/` and
+        // `api-tokens/` name a store and keep the review.
         let in_store = relative.parent().is_some_and(|parent| {
             parent.components().any(|part| {
                 part.as_os_str().to_str().is_none_or(|part| {
                     STORE_DIRECTORIES.contains(&part.to_ascii_lowercase().as_str())
                 })
-            }) || guard_secure_fs::credential_named_path(parent)
+            }) || guard_secure_fs::credential_directory_path(parent)
         });
-        if in_store || guard_secure_fs::credential_named_path(repository) {
+        if in_store || guard_secure_fs::credential_directory_path(repository) {
             return false;
         }
         let Some(rendered) = relative
