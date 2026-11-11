@@ -4765,10 +4765,11 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "sed '1d;w copy.ts' src/one.ts"
+        "command": "sed '1d;w ${HOME}/notes.md' src/one.ts"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-sed-addressed-substitution-write-flag",
@@ -4782,10 +4783,11 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "sed '2s/export/const/w copy.ts' src/one.ts"
+        "command": "sed '2s/export/const/w ${HOME}/notes.md' src/one.ts"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-sed-delete-then-execute",
