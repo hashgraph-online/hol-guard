@@ -169,6 +169,15 @@ fn process_id_list(value: &str) -> bool {
             .all(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
+/// `launchctl list` with no label prints the service table: each job's label,
+/// its last exit status and its pid, the same process view `ps` already
+/// proves. A label operand prints that one job's whole definition, including
+/// its `EnvironmentVariables`, and every other subcommand loads, starts,
+/// stops or reconfigures a job, so only the bare listing proves safe.
+pub(super) fn safe_launchctl_arguments(arguments: &[String]) -> bool {
+    matches!(arguments, [subcommand] if subcommand == "list")
+}
+
 /// `ps` lists processes and their arguments, the same view `pgrep -f`
 /// already exposes. Environment display (BSD `e`, and `-e`/`-E` on macOS)
 /// stays out because it prints other processes' variables.
@@ -356,6 +365,30 @@ mod process_listing_tests {
         ] {
             assert!(
                 !super::safe_pgrep_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn launchctl_lists_the_service_table() {
+        assert!(super::safe_launchctl_arguments(&arguments(&["list"])));
+    }
+
+    #[test]
+    fn launchctl_refuses_a_label_or_another_subcommand() {
+        for values in [
+            // A label prints that job's definition, EnvironmentVariables included.
+            &["list", "com.example.agent"][..],
+            &["print", "gui/501"][..],
+            &["load", "-w", "/Library/LaunchDaemons/com.example.plist"][..],
+            &["bootout", "gui/501/com.example.agent"][..],
+            &["setenv", "TOKEN", "value"][..],
+            &["getenv", "TOKEN"][..],
+            &[][..],
+        ] {
+            assert!(
+                !super::safe_launchctl_arguments(&arguments(values)),
                 "{values:?}"
             );
         }

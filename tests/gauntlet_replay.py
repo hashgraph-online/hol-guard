@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ci.gauntlet.approval_rows import offers_always
+from ci.gauntlet.eval_shell import protection_block_failure
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
@@ -104,7 +105,7 @@ class ReplayCase:
     tool: str
     tool_input: dict[str, object]
     cwd: str
-    expect: str  # quiet | always | quiet_or_always | setup | block
+    expect: str  # quiet | always | quiet_or_always | setup | block | protection_block
     event: str = "PreToolUse"
     tool_response: object = None
     # Set by a case whose whole harm is reach the workspace sandbox removes: the network, the home
@@ -328,6 +329,8 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
             return "review-by-design action raised no approval row to offer an Always allow"
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
         return f"review row without an Always allow offer: {bad}" if bad else None
+    if case.expect == "protection_block":
+        return protection_block_failure(result, approvals)
     # A contained run reaches no network, home or credential, so it protects a case whose harm is
     # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
     # the workspace, so an attack on the worktree itself must say so on the case to count.
