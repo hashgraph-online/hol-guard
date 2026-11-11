@@ -157,7 +157,10 @@ jobs:
   native-workspace:
     name: Rust workspace (${{ matrix.check }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Uncached feature crates add compilation time to the runtime partitions.
+    # A 15-minute job limit cancelled a run after all 4,108 tests passed.
+    # Allow build headroom here; per-test deadlines and required checks stay intact.
+    timeout-minutes: ${{ startsWith(matrix.check, 'test-runtime-') && 20 || 15 }}
     # Required main consumers are the archive producers. Only the two runtime
     # shards share an archive; core/command and PR/Clippy work stay independent.
     concurrency:

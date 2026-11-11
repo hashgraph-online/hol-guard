@@ -276,6 +276,11 @@ temporary busy responses and completed both previews. Status reads retry within
 their original ten-second deadline; navigation cancels pending retries, and
 controls and grants are never replayed by this recovery.
 
+The final PR also includes main's subsequent MCP catalog addition at `3d2346b`.
+Runtime CI partitions have a 20-minute build-and-test job budget after a cold
+compile reached the former 15-minute cap despite all 4,108 tests passing.
+Individual test deadlines, policy deadlines, and required checks are unchanged.
+
 Use an optimized native runtime for source-checkout UI previews:
 
 ```sh
