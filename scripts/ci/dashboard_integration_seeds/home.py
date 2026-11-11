@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.models import GuardReceipt
 from . import SeedContext
 
 # Connectable apps only: Home hides managed installs for anything else.
+# An inactive record is what disconnecting an app leaves behind.
 _INSTALLS: tuple[tuple[str, bool], ...] = (
     ("claude-code", True),
     ("cursor", True),
