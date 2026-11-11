@@ -11,6 +11,7 @@ available. An explicit user action to open a request or dashboard can still
 open the browser.
 
 Pi and Oh My Pi read the setting at each pause that could open a page, so a
-setting change takes effect without restarting the session. If that settings
-read fails or exceeds 1.5 seconds, they retain their previous browser-opening
-behavior. Other policies retain their existing timing and deduplication rules.
+setting change takes effect without restarting the session. Every Pi-family
+open can therefore wait up to 1.5 seconds for that read. If it fails or times
+out, they retain their previous browser-opening behavior. Other policies retain
+their existing timing and deduplication rules.

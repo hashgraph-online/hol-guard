@@ -8,6 +8,9 @@ fn native_only_disables_automatic_browser_fallback() {
         crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir_all(&home).unwrap();
+    let mut source = crate::managed_policy_load::ManagedPolicySource::native();
+    source.machine_root = Some(home.join("machine-root"));
+    fs::create_dir_all(source.machine_root.as_ref().unwrap()).unwrap();
     let config = home.join("config.toml");
     for (policy, allowed) in [
         ("native-only", false),
@@ -16,11 +19,13 @@ fn native_only_disables_automatic_browser_fallback() {
     ] {
         fs::write(&config, format!("approval_surface_policy = {policy:?}\n")).unwrap();
         assert_eq!(
-            crate::guard_config_load::approval_browser_allowed(&home).unwrap(),
+            crate::guard_config_load::approval_browser_allowed_under(&home, &source).unwrap(),
             allowed
         );
     }
+    fs::write(&config, "approval_surface_policy = [\n").unwrap();
+    assert!(crate::guard_config_load::approval_browser_allowed_under(&home, &source).is_err());
     fs::remove_file(config).unwrap();
-    assert!(crate::guard_config_load::approval_browser_allowed(&home).unwrap());
-    fs::remove_dir(home).unwrap();
+    assert!(crate::guard_config_load::approval_browser_allowed_under(&home, &source).unwrap());
+    fs::remove_dir_all(home).unwrap();
 }

@@ -29,6 +29,9 @@ fn global_native_only_policy_prevents_codex_browser_fallback() {
     ));
     std::fs::create_dir_all(&home).unwrap();
     std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let mut source = crate::managed_policy_load::ManagedPolicySource::native();
+    source.machine_root = Some(home.join("machine-root"));
+    std::fs::create_dir_all(source.machine_root.as_ref().unwrap()).unwrap();
     let token = home.join("daemon-auth-token");
     std::fs::write(&token, TOKEN).unwrap();
     std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
@@ -36,19 +39,20 @@ fn global_native_only_policy_prevents_codex_browser_fallback() {
     for (policy, expected) in [("native-only", false), ("approval-center", true)] {
         std::fs::write(&config, format!("approval_surface_policy = {policy:?}\n")).unwrap();
         let opened = Cell::new(false);
-        open_pending_with_browser(
+        open_pending_with_source(
             Some("http://127.0.0.1:4781/requests/request_123"),
             &home.join("daemon.json"),
             |_| {
                 opened.set(true);
                 true
             },
+            &source,
         );
         assert_eq!(opened.get(), expected);
     }
     std::fs::remove_file(token).unwrap();
     std::fs::remove_file(config).unwrap();
-    std::fs::remove_dir(home).unwrap();
+    std::fs::remove_dir_all(home).unwrap();
 }
 
 fn parsed(text: &str) -> PyVal {
