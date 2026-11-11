@@ -18,6 +18,7 @@ use super::super::http::{query_value, Request};
 use super::super::library;
 use super::{authorize_token, hook_scheduler, json_response, refusals, NativeReads, ReadConfig};
 use crate::claude_hook_bridge_render::py_strip;
+use crate::pyjson::PyVal;
 use admission::{
     client_key, exec_workdir, expires_at, lane, payload_reference, reply_event, runtime_event,
     take_hint, truthy, Directories, Rejection, MAX_PAYLOAD_REFERENCE_BYTES,
@@ -25,6 +26,12 @@ use admission::{
 
 #[path = "daemon_edge_hook_admission.rs"]
 mod admission;
+#[path = "daemon_edge_hook_counters.rs"]
+mod counters;
+#[path = "daemon_edge_hook_cursor_sink.rs"]
+mod cursor_sink;
+#[path = "daemon_edge_hook_lifecycle.rs"]
+mod lifecycle;
 
 /// The daemon's fixed hook replies, declared once for every harness.
 const ENVELOPES: &str = include_str!(
@@ -43,6 +50,23 @@ const REFERENCE_CODE: &str = "invalid_hook_payload_reference";
 const READINESS_WAIT: Duration = Duration::from_secs(60);
 /// How long past its deadline a hook still waits for a review to finish.
 const LATE_ANSWER_GRACE: Duration = Duration::from_millis(400);
+
+/// What is left of a hook's deadline, plus the grace a late answer still
+/// counts within.
+fn budget(expires: f64) -> Duration {
+    let remaining = (expires - hook_scheduler::shared().now()).max(0.0);
+    Duration::from_secs_f64(remaining) + LATE_ANSWER_GRACE
+}
+
+/// What is left of the deadline and its grace together, so a step after a
+/// late one does not get a fresh grace of its own.
+fn budget_left(expires: f64) -> Duration {
+    let deadline = expires + LATE_ANSWER_GRACE.as_secs_f64();
+    Duration::from_secs_f64((deadline - hook_scheduler::shared().now()).max(0.0))
+}
+/// How long a refused-directory audit waits for a store another writer
+/// holds, as the Python daemon's one inline attempt did.
+const AUDIT_BUSY_MS: u64 = 250;
 /// The longest a hook waits for the start-time worker warm-up.
 const WARM_WAIT: Duration = Duration::from_secs(20);
 
@@ -148,6 +172,7 @@ pub(in crate::daemon_edge) fn respond(
     reads.report_activity();
     let hook = Hook {
         config,
+        reads,
         port,
         daemon_pid: reads.daemon_pid(),
         path: request.path,
@@ -166,6 +191,7 @@ pub(in crate::daemon_edge) fn respond(
 /// One hook request, and the resident library steps it calls.
 struct Hook<'a> {
     config: &'a ReadConfig,
+    reads: &'a NativeReads,
     port: u16,
     daemon_pid: u32,
     path: &'a str,
@@ -203,12 +229,7 @@ impl Hook<'_> {
     /// A library step bounded by the hook's own deadline, plus the grace a
     /// review that finishes late is still answered within.
     fn call_by(&self, name: &str, extra: Value, expires: f64) -> Option<Map<String, Value>> {
-        let remaining = (expires - hook_scheduler::shared().now()).max(0.0);
-        self.call_within(
-            name,
-            extra,
-            Duration::from_secs_f64(remaining) + LATE_ANSWER_GRACE,
-        )
+        self.call_within(name, extra, budget(expires))
     }
 
     fn call_within(&self, name: &str, extra: Value, wait: Duration) -> Option<Map<String, Value>> {
@@ -244,13 +265,34 @@ impl Hook<'_> {
             .is_ok_and(|probe| probe.harness_unmanaged)
     }
 
-    /// Audits a directory the request named and the daemon refused.
-    fn audit_rejection(&self, rejection: &Value, expires: Option<f64>) {
-        let extra = json!({ "rejection": rejection });
-        let _ = match expires {
-            Some(expires) => self.call_by("hook.path_rejected", extra, expires),
-            None => self.call("hook.path_rejected", extra),
+    /// Audits a directory the request named and the daemon refused. The
+    /// row is best effort: a store held past the audit's short wait loses
+    /// it rather than delaying the hook.
+    fn audit_rejection(&self, rejection: &Value) {
+        let text = |key: &str| {
+            PyVal::Str(
+                rejection
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .map(py_strip)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_default()
+                    .to_owned(),
+            )
         };
+        let payload = PyVal::Dict(vec![
+            ("method".to_owned(), PyVal::Str("POST".to_owned())),
+            ("path".to_owned(), PyVal::Str(self.path.to_owned())),
+            ("parameter".to_owned(), text("parameter")),
+            ("reason".to_owned(), text("reason")),
+        ]);
+        let _ = refusals::record_within(
+            "daemon.hook.path_rejected",
+            &payload,
+            self.config,
+            self.reads,
+            AUDIT_BUSY_MS,
+        );
     }
 
     /// Settles the directories a request named against this daemon's homes.
@@ -278,7 +320,7 @@ impl Hook<'_> {
         };
         let guard_home = self.settle(&[("guard-home", self.param("guard-home"), None)]);
         if let Err(rejection) = guard_home.require("guard-home") {
-            self.audit_rejection(&rejection.to_value(), None);
+            self.audit_rejection(&rejection.to_value());
             return invalid(&rejection);
         }
         let candidate = self.raw_param("workspace").or_else(|| {
@@ -311,7 +353,7 @@ impl Hook<'_> {
             );
         }
         if let Some(rejection) = rejection {
-            self.audit_rejection(&rejection.to_value(), None);
+            self.audit_rejection(&rejection.to_value());
             return invalid(&rejection);
         }
         let Some(workspace) = workspace else {
@@ -368,22 +410,12 @@ impl Hook<'_> {
         // The daemon's direct lane (`direct_hook`) already asked the resident
         // before this route ran; what reaches here is the daemon's own review.
         let guard_home_query = self.param("guard-home");
-        let Some(begin) = self.call_by(
-            "hook.begin",
-            json!({
-                "count_harness": runtime_harness.as_deref().unwrap_or(self.harness),
-                "direct_miss": direct_miss,
-                "capacity_harness": reply_harness,
-            }),
-            expires,
-        ) else {
-            return unavailable();
-        };
-        let capacity_harness = begin
-            .get("capacity_harness")
-            .and_then(Value::as_str)
-            .unwrap_or("other")
-            .to_owned();
+        counters::note_received(
+            Path::new(&self.config.guard_home),
+            runtime_harness.as_deref().unwrap_or(self.harness),
+            direct_miss,
+        );
+        let capacity_harness = counters::capacity_harness(&reply_harness);
 
         let (workdir_named, workdir) = exec_workdir(&payload);
         let directories = self.settle(&[
@@ -434,7 +466,7 @@ impl Hook<'_> {
         };
 
         if let Some(rejection) = &rejection {
-            self.audit_rejection(rejection, Some(expires));
+            self.audit_rejection(rejection);
         }
         // Leftover hooks of an app Guard is not protecting pass through.
         let managed_harness = self.managed_harness();
@@ -473,7 +505,7 @@ impl Hook<'_> {
             .reserve_bytes(bytes, expires)
             .and_then(|reservation| {
                 scheduler.acquire(
-                    &capacity_harness,
+                    capacity_harness,
                     &client,
                     hook_scheduler::lane_index(lane(&event)),
                     reservation,
@@ -483,10 +515,28 @@ impl Hook<'_> {
         let mut permit = match admitted {
             Ok(permit) => permit,
             Err(code) => {
-                scheduler.record_harness_rejection(&capacity_harness);
+                scheduler.record_harness_rejection(capacity_harness);
                 return fail(capacity_reason(code), code);
             }
         };
+        if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {
+            permit.release();
+            return answer;
+        }
+        if let Some(answer) = self.cursor_sink(
+            &reply_harness,
+            &event,
+            &payload,
+            (
+                workspace.as_deref(),
+                home_dir.as_deref(),
+                guard_home.as_deref(),
+            ),
+            expires,
+        ) {
+            permit.release();
+            return answer;
+        }
         let review = self.call_by(
             "hook.review",
             json!({
