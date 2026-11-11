@@ -262,8 +262,15 @@ fn every_line(
         if !found.longer.is_empty() {
             others.push(kept_entry(file, &found.longer));
         }
+        // Cut to a list's length: any one already turns the rename command
+        // off, and these skip the note's length limit.
         if !found.building.is_empty() {
-            building.push(kept_entry(file, &found.building));
+            let cut = &found.building[..found.building.len().min(MAX_RENAME_LINES)];
+            let mut entry = kept_entry(file, cut);
+            if cut.len() < found.building.len() {
+                entry.push_str(" (and more lines)");
+            }
+            building.push(entry);
         }
     }
     for entry in others {

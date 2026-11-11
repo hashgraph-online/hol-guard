@@ -223,3 +223,29 @@ fn a_rename_lists_every_line_of_a_long_withheld_file() {
     assert!(!whole || map.contains(", 50: Guard keeps"), "{map}");
     assert!(!map.contains("stream.current"), "{map}");
 }
+
+/// Lines building a longer name in a kept-out file are listed to a list's
+/// length and said to go on, so the note stays short.
+#[test]
+fn a_rename_cuts_long_building_lines_of_a_withheld_file() {
+    let held = concat!("to", "ken = self.stream.current");
+    let builds = "    getattr(utils, f\"_detect_program_name{end}\")\n".repeat(45);
+    let test = format!("from app import utils\n\n\ndef test_name(end):\n    {held}\n{builds}");
+    let list = [
+        (
+            "src/app/utils.py",
+            "def _detect_program_name(path=None):\n    return 'app'\n",
+        ),
+        ("tests/test_utils.py", test.as_str()),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the internal helper `_detect_program_name` to \
+`_detect_program_name_impl` everywhere in the project, including tests.";
+    let map = prompt_map(home.path(), &root, prompt).unwrap();
+    // The lines naming it whole are all listed; those building on it stop
+    // at line 45, the fortieth.
+    let cut =
+        "45: Guard keeps this file's text out of this note; edit these lines too (and more lines)";
+    assert!(map.contains(cut), "{map}");
+    assert!(!map.contains("perl"), "{map}");
+}
