@@ -14,15 +14,11 @@ const NOT: [&str; 5] = ["no", "not", "without", "don", "dont"];
 pub(super) fn about_changes(prompt: &str) -> bool {
     let lower = prompt.to_lowercase();
     let words = words(&lower);
-    // "no code changes" or "don't change anything" rules changes out.
-    let denied = |at: usize| {
-        words[at.saturating_sub(2)..at]
-            .iter()
-            .any(|word| NOT.contains(word))
-    };
     (words.iter().enumerate()).any(|(at, word)| {
-        (WORDS.split(' ').any(|known| known == *word) || word.starts_with("regress")) && !denied(at)
-    }) || (words.windows(2)).any(|pair| pair == ["this", "session"] || last_push(pair))
+        (WORDS.split(' ').any(|known| known == *word) || word.starts_with("regress"))
+            && !denied(&words, at)
+    }) || (words.windows(2)).any(|pair| pair == ["this", "session"])
+        || last_push(&words)
 }
 
 /// Whether `prompt` is about someone else's change or a failure.
@@ -31,13 +27,24 @@ pub(super) fn about_others(prompt: &str) -> bool {
     let words = words(&lower);
     (words.iter()).any(|word| {
         OTHERS.contains(word) || word.starts_with("fail") || word.starts_with("regress")
-    }) || words.windows(2).any(last_push)
+    }) || last_push(&words)
 }
 
 /// "since the last push" names what was pushed, as "pushed" does; a bare
-/// "push" ("push this when it passes") names nothing that changed.
-fn last_push(pair: &[&str]) -> bool {
-    matches!(pair, ["last" | "latest" | "recent", "push"])
+/// "push" ("push this when it passes") names nothing that changed, and
+/// "not the last push" rules it out.
+fn last_push(words: &[&str]) -> bool {
+    (words.windows(2).enumerate()).any(|(at, pair)| {
+        matches!(pair, ["last" | "latest" | "recent", "push"]) && !denied(words, at)
+    })
+}
+
+/// Whether a word just before `at` says there is none to look at: "no code
+/// changes", "don't change anything".
+fn denied(words: &[&str], at: usize) -> bool {
+    words[at.saturating_sub(2)..at]
+        .iter()
+        .any(|word| NOT.contains(word))
 }
 
 fn words(lower: &str) -> Vec<&str> {

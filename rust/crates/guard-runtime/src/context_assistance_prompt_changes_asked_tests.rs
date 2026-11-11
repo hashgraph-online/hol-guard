@@ -41,6 +41,7 @@ fn a_red_build_since_the_last_push_asks_for_the_pushed_commit() {
         "push this when it passes",
         "add a push method to the queue",
         "make the last pusher win",
+        "Not the last push; explain cache eviction",
     ] {
         assert!(!about_changes(prompt), "{prompt}");
         assert!(!about_others(prompt), "{prompt}");
