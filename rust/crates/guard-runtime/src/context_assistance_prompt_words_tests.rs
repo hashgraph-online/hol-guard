@@ -111,6 +111,18 @@ fn task_words_name_nothing_unless_written_as_code() {
     for word in ["last", "edit", "first"] {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
     }
+    // "out" here found `SortedList._pos`, which has a local named `out`, and
+    // the agent read that method before looking at what was pushed.
+    let found = terms(
+        "tests are red on main since the last push, can you sort it out? don't touch the tests",
+    );
+    for word in ["red", "main", "since", "out", "touch"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    let found = terms("make `out` and `main()` stop going green when red");
+    for word in ["out", "main"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
 }
 
 /// A name written as a call is code even outside backticks, as are
