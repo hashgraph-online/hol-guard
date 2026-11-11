@@ -1,8 +1,9 @@
 //! `POST /v1/requests/{id}/approve|block` and `POST [/v1]/approvals/{id}/decision`:
 //! resolving a pending approval request.
 //!
-//! The route is matched and its scope fields checked natively. The decision
-//! itself (scope selection, the approval gate, the policy write, matching
+//! The route is matched and its scope fields checked natively, and a decision
+//! on a request that is no longer pending is answered from the store. The
+//! decision itself (scope selection, the approval gate, the policy write, matching
 //! requests and the harness continuation) is the Guard library's
 //! `approval.resolve` call. This module turns its answer or error into the
 //! daemon's reply, including the recovery copy the approval page shows.
@@ -90,6 +91,7 @@ pub(in crate::daemon_edge) fn respond(
     payload: &Map<String, Value>,
     local: SocketAddr,
     resolve_scope_matches: bool,
+    replayed: impl FnOnce(&str, &replay::Decision<'_>) -> Option<Result<Value, Map<String, Value>>>,
     call: impl FnOnce(Value) -> Result<Value, CallError>,
 ) -> Option<(u16, Value, bool)> {
     let DaemonRoutePayloadV1::ResolveRequest {
@@ -112,6 +114,13 @@ pub(in crate::daemon_edge) fn respond(
         return Some((400, json!({"resolved": false, "error": outcome}), false));
     };
     let queue_url = local_url(local, "/#/inbox");
+    let decision = replay::Decision {
+        action: &action,
+        scope: &scope,
+        contract_version: scope_contract_version.as_deref(),
+        contract_digest: scope_contract_digest.as_deref(),
+    };
+    let replayed = replayed(&request_id, &decision);
     let args = json!({
         "request_id": request_id,
         "action": action,
@@ -125,12 +134,13 @@ pub(in crate::daemon_edge) fn respond(
         "resolve_scope_matches": resolve_scope_matches,
         "copy": copy_table(&action),
     });
-    let answer = match call(args) {
-        Ok(Value::Object(answer)) => answer,
-        Ok(_) | Err(CallError::NoAnswer) => return Some((DROPPED, Value::Null, false)),
-        Err(CallError::Unavailable) => return None,
-        Err(CallError::Raised(error)) => return Some(raised(error, &queue_url)),
-    };
+    let answer =
+        match replayed.map_or_else(|| call(args), |answer| answer.map_err(CallError::Raised)) {
+            Ok(Value::Object(answer)) => answer,
+            Ok(_) | Err(CallError::NoAnswer) => return Some((DROPPED, Value::Null, false)),
+            Err(CallError::Unavailable) => return None,
+            Err(CallError::Raised(error)) => return Some(raised(error, &queue_url)),
+        };
     if let Some(body) = answer.get("idempotent").filter(|body| body.is_object()) {
         return Some((200, body.clone(), false));
     }
@@ -229,12 +239,31 @@ fn extend(body: &mut Map<String, Value>, extra: Option<Value>) {
     }
 }
 
+/// Answers a decision on a request that is no longer pending from the store.
+pub(in crate::daemon_edge) fn replay_stored<'a>(
+    config: &'a super::super::ReadConfig,
+    reads: &'a super::super::NativeReads,
+) -> impl FnOnce(&str, &replay::Decision<'_>) -> Option<Result<Value, Map<String, Value>>> + 'a {
+    move |request_id, decision| {
+        let cwd = config.daemon_cwd.as_deref()?;
+        let stored = reads.store_call(
+            config,
+            "get_approval_request",
+            json!({"request_id": request_id, "derive_scope": true, "cwd": cwd}),
+        )?;
+        replay::replay(stored.as_object()?, decision, Some(cwd))
+    }
+}
+
 /// Runs the resolution through the Guard CLI.
 pub(in crate::daemon_edge) fn call_library(
     config: &super::super::ReadConfig,
 ) -> impl FnOnce(Value) -> Result<Value, CallError> + '_ {
     move |args| library::call(config, "approval.resolve", args)
 }
+
+#[path = "daemon_edge_resolve_replay.rs"]
+pub(in crate::daemon_edge) mod replay;
 
 #[cfg(all(test, unix))]
 #[path = "daemon_edge_resolve_tests.rs"]

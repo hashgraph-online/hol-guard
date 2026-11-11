@@ -103,6 +103,7 @@ pub(super) fn respond(
             &payload,
             local,
             !link_bound,
+            resolve::replay_stored(config, reads),
             resolve::call_library(config),
         )?;
         return Some((status, body, caller.cors_origin, no_store));
