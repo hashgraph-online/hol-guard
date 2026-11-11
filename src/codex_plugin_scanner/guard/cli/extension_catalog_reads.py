@@ -9,15 +9,14 @@ schema, limit and server errors propagate unchanged.
 
 from __future__ import annotations
 
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
-from ..daemon.catalog_v2_client import (
-    CatalogV2Client,
+from ..native_daemon_client import (
     CatalogV2UnsupportedError,
-    extension_route,
-    v1_extension_from_v2,
+    GuardDaemonRequestError,
+    GuardDaemonResponseSchemaError,
+    GuardSurfaceDaemonClient,
 )
-from ..native_daemon_client import GuardDaemonRequestError, GuardDaemonResponseSchemaError, GuardSurfaceDaemonClient
 
 CATALOG_LIST_SCHEMA = "guard.cli.extension-catalog-list.v2"
 _NOT_FOUND = {"catalog_extension_not_found", "catalog_route_not_found"}
@@ -28,8 +27,13 @@ _MAX_SEARCH_CHARS = 256
 _MAX_SEARCH_ENCODED_BYTES = 1900
 
 
-def catalog_reader(client: object) -> CatalogV2Client | None:
-    return CatalogV2Client(client) if isinstance(client, GuardSurfaceDaemonClient) else None
+def catalog_reader(client: object) -> GuardSurfaceDaemonClient | None:
+    return client if isinstance(client, GuardSurfaceDaemonClient) else None
+
+
+def extension_route(extension_id: str, collection: str | None = None) -> str:
+    route = f"extensions/{quote(extension_id, safe='')}"
+    return f"{route}/{collection}" if collection else route
 
 
 def _v1_extensions(client: GuardSurfaceDaemonClient) -> list[dict[str, object]]:
@@ -47,7 +51,7 @@ def catalog_list(client: GuardSurfaceDaemonClient) -> dict[str, object]:
     reader = catalog_reader(client)
     if reader is not None:
         try:
-            index = reader.traverse("index", item_key="extension_id")
+            index = reader.catalog_traverse("index", item_key="extension_id")
         except CatalogV2UnsupportedError:
             pass
         else:
@@ -67,7 +71,7 @@ def catalog_show(client: GuardSurfaceDaemonClient, target_id: str) -> dict[str, 
     reader = catalog_reader(client)
     if reader is not None:
         try:
-            return v1_extension_from_v2(reader, target_id)
+            return reader.catalog_extension(target_id)
         except CatalogV2UnsupportedError:
             pass
         except GuardDaemonRequestError as error:
@@ -102,11 +106,11 @@ def pattern_extensions(client: GuardSurfaceDaemonClient, tool: str | None, query
     ]
 
 
-def _v2_pattern_extensions(reader: CatalogV2Client, tool: str | None, query: str) -> list[dict[str, object]]:
+def _v2_pattern_extensions(reader: GuardSurfaceDaemonClient, tool: str | None, query: str) -> list[dict[str, object]]:
     if tool is None:
         return _v2_permission_search(reader, query)
     try:
-        detail = reader.get(extension_route(tool)).get("extension")
+        detail = reader.catalog_get(extension_route(tool)).get("extension")
     except GuardDaemonRequestError as error:
         if error.code in _NOT_FOUND:
             return []
@@ -115,15 +119,15 @@ def _v2_pattern_extensions(reader: CatalogV2Client, tool: str | None, query: str
         return []
     extension_id = detail["extension_id"]
     permissions = (
-        reader.traverse(extension_route(extension_id, "permissions"), item_key="permission_id").items
+        reader.catalog_traverse(extension_route(extension_id, "permissions"), item_key="permission_id").items
         if detail.get("permission_count") != 0
         else []
     )
     return [{"extension_id": extension_id, "name": detail.get("name", ""), "permissions": permissions}]
 
 
-def _v2_permission_search(reader: CatalogV2Client, query: str) -> list[dict[str, object]]:
-    index = reader.traverse("index", item_key="extension_id").items
+def _v2_permission_search(reader: GuardSurfaceDaemonClient, query: str) -> list[dict[str, object]]:
+    index = reader.catalog_traverse("index", item_key="extension_id").items
     text = query.strip()
     sendable = (
         text
@@ -131,7 +135,9 @@ def _v2_permission_search(reader: CatalogV2Client, query: str) -> list[dict[str,
         and text.isprintable()
         and len(quote_plus(text)) <= _MAX_SEARCH_ENCODED_BYTES
     )
-    matches = reader.traverse("permissions", item_key="permission_id", params={"q": text} if sendable else None).items
+    matches = reader.catalog_traverse(
+        "permissions", item_key="permission_id", params={"q": text} if sendable else None
+    ).items
     grouped: dict[str, list[dict[str, object]]] = {}
     for permission in matches:
         grouped.setdefault(str(permission.get("extension_id", "")), []).append(permission)

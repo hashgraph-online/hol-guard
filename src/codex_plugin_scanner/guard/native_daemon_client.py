@@ -57,6 +57,8 @@ PREVIEW_REQUEST_TIMEOUT_S: Final = (
     + SEMANTIC_PREVIEW_TIMEOUT_S
     + TRANSPORT_MARGIN_S
 )
+CATALOG_V2_TIMEOUT_S: Final = 5.0
+CATALOG_V2_TRAVERSAL_TIMEOUT_S: Final = 60.0
 APPLY_AUTHORITY_READS: Final = 4
 APPLY_REQUEST_TIMEOUT_S: Final = (
     APPLY_AUTHORITY_READS * AUTHORITY_READ_TIMEOUT_S
@@ -94,6 +96,22 @@ class GuardDaemonTimeoutError(GuardDaemonTransportError):
 
 class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
     """Raised when the daemon response is not valid JSON object data."""
+
+
+class CatalogV2UnsupportedError(GuardDaemonRequestError):
+    """The daemon does not serve the v2 catalog read model; v1 fallback is allowed."""
+
+
+class CatalogTraversalError(GuardDaemonRequestError):
+    """A multi-page catalog traversal could not be verified as complete and consistent."""
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogTraversal:
+    snapshot_id: str
+    native_catalog_digest: str
+    total_count: int
+    items: list[dict[str, object]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +185,10 @@ def _raise_failure(reply: dict[str, object]) -> None:
             code=code if isinstance(code, str) else None,
             recovery_action=action if isinstance(action, str) else None,
         )
+    if kind in {"unsupported", "traversal"}:
+        code = reply.get("code")
+        error_type = CatalogV2UnsupportedError if kind == "unsupported" else CatalogTraversalError
+        raise error_type(message, status=status, code=code if isinstance(code, str) else None)
     if kind == "timeout":
         raise GuardDaemonTimeoutError(message)
     if kind == "schema":
@@ -395,6 +417,55 @@ class GuardSurfaceDaemonClient:
         payload = _object(reply)
         size = reply.get("size")
         return ConditionalResponse(200, etag, payload, size if type(size) is int else 0)
+
+    def catalog_get(self, route: str, *, timeout: float = CATALOG_V2_TIMEOUT_S) -> dict[str, object]:
+        """One bounded v2 catalog representation (ADR 0014)."""
+
+        return _object(_exchange(self.daemon_url, self.auth_token, "catalog_get", timeout, route=route))
+
+    def catalog_traverse(
+        self,
+        route: str,
+        *,
+        item_key: str,
+        params: dict[str, str] | None = None,
+        timeout: float = CATALOG_V2_TRAVERSAL_TIMEOUT_S,
+    ) -> CatalogTraversal:
+        """Every page of one v2 catalog resource, verified by the native client."""
+
+        payload = _object(
+            _exchange(
+                self.daemon_url,
+                self.auth_token,
+                "catalog_traverse",
+                timeout,
+                route=route,
+                item_key=item_key,
+                params=params or None,
+            )
+        )
+        snapshot_id = payload.get("snapshot_id")
+        digest = payload.get("native_catalog_digest")
+        total_count = payload.get("total_count")
+        items = payload.get("items")
+        if (
+            not isinstance(snapshot_id, str)
+            or not isinstance(digest, str)
+            or type(total_count) is not int
+            or not isinstance(items, list)
+            or not all(_is_string_object_dict(item) for item in items)
+        ):
+            raise GuardDaemonResponseSchemaError("Guard daemon catalog page schema is invalid")
+        return CatalogTraversal(snapshot_id, digest, total_count, cast(list[dict[str, object]], items))
+
+    def catalog_extension(
+        self, extension_id: str, *, timeout: float = CATALOG_V2_TRAVERSAL_TIMEOUT_S
+    ) -> dict[str, object]:
+        """One extension in the legacy v1 shape, assembled from bounded v2 reads."""
+
+        return _object(
+            _exchange(self.daemon_url, self.auth_token, "catalog_extension", timeout, extension_id=extension_id)
+        )
 
     def _get(self, path: str, *, timeout: float, max_bytes: int = _MAX_GET_RESPONSE_BYTES) -> dict[str, object]:
         if type(max_bytes) is not int or not 0 < max_bytes <= MAX_DAEMON_CATALOG_RESPONSE_BYTES:

@@ -399,7 +399,7 @@ def test_v2_python_boundary_never_reserializes_the_catalog() -> None:
     assert transport_source.count("json.loads(") == 1
 
 
-_V2_READ_MODULES = frozenset({"native_catalog_read", "catalog_v2_client"})
+_V2_READ_MODULES = frozenset({"native_catalog_read"})
 
 
 def _imported_modules(tree: ast.AST) -> set[str]:
@@ -424,8 +424,8 @@ def test_v2_read_model_is_reachable_only_from_read_paths() -> None:
         if path.stem not in _V2_READ_MODULES
         and _imported_modules(ast.parse(path.read_text(encoding="utf-8"))) & _V2_READ_MODULES
     }
-    # The daemon GET route and the CLI catalog readers are the only callers.
-    assert importers == {"routes/catalog_calls.py", "cli/extension_catalog_reads.py"}
+    # The daemon GET route is the only caller; the CLI reads through the native daemon client.
+    assert importers == {"routes/catalog_calls.py"}
     # The v2 modules import transport helpers only: no store, authority, policy or sync code.
     for module in _V2_READ_MODULES:
         source = next(package.rglob(f"{module}.py")).read_text(encoding="utf-8")

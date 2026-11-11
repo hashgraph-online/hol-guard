@@ -15,6 +15,9 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+#[path = "daemon_client_catalog.rs"]
+mod catalog;
+
 use crate::native_review_link::{now_micros, session_token};
 
 const SCHEMA: &str = "daemon-client.v1";
@@ -32,7 +35,7 @@ pub(crate) fn is_command(command: &str) -> bool {
     command == "daemon-client"
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Request {
     schema: String,
     op: String,
@@ -50,6 +53,14 @@ struct Request {
     max_bytes: Option<usize>,
     #[serde(default)]
     if_none_match: Option<String>,
+    #[serde(default)]
+    route: String,
+    #[serde(default)]
+    item_key: String,
+    #[serde(default)]
+    params: Option<Value>,
+    #[serde(default)]
+    extension_id: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -100,6 +111,9 @@ fn answer(request: &Request) -> Value {
             None => json!({"none": true}),
         },
         "dashboard_capabilities" => dashboard_capabilities(addr, &request.auth, deadline),
+        "catalog_get" | "catalog_traverse" | "catalog_extension" => {
+            catalog::answer(request, addr, deadline)
+        }
         "request" => {
             let limit = request
                 .max_bytes
