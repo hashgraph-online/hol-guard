@@ -157,7 +157,9 @@ fn the_literal_head_is_a_plain_word_the_shell_passes_through() {
         "bash ${TARGET} *",
         "bash $TARGET *",
         "bash {-c,x} *",
-        "bash ~/x.sh *",
+        "bash ~root/x.sh *",
+        "bash ~+/x.sh *",
+        "bash x~/y *",
     ] {
         assert_eq!(
             pattern("glob", value).map(|_| ()),
@@ -166,6 +168,7 @@ fn the_literal_head_is_a_plain_word_the_shell_passes_through() {
         );
     }
     assert!(pattern("glob", "gh pr-view * --repo owner/name").is_ok());
+    assert!(pattern("glob", "bash ~/.agents/scripts/approve.sh *").is_ok());
     assert!(pattern("startsWith", "git push").is_ok());
 }
 

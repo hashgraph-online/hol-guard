@@ -179,9 +179,12 @@ pub fn validate_allow_pattern(expression: &CommandExpressionV1) -> Result<String
 }
 
 /// The program and the word after it are plain words the shell passes through
-/// unchanged: no wildcard, quote, escape, expansion or brace.
+/// unchanged: no wildcard, quote, escape, expansion or brace. A leading `~/`
+/// (the home folder, which one simple command cannot change) is the one
+/// expansion allowed.
 fn literal_head(words: &[&str]) -> Result<(), String> {
     let plain = |word: &&str| {
+        let word = word.strip_prefix("~/").unwrap_or(word);
         !word.is_empty()
             && word
                 .bytes()
