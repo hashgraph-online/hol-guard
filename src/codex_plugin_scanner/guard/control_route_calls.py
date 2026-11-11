@@ -48,64 +48,6 @@ def _validated(kind: str, store: GuardStore, payload: Mapping[str, object]) -> A
     return decision
 
 
-def policy_clear(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    from .approval_gate import ApprovalGateError, input_from_mapping, require_high_risk
-
-    payload = _payload(args)
-    verdict = _validated("policy_clear", store, payload)
-    if isinstance(verdict, dict):
-        return verdict
-    fields = verdict.fields
-    try:
-        grant = require_high_risk(
-            store.guard_home,
-            purpose="policy_clear",
-            approval_gate_input=input_from_mapping(payload),
-        )
-        cleared = store.clear_policy_decisions(
-            fields["harness"],
-            fields["source"],
-            scope=fields["scope"],
-            artifact_id=fields["artifact_id"],
-            artifact_hash=fields["artifact_hash"],
-            artifact_id_is_null=fields["artifact_id_is_null"],
-            artifact_hash_is_null=fields["artifact_hash_is_null"],
-            workspace=fields["workspace"],
-            publisher=fields["publisher"],
-            approval_gate_grant=grant,
-        )
-    except ApprovalGateError as error:
-        body = error.to_payload()
-        body["cleared"] = 0
-        return _reply(body, error.status)
-    return _reply({"cleared": cleared, **verdict.body})
-
-
-def policy_upsert(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    from .approval_gate import ApprovalGateError, input_from_mapping, require_high_risk
-    from .models import PolicyDecision
-
-    payload = _payload(args)
-    verdict = _validated("policy_upsert", store, payload)
-    if isinstance(verdict, dict):
-        return verdict
-    decision = PolicyDecision(**verdict.fields)
-    try:
-        grant = require_high_risk(
-            store.guard_home,
-            purpose="policy_write",
-            approval_gate_input=input_from_mapping(payload),
-        )
-        store.upsert_policy(decision, _now(), approval_gate_grant=grant)
-    except ApprovalGateError as error:
-        body = error.to_payload()
-        body["saved"] = False
-        return _reply(body, error.status)
-    except ValueError as error:
-        return _reply({"saved": False, "error": str(error)}, 400)
-    return _reply(verdict.body)
-
-
 def bulk_allow_once(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     from .approval_gate import ApprovalGateError, input_from_mapping
     from .approvals import bulk_allow_read_only_once
@@ -438,8 +380,6 @@ def operation_block(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
 
 
 ROUTE_CALLS: dict[str, RouteCall] = {
-    "route.policy_clear": policy_clear,
-    "route.policy_upsert": policy_upsert,
     "route.bulk_allow_once": bulk_allow_once,
     "route.policy_resolve": policy_resolve,
     "route.policy_claim": policy_claim,

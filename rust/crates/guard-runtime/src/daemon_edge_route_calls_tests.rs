@@ -12,8 +12,6 @@ fn payload(value: Value) -> Map<String, Value> {
 #[test]
 fn routes_name_their_library_calls() {
     for (path, name) in [
-        ("/v1/policy/clear", "route.policy_clear"),
-        ("/v1/policy/decisions", "route.policy_upsert"),
         ("/v1/policy/resolve", "route.policy_resolve"),
         ("/v1/policy/claim", "route.policy_claim"),
         ("/v1/requests/bulk-allow-once", "route.bulk_allow_once"),
@@ -32,6 +30,9 @@ fn routes_name_their_library_calls() {
     ] {
         assert_eq!(route(path), Some((name, Map::new())), "{path}");
     }
+    // The edge answers policy writes itself.
+    assert_eq!(route("/v1/policy/clear"), None);
+    assert_eq!(route("/v1/policy/decisions"), None);
     let (name, args) = resident_route("/v1/local-clis/preview").unwrap_or_else(|| unreachable!());
     assert_eq!(name, "route.local_cli_post");
     assert_eq!(args["op"], "preview");

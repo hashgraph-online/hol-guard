@@ -151,10 +151,28 @@ def test_bulk_allow_rejects_a_malformed_body(tmp_path: Path) -> None:
     assert answer["ok"]["status"] == 400  # type: ignore[index]
 
 
-def test_policy_writes_reject_malformed_bodies(tmp_path: Path) -> None:
-    for name in ("route.policy_clear", "route.policy_upsert"):
-        answer = _call(tmp_path, name, {"payload": {}})
-        assert answer["ok"]["status"] == 400, name  # type: ignore[index]
+def test_policy_integrity_calls_reject_malformed_arguments(tmp_path: Path) -> None:
+    for name, args in (
+        ("policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00"}),
+        ("policy.integrity_begin", {"now": 1, "sign": True}),
+        ("policy.integrity_finalize", {"next_control_state": None}),
+    ):
+        answer = _call(tmp_path, name, args)
+        assert answer["error"]["message"] == "invalid_arguments", name  # type: ignore[index]
+
+
+def test_policy_integrity_begin_answers_the_mode_without_signing(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": False})
+    assert set(answer["ok"]) == {"mode"}  # type: ignore[arg-type]
+
+
+def test_policy_integrity_begin_hands_over_the_generation_to_sign(tmp_path: Path) -> None:
+    answer = _call(tmp_path, "policy.integrity_begin", {"now": "2026-05-01T00:00:00+00:00", "sign": True})
+    result = answer["ok"]
+    assert isinstance(result, dict)
+    if result["mode"] == "protected":
+        assert set(result) == {"mode", "current_generation", "integrity_key_b64", "integrity_key_id"}
+        assert isinstance(result["current_generation"], int)
 
 
 def test_harness_action_rejects_an_unknown_harness(tmp_path: Path) -> None:
