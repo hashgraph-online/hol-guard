@@ -246,6 +246,18 @@ fn guard_home(state_path: &Path) -> &Path {
 /// whose HOL Guard Desktop opens request links gets the request there, in a
 /// window that is already signed in, and the browser link when it does not.
 fn open_pending(approval_url: Option<&str>, state_path: &Path) {
+    open_pending_with_browser(
+        approval_url,
+        state_path,
+        crate::browser_open::open_browser_url,
+    );
+}
+
+fn open_pending_with_browser(
+    approval_url: Option<&str>,
+    state_path: &Path,
+    opener: impl FnOnce(&str) -> bool,
+) {
     let Some(url) = approval_url else {
         return;
     };
@@ -260,6 +272,13 @@ fn open_pending(approval_url: Option<&str>, state_path: &Path) {
             );
             return;
         }
+    }
+    if !crate::guard_config_load::approval_browser_allowed(home).unwrap_or(false) {
+        notify(
+            &mut std::io::stderr(),
+            "HOL Guard is waiting for approval; automatic browser opening is disabled. Open the request from Guard when ready.",
+        );
+        return;
     }
     let browser_url = now_micros().and_then(|now| {
         crate::native_review_link::approval_browser_url(
@@ -283,7 +302,7 @@ fn open_pending(approval_url: Option<&str>, state_path: &Path) {
         &mut std::io::stderr(),
         &format!("HOL Guard is waiting for approval in your browser: {browser_url}"),
     );
-    crate::browser_open::open_browser_url(&browser_url);
+    opener(&browser_url);
 }
 
 /// `_resolution_action(payload)`.

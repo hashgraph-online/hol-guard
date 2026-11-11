@@ -303,6 +303,16 @@ pub(crate) fn desktop_notifications(
     )
 }
 
+/// Whether automatic approval browser fallback is permitted by the global preference.
+pub(crate) fn approval_browser_allowed(guard_home: &Path) -> Result<bool, String> {
+    Ok(
+        effective_config(guard_home, None, &ManagedPolicySource::native())?
+            .get("approval_surface_policy")
+            .and_then(Value::as_str)
+            != Some("native-only"),
+    )
+}
+
 fn effective_config(
     guard_home: &Path,
     workspace: Option<&Path>,

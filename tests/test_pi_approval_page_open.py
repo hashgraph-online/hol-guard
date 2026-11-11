@@ -6,7 +6,9 @@ import json
 import os
 import subprocess
 import threading
+import time
 from collections.abc import Iterator
+from contextlib import suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -30,6 +32,7 @@ class _Settings:
     def __init__(self) -> None:
         self.status = 200
         self.body: bytes = b"{}"
+        self.delay = 0.0
         self.reads: list[dict[str, str | None]] = []
 
 
@@ -40,11 +43,14 @@ def daemon() -> Iterator[tuple[_Settings, int]]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             settings.reads.append({"path": self.path, "token": self.headers.get("X-Guard-Token")})
+            time.sleep(settings.delay)
             self.send_response(settings.status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(settings.body)))
             self.end_headers()
-            self.wfile.write(settings.body)
+            # A timed-out client has already closed this response.
+            with suppress(BrokenPipeError, ConnectionResetError):
+                self.wfile.write(settings.body)
 
         def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - http.server API
             return
@@ -63,7 +69,9 @@ def _policy_body(policy: object) -> bytes:
     return json.dumps({"settings": {"approval_surface_policy": policy}}).encode("utf-8")
 
 
-def _open_twice(tmp_path: Path, connection: dict[str, object] | None) -> dict[str, object]:
+def _open_twice(
+    tmp_path: Path, connection: dict[str, object] | None, harness_name: str = "omp"
+) -> dict[str, object]:
     """Pause twice on one approval center and report what the extension spawned."""
 
     harness = tmp_path / "open.ts"
@@ -87,7 +95,7 @@ def _open_twice(tmp_path: Path, connection: dict[str, object] | None) -> dict[st
         "  return typeof response.approval_url === 'string' ? response.approval_url : null;\n"
         "}\n"
         "function approvalCenterKey(approvalUrl: string): string { return new URL(approvalUrl).origin; }\n"
-        + fragment("approval_page_open")
+        + fragment("approval_page_open", harness=harness_name)
         + "const opened = new Set<string>();\n"
         "await openApprovalUrl({ approval_url: 'http://127.0.0.1:9/requests/first' }, opened);\n"
         "await openApprovalUrl({ approval_url: 'http://127.0.0.1:9/requests/second' }, opened);\n"
@@ -110,11 +118,14 @@ def _connection(port: int) -> dict[str, object]:
     return {"port": port, "authToken": TOKEN, "stateId": None}
 
 
-def test_never_open_a_browser_keeps_the_page_closed(tmp_path: Path, daemon: tuple[_Settings, int]) -> None:
+@pytest.mark.parametrize("harness_name", ["pi", "omp"])
+def test_never_open_a_browser_keeps_the_page_closed(
+    tmp_path: Path, daemon: tuple[_Settings, int], harness_name: str
+) -> None:
     settings, port = daemon
     settings.body = _policy_body("native-only")
 
-    result = _open_twice(tmp_path, _connection(port))
+    result = _open_twice(tmp_path, _connection(port), harness_name)
 
     assert result == {"calls": [], "opened": []}
     # Each pause asks again, so turning the setting off works in the same session.
@@ -160,6 +171,19 @@ def test_no_reachable_daemon_still_opens_the_page(tmp_path: Path, daemon: tuple[
     assert closed_port != port
     assert len(_calls(_open_twice(tmp_path, _connection(closed_port)))) == 1
     assert settings.reads == []
+
+
+def test_stalled_settings_read_opens_within_timeout(tmp_path: Path, daemon: tuple[_Settings, int]) -> None:
+    settings, port = daemon
+    settings.delay = 8.0
+    settings.body = _policy_body("native-only")
+    started = time.monotonic()
+
+    result = _open_twice(tmp_path, _connection(port))
+
+    assert len(_calls(result)) == 1
+    assert 1.0 <= time.monotonic() - started < 6.0
+    assert len(settings.reads) == 1
 
 
 @pytest.mark.parametrize(("config", "opens"), [('approval_surface_policy = "native-only"\n', False), ("", True)])
