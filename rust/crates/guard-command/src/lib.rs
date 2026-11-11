@@ -63,6 +63,7 @@ mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
 pub mod command_expression_match;
+pub mod command_pattern_allow;
 mod credential_store_names;
 pub mod cursor_shell_command;
 pub mod editor_task_risk;
