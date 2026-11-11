@@ -126,11 +126,11 @@ pub(super) fn maintain(reads: &NativeReads, config: &ReadConfig) -> bool {
     // A command-activity backlog keeps the pass on its short retry, as an
     // unfinished storage batch does.
     let activity = reads.store_write(config, "maintain_command_activity", args);
-    let activity_done = activity
-        .as_ref()
-        .ok()
-        .and_then(|result| result.get(1).and_then(Value::as_bool))
-        .unwrap_or(false);
+    // A failing pass keeps its hourly interval rather than retrying hot.
+    let activity_done = match &activity {
+        Ok(result) => result.get(1).and_then(Value::as_bool).unwrap_or(true),
+        Err(_) => true,
+    };
     if activity.is_err() {
         if let Some(occurred_at) = isoformat(now) {
             let _ = reads.store_write(
