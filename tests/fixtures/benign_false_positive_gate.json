@@ -28988,7 +28988,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "git show HEAD:src/one.ts | diff - ~/.aws/credentials"
+        "command": "git show HEAD:src/one.ts | diff - ~/.ssh/id_rsa"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -29004,7 +29004,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "git show HEAD:src/one.ts | cmp - ~/.ssh/id_ed25519"
+        "command": "git show HEAD:src/one.ts | cmp - ~/.ssh/id_rsa"
       },
       "cwd": "worktree",
       "expect": "not_allow"
