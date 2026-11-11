@@ -7,6 +7,7 @@ The ordinary core catalog never activates these hooks.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from .approval_retry import ReviewApprover, pinned_retry_outcome, retry_assessment, write_review_config
@@ -24,6 +25,15 @@ from .approval_retry_persistent import assessment as persistent_assessment
 from .approval_retry_persistent import collect as collect_approval_persistent
 from .approval_retry_persistent import stage as stage_approval_persistent
 from .approval_retry_persistent import write_package_review_config
+from .approval_retry_relay import (
+    RELAY_MARKER,
+    RELAY_ORACLE,
+    omp_final_text,
+    queued_request_ids,
+    relay_evidence,
+    write_relay_config,
+)
+from .approval_retry_relay import assessment as relay_assessment
 from .approval_rows import approval_rows
 from .catalog import Scenario
 from .input_evidence import redact_value
@@ -33,6 +43,7 @@ def enabled(scenario: Scenario) -> bool:
     return scenario.profiles == ("approval-retry",) and scenario.oracle in {
         "approved-retry",
         BASH_LIFECYCLE_ORACLE,
+        RELAY_ORACLE,
     }
 
 
@@ -52,7 +63,9 @@ class OmpReview:
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
         case["review_policy"] = (
-            write_package_review_config(self.guard_home)
+            write_relay_config(self.guard_home)
+            if scenario.oracle == RELAY_ORACLE
+            else write_package_review_config(self.guard_home)
             if scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES
             else write_review_config(
                 self.guard_home,
@@ -61,12 +74,15 @@ class OmpReview:
             )
         )
 
-    def approver(self, worker: Any) -> ReviewApprover:
+    def approver(self, worker: Any) -> ReviewApprover | None:
         self.known_ids = {
             str(row["request_id"])
             for row in worker.store.list_approval_requests(status=None, limit=200)
             if isinstance(row, dict) and row.get("request_id")
         }
+        if self.scenario.oracle == RELAY_ORACLE:
+            # Nobody answers the relay case's review; the user does, after the session.
+            return None
         return ReviewApprover(
             worker.store,
             known_ids=self.known_ids,
@@ -81,9 +97,24 @@ class OmpReview:
         self,
         case: dict[str, Any],
         worker: Any,
-        approver: ReviewApprover,
+        approver: ReviewApprover | None,
         replacements: dict[str, str],
+        raw_log: Path | None = None,
     ) -> None:
+        if self.scenario.oracle == RELAY_ORACLE:
+            from .evidence import read_events
+
+            # Checked before redaction, so the evidence keeps verdicts, not usable links.
+            case["relay"] = relay_evidence(
+                omp_final_text(read_events(raw_log)) if raw_log is not None and raw_log.exists() else "",
+                guard_home=self.guard_home,
+                request_ids=queued_request_ids(worker.store, self.known_ids),
+                marker_written=(self.fixture.workspace / RELAY_MARKER).exists(),
+            )
+            case["approval_rows"] = approval_rows(worker.store, self.known_ids)
+            return
+        if approver is None:
+            raise ValueError("an approve-then-retry case needs its operator")
         case["approval_grants"] = redact_value(approver.report(), replacements)
         collect_approval_marker(self.fixture.workspace, self.scenario.id, case)
         collect_approval_persistent(self.fixture.workspace, self.scenario.id, case)
@@ -144,6 +175,8 @@ def assess(
         decisions.append(decision)
     if scenario.oracle == BASH_LIFECYCLE_ORACLE:
         return bash_assessment(scenario.id, case, decisions)
+    if scenario.oracle == RELAY_ORACLE:
+        return relay_assessment(case, decisions)
     outcome = retry_assessment(case, decisions)
     if outcome[0] == "pass" and (
         pinned := pinned_retry_outcome(

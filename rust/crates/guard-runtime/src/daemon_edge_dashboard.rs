@@ -7,6 +7,11 @@
 //! never pairs a new dashboard with this daemon's API. The shell is stamped
 //! with the pinned bundle's fingerprint, so a tab left open across a restart
 //! can tell it is stale.
+//!
+//! When HOL Guard Desktop says it opens request links, the shell also carries
+//! a `guard-desktop-requests` marker. A browser tab that lands on
+//! `/requests/<id>` hands that request to Desktop, so a relayed approval link
+//! still reaches the app even when it lost its signed code on the way.
 
 use std::collections::HashMap;
 use std::fs;
@@ -48,6 +53,8 @@ const DASHBOARD_ROUTES: [&str; 19] = [
     "/requests",
     "/approvals",
 ];
+/// Read by the dashboard's request-page handoff to Desktop.
+const DESKTOP_REQUESTS_META: &str = "<meta name=\"guard-desktop-requests\" content=\"1\" />";
 const NO_STORE: &str =
     "Cache-Control: no-store, max-age=0\r\nPragma: no-cache\r\nExpires: 0\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\n";
 
@@ -79,12 +86,14 @@ fn is_dashboard_route(path: &str) -> bool {
 }
 
 /// The whole response for a dashboard `GET`, or `None` when the edge has no
-/// dashboard directory to serve from.
+/// dashboard directory to serve from. `guard_home` is where Desktop's
+/// deep-link marker lives.
 pub(super) fn respond(
     request: &Request<'_>,
     static_dir: Option<&Path>,
     auth_key: &[u8],
     dashboard_build: Option<&str>,
+    guard_home: &Path,
 ) -> Option<Vec<u8>> {
     let static_dir = static_dir?;
     if is_public_static(request.path) {
@@ -96,7 +105,8 @@ pub(super) fn respond(
     }) {
         return Some(redirect(&location, dashboard_build));
     }
-    Some(shell(static_dir, dashboard_build))
+    let desktop = crate::desktop_review_link::desktop_opens_requests(guard_home);
+    Some(shell(static_dir, dashboard_build, desktop))
 }
 
 /// The pinned bundle's fingerprint, or `None` when no dashboard is bundled.
@@ -194,7 +204,7 @@ fn unpinned_file(static_dir: &Path, relative: &str) -> Option<Vec<u8>> {
 }
 
 /// `_write_dashboard_shell`.
-fn shell(static_dir: &Path, dashboard_build: Option<&str>) -> Vec<u8> {
+fn shell(static_dir: &Path, dashboard_build: Option<&str>, desktop: bool) -> Vec<u8> {
     let bundle = pinned(static_dir);
     let (Some(index), true) = (
         bundle.files.get("index.html"),
@@ -208,7 +218,7 @@ fn shell(static_dir: &Path, dashboard_build: Option<&str>) -> Vec<u8> {
             false,
         );
     };
-    let body = stamp(index, bundle.build.as_deref());
+    let body = stamp(index, bundle.build.as_deref(), desktop);
     let mut head = format!(
         "HTTP/1.0 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n{NO_STORE}Content-Security-Policy: {DASHBOARD_CSP}\r\n",
         body.len()
@@ -219,18 +229,25 @@ fn shell(static_dir: &Path, dashboard_build: Option<&str>) -> Vec<u8> {
     response
 }
 
-/// `stamp_dashboard_build`.
-fn stamp(index: &[u8], build: Option<&str>) -> Vec<u8> {
+/// `stamp_dashboard_build`, plus the Desktop marker when Desktop opens
+/// request links.
+fn stamp(index: &[u8], build: Option<&str>, desktop: bool) -> Vec<u8> {
     const HEAD_END: &[u8] = b"</head>";
-    let (Some(build), Some(at)) = (
-        build,
-        index
-            .windows(HEAD_END.len())
-            .position(|window| window == HEAD_END),
-    ) else {
+    let Some(at) = index
+        .windows(HEAD_END.len())
+        .position(|window| window == HEAD_END)
+    else {
         return index.to_vec();
     };
-    let meta = format!("<meta name=\"guard-dashboard-build\" content=\"{build}\" />");
+    let mut meta = build
+        .map(|build| format!("<meta name=\"guard-dashboard-build\" content=\"{build}\" />"))
+        .unwrap_or_default();
+    if desktop {
+        meta.push_str(DESKTOP_REQUESTS_META);
+    }
+    if meta.is_empty() {
+        return index.to_vec();
+    }
     let mut stamped = Vec::with_capacity(index.len() + meta.len());
     stamped.extend_from_slice(&index[..at]);
     stamped.extend_from_slice(meta.as_bytes());

@@ -370,8 +370,8 @@ def run_case(
                     timeout=timeout + 15,
                 )
             time.sleep(0.1)
-            if review is not None and approver is not None:
-                review.collect(case, worker, approver, replacements)
+            if review is not None:
+                review.collect(case, worker, approver, replacements, raw_log)
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before

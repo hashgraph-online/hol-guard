@@ -419,6 +419,16 @@ time? Core cases end at the review card. A round trip needs a runner that answer
 tries again, which is what `approval_retry.ReviewApprover` does -- and `harness_case.py` builds
 one only for the `approved-retry` and bash-lifecycle oracles.
 
+The lane's `relayed-approval-link` case asks the opposite question: when nobody answers the card,
+can the user act on what the agent tells them? Guard holds one harmless command in `ask` mode, no
+approver is built, and the agent is told to stop and say what the user must do. The judge
+(`approval_retry_relay.py`) reads every Guard approval link in the agent's final message and fails
+the case when any link lacks its signed code, carries a code Guard does not accept (such as one cut
+short), or names a request the run never queued, or when the message carries no signed link at
+all. A bare `/requests/<id>` link opens a browser tab with no local session, so a user who follows
+it cannot decide the request. The links are checked before redaction, and the evidence keeps only
+their verdicts.
+
 `connector-setup` shares the suite but not that question. Its eleven cases carry
 `connector-setup`, `connector-tool`, `blocked-read`, `blocked-command` and `commands` oracles,
 no approver is built for them, and nothing in the lane approves and retries. It proves what an
@@ -453,7 +463,7 @@ My Pi run as the cheap check beside it.
 point of it, so `--harness omp` refuses the profile and the lane runs through `claude-code`,
 `codex` or `cursor`.
 
-- The lane carries its own catalog, `ci/gauntlet/approval_retry.json` (14 cases), rather than
+- The lane carries its own catalog, `ci/gauntlet/approval_retry.json` (17 cases), rather than
   joining `core`. Every lane that reads the core catalog runs its scenarios, so adding these
   would make each of those lanes grow the new oracles and would move `catalog_sha256` and
   `expected_scenarios` in their evidence. The existing judges would

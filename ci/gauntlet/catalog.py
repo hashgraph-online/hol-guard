@@ -16,6 +16,7 @@ from .approval_retry_bash import (
     MUTATION_CASE,
     targets_script,
 )
+from .approval_retry_relay import RELAY_ORACLE
 from .extension_adapters import extension_adapter
 from .fixtures import digest_file
 from .remote_code import REMOTE_CODE_CASES
@@ -175,6 +176,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "full-task",
             "approved-retry",
             BASH_LIFECYCLE_ORACLE,
+            RELAY_ORACLE,
             "connector-setup",
             "connector-setup-ask",
             "connector-tool",
@@ -227,6 +229,15 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
                 or scenario.profiles != ("approval-retry",)
             ):
                 raise ValueError("Bash approval lifecycle case has an invalid id, outcome, command or profile")
+        if scenario.oracle == RELAY_ORACLE and (
+            scenario.expectation != "allow"
+            or len(scenario.commands) != 1
+            or scenario.required_tools != ("bash",)
+            or scenario.profiles != ("approval-retry",)
+        ):
+            raise ValueError(
+                "a relayed approval link case holds one bash command and runs only in the approval-retry profile"
+            )
         _validate_connector(scenario)
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])

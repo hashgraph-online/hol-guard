@@ -17,9 +17,13 @@ fn bundle(dir: &Path) {
 }
 
 fn get(dir: Option<&Path>, path: &str) -> String {
+    get_in(dir, path, Path::new("/nonexistent/guard-home"))
+}
+
+fn get_in(dir: Option<&Path>, path: &str, guard_home: &Path) -> String {
     let head = format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n");
     let request = parse_request(head.as_bytes()).unwrap();
-    let response = respond(&request, dir, b"k", Some("b1")).unwrap();
+    let response = respond(&request, dir, b"k", Some("b1"), guard_home).unwrap();
     String::from_utf8(response).unwrap()
 }
 
@@ -56,6 +60,44 @@ fn serves_the_stamped_shell_with_its_policy() {
     assert!(answer.contains("X-Guard-Dashboard-Build: b1\r\n"));
     assert!(answer.contains("<meta name=\"guard-dashboard-build\" content=\""));
     assert!(answer.ends_with("</head><body></body></html>"));
+}
+
+#[test]
+fn without_desktop_the_shell_carries_no_desktop_marker() {
+    let dir = tempfile::tempdir().unwrap();
+    bundle(dir.path());
+    let answer = get(Some(dir.path()), "/requests/0123456789abcdef0123456789abcdef");
+    assert!(!answer.contains("guard-desktop-requests"), "{answer}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_desktop_that_opens_requests_marks_the_shell() {
+    use crate::claude_hook_bridge_fixture::{write_private, GuardHome};
+
+    let dir = tempfile::tempdir().unwrap();
+    bundle(dir.path());
+    let home = GuardHome::new("dashboard-desktop-marker");
+    let marker = serde_json::json!({
+        "version": 1,
+        "scheme": "hol-guard-desktop",
+        "routes": ["requests"],
+        "app_path": home.home.to_string_lossy(),
+    });
+    write_private(
+        &home.home.join("desktop-deep-link.json"),
+        &marker.to_string(),
+    );
+    let answer = get_in(
+        Some(dir.path()),
+        "/requests/0123456789abcdef0123456789abcdef",
+        &home.home,
+    );
+    assert!(
+        answer.contains("<meta name=\"guard-desktop-requests\" content=\"1\" /></head>"),
+        "{answer}"
+    );
+    assert!(answer.contains("<meta name=\"guard-dashboard-build\" content=\""));
 }
 
 #[test]
@@ -117,5 +159,5 @@ fn a_short_link_redirects_to_its_request_page() {
 fn no_static_directory_leaves_the_route_unanswered() {
     let head = b"GET / HTTP/1.1\r\n\r\n";
     let request = parse_request(head).unwrap();
-    assert!(respond(&request, None, b"k", None).is_none());
+    assert!(respond(&request, None, b"k", None, Path::new("/nonexistent")).is_none());
 }
