@@ -26,7 +26,7 @@
     "external-repository-write"
   ],
   "tools": [
-    { "name": "open_review", "state": "inherit" },
+    { "name": "open_review", "state": "review" },
     { "name": "await_reviewer", "state": "inherit" },
     { "name": "reply", "state": "inherit" },
     { "name": "add_findings", "state": "inherit" },
@@ -44,8 +44,8 @@
     "https://github.com/sdsvn/co-review/blob/main/docs/architecture.md"
   ],
   "saferAlternatives": [
-    "Keep post_review_to_github on review: it is the only tool that leaves the machine, posting the reviewer's verdict and line comments to the GitHub pull request named in PR.md through the gh CLI, and only after the reviewer has submitted.",
-    "Everything else is local: review state, anchor snapshots and the repository map live under ~/.co-review, and the only writes to the repository are document edits the reviewer accepted.",
+    "Keep post_review_to_github on review: it is the only tool that leaves the machine, posting line comments to the GitHub pull request named in PR.md through the gh CLI. Upstream can post when there is no submitted verdict yet, but asks the reviewer to confirm the exact comment first.",
+    "open_review is also on review because it writes local review state (review.json or storePath) and may create review files under ~/.co-review; accepted document edits can write into the workspace. Other local tools leave review state, anchor snapshots and the repository map under ~/.co-review.",
     "Findings are placed by quoting the code, not by line number, and anchored to symbols and Tree-sitter tokens; a quote that matches nothing is refused and a comment whose code is gone is marked outdated, never moved onto code it may not describe.",
     "Install graphify only if you want the code graph in the repository overview; repo_map works without it, and neither calls a model or the network."
   ]
