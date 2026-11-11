@@ -24,8 +24,14 @@ LIBRARY_SEARCH_PATH_NAMES = (
 _MAX_STAMPED_PATH_BYTES = 32 * 1024
 # Git pages through `less` when no pager is configured, so an explicit `less`
 # adds no execution surface beyond the default. Only flags that take no
-# argument are accepted; -o/-O/-k/-T and similar name files.
-_DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?")
+# argument are accepted; -o/-O/-k/-T and similar name files. Cursor's agent
+# terminal exports a pager that keeps the first 10000 lines and prints them:
+# a fixed script that finds `sh`, `head` and `cat` on the same PATH Git would
+# search for `less`, and writes only to the terminal.
+_DEFAULT_EQUIVALENT_PAGER = re.compile(
+    r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*"
+    r'|sh -c "head -n 10000 [|] cat")?'
+)
 # `NODE_OPTIONS` flags that only size the heap, change diagnostics or expose
 # an engine API; none loads code, reads a file or opens a port. The pattern has no backslash or
 # brace so generated hook sources can embed it unchanged. The rule itself is
