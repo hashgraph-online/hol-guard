@@ -141,7 +141,6 @@ RESUME_STEPS = """
 setupDelayMs = 80;
 idle = RESUME_IDLE;
 const input = await callbacks.input({text: 'fix the cart total', source: 'interactive'}, ctx);
-const early = await start('fix the cart total');
 for (let waited = 0; resumed.length === 0 && waited < 2000; waited += 10) {
   await new Promise(resolve => setTimeout(resolve, 10));
 }
@@ -149,7 +148,7 @@ idle = true;
 // Pi runs the resumed prompt as a new turn from the extension.
 const resumedTurn = await turn(resumed[0], 'extension');
 const again = await start(resumed[0]);
-console.log(JSON.stringify({input, early, resumed, sent, resumedTurn, again}));
+console.log(JSON.stringify({input, resumed, sent, resumedTurn, again, payloads}));
 """
 
 
@@ -158,7 +157,8 @@ console.log(JSON.stringify({input, early, resumed, sent, resumedTurn, again}));
 def test_prompt_resumed_after_workspace_setup_keeps_its_context(tmp_path: Path, harness: str) -> None:
     result = run_handlers(tmp_path, harness, RESUME_STEPS.replace("RESUME_IDLE", "true"), timeout_ms=40)
     assert result["input"] == {"action": "handled", "handled": True}
-    assert "early" not in result, "nothing is handed on before the review finishes"
+    reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
+    assert reviewed == ["fix the cart total"], "the resumed turn is not reviewed again"
     assert result["resumed"] == ["fix the cart total"]
     # Starting the turn directly lets Pi expand a skill command or prompt template.
     assert result["sent"] == [{"expandPromptTemplates": True}]
@@ -188,10 +188,18 @@ const blocked = await begin('protected');
 const held = await begin('needs approval');
 const stopped = aborted.length;
 const revived = await begin('fix the cart total', 'revive');
-// Once the host emits "input", prompts are reviewed there and only there.
+// A typed prompt is reviewed by the input handler, and only its own turn.
 const typed = await turn('fix the theme');
+// An SDK session that emitted "input" can still call prompt() directly.
 const later = await begin('fix the cart total');
-console.log(JSON.stringify({matched, empty, blocked, held, stopped, notes, revived, typed, later, payloads}));
+const repeat = await begin('fix the theme');
+// A prompt the input handler held owns no turn, so prompt() reviews it again.
+await callbacks.input({text: 'protected', source: 'interactive'}, ctx);
+const retried = await begin('protected');
+console.log(JSON.stringify({
+  matched, empty, blocked, held, stopped, notes, revived, typed, later, repeat, retried, payloads,
+  aborted: aborted.length,
+}));
 """
 
 
@@ -204,16 +212,24 @@ def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harnes
     assert "blocked" not in result
     assert "held" not in result
     assert result["stopped"] == 2, "a denied headless prompt stops its turn"
-    # Nothing resumes a headless turn after approval, so the note asks for a rerun.
-    assert result["notes"] == [
-        "protected",
-        "held\n\nHOL Guard approval page: https://guard.example/approve/1\n"
-        "This prompt was stopped. Run it again after approving it in HOL Guard.",
-    ]
+    # A prompt cannot be approved, so the note gives the reason and no approval link.
+    assert result["notes"] == ["protected", "held", "protected"]
     assert "revived" not in result
     assert result["typed"] == {"input": {"action": "continue"}, "start": context_message("fix the theme")}
-    assert "later" not in result
+    assert result["later"] == context_message("fix the cart total")
+    assert "repeat" not in result, "a turn rerunning the typed prompt is not reviewed twice"
+    assert "retried" not in result
+    assert result["aborted"] == 3
     reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
-    assert reviewed == ["fix the cart total", "no match", "protected", "needs approval", "fix the theme"]
+    assert reviewed == [
+        "fix the cart total",
+        "no match",
+        "protected",
+        "needs approval",
+        "fix the theme",
+        "fix the cart total",
+        "protected",
+        "protected",
+    ]
     assert all(payload["guard_prompt_context"] is True for payload in result["payloads"])
     assert all(payload["session_id"] == "session-a" for payload in result["payloads"])
