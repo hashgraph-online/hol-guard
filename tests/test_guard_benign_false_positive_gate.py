@@ -72,6 +72,8 @@ _FIXED_TOOLS = {
     "ls": "ls",
     # Claude Code's built-in question prompt reaches Guard only after the user answers.
     "ask_user_question": "AskUserQuestion",
+    # A web fetch reaches Guard as its own tool; only the URL decides it.
+    "web_fetch": "WebFetch",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix

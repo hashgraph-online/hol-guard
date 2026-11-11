@@ -190,6 +190,7 @@ pub(crate) use git_routes::{
     reads_without_repository,
 };
 mod apply_patch_writes;
+mod ci_workflow_writes;
 mod data_heredocs;
 mod lockfile_install;
 mod omp_file_url;
