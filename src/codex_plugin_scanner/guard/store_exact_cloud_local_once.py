@@ -142,6 +142,60 @@ class StoreExactCloudLocalOnceMixin:
         # call whose reply was lost may already have landed.
         return self._native_store_call("settle_claimed_native_review", {**reuse, **claim})
 
+    def peek_waited_exact_cloud_package_allow(
+        self: _NativeStoreOwner,
+        *,
+        request_id: str,
+        artifact_id: str,
+        artifact_hash: str,
+        now: str,
+        ordinary_decision: Mapping[str, object] | None = None,
+    ) -> dict[str, object] | None:
+        # The resident reads the exact Cloud allow issued for the request this
+        # install queued and waited on, bound to the artifact and hash it is
+        # about to run, and only when it outranks the row the ordinary lookup
+        # returned. Without the keyring key there is no authority.
+        args: dict[str, object] = {
+            "request_id": request_id,
+            "artifact_id": artifact_id,
+            "artifact_hash": artifact_hash,
+            "now": now,
+        }
+        if ordinary_decision is not None:
+            args["ordinary_decision"] = dict(ordinary_decision)
+        if not _add_exact_cloud_key(self, args):
+            return None
+        decision = self._native_store_call("peek_waited_exact_cloud_package_allow", args)
+        return dict(decision) if isinstance(decision, Mapping) else None
+
+    def consume_waited_exact_cloud_package_allow(
+        self: _NativeStoreOwner, decision: Mapping[str, object], *, now: str
+    ) -> bool:
+        args: dict[str, object] = {
+            "request_id": decision.get("request_id"),
+            "decision": dict(decision),
+            "now": now,
+        }
+        if not _add_exact_cloud_key(self, args):
+            return False
+        # Never retried: the spend may have landed when a reply was lost.
+        return self._native_store_call("consume_waited_exact_cloud_package_allow", args) is True
+
+
+def _add_exact_cloud_key(owner: _NativeStoreOwner, args: dict[str, object]) -> bool:
+    key, key_id = owner._policy_integrity_secret_material(create=False)
+    if key is None or key_id is None:
+        return False
+    try:
+        # The resident serves only once its verifier exists; a restart that
+        # lost it is restored from the keyring key.
+        owner._provision_resident_verifier(key)
+    except NativePolicySnapshotError:
+        # A verifier the keyring key does not match is tampering evidence.
+        return False
+    args.update(integrity_key_b64=encode_key(key), integrity_key_id=key_id)
+    return True
+
 
 def _live_authority_args(
     owner: _NativeStoreOwner, request: Mapping[str, object], *, now: str

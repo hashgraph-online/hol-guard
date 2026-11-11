@@ -128,7 +128,7 @@ for (const width of [1440, 790, 390, 320]) {
     await expect(page.getByRole("heading", { name: "Give your AI the right pages, not the whole book.", exact: true })).toBeVisible();
     await expect(page.locator(".cigar-home-detail strong")).toHaveText("CIGAR is off.");
     await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toBeEnabled();
-    await expect(workspace.getByRole("tab")).toHaveCount(6);
+    await expect(workspace.getByRole("tab")).toHaveCount(7);
     await expect(page.getByRole("tab", { name: "Home", exact: true })).toHaveAttribute("aria-selected", "true");
     for (const name of ["How it works", "Works in your apps", "You stay in charge", "Go further"])
       await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
@@ -207,6 +207,44 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   expect(saves[0].body.settings.context_assistance.enabled).toBe(true);
 });
 
+test("a Codex summary size Guard wrote shows a Remove button that takes it out after approval", async ({ page }) => {
+  await fixture(page, true, true);
+  const lean: Call[] = [];
+  let state = { state: "on", limit: 30000 };
+  // Registered after the fixture, so this handler wins for the Codex config route.
+  await page.route("**/v1/context-assistance/codex-lean", async (route) => {
+    const request = route.request();
+    lean.push({ path: new URL(request.url()).pathname, method: request.method(), body: request.postDataJSON() });
+    if (request.method() === "POST") {
+      const approved = typeof request.postDataJSON()?.approval_password === "string";
+      if (!approved) {
+        await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "approval_required" }) });
+        return;
+      }
+      state = { state: "off", limit: null };
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=runtime");
+  const section = page.getByText("Codex summary size", { exact: true });
+  await expect(section).toBeVisible();
+  await expect(page.getByText(/once they pass 30,000 tokens/)).toBeVisible();
+  await expect(page.getByText("can raise your bill", { exact: false })).toBeVisible();
+  // The page never offers to set a size, only to remove one.
+  await expect(page.getByRole("switch", { name: /summary|lean/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  const proof = page.getByRole("dialog");
+  await expect(proof).toBeVisible();
+  await expect(proof.getByText("Approve removing the Codex summary size")).toBeVisible();
+  await proof.getByLabel("Approval password").fill("lean-remove-proof");
+  await proof.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(proof).toHaveCount(0);
+  await expect(section).toHaveCount(0);
+  const posts = lean.filter((call) => call.method === "POST");
+  expect(posts).toHaveLength(1);
+  expect(posts[0].body).toEqual({ enabled: false, approval_password: "lean-remove-proof" });
+});
+
 test("a saved runtime turns on from the top of the page and adding a project stays optional", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const calls = await fixture(page, true, true);
@@ -222,6 +260,8 @@ test("a saved runtime turns on from the top of the page and adding a project sta
   await page.getByRole("button", { name: "Open Projects", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Projects", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("No projects yet.", { exact: true })).toBeVisible();
+  // Nothing to remove yet, so no red button competes with adding the first project.
+  await expect(page.getByRole("button", { name: "Remove all projects", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Choose a project folder/ })).toBeEnabled();
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
   expect(calls.some((call) => call.path === "/v1/settings" && call.method === "POST")).toBe(false);
@@ -402,5 +442,80 @@ test("the guide explains CIGAR in plain words and links to the deeper sections",
   await page.getByText("Do I need to install anything?", { exact: true }).click();
   await page.getByRole("button", { name: "Choose a version in Updates", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
+  expect(writes(calls)).toEqual([]);
+});
+
+const usageTotals = (scale: number) => ({ uncached_input_tokens: 1200 * scale, cached_input_tokens: 2_500_000 * scale, cache_write_tokens: 0,
+  output_tokens: 300 * scale, requests: 4 * scale, compactions: scale > 1 ? 1 : 0 });
+const usageWeek = { harness: "codex", sessions: 2, totals: usageTotals(5), recent: [
+  { last_active: "2026-11-05T10:15:00-05:00", model: "gpt-test", folder: "my-app", totals: usageTotals(3) },
+  { last_active: "2026-11-04T09:00:00-05:00", model: null, folder: null, totals: usageTotals(2) }] };
+const emptyTool = (harness: string) => ({ harness, sessions: 0, totals: usageTotals(0), recent: [] });
+const usageReady = { schema: "guard-context-usage-meter.v1", state: "ready", window_days: 7,
+  today: [{ ...usageWeek, sessions: 1, totals: usageTotals(1), recent: [] }, emptyTool("claude-code")],
+  week: [usageWeek, emptyTool("claude-code")], unread: ["copilot", "cursor", "gemini", "opencode", "pi"] };
+
+for (const width of [1440, 390]) {
+  test("Usage shows each app's own numbers after counting, with no guesses, at " + width + "px", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const calls = await fixture(page);
+    let reads = 0;
+    await page.route("**/v1/context-assistance/usage", async (route) => {
+      reads += 1;
+      const body = reads === 1 ? { ...usageReady, state: "counting", today: [], week: [] } : usageReady;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    });
+    await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+    await expect(page.getByRole("tab", { name: "Usage", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Counting your usage…", { exact: true })).toBeVisible();
+    const codex = page.getByRole("article", { name: "Codex usage" });
+    await expect(codex).toBeVisible({ timeout: 10_000 });
+    await expect(codex.getByRole("row", { name: /Input at full price/ })).toContainText("1,200");
+    await expect(codex.getByRole("row", { name: /Input at full price/ })).toContainText("6,000");
+    await expect(codex.getByRole("row", { name: /Input read from cache/ })).toContainText("12.5M");
+    await expect(codex.getByRole("row", { name: /Chat summaries/ })).toContainText("1");
+    await codex.getByText("Latest sessions", { exact: true }).click();
+    await expect(codex.getByText("my-app", { exact: true })).toBeVisible();
+    await expect(codex.getByText("Unknown folder", { exact: true })).toBeVisible();
+    await expect(page.getByText("No sessions in the last 7 days.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Guard does not read usage records from Copilot, Cursor, Gemini, OpenCode or Pi, so they are not shown here.", { exact: true })).toBeVisible();
+    await expect(page.locator(".cigar-usage")).not.toContainText("%");
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("cigar-usage-" + width + ".png"), fullPage: true });
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(writes(calls)).toEqual([]);
+  });
+}
+
+test("Usage says plainly when Guard cannot count, and tries again on request", async ({ page }) => {
+  await fixture(page);
+  let reads = 0;
+  await page.route("**/v1/context-assistance/usage", async (route) => {
+    reads += 1;
+    const body = reads === 1 ? { ...usageReady, state: "unavailable", today: [], week: [] } : usageReady;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByRole("article", { name: "Codex usage" })).toBeVisible();
+});
+
+test("Usage keeps the last totals on screen while Guard recounts, then shows the new ones", async ({ page }) => {
+  const calls = await fixture(page);
+  let reads = 0;
+  await page.route("**/v1/context-assistance/usage", async (route) => {
+    reads += 1;
+    const body = reads === 1 ? { ...usageReady, refreshing: true }
+      : { ...usageReady, refreshing: false, today: [{ ...usageWeek, sessions: 1, totals: usageTotals(2), recent: [] }, emptyTool("claude-code")] };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=usage");
+  const fullPrice = page.getByRole("article", { name: "Codex usage" }).getByRole("row", { name: /Input at full price/ });
+  await expect(fullPrice).toContainText("1,200");
+  await expect(page.getByText("Counting your usage…", { exact: true })).toHaveCount(0);
+  await expect(fullPrice).toContainText("2,400", { timeout: 10_000 });
+  await page.waitForTimeout(3_500);
+  expect(reads).toBe(2);
   expect(writes(calls)).toEqual([]);
 });

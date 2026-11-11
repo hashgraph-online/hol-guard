@@ -1,0 +1,231 @@
+{
+  "schema": "guard-mcp-server-id-vectors.v1",
+  "cases": [
+    {
+      "server": {
+        "harness": "codex",
+        "name": "github",
+        "source_scope": "global",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-github"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:codex:global:github:151a669af9837534fa6c"
+    },
+    {
+      "server": {
+        "harness": " Codex ",
+        "name": " GitHub ",
+        "source_scope": " Project ",
+        "command": "/usr/local/bin/NPX",
+        "args": [],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:codex:project:github:6961c37d6f35397a20cc"
+    },
+    {
+      "server": {
+        "harness": "cursor",
+        "name": "",
+        "source_scope": "workspace",
+        "command": "node",
+        "args": [
+          "./server.js"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:cursor:workspace:unnamed:7fa185d5bc8ebeb0237b"
+    },
+    {
+      "server": {
+        "harness": "claude-code",
+        "name": "   ",
+        "source_scope": "global",
+        "command": "uvx",
+        "args": [
+          "mcp-server-fetch"
+        ],
+        "transport": "local"
+      },
+      "expected": "mcp_server:claude-code:global:unnamed:148d2b3e1d23820ab0b2"
+    },
+    {
+      "server": {
+        "harness": "copilot",
+        "name": "files",
+        "source_scope": "global",
+        "command": "node",
+        "args": [
+          "/srv/app/index.js",
+          "--root=/srv/data"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:copilot:global:files:589812e6ea901fac940c"
+    },
+    {
+      "server": {
+        "harness": "cline",
+        "name": "files",
+        "source_scope": "global",
+        "command": "C:\\Tools\\Node.EXE",
+        "args": [
+          "C:\\srv\\index.js",
+          "--dir=C:/x"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:cline:global:files:ff31d8cdd4da7fcccdb1"
+    },
+    {
+      "server": {
+        "harness": "hermes",
+        "name": "flags",
+        "source_scope": "global",
+        "command": "tool",
+        "args": [
+          "/help",
+          "/HELP",
+          "/verbose",
+          "/verbose/x",
+          "/x"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:hermes:global:flags:a5ae4b3184b09f80cd0f"
+    },
+    {
+      "server": {
+        "harness": "hermes",
+        "name": "assign",
+        "source_scope": "global",
+        "command": "tool",
+        "args": [
+          "--Work_Dir= /q",
+          "cwd=/a",
+          "name=value",
+          "path=rel"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:hermes:global:assign:a65c1840838b7624915b"
+    },
+    {
+      "server": {
+        "harness": "opencode",
+        "name": "home",
+        "source_scope": "global",
+        "command": "tool",
+        "args": [
+          "~/x",
+          "../y",
+          "~",
+          "a=./b"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:opencode:global:home:6efdbcb9b0957a011be2"
+    },
+    {
+      "server": {
+        "harness": "codex",
+        "name": "drives",
+        "source_scope": "global",
+        "command": "tool",
+        "args": [
+          "1:/x",
+          "é:/x",
+          "c:/",
+          "c:"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:codex:global:drives:051936ef07d36c9b2cda"
+    },
+    {
+      "server": {
+        "harness": "codex",
+        "name": "Ünïcödé Ñame",
+        "source_scope": "glöbal",
+        "command": "tööl",
+        "args": [
+          "ärg",
+          "😀",
+          " spaced "
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:codex:glöbal:ünïcödé ñame:620c2f8cccf1a50ca8aa"
+    },
+    {
+      "server": {
+        "harness": "codex",
+        "name": "quotes",
+        "source_scope": "global",
+        "command": "tool",
+        "args": [
+          "say \"hi\"",
+          "back\\slash",
+          "tab\there",
+          "nl\nx",
+          "\u0001"
+        ],
+        "transport": ""
+      },
+      "expected": "mcp_server:codex:global:quotes:ab8a45aeafa7c2f64676"
+    },
+    {
+      "server": {
+        "harness": "CODEX",
+        "name": "ẞig",
+        "source_scope": "GLOBAL",
+        "command": "/usr/bin/",
+        "args": [
+          "İ"
+        ],
+        "transport": "STDIO"
+      },
+      "expected": "mcp_server:codex:global:ßig:a4cbf5eb5408490a5646"
+    },
+    {
+      "server": {
+        "harness": "codex",
+        "name": "dots",
+        "source_scope": "global",
+        "command": "a/.",
+        "args": [],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:codex:global:dots:80f356d43d1810f4d897"
+    },
+    {
+      "server": {
+        "harness": "codex",
+        "name": "empty-command",
+        "source_scope": "global",
+        "command": "",
+        "args": [],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:codex:global:empty-command:dd42987c65af404c5ca3"
+    },
+    {
+      "server": {
+        "harness": "codex",
+        "name": "colon:name",
+        "source_scope": "scope:x",
+        "command": "python3",
+        "args": [
+          "-m",
+          "pkg.server",
+          "--config=/etc/x.json"
+        ],
+        "transport": "stdio"
+      },
+      "expected": "mcp_server:codex:scope:x:colon:name:cc474416e263f92e005b"
+    }
+  ]
+}

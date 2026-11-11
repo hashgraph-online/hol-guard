@@ -959,6 +959,11 @@ fn invalid_vitest<T>() -> Result<T, RestrictedPytestError> {
 /// own answer: a trailing group's command list, an activation's target, or
 /// both. A sink that plans the call again has to plan the text the pre-tool
 /// pass answered for, or it refuses the work that answer already admitted.
+///
+/// A bounded inline shell whose script is one command, such as
+/// `bash -ec 'pytest -q'`, is read as that command, because it is what the
+/// review read. The caller re-authorizes the projected text on its own, so a
+/// command the review would not contain still gets refused there.
 fn contained_target(input: &Value) -> Value {
     let text = input
         .get("text")
@@ -969,7 +974,9 @@ fn contained_target(input: &Value) -> Value {
         cwd: input.get("cwd").and_then(Value::as_str),
         ..Default::default()
     };
-    crate::pretool::generic::contained_target(text, context).map_or(Value::Null, Value::String)
+    crate::pretool::generic::contained_target(text, context)
+        .or_else(|| crate::contained_inline_target::inline_shell_target(text))
+        .map_or(Value::Null, Value::String)
 }
 
 /// The words a manifest script spells, read with the lexer that reads it in

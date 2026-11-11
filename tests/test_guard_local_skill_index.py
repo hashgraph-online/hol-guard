@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime import local_skill_index
 from codex_plugin_scanner.guard.runtime.local_skill_index import (
     LocalSkillRecord,

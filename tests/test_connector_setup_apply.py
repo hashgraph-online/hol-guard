@@ -8,14 +8,15 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import approvals
+from codex_plugin_scanner.guard import continuation_runtime_local as local_approval_continuation
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import local_approval_continuation, local_cli_api, local_cli_http
-from codex_plugin_scanner.guard.daemon import local_cli_connector_group as group
-from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
+from codex_plugin_scanner.guard.hook_review.approval_connector_recommendation import (
     build_approval_connector_recommendation,
 )
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.daemon.local_cli_api_contract import LocalCliApiError
+from codex_plugin_scanner.guard.local_clis import local_cli_api
+from codex_plugin_scanner.guard.local_clis import local_cli_connector_group as group
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api_contract import LocalCliApiError
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import (
@@ -294,7 +295,7 @@ def test_group_resolves_only_after_the_proof_bound_write(store: GuardStore, monk
 
 
 def test_recommended_setup_is_a_body_for_the_same_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.daemon import approval_connector_recommendation as recommendation
+    from codex_plugin_scanner.guard.hook_review import approval_connector_recommendation as recommendation
 
     item = {
         "cli_id": _CLI_ID,
@@ -349,55 +350,17 @@ def test_list_filters_to_one_bound_identity(store: GuardStore, monkeypatch: pyte
     assert len(service.list_items()["items"]) == 2  # type: ignore[arg-type]
 
 
-class _Handler:
-    def __init__(self) -> None:
-        self.calls: list[dict[str, object]] = []
-        self.written: list[tuple[dict[str, object], int]] = []
-        self.local_cli_api = self
-
-    def _daemon_server(self) -> _Handler:
-        return self
-
-    def list_items(self, **kwargs: object) -> dict[str, object]:
-        self.calls.append(kwargs)
-        return {"items": []}
-
-    def _write_json(self, payload: dict[str, object], status: int = 200, **_kwargs: object) -> None:
-        self.written.append((payload, status))
-
-
-@pytest.mark.parametrize(
-    "query", ["identity=nothex", f"identity={_HASH}&identity={_HASH}", f"identity={_HASH.upper()}"]
-)
-def test_list_rejects_a_malformed_identity(query: str) -> None:
-    handler = _Handler()
-
-    local_cli_http.handle_local_cli_list(handler, query)
-
-    assert handler.calls == []
-    assert handler.written[0][1] == 400
-
-
-def test_list_passes_a_valid_identity() -> None:
-    handler = _Handler()
-
-    local_cli_http.handle_local_cli_list(handler, f"identity={_HASH}")
-    local_cli_http.handle_local_cli_list(handler, "")
-
-    assert handler.calls == [{"identity_hash": _HASH}, {}]
-
-
 # Every Python call site that writes a local-CLI grant. Connector setup adds
 # none: it reaches the grant only through the proof-bound local-CLI apply.
 _GRANT_WRITERS = {
-    "_write_local_cli_grant",
-    "apply_custom_extension_continuity_mutation_locked",
+    "_native_grant_write",
     "apply_custom_extension_continuity_transaction",
+    "mutation_wire",
     "record_local_custom_extension_mutation",
     "upsert_local_cli_grant",
 }
 _KNOWN_WRITE_SITES = {
-    ("daemon/local_cli_api.py", "apply", "record_local_custom_extension_mutation"),
+    ("local_clis/local_cli_api.py", "apply", "record_local_custom_extension_mutation"),
     (
         "runtime/custom_extension_continuity.py",
         "record_local_custom_extension_mutation",
@@ -406,19 +369,11 @@ _KNOWN_WRITE_SITES = {
     (
         "store_custom_extension_continuity.py",
         "apply_custom_extension_continuity_transaction",
-        "apply_custom_extension_continuity_mutation_locked",
+        "_native_grant_write",
     ),
-    (
-        "store_custom_extension_continuity.py",
-        "apply_custom_extension_continuity_mutation_locked",
-        "_write_local_cli_grant",
-    ),
-    ("store_local_cli.py", "upsert_local_cli_grant", "_write_local_cli_grant"),
-    (
-        "store_policy_activation_preflight.py",
-        "apply_continuity_rejection",
-        "apply_custom_extension_continuity_mutation_locked",
-    ),
+    ("store_local_cli.py", "upsert_local_cli_grant", "_native_grant_write"),
+    # Signed policy activation hands its continuity to the resident's apply_policy.
+    ("store_policy.py", "_apply_policy_bundle_authority_attempt", "mutation_wire"),
 }
 
 
@@ -445,9 +400,9 @@ def test_no_other_path_can_set_a_connector_allowed() -> None:
     assert {site for site in sites if site in _KNOWN_WRITE_SITES} == _KNOWN_WRITE_SITES
     assert sites <= _KNOWN_WRITE_SITES, sorted(sites - _KNOWN_WRITE_SITES)
     connector_modules = {
-        "daemon/approval_connector_recommendation.py",
-        "daemon/local_cli_connector_group.py",
-        "daemon/local_cli_http.py",
+        "hook_review/approval_connector_recommendation.py",
+        "local_clis/local_cli_connector_group.py",
+        "routes/service_calls.py",
         "runtime/connector_setup_items.py",
     }
     assert not {site for site in sites if site[0] in connector_modules}

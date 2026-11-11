@@ -62,8 +62,15 @@ _RUNTIME_PROBE_RETRY_SECONDS = 0.3
 # loaded host a single request can lapse with a deadline code while most of the caller's budget is unspent.
 # A verdict is a pure function of its request, so asking again is safe; retry only these codes, only while
 # the caller's remaining budget can still fit a meaningful attempt.
+# A busy client-lease directory fails before the request reaches the resident,
+# so retrying it cannot apply the operation twice.
 _TRANSIENT_DEADLINE_CODES = frozenset(
-    {"native_client_deadline_exceeded", "native_request_deadline_exceeded", "native_client_timed_out"}
+    {
+        "native_client_deadline_exceeded",
+        "native_request_deadline_exceeded",
+        "native_client_timed_out",
+        "native_resident_lease_busy",
+    }
 )
 # Every failed attempt counts toward the shared native circuit breaker (opens at 3 consecutive failures), so a
 # single operation must not be able to open it alone: one retry at most.

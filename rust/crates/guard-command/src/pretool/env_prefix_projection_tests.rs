@@ -324,11 +324,23 @@ fn a_data_setting_keeps_only_a_profile_that_drops_it() {
         (joined.minimum_action.as_str(), joined.reason_code.as_str()),
         ("sandbox-required", vitest)
     );
-    // The workspace sandbox would run the text without its settings.
-    for (reason_code, data_only) in [
-        (vitest, false),
-        ("native_workspace_containment_required", true),
-    ] {
+    // The workspace launcher builds its environment with the same restricted
+    // filter, so the setting does not reach that run either. Which contained
+    // profile a host picks for one command varies, and a review for the
+    // prefixed spelling alone would follow the host rather than the command.
+    let workspace = "native_workspace_containment_required";
+    let joined = super::join_reviewed(
+        verdict("sandbox-required", workspace),
+        raw(),
+        &reviewed(true),
+    );
+    assert_eq!(
+        (joined.minimum_action.as_str(), joined.reason_code.as_str()),
+        ("sandbox-required", workspace)
+    );
+    // A setting that is not data, and a route that hands the command the
+    // session environment instead of a filtered one, both keep the review.
+    for (reason_code, data_only) in [(vitest, false), ("native_bash_owner_required", true)] {
         let joined = super::join_reviewed(
             verdict("sandbox-required", reason_code),
             raw(),

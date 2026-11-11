@@ -91,8 +91,13 @@ def build_protect_payload(
     config: GuardConfig | None = None,
     current_config_provider: Callable[[], GuardConfig] | None = None,
     unsafe_raw_output: bool = False,
+    waited_request_ids: tuple[str, ...] = (),
 ) -> tuple[dict[str, object], int]:
-    """Evaluate and optionally execute an install command."""
+    """Evaluate and optionally execute an install command.
+
+    ``waited_request_ids`` names the approval requests this process queued and
+    waited on; only the re-check after that wait passes them.
+    """
 
     if len(command) == 0:
         raise ValueError("Guard protect requires a command to wrap.")
@@ -186,6 +191,7 @@ def build_protect_payload(
         additional_policy_context=cached_policy_context,
         current_config_provider=final_config_provider,
         additional_authority_provider=final_advisory_provider,
+        waited_request_ids=waited_request_ids,
     )
     if package_payload is not None:
         current_cached_verdict = evaluate_protect_request(request, store, cwd=workspace_dir)

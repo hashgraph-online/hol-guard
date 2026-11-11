@@ -12,7 +12,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_metrics import HookMetricsRecorder
+from codex_plugin_scanner.guard.hook_review.hook_metrics import HookMetricsRecorder
 from scripts import native_slo_capacity as capacity
 from scripts import native_slo_session as session_module
 from scripts.native_slo_adapter import Observation

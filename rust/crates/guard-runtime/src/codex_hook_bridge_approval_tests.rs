@@ -130,9 +130,9 @@ fn a_browser_allow_recorded_by_the_daemon_is_approved() {
     assert_eq!(
         targets,
         [
-            "/v1/requests/req_12345678",
-            "/v1/requests/req_12345678",
-            "/v1/requests/req_12345678",
+            "/v1/requests/req_12345678?wait_ms=1000",
+            "/v1/requests/req_12345678?wait_ms=1000",
+            "/v1/requests/req_12345678?wait_ms=1000",
             "/v1/requests/req_12345678/live-decision",
         ]
     );
@@ -194,6 +194,28 @@ fn an_allow_the_daemon_does_not_record_keeps_the_deny() {
         );
         assert_eq!(daemon.join().unwrap().len(), 2);
     }
+}
+
+#[test]
+fn a_read_the_daemon_held_open_is_followed_without_a_pause() {
+    let hold = Duration::from_millis(300);
+    let (home, daemon) = codex_home(
+        "codex-approval-held",
+        vec![
+            Exchange::Held(hold, 200, r#"{"status":"pending"}"#.to_owned()),
+            Exchange::Held(hold, 200, r#"{"status":"pending"}"#.to_owned()),
+            Exchange::Plain(200, RESOLVED_ALLOW.to_owned()),
+            Exchange::Plain(200, r#"{"completed":true,"action":"allow"}"#.to_owned()),
+        ],
+    );
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(20);
+    assert!(approved(&home.state_path, &pending(), HOOK_INPUT, deadline));
+    let waited = started.elapsed();
+    // Two held reads take 600ms; a pause after each would add 400ms more.
+    assert!(waited < Duration::from_millis(900), "{waited:?}");
+    let requests = daemon.join().unwrap();
+    assert_eq!(requests.len(), 4);
 }
 
 #[test]

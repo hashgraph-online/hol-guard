@@ -82,7 +82,7 @@ assert.equal(cigarTabFromSearch("?section=unknown"), "overview");
 assert.equal(cigarTabFromSearch(""), "overview");
 assert.equal(cigarTabFromSearch("?section=tutorials"), "guide", "the old Tutorials link opens the merged Guides section");
 assert.equal(new Set(CIGAR_TABS.map((tab) => tab.value)).size, CIGAR_TABS.length);
-assert.deepEqual(CIGAR_TABS.map((tab) => tab.label), ["Home", "Projects", "Settings", "Updates", "Privacy", "Guide"],
+assert.deepEqual(CIGAR_TABS.map((tab) => tab.label), ["Home", "Projects", "Settings", "Updates", "Usage", "Privacy", "Guide"],
   "six plain sections, always in view");
 const idle = (plan: CigarOneClick["plan"], run: CigarOneClick["run"] = { phase: "idle" }): CigarOneClick => ({
   plan, loadError: null, run, busy: run.phase === "running", start: () => {}, confirm: () => {}, cancelProof: () => {},
@@ -173,7 +173,7 @@ const sectionOpen = (section: string) => {
 const settingsOpen = sectionOpen("runtime");
 assert.match(settingsOpen, /role="tablist" aria-label="CIGAR sections"/);
 assert.match(settingsOpen, /role="tabpanel" aria-labelledby=/);
-for (const label of ["Home", "Projects", "Settings", "Updates", "Privacy", "Guide"]) assert.match(settingsOpen, new RegExp(">" + label + "<"));
+for (const label of ["Home", "Projects", "Settings", "Updates", "Usage", "Privacy", "Guide"]) assert.match(settingsOpen, new RegExp(">" + label + "<"));
 assert.match(settingsOpen, /Runtime controls/);
 assert.match(sectionOpen("access"), /Workspace access/);
 assert.match(sectionOpen("data"), /Context data/);

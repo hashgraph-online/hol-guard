@@ -12,7 +12,7 @@ permissions:
 
 env:
   UV_HTTP_TIMEOUT: "120"
-  # This compiler generates wheel data; it is not a shipped enforcement binary.
+  # These binaries generate wheel data and run the tests; neither is shipped.
   CARGO_PROFILE_RELEASE_OPT_LEVEL: "0"
   CARGO_PROFILE_RELEASE_LTO: "false"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
@@ -50,8 +50,10 @@ jobs:
         with:
           cache-key: evaluation-wheel
           cache-fallback-key: native-wheel
-      - name: Build source compiler
-        run: cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+      - name: Build source compiler and native runtime
+        run: >-
+          cargo build --manifest-path rust/Cargo.toml --locked --release
+          -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
       - name: Build and install the wheel
         env:
           HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
@@ -59,6 +61,10 @@ jobs:
           uv build --wheel --out-dir evaluation-dist
           uv pip install --python .venv/bin/python --no-deps evaluation-dist/*.whl
       - name: Verify installed staged evaluator with synthetic fixtures
+        # Evaluation contract checks run in the native runtime, as in a release wheel.
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
           VERSION=$(.venv/bin/python scripts/sync_repo_version.py --check)
           .venv/bin/python -I scripts/ci/check_evaluation_wheel.py --expected-version "$VERSION"

@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_native_review_binding import (
+from codex_plugin_scanner.guard.hook_review.hook_native_review_binding import (
     native_review_policy_binding,
 )
 from codex_plugin_scanner.guard.native_decision_receipt import validate_native_decision_receipt

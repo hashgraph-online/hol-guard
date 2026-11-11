@@ -1,4 +1,4 @@
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server_module
 from tests.dashboard_bundle_support import dashboard_chunk
 
 

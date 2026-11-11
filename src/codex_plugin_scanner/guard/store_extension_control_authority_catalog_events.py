@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any, Final
 
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
-from .runtime.extension_control_contract import ExtensionControlLayer
 from .runtime.generated_command_catalog_provenance import catalog_provenance, is_downgrade
 
 MIGRATED_EVENT: Final = "extension_control_authority_catalog_migrated"
@@ -105,41 +104,6 @@ def migration_provenance(
     return provenance, previous_writer_version if downgrade else None
 
 
-def build_catalog_migration_payload(
-    *,
-    previous_revision: int,
-    revision: int,
-    previous_catalog_digest: str,
-    catalog_digest: str,
-    layers: tuple[ExtensionControlLayer, ...],
-    retired_targets: tuple[str, ...],
-    provenance: tuple[dict[str, Any], str | None],
-) -> tuple[str, dict[str, Any] | None]:
-    """Build the migration event, and the regression record if there is one."""
-
-    described, downgraded_from = provenance
-    payload: dict[str, Any] = {
-        "previous_revision": previous_revision,
-        "revision": revision,
-        "previous_catalog_digest": previous_catalog_digest,
-        "catalog_digest": catalog_digest,
-        "layer_count": len(layers),
-        "control_count": sum(len(layer.controls) for layer in layers),
-        "retired_target_count": len(retired_targets),
-        "retired_target_ids": list(retired_targets),
-        "provenance": described,
-    }
-    regression: dict[str, Any] | None = None
-    if downgraded_from is not None:
-        regression = payload["regression"] = {
-            "previous_writer_version": downgraded_from,
-            "writer_version": described["writer_version"],
-            "retired_target_count": len(retired_targets),
-            "retired_target_ids": list(retired_targets),
-        }
-    return _encode(payload), regression
-
-
 def already_recorded(connection: sqlite3.Connection, revision: int) -> bool:
     """Whether this revision's migration event is already in the store."""
 
@@ -154,45 +118,8 @@ def already_recorded(connection: sqlite3.Connection, revision: int) -> bool:
     return False
 
 
-def insert_catalog_migration_event(
-    connection: sqlite3.Connection,
-    *,
-    payload: str,
-    regression: dict[str, Any] | None,
-    occurred_at: str,
-    revision: int,
-    previous_catalog_digest: str,
-    catalog_digest: str,
-) -> None:
-    """Record the migration, and a separate row when it loses protection."""
-
-    connection.execute(
-        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-        (MIGRATED_EVENT, payload, occurred_at),
-    )
-    if regression is None:
-        return
-    connection.execute(
-        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-        (
-            REGRESSED_EVENT,
-            _encode(
-                {
-                    "revision": revision,
-                    "previous_catalog_digest": previous_catalog_digest,
-                    "catalog_digest": catalog_digest,
-                    **regression,
-                }
-            ),
-            occurred_at,
-        ),
-    )
-
-
 __all__ = [
     "MIGRATED_EVENT",
     "REGRESSED_EVENT",
     "already_recorded",
-    "build_catalog_migration_payload",
-    "insert_catalog_migration_event",
 ]

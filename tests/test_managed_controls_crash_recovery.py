@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
-from types import MethodType
 
 import pytest
 
@@ -29,24 +27,6 @@ def _run_activation_crash_child(guard_home: Path, stage: str) -> None:
     bundle["bundleVersion"] = 8
     bundle["bundleHash"] = "sha256:" + "8" * 64
 
-    if stage == "after_remote_rows":
-        original_replace = store._replace_remote_policy_rows_locked  # pyright: ignore[reportPrivateUsage]
-
-        def replace_then_crash(
-            _store: GuardStore,
-            connection: sqlite3.Connection,
-            rows: Sequence[tuple[object, ...]],
-        ) -> None:
-            original_replace(connection, rows)
-            os._exit(91)
-
-        store._replace_remote_policy_rows_locked = MethodType(  # pyright: ignore[reportPrivateUsage]
-            replace_then_crash,
-            store,
-        )
-        _activate(store, bundle)
-        raise AssertionError("crash injection did not terminate")
-
     def publish_then_crash(
         _view: ExtensionControlAuthorityView,
         commit: Callable[[], None],
@@ -65,7 +45,6 @@ def _run_activation_crash_child(guard_home: Path, stage: str) -> None:
 @pytest.mark.parametrize(
     ("stage", "exit_code", "durable_new_state"),
     (
-        ("after_remote_rows", 91, False),
         ("before_commit", 92, False),
         ("after_commit", 93, True),
     ),

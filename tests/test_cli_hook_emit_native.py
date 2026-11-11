@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import fail_closed_response
+from codex_plugin_scanner.guard.hook_review.hook_fail_closed import fail_closed_response
 
 
 def test_bridge_harness_prints_the_resident_rendering(monkeypatch: pytest.MonkeyPatch) -> None:

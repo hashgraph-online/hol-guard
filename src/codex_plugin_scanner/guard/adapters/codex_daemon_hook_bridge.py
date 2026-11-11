@@ -41,9 +41,9 @@ if __package__:
         isolated_hook_environment,
         run_isolated_hook_process,
     )
-    from ..daemon.hook_availability_policy import hook_event_is_permission_request
-    from ..daemon.hook_request_parsing import runtime_hook_event_name
     from ..hook_execution_environment import stamp_hook_input_text
+    from ..hook_review.hook_availability_policy import hook_event_is_permission_request
+    from ..hook_review.hook_request_parsing import runtime_hook_event_name
     from ..live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -75,11 +75,11 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         isolated_hook_environment,
         run_isolated_hook_process,
     )
-    from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+    from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
+    from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
         hook_event_is_permission_request,
     )
-    from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
-    from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
+    from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
     from codex_plugin_scanner.guard.live_process_identity import (
         CODEX_BROWSER_WAIT_PROCESS_KEY,
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,

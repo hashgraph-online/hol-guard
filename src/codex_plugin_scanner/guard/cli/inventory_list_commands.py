@@ -129,7 +129,7 @@ def run_inventory_list_command(
     command = str(args.guard_command)
     generated_at = datetime.now(timezone.utc).isoformat()
     if command == "mcp":
-        from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+        from ..native_daemon_peer import load_guard_daemon_endpoint_url
 
         if context is not None:
             from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers

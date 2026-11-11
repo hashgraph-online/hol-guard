@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, native_store_policy, store_policy
-from codex_plugin_scanner.guard.daemon.hook_native_review_binding import native_review_settle
+from codex_plugin_scanner.guard.hook_review.hook_native_review_binding import native_review_settle
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.store import GuardStore
 

@@ -17,7 +17,7 @@ qualification, review, and release checks remain required for shipping changes.
 Build the offline tool using the repository lockfile:
 
 ```sh
-cargo +1.88.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --release --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
 ```
 
 Run the shell examples from the repository root with Bash and `jq`. On

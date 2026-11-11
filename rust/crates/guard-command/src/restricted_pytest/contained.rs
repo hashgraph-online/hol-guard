@@ -93,8 +93,116 @@ fn request_home(home: Option<&Path>) -> Option<PathBuf> {
         .or_else(host_home_directory)
 }
 
-fn nvm_versions_root(home: Option<&Path>) -> Option<PathBuf> {
-    request_home(home).map(|home| home.join(".nvm/versions/node"))
+/// Where a version manager keeps the Node releases it installed, relative to
+/// a home. Each entry is one manager's own tree and nothing else: nvm, fnm,
+/// Volta, asdf and mise. They are named one by one, rather than hidden
+/// directories below a home being admitted as a class, because that class
+/// holds the directories a contained run must never execute from.
+/// `~/.hol-guard/package-shims/bin` holds shims that hand a launch back to
+/// Guard instead of running the runtime, and `~/.claude`, `~/.codex` and
+/// `~/.omp` hold agent state; no entry here can spell any of them.
+pub(super) const NODE_MANAGER_ROOTS: &[&str] = &[
+    ".nvm/versions/node",
+    ".fnm/node-versions",
+    ".local/share/fnm/node-versions",
+    ".volta/tools/image/node",
+    ".asdf/installs/nodejs",
+    ".local/share/mise/installs/node",
+];
+/// Where Bun's own installer puts the runtime, relative to a home, and the
+/// version-manager trees that install Bun instead. The installer directory
+/// holds the binary itself; the others hold a release per version, like
+/// [`NODE_MANAGER_ROOTS`].
+const BUN_INSTALL_ROOT: &str = ".bun/bin";
+const BUN_MANAGER_ROOTS: &[&str] = &[".asdf/installs/bun", ".local/share/mise/installs/bun"];
+
+/// Every home a runtime may be installed under: the one the request names and
+/// this account's own, canonical and without repeats.
+///
+/// The request HOME is not always the account's. A session Guard supervises
+/// is started with the HOME its harness chose, while the runtime the caller
+/// actually runs was installed by nvm or Bun's installer under the account's
+/// home. Reading only the request's home refused that runtime and the
+/// contained run died with exit 126 before it executed anything, which is why
+/// both are read here, as `toolchains::homes` already does for every other
+/// root a contained run is granted.
+fn runtime_homes(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut homes: Vec<PathBuf> = Vec::new();
+    for candidate in request_home(home).into_iter().chain(host_home_directory()) {
+        let canonical = candidate.canonicalize().unwrap_or(candidate);
+        if !homes.contains(&canonical) {
+            homes.push(canonical);
+        }
+    }
+    homes
+}
+
+/// `relatives` below each home, canonical where the directory resolves.
+///
+/// The executable a plan judges is canonical, so the roots it is compared
+/// against are canonical too: a home whose `.nvm` is a link, which is how
+/// several dotfile managers lay a profile out, otherwise never matched the
+/// path the runtime actually resolved to.
+pub(super) fn manager_roots(homes: &[PathBuf], relatives: &[&str]) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for home in homes {
+        for relative in relatives {
+            let joined = home.join(relative);
+            let root = joined.canonicalize().unwrap_or(joined);
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    }
+    roots
+}
+
+/// Whether `executable` is the runtime a version manager installed below one
+/// of `roots`: `<root>/<version>/bin/<name>`, or the extra `installation`
+/// level fnm writes. Only those two shapes, so a program that merely happens
+/// to sit somewhere inside a manager's tree is not reached through this rule.
+pub(super) fn managed_runtime(executable: &Path, roots: &[PathBuf]) -> bool {
+    static VERSION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^v?\d+(\.\d+){0,2}$").unwrap());
+    let Some(parent) = executable.parent() else {
+        return false;
+    };
+    if parent.file_name() != Some(OsStr::new("bin")) {
+        return false;
+    }
+    let Some(mut version) = parent.parent() else {
+        return false;
+    };
+    if version.file_name() == Some(OsStr::new("installation")) {
+        let Some(outer) = version.parent() else {
+            return false;
+        };
+        version = outer;
+    }
+    version
+        .file_name()
+        .and_then(OsStr::to_str)
+        .is_some_and(|name| VERSION.is_match(name))
+        && version
+            .parent()
+            .is_some_and(|root| roots.iter().any(|candidate| candidate == root))
+}
+
+/// Whether `executable` is a Node a version manager installed under one of
+/// the caller's homes.
+pub(super) fn managed_node(executable: &Path, home: Option<&Path>) -> bool {
+    let homes = runtime_homes(home);
+    managed_runtime(executable, &manager_roots(&homes, NODE_MANAGER_ROOTS))
+}
+
+/// Whether `executable` is a Bun that Bun's own installer, or a version
+/// manager, put under one of the caller's homes.
+pub(super) fn managed_bun(executable: &Path, home: Option<&Path>) -> bool {
+    let homes = runtime_homes(home);
+    let installed = executable.file_name() == Some(OsStr::new("bun"))
+        && manager_roots(&homes, &[BUN_INSTALL_ROOT])
+            .iter()
+            .any(|root| executable.parent() == Some(root.as_path()));
+    installed || managed_runtime(executable, &manager_roots(&homes, BUN_MANAGER_ROOTS))
 }
 
 fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bool {
@@ -110,10 +218,6 @@ fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bo
     {
         return false;
     }
-    let parent = executable.parent().unwrap_or(Path::new("/"));
-    let version = parent.parent().unwrap_or(Path::new("/"));
-    let nvm = nvm_versions_root(home);
-    static VERSION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^v\d+\.\d+\.\d+$").unwrap());
     let trusted = [
         workspace,
         Path::new("/usr/bin"),
@@ -122,12 +226,7 @@ fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bo
     ]
     .iter()
     .any(|root| path_is_within(executable, root))
-        || (parent.file_name() == Some(OsStr::new("bin"))
-            && version.parent() == nvm.as_deref()
-            && version
-                .file_name()
-                .and_then(OsStr::to_str)
-                .is_some_and(|v| VERSION.is_match(v)));
+        || managed_node(executable, home);
     trusted && native_image(executable)
 }
 

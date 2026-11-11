@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.petasats",
+  "version": "1.0.0",
+  "name": "PetaSats",
+  "description": "Buys BSV with USDC on Base from an AI app through a local MCP server. The kit's keys stay on this device and each swap settles as a cross-chain atomic swap with the PetaSats market maker. Quote and status tools keep your existing policy; the swap and the two withdrawal tools move funds and need review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.bsvanon",
+    "displayName": "BSVanon",
+    "url": "https://github.com/BSVanon"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#EAB300"
+  },
+  "homepage": "https://github.com/BSVanon/petasats-mcp",
+  "license": "Open BSV License v4",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "petasats-mcp"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-agent-messaging",
+    "external-token-swap",
+    "external-onchain-transaction",
+    "external-funds-transfer",
+    "local-secret-read",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "get_quote",
+      "state": "inherit"
+    },
+    {
+      "name": "list_liquidity",
+      "state": "inherit"
+    },
+    {
+      "name": "fund_wallet",
+      "state": "inherit"
+    },
+    {
+      "name": "wallet_info",
+      "state": "inherit"
+    },
+    {
+      "name": "swap_status",
+      "state": "inherit"
+    },
+    {
+      "name": "wait_for_swap",
+      "state": "inherit"
+    },
+    {
+      "name": "stop_spending",
+      "state": "inherit"
+    },
+    {
+      "name": "swap_asset_to_bsv",
+      "state": "review"
+    },
+    {
+      "name": "withdraw_bsv",
+      "state": "review"
+    },
+    {
+      "name": "withdraw_base",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/BSVanon/petasats-mcp",
+    "https://github.com/BSVanon/petasats-mcp#limits-you-control",
+    "https://www.npmjs.com/package/petasats-mcp"
+  ],
+  "saferAlternatives": [
+    "Keep swap_asset_to_bsv, withdraw_bsv and withdraw_base on review: each one moves funds. get_quote, fund_wallet and list_liquidity are read-only and move nothing.",
+    "Create ~/.petasats/limits.json: bsvDestinations and baseDestinations allowlist where funds may go, and maxSwapUsdPerDay caps daily swaps. The kit rereads it before every money operation.",
+    "Keep shell and file-write access to ~/.petasats on review: an agent that can edit limits.json or the STOP file can undo those limits.",
+    "Use stop_spending to stop new swaps and withdrawals at once. Only the user can resume, from a terminal (npx petasats-mcp@0.2.16 resume); recovery of swaps already started keeps working.",
+    "Leave speed at standard, the default, which waits for one BSV confirmation, or set allowFastSettlement to false. Fast settlement accepts an unconfirmed BSV lock and is limited to $25.",
+    "Never let an agent read, print or send ~/.petasats/keys.json; it holds the only copy of the kit's keys, so keep a private backup.",
+    "Pin the package version when launching with npx (for example petasats-mcp@0.2.16) so only the reviewed release runs."
+  ]
+}

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
-from ..daemon.live_identity import verified_live_guard_daemon_identity
+from ..native_daemon_peer import verified_live_guard_daemon_identity
 
 CORE_START_WAIT_SECONDS = 60.0
 CORE_START_POLL_SECONDS = 0.5

@@ -7,7 +7,7 @@ import pytest
 from codex_plugin_scanner.guard.approval_gate import update_settings
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact, build_tool_call_hash, evaluate_tool_call
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs

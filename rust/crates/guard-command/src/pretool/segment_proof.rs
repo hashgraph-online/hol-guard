@@ -15,6 +15,38 @@ pub(super) use cwd::{
     git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
 };
 
+/// The leading `cd <dir>` of a list whose separators leave the steps after it
+/// unproven, as the one segment index it covers.
+///
+/// [`benign_command_segments`] answers nothing at all for such a list: a `;`
+/// after the `cd` means a failed `cd` would leave the rest running in the
+/// directory the command started in, so no step after it can be proved
+/// against the directory the `cd` names. The `cd` is still the first thing
+/// that runs, it runs unconditionally, and a verified target neither reads
+/// nor creates anything. Proving it alone lets an extension the user allowed
+/// cover the programs after it, instead of the whole command keeping a review
+/// for the one step nobody doubts.
+pub(crate) fn leading_cd_segment(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> Vec<usize> {
+    // `cd $((PATH=10))` assigns as it expands, so the step the proof reads as
+    // a directory change also decides what the programs after it run.
+    let assigns = model
+        .segments
+        .first()
+        .is_some_and(|segment| super::shell_arithmetic::arithmetic_assigns(&segment.text));
+    if model.confidence != "exact"
+        || model.path_overridden
+        || !model.wrapper_chain.is_empty()
+        || assigns
+        || cwd::verified_leading_cd_target(model, context).is_none()
+    {
+        return Vec::new();
+    }
+    vec![0]
+}
+
 pub(crate) fn benign_command_segments(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
@@ -54,8 +86,12 @@ pub(crate) fn benign_command_segments(
         .iter()
         .enumerate()
         .map(|(index, segment)| {
+            // `$((PATH=10))` assigns as it expands, which a later step sees.
+            let assigns = index + 1 < model.segments.len()
+                && super::shell_arithmetic::arithmetic_assigns(&segment.text);
             (index == 0 && cwd.is_some())
-                || exact_safe_segment_with_context(model, segment, false, proof_context)
+                || (!assigns
+                    && exact_safe_segment_with_context(model, segment, false, proof_context))
         })
         .collect();
     let mut all_previous_benign = true;
@@ -308,8 +344,15 @@ pub(super) fn exact_safe_segment_with_context(
         Vec::new()
     };
     let secret_namespace = github_metadata_text::secret_namespace(segment);
-    let sensitive_text =
-        secret_namespace.map(|index| github_metadata_text::without_namespace(segment, index));
+    // A `kubectl` output template selects fields in the object the read
+    // returns, so its words are not names on this machine.
+    let output_templates = super::kubectl_reads::output_template_positions(segment);
+    let sensitive_text = secret_namespace
+        .map(|index| github_metadata_text::without_namespace(segment, index))
+        .or_else(|| {
+            (!output_templates.is_empty())
+                .then(|| super::kubectl_reads::without_output_templates(segment, &output_templates))
+        });
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))
@@ -321,6 +364,7 @@ pub(super) fn exact_safe_segment_with_context(
                 .any(|(index, argument)| {
                     Some(index) != jq_filter
                         && Some(index) != secret_namespace
+                        && !output_templates.contains(&index)
                         && !search_text.contains(&index)
                         && sensitive_path_argument(argument)
                 }))
@@ -349,8 +393,11 @@ pub(super) fn exact_safe_segment_with_context(
                 && matches!(segment.arguments.as_slice(), [target] if safe_directory_target(target))
                 && super::directory_targets::drive_targets_quoted(segment)
         }
+        // `printf -v NAME` and `%n` assign a shell variable rather than print.
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => {
-            super::glob_words::printed_globs_listable(model, segment, context)
+            !super::printf_words::printf_sets_variable(segment)
+                && !super::control_flow_flatten::command_word_changes_shell_state(&segment.text)
+                && super::glob_words::printed_globs_listable(model, segment, context)
         }
         "exit" => super::shell_flow::safe_exit_arguments(&segment.arguments),
         "break" | "continue" => super::shell_flow::safe_loop_control_arguments(&segment.arguments),
@@ -368,6 +415,21 @@ pub(super) fn exact_safe_segment_with_context(
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
         "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
+        // Signal 0 is delivered to nothing. The kernel performs the
+        // permission check and returns, so `kill -0 4821` answers whether a
+        // process is still there and leaves it running -- the same question
+        // `ps -p 4821` asks, which is proven here already. A wait on a build
+        // or a server asks it on every pass, and the containment reading
+        // already admits this exact form for the same reason. An expansion
+        // stands for a number by the time the arguments are read, so
+        // `kill -0 $((-1))` would arrive as the pid `1` while the shell
+        // signals every process the user can reach; the operands this form
+        // admits are the words the caller wrote, so a segment carrying one
+        // is not among them.
+        "kill" => {
+            !segment.text.contains('$')
+                && super::workspace_contained::kill::liveness_only(&segment.arguments)
+        }
         "pg_isready" => super::safe_scalar::safe_pg_isready_arguments(&segment.arguments),
         "ls" => super::listing_reads::safe_listing_segment(
             &segment.text,

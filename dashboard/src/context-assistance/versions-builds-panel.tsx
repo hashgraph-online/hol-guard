@@ -62,7 +62,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
       </details>}
       action={installed ? prepareSelection(installed) : <button type="button" className={versionButton} aria-describedby={reason ? id + "-build-reason-" + buildId : undefined} disabled={disabled || reason !== null || !interpreter}
         onClick={() => { if (interpreter) onAction({ input: { action: "install", job_id: cigarVersionJobId(), build_id: buildId, interpreter_id: interpreter.interpreter_id },
-          title: "Prepare this CIGAR version", detail: "Guard downloads and checks this version next to the one you have. Nothing changes until you switch." }); }}>Prepare this build</button>} />;
+          title: "Prepare this CIGAR version", detail: "Guard downloads and checks this version next to the one you have. Nothing changes until you switch." }); }}>Get this version</button>} />;
   });
   const looseRows = data.installations.filter((item) => !matched.has(item.runtime_id)).map((item) => <Row key={item.runtime_id}
     titleId={id + "-installed-" + item.runtime_id} title={"CIGAR " + (item.sdk_version ?? "registered bundle")} tags={inUseTag(item)}
@@ -79,7 +79,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
       reason={reason && build.platform === catalog.host_platform ? <p id={id + "-python-reason-" + build.build_id} className="text-sm text-amber-800">{reason}</p> : null}
       action={<button type="button" className={versionButton} aria-describedby={reason && build.platform === catalog.host_platform ? id + "-python-reason-" + build.build_id : undefined} disabled={disabled || present || reason !== null}
         onClick={() => onAction({ input: { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: build.build_id },
-          title: "Prepare private Python", detail: "Guard downloads and checks a private copy of Python for CIGAR. Your system Python and current CIGAR version stay as they are." })}>{present ? "Python registered" : "Prepare private Python"}</button>} />;
+          title: "Set up Python for CIGAR", detail: "Guard downloads and checks a private copy of Python for CIGAR. Your system Python and current CIGAR version stay as they are." })}>{present ? "Python is set up" : "Set up Python for CIGAR"}</button>} />;
   };
   const hostPython = catalog.interpreter_builds.filter((b) => !catalog.host_platform || b.platform === catalog.host_platform);
   const otherPython = catalog.interpreter_builds.filter((b) => catalog.host_platform && b.platform !== catalog.host_platform);

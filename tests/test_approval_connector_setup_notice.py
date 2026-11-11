@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import approvals
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
 
 
 class _Store:

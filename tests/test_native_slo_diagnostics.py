@@ -9,7 +9,6 @@ import pytest
 
 from scripts.native_slo_diagnostics import (
     capture_inflight_failure,
-    capture_transport_refusals,
     preserve_session_diagnostics,
 )
 
@@ -59,29 +58,3 @@ def test_oversize_log_is_rejected_before_copying(tmp_path):
             SimpleNamespace(guard_home=guard, daemon=SimpleNamespace(_server=SimpleNamespace())), destination
         )
     assert not (destination / "daemon.log").exists()
-
-
-def test_observer_preserves_original_transport_effects_and_exceptions():
-    sentinel = object()
-    effects = []
-
-    def discard(request):
-        effects.append(request)
-        return sentinel
-
-    def close(request):
-        effects.append(request)
-        raise ConnectionError("synthetic private request text")
-
-    server = SimpleNamespace(_discard_request=discard, _close_unclassified_socket=close)
-    capture_transport_refusals(server)
-    request = object()
-    assert server._discard_request(request) is sentinel
-    with pytest.raises(ConnectionError):
-        server._close_unclassified_socket(request)
-    assert effects == [request, request]
-    assert dict(server._cigar_probe_transport_counts) == {
-        "discard_request:other": 1,
-        "close_unclassified_socket:other": 1,
-    }
-    assert "private" not in json.dumps(server._cigar_probe_transport_counts)

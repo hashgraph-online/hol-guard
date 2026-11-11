@@ -13,24 +13,18 @@ from typing import Any
 import pytest
 
 _MODULES = (
-    "codex_plugin_scanner.guard.daemon.server",
-    "codex_plugin_scanner.guard.daemon.server_common",
-    "codex_plugin_scanner.guard.daemon.server_control_cloud_connect",
-    "codex_plugin_scanner.guard.daemon.server_control_cloud_sync",
-    "codex_plugin_scanner.guard.daemon.server_control_connect_flow",
-    "codex_plugin_scanner.guard.daemon.server_control_connect_state",
-    "codex_plugin_scanner.guard.daemon.server_control_headless",
-    "codex_plugin_scanner.guard.daemon.server_control_health",
-    "codex_plugin_scanner.guard.daemon.server_control_misc",
-    "codex_plugin_scanner.guard.daemon.server_control_operations",
-    "codex_plugin_scanner.guard.daemon.server_control_policy",
-    "codex_plugin_scanner.guard.daemon.server_control_repair",
-    "codex_plugin_scanner.guard.daemon.server_control_routes_post",
-    "codex_plugin_scanner.guard.daemon.server_control_supply_chain",
-    "codex_plugin_scanner.guard.daemon.server_dashboard_records_read",
-    "codex_plugin_scanner.guard.daemon.server_dashboard_runtime_read",
-    "codex_plugin_scanner.guard.daemon.server_dashboard_support",
-    "codex_plugin_scanner.guard.daemon.server_control_sync",
+    "codex_plugin_scanner.guard.routes.request_handler",
+    "codex_plugin_scanner.guard.runtime_health.server_common",
+    "codex_plugin_scanner.guard.routes.connect_calls",
+    "codex_plugin_scanner.guard.cloud_control.server_control_cloud_sync",
+    "codex_plugin_scanner.guard.cloud_control.server_control_connect_flow",
+    "codex_plugin_scanner.guard.cloud_control.server_control_connect_state",
+    "codex_plugin_scanner.guard.routes.repair_calls",
+    "codex_plugin_scanner.guard.routes.supply_chain_calls",
+    "codex_plugin_scanner.guard.routes.update_calls",
+    "codex_plugin_scanner.guard.routes.headless_calls",
+    # Library calls import these collaborators where they run.
+    "codex_plugin_scanner.guard.cli.update_commands",
 )
 
 

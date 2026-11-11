@@ -51,13 +51,18 @@ USER_BLOCK_REASON = "native_review_user_block"
 GRANT_REASON = "Gauntlet operator approved the reviewed action"
 
 
-def write_review_config(guard_home: Path, *, file_tool: bool = False) -> dict[str, Any]:
+def write_review_config(guard_home: Path, *, file_tool: bool = False, intrinsic_review: bool = False) -> dict[str, Any]:
     """Raise the fixture's review floor before its daemon starts.
 
     ``file_tool`` picks the floor that reaches the case's own action: the default floor
     for a case whose repeated action is a file-tool call, the subprocess floor otherwise.
     """
     guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if intrinsic_review:
+        # The command already needs review. A blanket subprocess floor would
+        # also hold its successful PostToolUse and make the agent retry after execution.
+        (guard_home / "config.toml").write_text('mode = "enforce"\nblocked_request_mode = "ask"\n', encoding="utf-8")
+        return {"intrinsic_review": True, "blocked_request_mode": "ask"}
     setting = "default_action" if file_tool else "subprocess_action"
     config = FILE_REVIEW_CONFIG if file_tool else REVIEW_CONFIG
     (guard_home / "config.toml").write_text(config, encoding="utf-8", newline="\n")
@@ -204,6 +209,7 @@ class ReviewApprover:
         from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 
         from .approval_retry_bash import SCRIPT_RELATIVE, plan, targets_script
+        from .approval_retry_persistent import persistent_consent
 
         request_id = str(row.get("request_id") or "")
         lifecycle = plan(self._scenario_id or "")
@@ -228,6 +234,8 @@ class ReviewApprover:
                     self._lifecycle["once_contention_observed"] = True
             return
         persist_policy = True if lifecycle is not None and lifecycle_target and lifecycle.persist else None
+        if persist_policy is None and persistent_consent(self._scenario_id or "", target):
+            persist_policy = True
         artifact_hash = row.get("artifact_hash") if isinstance(row.get("artifact_hash"), str) else None
         scope_version = row.get("scope_contract_version")
         scope_digest = row.get("scope_contract_digest")

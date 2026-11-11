@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
+from codex_plugin_scanner.guard.hook_deadline import RuntimeHookDeadline
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 _PAYLOAD = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git status"}}

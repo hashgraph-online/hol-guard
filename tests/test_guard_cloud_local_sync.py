@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provisio
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.shims import install_package_shims
+from codex_plugin_scanner.guard.sqlite_connection_cache import close_idle_store_connections
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
@@ -496,6 +497,9 @@ def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatc
         opened += 1
         return original(*args, **kwargs)
 
+    # Count from a cold start: a connection kept from setup would hide an
+    # extra open.
+    close_idle_store_connections()
     monkeypatch.setattr(sqlite3, "connect", counted_connect)
 
     snapshot = build_runtime_snapshot(store=store, approval_center_url=None)

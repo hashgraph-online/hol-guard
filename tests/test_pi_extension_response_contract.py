@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool
+from codex_plugin_scanner.guard.hook_review.hook_fail_closed import render_pre_tool
 from tests.pi_extension_response_callback_support import (
     _run_generated_callback_payload,
     _run_generated_source_ref_fixture,

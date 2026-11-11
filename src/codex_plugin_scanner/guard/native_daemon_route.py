@@ -47,6 +47,7 @@ _CLAIM_KEYS: dict[str, str] = {
     "location_id_camel": "locationId",
     "daemon_origin": "daemon_origin",
     "daemon_origin_camel": "daemonOrigin",
+    "request_id": "request_id",
 }
 _PAYLOAD_KEYS: dict[str, str] = {
     "harness": "harness",

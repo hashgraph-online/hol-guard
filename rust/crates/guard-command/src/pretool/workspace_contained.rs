@@ -52,7 +52,7 @@ pub(super) mod home_exec;
 #[path = "workspace_git_keeps_work.rs"]
 mod keeps_work;
 #[path = "workspace_contained_kill.rs"]
-mod kill;
+pub(super) mod kill;
 #[path = "workspace_contained_launch.rs"]
 mod launch;
 #[path = "workspace_contained_links.rs"]
@@ -69,6 +69,8 @@ mod removal;
 pub(super) mod runner;
 #[path = "workspace_contained_script.rs"]
 mod script;
+#[path = "workspace_contained_sed.rs"]
+mod sed;
 #[path = "workspace_contained_settings.rs"]
 mod settings;
 #[path = "workspace_contained_sibling.rs"]
@@ -252,6 +254,9 @@ pub(crate) fn command_shape(
             return None;
         }
         let name = super::executable_basename(executable);
+        if matches!(name, "sed" | "gsed") && !sed::arguments_without_execution(&segment.arguments) {
+            return None;
+        }
         // A scratch script outside the workspace is read as that one file.
         let script = script::outside_script(segment, workspace);
         // The sandbox has no network, so a network client would only fail,

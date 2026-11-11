@@ -1,4 +1,5 @@
 use super::*;
+use crate::context_assistance_engine::PickedExcerpt;
 use serde_json::json;
 
 fn excerpt(path: &str, text: &str) -> PickedExcerpt {
@@ -16,7 +17,7 @@ fn words(list: &[&str]) -> Vec<String> {
 
 /// The context text for a session's first prompt.
 fn render(picked: &[PickedExcerpt], found: &[String], words: &[String]) -> Option<String> {
-    super::render(picked, found, words, &[]).map(|rendered| rendered.text)
+    super::render(picked, found, words, &[], &[]).map(|rendered| rendered.text)
 }
 
 fn matched(found: &[String]) -> Option<String> {
@@ -40,11 +41,11 @@ fn an_excerpt_the_session_already_has_is_named_instead_of_sent_again() {
     ];
     let found = words(&["src/header.tsx", "src/header-title.ts", "src/theme.css"]);
     let asked = words(&["header"]);
-    let first = super::render(&picked, &found, &asked, &[]).unwrap();
+    let first = super::render(&picked, &found, &asked, &[], &[]).unwrap();
     assert_eq!(first.shown, vec![shown(&picked[0]), shown(&picked[1])]);
 
     let earlier = [shown(&picked[0])];
-    let next = super::render(&picked, &found, &asked, &earlier).unwrap();
+    let next = super::render(&picked, &found, &asked, &earlier, &[]).unwrap();
     assert_eq!(next.shown, vec![shown(&picked[1])]);
     assert!(!next.text.contains("<header />"), "{}", next.text);
     assert!(next.text.starts_with(HEADER), "{}", next.text);
@@ -56,7 +57,7 @@ fn an_excerpt_the_session_already_has_is_named_instead_of_sent_again() {
         next.text
     );
 
-    let repeat = super::render(&picked, &found, &asked, &first.shown).unwrap();
+    let repeat = super::render(&picked, &found, &asked, &first.shown, &[]).unwrap();
     assert!(repeat.shown.is_empty());
     assert!(repeat.text.starts_with(REPEATED_HEADER), "{}", repeat.text);
     assert!(!repeat.text.contains("```"), "{}", repeat.text);
@@ -74,7 +75,7 @@ fn an_excerpt_edited_since_it_was_shown_is_sent_again() {
         3,
         "export const Header = () => <div />;",
     )];
-    let next = super::render(&picked, &[], &words(&["header"]), &before).unwrap();
+    let next = super::render(&picked, &[], &words(&["header"]), &before, &[]).unwrap();
     assert_eq!(next.shown, vec![shown(&picked[0])]);
     assert!(next.text.contains("<header />"), "{}", next.text);
 }
@@ -127,7 +128,9 @@ fn a_test_that_repeats_the_request_does_not_push_out_its_source() {
             "def test_invalid_choice_suggests():\n    convert(choice, value)",
         ),
     ];
-    let found = words(&["tests/test_types.py", "src/types.py"]);
+    // The search ranks a test only when the prompt names it or only tests
+    // hold its quote; this one is here from an earlier prompt.
+    let found = words(&["src/types.py"]);
     let asked = words(&["choice", "invalid", "value", "convert", "suggest"]);
     let rendered = render(&picked, &found, &asked).unwrap();
     assert!(rendered.contains("src/types.py (lines"), "{rendered}");
@@ -385,7 +388,7 @@ fn project(
 fn own_read(home: &Path, root: &Path, found: &[&str], terms: &[&str]) -> Option<String> {
     let later = Instant::now() + Duration::from_secs(5);
     let (found, terms) = (words(found), words(terms));
-    read_matched(home, root, "codex", &found, &terms, &[], later).map(|read| read.text)
+    read_matched(home, root, "codex", &found, &terms, &[], &[], later).map(|read| read.text)
 }
 
 /// A prompt sent while CIGAR is busy with another, or still loading the
@@ -436,3 +439,61 @@ fn guard_reads_nothing_a_workspace_has_not_allowed() {
     );
     assert!(!project_context_on(home.path(), &root, "codex"));
 }
+
+/// A library module named like a test, as Jinja's `tests.py` of template
+/// tests, is the only file holding a quoted docstring. It is found and read,
+/// not set aside as a test. A test that repeats a quote the source holds
+/// still gives way.
+#[test]
+fn a_quote_only_a_test_named_module_holds_is_shown() {
+    let prompt = "Which function does this? \"Return true if the variable is a number.\"";
+    let module = concat!(
+        "def test_number(value):\n",
+        "    \"\"\"Return true if the variable is a number.\"\"\"\n",
+        "    return isinstance(value, Number)\n",
+    );
+    let env = "class Environment:\n    def variable_number(self):\n        return True\n";
+    let (home, _project, root) = project(ON, &[("src/tests.py", module), ("src/env.py", env)]);
+    let words = crate::context_assistance_prompt_files::terms(prompt);
+    let search = || walk(&root, &words, &phrases(prompt), &[], Duration::from_secs(5));
+    let found = search().found(&words);
+    assert!(found.contains(&"src/tests.py".to_owned()), "{found:?}");
+    let later = Instant::now() + Duration::from_secs(5);
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], &[], later).unwrap();
+    assert!(read.text.contains("src/tests.py (lines"), "{}", read.text);
+    assert!(read.text.contains("def test_number"), "{}", read.text);
+    std::fs::write(root.join("src/env.py"), format!("{env}{module}")).unwrap();
+    let found = search().found(&words);
+    assert!(!found.contains(&"src/tests.py".to_owned()), "{found:?}");
+}
+
+/// A prompt that names its source file, with no other source matching, still
+/// sets aside a test that repeats more of its words, so the test cannot raise
+/// the bar the named file is measured against and hide it.
+#[test]
+fn a_test_cannot_push_out_the_source_file_the_prompt_names() {
+    let prompt = "In types.py, convert should suggest a choice for an invalid value.";
+    let source = "def convert(raw):\n    return raw\n";
+    let test = "def test_invalid_choice_suggests():\n    \
+assert convert('bad') == 'suggest a choice for an invalid value'\n";
+    let files = [("src/types.py", source), ("src/test_types.py", test)];
+    let (home, _project, root) = project(ON, &files);
+    let words = crate::context_assistance_prompt_files::terms(prompt);
+    let named = crate::context_assistance_prompt_words::named(prompt);
+    assert_eq!(named, ["types.py".to_owned()]);
+    let found = walk(
+        &root,
+        &words,
+        &phrases(prompt),
+        &named,
+        Duration::from_secs(5),
+    )
+    .found(&words);
+    assert_eq!(found, ["src/types.py".to_owned()]);
+    let later = Instant::now() + Duration::from_secs(5);
+    let read = read_matched(home.path(), &root, "codex", &found, &words, &[], &[], later).unwrap();
+    assert!(read.text.contains("src/types.py (lines"), "{}", read.text);
+}
+
+#[path = "context_assistance_prompt_quoted_tests.rs"]
+mod quoted;

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.co-review",
+  "version": "1.0.0",
+  "name": "Co-Review",
+  "description": "Review code and designs with the human in Co-Review, the repository review app. Comments and findings are anchored to their symbol and Tree-sitter tokens, so they follow the code through edits and are marked outdated instead of drifting; repo_map gives the agent a Tree-sitter outline of the repository. The server starts or joins the local Co-Review app. Only post_review_to_github leaves the machine (gh). Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.sdsvn",
+    "displayName": "Sarath Sadasivan Pillai",
+    "url": "https://github.com/sdsvn"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#1f2937" },
+  "homepage": "https://github.com/sdsvn/co-review",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "co-review"
+  },
+  "riskClasses": [
+    "local-source-read",
+    "local-file-write",
+    "local-command-execution",
+    "localhost-listener",
+    "external-repository-write"
+  ],
+  "tools": [
+    { "name": "open_review", "state": "review" },
+    { "name": "await_reviewer", "state": "inherit" },
+    { "name": "reply", "state": "inherit" },
+    { "name": "add_findings", "state": "inherit" },
+    { "name": "ask_reviewer", "state": "inherit" },
+    { "name": "get_review", "state": "inherit" },
+    { "name": "repo_map", "state": "inherit" },
+    { "name": "repo_facts", "state": "inherit" },
+    { "name": "post_review_to_github", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/sdsvn/co-review",
+    "https://github.com/sdsvn/co-review/blob/main/docs/agent-setup.md#other-harnesses-mcp",
+    "https://github.com/sdsvn/co-review/blob/main/llms.txt",
+    "https://github.com/sdsvn/co-review/blob/main/docs/architecture.md"
+  ],
+  "saferAlternatives": [
+    "Keep post_review_to_github on review: it posts PR comments via gh. Upstream may post before a verdict, but asks the reviewer to confirm the exact comment first.",
+    "open_review is on review: it writes local review state (review.json or storePath) under ~/.co-review, and accepted document edits can write into the workspace.",
+    "Findings are placed by quoting the code, not by line number, and anchored to symbols and Tree-sitter tokens; a quote that matches nothing is refused and a comment whose code is gone is marked outdated, never moved onto code it may not describe.",
+    "Install graphify only if you want the code graph in the repository overview; repo_map works without it, and neither calls a model or the network."
+  ]
+}

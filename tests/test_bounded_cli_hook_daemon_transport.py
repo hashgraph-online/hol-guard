@@ -10,9 +10,9 @@ from urllib.parse import urlparse
 
 import pytest
 
+from codex_plugin_scanner.guard import native_daemon_manage as auth_token_module
 from codex_plugin_scanner.guard import native_hook_render
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon as daemon
-from codex_plugin_scanner.guard.daemon import auth_token as auth_token_module
 
 
 @pytest.mark.parametrize("url", ["https://127.0.0.1:4781/hook", "http://example.com/hook"])

@@ -153,7 +153,8 @@ fn execution_intent_same_session_call_id_is_harness_scoped() {
     }
     // Claude Code and Codex stamp `tool_use_id` on every tool-use block, so a
     // retry of the same action carries a new one; Claude Code's `prompt_id`
-    // names the user turn, and the approved retry comes in a later turn.
+    // and Codex's `turn_id` name the user turn, and the approved retry comes
+    // in a later turn.
     // Cursor mints a fresh `generation_id` per attempt beside its
     // `tool_use_id`, and ZCode replaces `tool_use_id`, `toolCallId` and
     // `turnId` together. Every other root key, and every key a harness does
@@ -163,7 +164,9 @@ fn execution_intent_same_session_call_id_is_harness_scoped() {
         ("claude-code", "tool_use_id", true),
         ("claude-code", "prompt_id", true),
         ("codex", "tool_use_id", true),
+        ("codex", "turn_id", true),
         ("codex", "prompt_id", false),
+        ("claude-code", "turn_id", false),
         ("claude-code", "tool_call_id", false),
         ("codex", "tool_call_id", false),
         ("cursor", "tool_use_id", true),

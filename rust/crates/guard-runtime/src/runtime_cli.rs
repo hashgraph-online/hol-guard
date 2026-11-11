@@ -30,6 +30,11 @@ pub(super) fn run() -> Result<(), String> {
         [command, rest @ ..] if command == codex_sandbox_check::CHECK_COMMAND => {
             std::process::exit(codex_sandbox_check::run(rest))
         }
+        // Guard Cloud's hosted action evaluator; the same JSON-lines loop as
+        // `guard-cloud-action`, so a host with the wheel needs no other binary.
+        [command, rest @ ..] if command == "cloud-action" => std::process::exit(
+            guard_command::cloud_action_serve::serve("hol-guard-runtime cloud-action", rest),
+        ),
         [command] if command == "capabilities" => write_json(&capabilities()),
         [command, flag] if command == "capabilities" && flag == "--json" => {
             write_json(&capabilities())
@@ -77,6 +82,9 @@ pub(super) fn run() -> Result<(), String> {
         [command, config] if command == cline_hook_worker::WORKER_COMMAND => {
             std::process::exit(cline_hook_worker::run(config))
         }
+        [command, rest @ ..] if command == daemon_edge::standalone::SERVE_COMMAND => {
+            std::process::exit(daemon_edge::standalone::run(rest))
+        }
         [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
             std::process::exit(pi_hook_bridge::run(config))
         }
@@ -108,6 +116,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if desktop_core_onedir::is_command(command) && flag == "--stdin" => {
             let response = desktop_core_onedir::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if exact_cloud_review::is_command(command) && flag == "--stdin" => {
+            let response = exact_cloud_review::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if trust_attestation_key::is_command(command) && flag == "--stdin" => {
@@ -208,6 +220,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = cloud_actions_connect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if registry_trust::is_command(command) && flag == "--stdin" => {
+            let response = registry_trust::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if cloud_actions_health::is_command(command) && flag == "--stdin" => {
             let response = cloud_actions_health::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -258,6 +274,17 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if desktop_foreign_remove::is_command(command) && flag == "--stdin" => {
             let response = desktop_foreign_remove::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if daemon_client::is_command(command) && flag == "--stdin" => {
+            let response = daemon_client::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if daemon_recovery::is_command(command) && flag == "--stdin" => {
+            daemon_recovery::run_session(io::stdin().lock(), io::stdout().lock())
+        }
+        [command, flag] if daemon_manage::is_command(command) && flag == "--stdin" => {
+            let response = daemon_manage::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {

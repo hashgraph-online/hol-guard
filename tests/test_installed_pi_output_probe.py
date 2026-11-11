@@ -34,11 +34,8 @@ from ci.native_runtime.probe_installed_pi_output import (
     _retain_private_native_retry_state,
     _retain_unsafe_cleanup_marker,
     _run_probe,
-    _start_installed_daemon,
     _text_digest,
 )
-from codex_plugin_scanner.guard import store as store_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server
 
 
 def _preserved_result(case: dict[str, object]) -> dict[str, object]:
@@ -772,49 +769,6 @@ def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -
         assert daemon.finished is False
     finally:
         release.set()
-
-
-def test_daemon_constructor_failure_closes_public_resources_and_stays_unsafe(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    calls: list[str] = []
-
-    class Publisher:
-        def close(self) -> None:
-            calls.append("publisher")
-
-    class Store:
-        policy_snapshot_publisher = Publisher()
-
-        def close(self) -> None:
-            calls.append("store")
-
-    def make_store(*args: object, **kwargs: object) -> Store:
-        return Store()
-
-    def fail_daemon(*args: object, **kwargs: object) -> object:
-        raise RuntimeError("constructor failed")
-
-    monkeypatch.setattr(store_module, "GuardStore", make_store)
-    monkeypatch.setattr(daemon_server, "GuardDaemonServer", fail_daemon)
-    native_cleanup_called = False
-
-    def unexpected_native_cleanup(identity: object, guard_home: Path) -> None:
-        nonlocal native_cleanup_called
-        native_cleanup_called = True
-
-    monkeypatch.setattr(probe, "_cleanup_native", unexpected_native_cleanup)
-
-    with pytest.raises(ProbeCleanupUnsafeError, match="startup cleanup failed"):
-        _start_installed_daemon(
-            guard_home=tmp_path / "guard-home",
-            home=tmp_path / "home",
-            workspace=tmp_path / "workspace",
-            identity=SimpleNamespace(path=Path("/bin/false")),
-        )
-
-    assert calls == ["store", "publisher"]
-    assert native_cleanup_called is False
 
 
 def test_bounded_daemon_call_redelivers_expired_prior_timer(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -692,6 +692,7 @@ fn evaluate_request(
             cwd,
             home_dir,
             launch_env,
+            package_manager_binding,
         } => {
             let launch_env_value = launch_env.as_ref().map(|env| {
                 Value::Object(
@@ -700,19 +701,33 @@ fn evaluate_request(
                         .collect(),
                 )
             });
-            result.runtime_identity =
-                Some(observe_value(Phase::ContextRuntimeLaunchIdentity, || {
-                    guard_command::launch_identity::build_runtime_launch_identity(
-                        command.as_ref().unwrap_or(&Value::Null),
-                        args,
-                        *structured_command,
-                        *direct_executable,
-                        search_path.as_deref(),
-                        cwd.as_deref().map(Path::new),
-                        home_dir.as_deref().map(Path::new),
-                        launch_env_value.as_ref(),
-                    )
-                }));
+            let mut identity = observe_value(Phase::ContextRuntimeLaunchIdentity, || {
+                guard_command::launch_identity::build_runtime_launch_identity(
+                    command.as_ref().unwrap_or(&Value::Null),
+                    args,
+                    *structured_command,
+                    *direct_executable,
+                    search_path.as_deref(),
+                    cwd.as_deref().map(Path::new),
+                    home_dir.as_deref().map(Path::new),
+                    launch_env_value.as_ref(),
+                )
+            });
+            // The executed argv and every reuse check keep reading
+            // `argv_sha256`; only the approval binding reads this digest, and
+            // only when a presentation-only option changed the spelling.
+            if *package_manager_binding {
+                if let Some(binding) = guard_command::launch_identity::package_binding_argv_digest(
+                    command.as_ref().unwrap_or(&Value::Null),
+                    args,
+                    *structured_command,
+                ) {
+                    if let Some(map) = identity.as_object_mut() {
+                        map.insert("binding_argv_sha256".into(), Value::String(binding));
+                    }
+                }
+            }
+            result.runtime_identity = Some(identity);
         }
         ContextDigestKindV1::GuardRunLaunchPlans {
             adapter_commands,

@@ -392,7 +392,7 @@ def test_reopened_coordinator_recovers_only_inverse_with_one_deadline(transition
 
 @pytest.mark.parametrize("side", ["candidate", "predecessor"])
 def test_daemon_binding_uses_planned_executable_digest_instead_of_artifact_archive(transition, side):
-    from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
+    from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
     _, plan, *_ = transition
     artifact = plan.candidate if side == "candidate" else plan.predecessor
@@ -1893,7 +1893,7 @@ def test_native_runtime_bindings_require_both_signed_readonly_dependencies(trans
 @pytest.mark.usefixtures("native_hook_force")
 @pytest.mark.parametrize("rollback", [False, True])
 def test_actual_native_admission_drives_protocol_completion(transition, tmp_path, rollback):
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
     from codex_plugin_scanner.guard.runtime_transition_admission import probe_native_protection
@@ -2249,73 +2249,3 @@ def test_real_process_exit_releases_owner_and_recovers_transition_pair(tmp_path:
     assert bindings.read_bytes() == b"previous bindings"
     assert pointer.read_bytes() == b"previous pointer"
     assert store.get_managed_install("codex") == install_row("codex", "previous")
-
-
-def test_production_driver_restores_bindings_when_candidate_start_fails(transition, monkeypatch):
-    """A4: candidate start and predecessor restart both fail on the production driver.
-
-    The executable is a real spawned program that exits. Admission, state
-    authentication, and the coordinator stay on the production path. The
-    result keeps the original start failure and the rollback start failure.
-
-    The launch exits before its process identity can be recorded, so no signed
-    launch receipt exists and the retirement proof stays exact. A launch whose
-    identity was recorded keeps its receipt until its own handoff clears it,
-    which is covered by the daemon manager pending-launch tests.
-    """
-    from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-    from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
-    from codex_plugin_scanner.guard.runtime_transition_daemon import TransitionDaemonDriver
-
-    runtime, plan, bindings, pointer = transition
-    script = b"#!/bin/sh\nexit 1\n"
-    monkeypatch.setattr(daemon_manager, "process_start_token", lambda _pid, **_kwargs: None)
-    dependencies = []
-    for _side, artifact in (("candidate", plan.candidate), ("predecessor", plan.predecessor)):
-        path = Path(artifact["path"])
-        path.write_bytes(script)
-        path.chmod(0o700)
-        dependencies.append(
-            TransitionFile.artifact_dependency(
-                {
-                    "path": str(path),
-                    "size": len(script),
-                    "sha256": hashlib.sha256(script).hexdigest(),
-                    "mode": 0o700,
-                    "owner_uid": path.stat().st_uid,
-                    "role": "artifact",
-                }
-            )
-        )
-    plan = replace(
-        plan,
-        files=(*plan.files, *dependencies),
-        deadline_epoch=time.time() + 8,
-    )
-
-    def observe(artifact, daemon_identity, operation_id, *, deadline_monotonic):
-        del daemon_identity, operation_id, deadline_monotonic
-        raise AssertionError(f"hook observation without a live daemon: {artifact['generation']}")
-
-    driver = TransitionDaemonDriver(
-        runtime,
-        plan,
-        home_dir=plan.guard_home.parent,
-        observe_hook=observe,
-    )
-    started = time.monotonic()
-    result = RuntimeTransitionCoordinator(runtime, driver).activate(
-        plan,
-        authority_home=plan.guard_home,
-        grant=None,
-        deadline_monotonic=started + 8,
-    )
-    assert bindings.read_bytes() == b"previous hooks"
-    assert pointer.read_bytes() == b"previous pointer"
-    assert result.phase == "RecoveryRequired"
-    assert result.first_cause == "daemon_start_failed"
-    assert any(item.get("code") == "daemon_start_failed" for item in result.recovery_causes)
-    print(
-        "A4 production driver phase="
-        f"{result.phase} first_cause={result.first_cause} recovery={list(result.recovery_causes)}"
-    )

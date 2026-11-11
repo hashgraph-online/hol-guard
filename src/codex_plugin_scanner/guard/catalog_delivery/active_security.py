@@ -12,9 +12,9 @@ from ..native_command_control_authority_io import (
     hold_command_control_authority_lock,
     read_private_state,
     require_exclusive_command_control_mutation_lease,
-    write_private_state,
 )
 from ..native_command_control_authority_store import _key
+from ..native_extension_control_authority import write_private_state as write_native_private_state
 from . import activation_store, lifecycle, lifecycle_store
 from .located_store import LocatedStore
 from .object_native import sessioned
@@ -87,7 +87,14 @@ def _commit(store, captured, activation, result):
         backend.set_secret(store._build_scoped_secret_ref(PREFIX), result["record"])
         if read(store) != result["record"]:
             raise ValueError("active_security_protected_write_mismatch")
-        write_private_state(store.guard_home, FILE, result["record"].encode(), MAX_BYTES)
+        _publish(store, result["record"].encode())
+
+
+def _publish(store, data):
+    # The resident writes the private file and reads it back byte for byte.
+    error = write_native_private_state(store, FILE, data)
+    if error is not None:
+        raise ValueError("active_security_private_write_failed")
 
 
 def _no_fetch(target, maximum):
@@ -226,7 +233,7 @@ def reconcile(store):
             # Preserve the resident publication fence when the protected
             # observation already has an identical private file on disk.
             if read_private_state(store.guard_home, FILE, MAX_BYTES) != data:
-                write_private_state(store.guard_home, FILE, data, MAX_BYTES)
+                _publish(store, data)
         return
     from .cache_io import Lease
 

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
     cursor_unparseable_input_permission,
     hook_event_pauses_when_unavailable,
