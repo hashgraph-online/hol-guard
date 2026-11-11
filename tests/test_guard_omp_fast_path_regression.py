@@ -10,7 +10,7 @@ from typing import TypeGuard, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -66,7 +66,7 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     try:
         with ThreadPoolExecutor(max_workers=24) as executor:
             results = list(executor.map(review, range(24)))
-        scheduler_stats = daemon._server.runtime_hook_scheduler.stats()  # pyright: ignore[reportPrivateUsage]
+        scheduler_stats = daemon.hook_capacity()
     finally:
         daemon.stop()
 

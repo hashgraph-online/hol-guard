@@ -114,6 +114,8 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::CURSOR_OBSERVER_PROOF_FEATURE,
     guard_contracts::HOOK_AUTHORITY_STATE_FEATURE,
     guard_contracts::EXTENSION_CONTROL_AUTHORITY_FEATURE,
+    guard_contracts::EXTENSION_CONTROL_AUTHORITY_WRITES_FEATURE,
+    guard_contracts::EXTENSION_CONTROL_AUTHORITY_COMMIT_FEATURE,
     guard_contracts::HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
     guard_contracts::HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE,
     guard_contracts::HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
@@ -222,6 +224,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::EDGE_CURSOR_NATIVE_SINK_FEATURE,
     guard_contracts::RESIDENT_HEALTH_FEATURE,
     guard_contracts::CONTENT_DECODE_FEATURE,
+    "native-exact-cloud-review-resident-v1",
 ];
 
 /// Feature flags for the one-shot `--stdin` helper commands that replaced
@@ -282,6 +285,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-windows-process-command-lines-v1",
     "native-onefile-extraction-reclaim-v1",
     "native-policy-effective-v1",
+    "native-policy-effective-publish-v1",
     "native-policy-file-io-v1",
     "native-hook-removal-sweep-v1",
     "native-harness-version-compatibility-v1",
@@ -307,6 +311,10 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-desktop-notification-v1",
     "native-grok-executable-v1",
     "native-process-identity-v1",
+    "daemon-manage-v1",
+    "daemon-recovery-v1",
+    "daemon-recovery-store-v1",
+    "daemon-client-v1",
     "native-macos-code-signing-v1",
     "native-local-risk-report-v1",
     "native-business-source-current-fence-v2",

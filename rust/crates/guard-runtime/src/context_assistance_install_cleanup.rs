@@ -88,6 +88,7 @@ fn remove_file(path: &Path) -> std::io::Result<()> {
     {
         let mut permissions = fs::symlink_metadata(path)?.permissions();
         if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
             permissions.set_readonly(false);
             fs::set_permissions(path, permissions)?;
         }

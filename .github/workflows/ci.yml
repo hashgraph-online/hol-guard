@@ -1233,13 +1233,12 @@ jobs:
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
     # Use the three allocated CPU cores while retaining twelve runners and
-    # the full gate catalog. The catalog has since grown past the old
-    # five-minute budget: the slowest shards now spend around 290 seconds in
-    # pytest alone, so checkout and setup pushed three of them over the job
-    # limit and GitHub cancelled them after their cases had already passed.
-    # Eight minutes restores the headroom without a wider macOS fan-out,
-    # which the runner pool cannot spare.
-    timeout-minutes: 8
+    # the full gate catalog. The catalog keeps growing: the slowest shards
+    # now spend around 430 seconds in pytest alone, so checkout and setup push
+    # them past an eight-minute limit and GitHub cancels them after their
+    # cases have already passed. Twelve minutes restores the headroom without
+    # a wider macOS fan-out, which the runner pool cannot spare.
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:

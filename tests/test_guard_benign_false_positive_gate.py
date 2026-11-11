@@ -27,17 +27,17 @@ from pathlib import Path
 
 import pytest
 
-from ci.gauntlet.approval_rows import always_gap, approval_rows
+from ci.gauntlet.approval_rows import always_gap
 from ci.gauntlet.input_evidence import redact_value
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_setup, connector_groups
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
 from tests.gauntlet_replay import cursor_hook_fields, cursor_route_probe, omp_routes_profile, source_ref_payload
-from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
+from tests.native_gate_retry import BUDGET_MISS_REASONS, RetryApprovals, review_with_unavailable_retry
 from tests.outbound_network_guard import outbound_network_attempts
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
@@ -242,7 +242,8 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
 
 def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple[dict[str, object], int]:
     before = worker.store.count_approval_requests(status=None)
-    known = {str(row.get("request_id")) for row in worker.store.list_approval_requests(status=None, limit=500)}
+    approvals = RetryApprovals(worker.store)
+
     payload: dict[str, object] = {
         "hook_event_name": case.event,
         "tool_name": _tool_name(case),
@@ -260,10 +261,14 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
         spelled = str(tool_input.get("path") or tool_input["file_path"])
         payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
     if case.harness == "cursor" and case.tool == "shell" and case.event == "PreToolUse":
-        payload = cursor_route_probe(case.case_id, payload, fixture, worker, fixture.cwd(case.cwd))
+        payload = cursor_route_probe(
+            case.case_id, payload, fixture, worker, fixture.cwd(case.cwd), on_retry=approvals.mark_retry
+        )
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
-    # Approval baselines stay from before the first attempt, so a retry never hides a row.
+    # The baseline stays from before the first attempt, so an added row is never hidden. A
+    # retried case then drops the rows the interrupted attempt queued, which say nothing about
+    # the answer being judged.
     # Hooks answer from local state: a review that reaches for a remote host fails the case.
     with outbound_network_attempts() as attempts:
         result = review_with_unavailable_retry(
@@ -276,6 +281,7 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
                 guard_home=fixture.guard_home,
                 workspace=fixture.cwd(case.cwd),
             ),
+            on_retry=approvals.mark_retry,
         )
     assert not attempts, f"{case.case_id}: hook review used the network: {attempts}"
     # Claude's PostToolUse output carries no reason code, so a silent policy
@@ -283,9 +289,10 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     receipt = worker._last_native_decision_receipt
     if "reason_code" not in result and isinstance(receipt, dict) and isinstance(receipt.get("reason_code"), str):
         result = {**result, "reason_code": receipt["reason_code"]}
-    _ROWS[case.case_id] = approval_rows(worker.store, known)
+    _ROWS[case.case_id] = approvals.rows()
     routed = _harness_route(case, result, payload, fixture)
-    return routed, worker.store.count_approval_requests(status=None) - before
+    # Rows set aside with an interrupted attempt are not part of this count either.
+    return routed, worker.store.count_approval_requests(status=None) - before - approvals.set_aside
 
 
 def _harness_route(

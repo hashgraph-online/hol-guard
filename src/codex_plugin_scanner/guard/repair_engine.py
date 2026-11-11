@@ -76,13 +76,13 @@ def repair_daemon(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[st
         return _step("daemon", "ok", "No daemon is recorded for this Guard home.")
     try:
         if dry_run:
-            from .daemon.live_identity import verified_live_guard_daemon_identity
+            from .native_daemon_peer import verified_live_guard_daemon_identity
 
             healthy = verified_live_guard_daemon_identity(guard_home) is not None
             if healthy:
                 return _step("daemon", "ok", "Daemon is healthy.")
             return _step("daemon", "planned", "Daemon is not responding; it would be restarted.")
-        from .daemon.runtime_repair import repair_guard_daemon_runtime
+        from .runtime_health.runtime_repair import repair_guard_daemon_runtime
 
         result = repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
         runtime_status = str(result.get("runtime_status", "unknown"))

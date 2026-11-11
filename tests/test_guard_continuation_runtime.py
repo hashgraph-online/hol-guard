@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer, 
 from codex_plugin_scanner.guard.continuation_runtime import (
     continue_request_after_application,
 )
-from codex_plugin_scanner.guard.continuation_worker import StoreContinuationPlan
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -57,13 +56,20 @@ def _successful_isolated_plan(
     )
 
 
-def _blocking_waiting_isolated_plan(
-    plan: StoreContinuationPlan,
-    offer: ContinuationOffer,
-    _action: str,
-    _timeout_seconds: float,
-) -> ContinuationResult:
-    guard_home = Path(plan.guard_home)
+def _blocking_waiting_settler(guard_home: Path):
+    def settle(
+        offer: ContinuationOffer,
+        *,
+        cancelled: object,
+        observed_at: str,
+    ) -> ContinuationResult:
+        _ = cancelled, observed_at
+        return _block_until_released(guard_home, offer)
+
+    return settle
+
+
+def _block_until_released(guard_home: Path, offer: ContinuationOffer) -> ContinuationResult:
     (guard_home / "continuation-child-started").write_text("started", encoding="utf-8")
     release = guard_home / "continuation-child-release"
     deadline = time.monotonic() + 5.0
@@ -252,8 +258,8 @@ def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, m
         metadata=_live_codex_wait_metadata(),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.continuation_runtime._run_store_continuation_plan",
-        _blocking_waiting_isolated_plan,
+        "codex_plugin_scanner.guard.continuation_runtime._settle_without_harness",
+        _blocking_waiting_settler(guard_home),
     )
 
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -269,7 +275,7 @@ def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, m
         deadline = time.monotonic() + 3.0
         while not started.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
-        assert started.exists(), "spawned continuation did not reach the deterministic interleaving"
+        assert started.exists(), "continuation did not reach the deterministic interleaving"
         completed = store._native_store_call(
             "record_codex_live_completion",
             {"request_id": "request-live-completion-race", "action": "allow", "now": "2026-08-24T12:00:01+00:00"},

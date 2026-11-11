@@ -3,9 +3,9 @@ use super::authority::{ancestor_paths, dedupe_parent_paths, runtime_roots};
 use super::credentials::{denials, patterns, seatbelt_string};
 use super::framework_grants::{framework_grants, sealed_on_disk, FrameworkGrants};
 use super::*;
+use collection_links::collection_link_metadata;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::BTreeSet;
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -32,6 +32,8 @@ struct Input {
     home: Option<PathBuf>,
 }
 
+#[path = "collection_links.rs"]
+mod collection_links;
 #[cfg(test)]
 #[path = "workspace_grant_profile_tests.rs"]
 mod workspace_grant_profile_tests;
@@ -119,38 +121,6 @@ fn existing(paths: &[&str]) -> Vec<PathBuf> {
         .map(PathBuf::from)
         .filter(|p| p.exists())
         .collect()
-}
-
-fn collection_link_metadata(input: &Input) -> Result<Vec<PathBuf>, RestrictedPytestError> {
-    let patterns: Vec<Regex> = patterns().iter().map(|p| Regex::new(p).unwrap()).collect();
-    let mut targets = BTreeSet::new();
-    for directory in BTreeSet::from([input.workspace.clone(), input.cwd.clone()]) {
-        let entries = fs::read_dir(directory).map_err(|_| {
-            RestrictedPytestError::new(
-                PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-                "Collection metadata is unavailable.",
-            )
-        })?;
-        for entry in entries.take(4096) {
-            let entry = entry.map_err(|_| {
-                RestrictedPytestError::new(
-                    PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-                    "Collection metadata is unavailable.",
-                )
-            })?;
-            if entry.file_type().is_ok_and(|v| v.is_symlink()) {
-                if let Ok(target) = entry.path().canonicalize() {
-                    if !patterns
-                        .iter()
-                        .any(|p| p.is_match(&target.to_string_lossy()))
-                    {
-                        targets.insert(target);
-                    }
-                }
-            }
-        }
-    }
-    Ok(targets.into_iter().collect())
 }
 
 fn macos_profile(input: &Input) -> Result<String, RestrictedPytestError> {

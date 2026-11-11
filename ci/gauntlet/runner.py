@@ -21,6 +21,7 @@ from .agent_configuration import write_agent_configuration
 from .agent_prompt import fixture_authorization
 from .approval_retry_omp import OmpReview
 from .approval_retry_omp import enabled as approval_retry_enabled
+from .approval_retry_persistent import case_environment as approval_persistent_environment
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import (
@@ -41,6 +42,7 @@ from .contained_core import request_proofs
 from .decision_coverage import profile_coverage
 from .evidence import assess_case, execution_error_chain, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
+from .extension_allow_fixtures import EXTENSION_ALLOW_CASES, configure_extension_allow_controls
 from .fixtures import (
     create_fixture,
     create_run_root,
@@ -246,6 +248,10 @@ def run_case(
                 case["extension_control"] = configure_github_review_controls(daemon, fixture.root / "guard-home")
             if scenario.id in GIT_ALLOW_CASES:
                 case["extension_control"] = configure_git_allow_controls(daemon, fixture.root / "guard-home")
+            if scenario.id in EXTENSION_ALLOW_CASES:
+                case["extension_control"] = configure_extension_allow_controls(
+                    daemon, fixture.root / "guard-home", scenario.id
+                )
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.
@@ -301,11 +307,15 @@ def run_case(
             )
             case["guard_extension_sha256"] = digest_file(extension)
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
+            environment.update(approval_persistent_environment(scenario.id))
             if first_contact:
                 environment = realistic_environment(environment, fixture.home)
             if scenario.oracle == "watch-command":
                 environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
-            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
+            if (
+                scenario.oracle == "blocked-extension"
+                or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES | EXTENSION_ALLOW_CASES
+            ):
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             # The contained runner resolves Node from the request's own PATH, and
             # trusts the one this fixture's home owns rather than the host's.

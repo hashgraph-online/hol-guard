@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, cast
 
 from .adapters.base import HarnessContext
 from .codex_install_transaction import codex_install_transaction
-from .daemon.live_identity import DaemonArtifactBinding
-from .daemon.start_lock import guard_daemon_start_lock
+from .native_daemon_manage import guard_daemon_start_lock
+from .native_daemon_peer import DaemonArtifactBinding
 from .runtime_transition import TransitionError
 from .runtime_transition_admission import NativeProtectionAdmission, verified_admission_payload
 from .runtime_transition_codex_observer import observe_configured_codex_hook

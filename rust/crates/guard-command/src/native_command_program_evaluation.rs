@@ -173,7 +173,7 @@ impl Evaluation<'_> {
 /// `deadline_ok` - the shared budget check, usable without an `Evaluation`.
 pub(super) fn deadline_ok(deadline: Option<Instant>) -> Result<(), &'static str> {
     if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-        Err("native_command_deadline_exceeded")
+        Err(super::NATIVE_COMMAND_DEADLINE_EXCEEDED)
     } else {
         Ok(())
     }

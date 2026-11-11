@@ -36,7 +36,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install the pinned Rust toolchain
-        run: rustup toolchain install 1.88.0 --profile minimal
+        run: rustup toolchain install 1.89.0 --profile minimal
       - name: Cache Plugin Kit dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:

@@ -149,10 +149,10 @@ fn cursor_listing_no_servers_beside_local_definitions_is_reported() {
     let mismatch = "Cursor CLI reported no MCP servers, but Guard found local definitions. \
                     Cursor may be using a different config root than Guard.";
     assert_eq!(
-        cursor(&[server.clone()], probe(false, false, true)),
+        cursor(std::slice::from_ref(&server), probe(false, false, true)),
         [mismatch]
     );
-    assert!(cursor(&[server.clone()], probe(false, false, false)).is_empty());
+    assert!(cursor(std::slice::from_ref(&server), probe(false, false, false)).is_empty());
     assert!(cursor(&[server], Value::Null).is_empty());
     assert!(cursor(&[guard_hook()], probe(false, false, true)).is_empty());
 }

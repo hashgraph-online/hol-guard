@@ -23,7 +23,7 @@ def main() -> None:
 
     from dashboard_integration_server import _use_file_secret_store
 
-    from codex_plugin_scanner.guard.daemon.hook_native_review_approval import queue_native_pre_tool_review
+    from codex_plugin_scanner.guard.hook_review.hook_native_review_approval import queue_native_pre_tool_review
     from codex_plugin_scanner.guard.models import GuardReceipt
     from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
     from codex_plugin_scanner.guard.store import GuardStore

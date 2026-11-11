@@ -155,7 +155,7 @@ def _windows_recovery_bootstrap(package_root: Path, *, guard_home: Path, home_di
         "_windows_job=assign_current_process_to_windows_hook_job(allow_breakaway=True) if os.name=='nt' else None;"
         "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
         "sys.stderr.flush() if _windows_job is not None else None;from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon.manager import recover_guard_daemon_after_hook_failure;"
+        "from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure;"
         f"recover_guard_daemon_after_hook_failure(Path({str(guard_home)!r}),"
         f"home_dir=Path({str(home_dir)!r}),failure_kind=sys.argv[1])"
     )

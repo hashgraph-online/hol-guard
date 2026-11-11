@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_worker_structured
-from codex_plugin_scanner.guard.daemon.hook_worker_structured import (
+from codex_plugin_scanner.guard.hook_review import hook_worker_structured
+from codex_plugin_scanner.guard.hook_review.hook_worker_structured import (
     MEDIATION_FIELD,
     read_structured_view,
     structured_destination_required,

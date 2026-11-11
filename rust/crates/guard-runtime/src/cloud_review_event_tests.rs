@@ -83,7 +83,7 @@ fn the_event_carries_the_display_answer_and_the_row_facts() {
             "continuationHookAttached": true,
             "continuationOpaqueTargetId": "target-1",
             "continuationWaitDeadline": null,
-            "riskCategory": null,
+            "riskCategory": "low",
             "policyAction": "allow",
             "recommendedScope": null,
             "localCreatedAt": "2026-11-04T01:00:00+00:00",
@@ -117,13 +117,71 @@ fn falsy_columns_fall_back_the_way_python_did() {
     assert_eq!(event["localCreatedAt"], "2026-11-04T02:00:00+00:00");
     assert_eq!(event["localLastSeenAt"], "2026-11-04T02:00:00+00:00");
     assert_eq!(event["localUpdatedAt"], "2026-11-04T03:00:00+00:00");
-    assert_eq!(event["riskCategory"], Value::Null);
+    assert_eq!(event["riskCategory"], "low");
     assert_eq!(event["recommendedScope"], "True");
     assert_eq!(event["reviewClaim"], json!({"claimId": "c-1"}));
 
     let bare =
         assemble(json!({"request_id": "r3", "policy_action": "allow"}), facts).expect("event");
     assert_eq!(bare["requestKind"], "guard-review");
+}
+
+#[test]
+fn the_risk_category_comes_from_the_row_when_the_store_has_no_column() {
+    let category = |item: Value| assemble(item, facts()).expect("event")["riskCategory"].clone();
+    let with = |fields: Value| {
+        let mut item = row();
+        for (key, value) in fields.as_object().expect("fields") {
+            item[key] = value.clone();
+        }
+        category(item)
+    };
+    // An explicit column still wins over anything the text says.
+    assert_eq!(
+        with(json!({"risk_category": "critical", "risk_headline": "low"})),
+        "critical"
+    );
+    // The headline is read before the summary and the policy action.
+    assert_eq!(
+        with(
+            json!({"risk_headline": "Destructive delete of the build cache", "policy_action": "allow"})
+        ),
+        "high"
+    );
+    assert_eq!(
+        with(
+            json!({"risk_headline": "Reads a project file", "risk_summary": "Needs review", "policy_action": "allow"})
+        ),
+        "medium"
+    );
+    assert_eq!(
+        with(json!({"policy_action": "require-reapproval"})),
+        "medium"
+    );
+    assert_eq!(with(json!({"policy_action": "block"})), "high");
+    // Within one field the highest level named wins.
+    assert_eq!(
+        with(json!({"risk_headline": "low effort, high impact"})),
+        "high"
+    );
+    // Whole words only: "follow" and "highlight" name no level.
+    assert_eq!(
+        category(
+            json!({"request_id": "r4", "risk_headline": "follow the highlight", "policy_action": "sandbox-required"})
+        ),
+        Value::Null
+    );
+    // Inflected stems count; words that only contain a stem do not.
+    assert_eq!(
+        with(json!({"risk_headline": "Blocked writes to the keychain"})),
+        "high"
+    );
+    assert_eq!(
+        with(json!({"risk_headline": "Reviewing a follow-up"})),
+        "medium"
+    );
+    assert_eq!(with(json!({"risk_headline": "Allows highlighting"})), "low");
+    assert_eq!(category(json!({"request_id": "r6"})), Value::Null);
 }
 
 #[test]

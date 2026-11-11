@@ -139,6 +139,43 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         .map_err(|_| "exact_cloud_review_response_encode_failed".to_owned())
 }
 
+const RESIDENT_REQUEST_SCHEMA: &str = "guard-exact-cloud-review-resident-request.v1";
+const RESIDENT_RESULT_SCHEMA: &str = "guard-exact-cloud-review-resident-result.v1";
+
+/// One exact Cloud Review request for the resident, so a Review job does not
+/// start a helper process for every signature, check and digest it needs.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ExactCloudReviewResidentRequest {
+    schema: String,
+    request: Value,
+}
+
+impl std::fmt::Debug for ExactCloudReviewResidentRequest {
+    // The request can carry the local signing key, so it is never printed.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExactCloudReviewResidentRequest")
+            .field("schema", &self.schema)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The resident's answer: the same JSON the `exact-cloud-review` helper
+/// prints, under `answer`. A refusal is an answer; only a fault is an error.
+pub(crate) fn evaluate_resident_request(
+    request: ExactCloudReviewResidentRequest,
+) -> Result<Vec<u8>, String> {
+    if request.schema != RESIDENT_REQUEST_SCHEMA {
+        return Err(invalid());
+    }
+    let answer = answer(request.request)?;
+    crate::encode_response(&json!({
+        "schema": RESIDENT_RESULT_SCHEMA,
+        "status": "ok",
+        "answer": answer,
+    }))
+}
+
 fn invalid() -> String {
     "exact_cloud_review_request_invalid".to_owned()
 }

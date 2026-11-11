@@ -18,7 +18,6 @@ import urllib.request
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from ...version import __version__
@@ -59,7 +58,6 @@ from ..policy_bundle_activation import activate_with_reason, persist_activation_
 from ..policy_bundle_decisions import build_policy_bundle_decisions as _materialize_policy_bundle_decisions
 from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
-    failed_policy_bundle_acknowledgement,
     is_failed_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
@@ -88,7 +86,7 @@ from ..policy_bundle_v2 import (
 )
 from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
-from ..review_contracts import validated_review_verification_keys_from_sync
+from ..review_signature_verification import sync_review_verification_keys
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
@@ -136,12 +134,22 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
+from .policy_bundle_failure_ack import cached_bundle_failure_acknowledgement, failed_acknowledgement
 from .supply_chain_bundle import (
     SupplyChainBundleError,
     SupplyChainVerificationKey,
     load_supply_chain_verification_keys,
 )
 from .supply_chain_support import ecosystem_support_matrix
+from .sync_retry_delay import (
+    parse_retry_after_header as _parse_retry_after_header,
+)
+from .sync_retry_delay import (
+    retry_after_sleep_seconds as _retry_after_sleep_seconds,
+)
+from .sync_retry_delay import (
+    retryable_gateway_http_error as _retryable_gateway_http_error,
+)
 from .workspace_assessment_sync import (
     MAX_REQUEST_BYTES as _WORKSPACE_ASSESSMENT_REQUEST_BYTES,
 )
@@ -224,7 +232,6 @@ _LOGGER = logging.getLogger(__name__)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
-_SYNC_RETRYABLE_GATEWAY_STATUS_CODES = frozenset({502, 503, 504, 522, 524})
 _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS = 2
 _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
@@ -785,6 +792,9 @@ def sync_receipts(
     effective_policy_bundle: dict[str, object] | None = None
     retain_existing_policy_authority = False
     activation_last_error: dict[str, object] = {}
+    # The bundle Cloud is told failed when authority is cleared below.
+    failed_policy_bundle: object = None
+    failed_policy_bundle_reason: str | None = None
     trusted_policy_bundle_keys: tuple[PolicyBundleVerificationKey, ...] = ()
     update_last_good = False
     existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
@@ -893,6 +903,8 @@ def sync_receipts(
                 policy_bundle_rejection_reason,
                 policy_bundle_rejection_rule_id,
             )
+            failed_policy_bundle = policy_bundle_payload
+            failed_policy_bundle_reason = str(activation_last_error["reason"])
             store.add_event(
                 "policy_bundle/rejected",
                 activation_last_error,
@@ -913,6 +925,8 @@ def sync_receipts(
             ):
                 rejection_reason = existing_policy_bundle_error or last_good_error or "invalid_policy_bundle"
                 activation_last_error = _policy_bundle_rejection_payload(rejection_reason)
+                failed_policy_bundle = existing_policy_bundle_payload
+                failed_policy_bundle_reason = rejection_reason
                 store.add_event("policy_bundle/rejected", activation_last_error, now)
         if not activation_last_error:
             stored_last_error = store.get_sync_payload("policy_bundle_last_error")
@@ -960,6 +974,9 @@ def sync_receipts(
         if activation_bundle is None:
             activation_last_error = _policy_bundle_rejection_payload(activation_reason)
             store.add_event("policy_bundle/rejected", activation_last_error, now)
+            if failed_policy_bundle is None:
+                failed_policy_bundle = effective_policy_bundle
+                failed_policy_bundle_reason = str(activation_last_error["reason"])
             effective_policy_bundle = None
         else:
             # Use exactly the payload and anchor set from the final live trust
@@ -996,6 +1013,8 @@ def sync_receipts(
                 managed_controls_publish=managed_controls_publish,
                 device_id=device_id,
                 device_name=device_name,
+                policy_bundle=failed_policy_bundle,
+                reason=failed_policy_bundle_reason or _optional_string(activation_last_error.get("reason")),
             )
             _reset_cloud_receipt_redaction_authority(store, synced_at=now)
     else:
@@ -1025,6 +1044,7 @@ def sync_receipts(
             # is a verdict, so it must not leave a stale bundle in force.
             activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
             store.add_event("policy_bundle/rejected", activation_last_error, now)
+            rejected_policy_bundle = effective_policy_bundle
             effective_policy_bundle = None
             if not isinstance(error, PolicyBundleNativeUnavailableError) and not retain_existing_policy_authority:
                 _clear_policy_bundle_authority_reporting_failure(
@@ -1034,6 +1054,8 @@ def sync_receipts(
                     managed_controls_publish=managed_controls_publish,
                     device_id=device_id,
                     device_name=device_name,
+                    policy_bundle=failed_policy_bundle or rejected_policy_bundle,
+                    reason=failed_policy_bundle_reason or str(activation_last_error["reason"]),
                 )
                 _reset_cloud_receipt_redaction_authority(store, synced_at=now)
             selected_policy_decisions = []
@@ -1151,19 +1173,16 @@ def sync_receipts(
         workspace_dir=workspace_dir,
         now=now,
     )
-    if review_verification_keys_payload is not None:
-        if cloud_workspace_id is None:
-            raise RuntimeError("review_verification_keys_workspace_missing")
-        review_verification_keys = validated_review_verification_keys_from_sync(
+    review_verification_keys_rejection = (
+        sync_review_verification_keys(
             review_verification_keys_payload,
             store=store,
             workspace_id=cloud_workspace_id,
+            now=now,
         )
-        store.set_sync_payload(
-            "guard_review_verification_keyring",
-            [key.to_dict() for key in review_verification_keys],
-            now,
-        )
+        if review_verification_keys_payload is not None
+        else None
+    )
     _record_synced_alert_events(
         store=store,
         advisories=deduped_advisories,
@@ -1204,6 +1223,8 @@ def sync_receipts(
     }
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
+    if review_verification_keys_rejection is not None:
+        summary["review_verification_keys_rejected"] = review_verification_keys_rejection
     summary["guard_events_v1"] = sync_guard_events(store, auth_context=resolved_auth_context)
     if include_aibom:
         from ..aibom_cli import sync_aibom_snapshots_if_due
@@ -1741,40 +1762,6 @@ def sync_guard_events(
     summary: dict[str, object] = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
     store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
     return summary
-
-
-def _parse_retry_after_header(error: urllib.error.HTTPError) -> int:
-    """Parse the Retry-After header from a 429 response. Returns seconds to wait."""
-    retry_after = error.headers.get("Retry-After") if error.headers else None
-    if not retry_after:
-        return 60  # Default: 60 seconds
-    try:
-        return max(1, int(retry_after))
-    except ValueError:
-        pass
-    try:
-        retry_date = parsedate_to_datetime(retry_after)
-        if retry_date.tzinfo is None:
-            retry_date = retry_date.replace(tzinfo=timezone.utc)
-        return max(1, int((retry_date - datetime.now(timezone.utc)).total_seconds()))
-    except (ValueError, TypeError):
-        pass
-    try:
-        retry_date = datetime.fromisoformat(retry_after.replace("Z", "+00:00"))
-        if retry_date.tzinfo is None:
-            retry_date = retry_date.replace(tzinfo=timezone.utc)
-        delta = (retry_date - datetime.now(timezone.utc)).total_seconds()
-        return max(1, int(delta))
-    except (ValueError, TypeError):
-        return 60
-
-
-def _retryable_gateway_http_error(error: urllib.error.HTTPError) -> bool:
-    return error.code in _SYNC_RETRYABLE_GATEWAY_STATUS_CODES
-
-
-def _retry_after_sleep_seconds(error: urllib.error.HTTPError, retry_timeout_seconds: int) -> int:
-    return min(_parse_retry_after_header(error), retry_timeout_seconds)
 
 
 def _request_for_gateway_retry(request: urllib.request.Request) -> urllib.request.Request:
@@ -3489,6 +3476,7 @@ def _urlopen_with_sync_retries(
     parse_json_response: bool,
     nonce_fast_path: bool,
     max_response_bytes: int | None = None,
+    unhinted_gateway_retry_seconds: float | None = None,
 ) -> object:
     """Drive one Guard Cloud request through the shared sync retry policies.
 
@@ -3537,7 +3525,9 @@ def _urlopen_with_sync_retries(
                 retried_timeout = False
                 continue
             if _retryable_gateway_http_error(error) and gateway_retry_count < _SYNC_RETRYABLE_GATEWAY_MAX_ATTEMPTS:
-                retry_after = _retry_after_sleep_seconds(error, retry_timeout_seconds)
+                retry_after = _retry_after_sleep_seconds(
+                    error, retry_timeout_seconds, unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds
+                )
                 time.sleep(retry_after)
                 gateway_retry_count += 1
                 current_request = _request_for_gateway_retry(current_request)
@@ -3576,6 +3566,7 @@ def _urlopen_json_with_timeout_retry(
     timeout_seconds: int,
     retry_timeout_seconds: int,
     max_response_bytes: int | None = None,
+    unhinted_gateway_retry_seconds: float | None = None,
 ) -> dict[str, object]:
     payload = _urlopen_with_sync_retries(
         request=request,
@@ -3584,6 +3575,7 @@ def _urlopen_json_with_timeout_retry(
         parse_json_response=True,
         nonce_fast_path=False,
         max_response_bytes=max_response_bytes,
+        unhinted_gateway_retry_seconds=unhinted_gateway_retry_seconds,
     )
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
@@ -3857,6 +3849,8 @@ def _clear_policy_bundle_authority_reporting_failure(
     managed_controls_publish: Callable[[ExtensionControlAuthorityView, Callable[[], None]], object] | None,
     device_id: str,
     device_name: str,
+    policy_bundle: object,
+    reason: str | None,
 ) -> None:
     """Clear remote authority and leave a ``failed`` acknowledgement for Cloud."""
 
@@ -3864,11 +3858,13 @@ def _clear_policy_bundle_authority_reporting_failure(
         now,
         policy_bundle_last_error=policy_bundle_last_error,
         managed_controls_publish=managed_controls_publish,
-        policy_bundle_ack=lambda stored: failed_policy_bundle_acknowledgement(
+        policy_bundle_ack=lambda stored: failed_acknowledgement(
             stored,
+            policy_bundle=policy_bundle,
+            reason=reason,
             device_id=device_id,
             device_name=device_name,
-            failed_at=now,
+            synced_at=now,
         ),
     )
 
@@ -3882,15 +3878,17 @@ def _validated_policy_bundle_acknowledgement(
     acknowledgement = store.get_sync_payload("policy_bundle_ack")
     if not isinstance(acknowledgement, dict):
         return None
-    if is_failed_policy_bundle_acknowledgement(acknowledgement):
-        # Guard dropped this bundle; report that until a new one is applied.
-        if (
-            validated_synced_policy_bundle(store) is None
-            and acknowledgement.get("deviceId") == device_id
-            and _normalized_timestamp_string(acknowledgement.get("appliedAt")) is not None
-        ):
-            return acknowledgement
-        return None
+    # A cached bundle that no longer validates is reported as failed, never as
+    # the applied state Guard stopped enforcing.
+    failure = cached_bundle_failure_acknowledgement(
+        store,
+        acknowledgement=acknowledgement,
+        device_id=device_id,
+        device_name=device_name,
+        validate=lambda guard_store, policy_bundle: cached_policy_bundle_validation(guard_store, policy_bundle),
+    )
+    if failure is not None:
+        return failure or None
     if acknowledgement.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
         validated, _error = validated_policy_bundle_v2_acknowledgement(acknowledgement)
         return validated
@@ -3927,11 +3925,11 @@ def _sync_context_acknowledgement(sync_context: dict[str, object]) -> dict[str, 
 
 
 def _sync_context_bundle_hash(sync_context: dict[str, object]) -> str | None:
-    """Key the acknowledgement by bundle and outcome, so dropping a bundle is reported at once."""
+    """Key the acknowledgement by bundle and outcome, so a failure is reported at once."""
 
     acknowledgement = _sync_context_acknowledgement(sync_context)
     bundle_hash = _optional_string(acknowledgement.get("bundleHash")) if acknowledgement is not None else None
-    if bundle_hash is not None and is_failed_policy_bundle_acknowledgement(acknowledgement):
+    if bundle_hash is not None and acknowledgement is not None and acknowledgement.get("status") == "failed":
         return f"failed:{bundle_hash}"
     return bundle_hash
 

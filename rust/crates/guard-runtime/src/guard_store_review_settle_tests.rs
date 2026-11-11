@@ -302,7 +302,7 @@ fn collision_recovery_needs_the_typed_code_and_the_exact_sent_event() {
     let collisions = sent_collisions(&rejections);
     assert_eq!(
         collisions.into_iter().collect::<Vec<_>>(),
-        [(41, "event-41")]
+        [(41, "event-41"), (42, "event-42")]
     );
     assert_eq!(safe_high_water(Some(&json!(0))), Some(0));
     assert_eq!(safe_high_water(Some(&json!(529))), Some(529));

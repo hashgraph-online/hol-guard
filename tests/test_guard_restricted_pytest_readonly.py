@@ -252,3 +252,57 @@ def test_bind_is_allowed_and_nothing_else():
             read_only_workspace=True,
         )
         assert result == 0
+
+
+@pytest.mark.usefixtures("native_context_digest")
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")
+def test_collection_walks_past_a_nested_link_to_a_borrowed_directory() -> None:
+    # A worktree often borrows `node_modules` from the main checkout through a
+    # link. Collection stats every entry it walks, following the link.
+    workspace = Path.cwd().resolve()
+    with (
+        tempfile.TemporaryDirectory(prefix=".guard-worktree-", dir=workspace) as project_text,
+        tempfile.TemporaryDirectory(prefix=".guard-main-", dir=workspace.parent) as main_text,
+    ):
+        project = Path(project_text)
+        borrowed = Path(main_text) / "dashboard" / "node_modules"
+        borrowed.mkdir(parents=True)
+        (borrowed / "package.json").write_text("{}", encoding="utf-8")
+        dashboard = project / "dashboard"
+        dashboard.mkdir()
+        (dashboard / "node_modules").symlink_to(borrowed)
+        configuration = project / "pytest.ini"
+        configuration.write_text("[pytest]\n", encoding="utf-8")
+        (project / "test_inline.py").write_text(
+            f"""
+from pathlib import Path
+
+
+def test_borrowed_contents_stay_unreadable():
+    try:
+        Path({json.dumps(str(borrowed / "package.json"))}).read_text()
+    except OSError:
+        pass
+    else:
+        raise AssertionError('the borrowed directory must stay unreadable')
+""".lstrip(),
+            encoding="utf-8",
+        )
+        result = run_restricted_pytest(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "--confcutdir",
+                str(project),
+                "-c",
+                str(configuration),
+                str(project),
+                "-q",
+            ],
+            workspace=workspace,
+            cwd=project,
+            timeout_seconds=60,
+            read_only_workspace=True,
+        )
+        assert result == 0

@@ -102,7 +102,7 @@ def _approve_then_retry(
     """
     # The HTTP bridge supplies a bounded deadline. Supplying it here also
     # exercises the existing fresh-ACK retry when a grant republishes policy.
-    from codex_plugin_scanner.guard.daemon.hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
+    from codex_plugin_scanner.guard.hook_review.hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 
     first = worker.review_http_payload(
         payload=_payload(command, use_id, workspace),
@@ -143,7 +143,7 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_approval_reuse_runtime: Path
 ) -> None:
     from codex_plugin_scanner.guard.config import update_guard_settings
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
     from codex_plugin_scanner.guard.store import GuardStore
 
     home = tmp_path / "home"

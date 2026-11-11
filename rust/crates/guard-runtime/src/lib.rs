@@ -280,6 +280,7 @@ mod context_assistance_op;
 mod context_assistance_prompt;
 mod context_assistance_prompt_files;
 mod context_assistance_prompt_ignore;
+mod context_assistance_prompt_words;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -342,6 +343,8 @@ mod cursor_hook_state_tests;
 mod cursor_observer_proof_op;
 mod custom_extension_continuity;
 mod custom_extension_suggestion;
+mod daemon_client;
+mod daemon_edge;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
 mod daemon_handler_headless;
@@ -361,7 +364,11 @@ mod daemon_lifecycle_text;
 mod daemon_lifecycle_unit_tests;
 #[cfg(test)]
 mod daemon_lifecycle_vectors_tests;
+mod daemon_manage;
 mod daemon_policy_authority;
+mod daemon_recovery;
+mod daemon_recovery_contract;
+mod daemon_recovery_store;
 mod daemon_route_op;
 mod daemon_route_paths;
 mod daemon_route_resolve;
@@ -395,7 +402,9 @@ mod directory_trust;
 mod discovery_placement_op;
 mod durable_runtime_collapse;
 mod edge;
+mod edge_exact_command_allow;
 mod edge_exact_command_review;
+mod edge_exact_command_spelling;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
@@ -515,10 +524,12 @@ mod guard_store_connect_effective;
 #[cfg(test)]
 mod guard_store_connect_vectors_tests;
 mod guard_store_connector_context;
+mod guard_store_continuity_write;
 mod guard_store_db;
 mod guard_store_devices;
 mod guard_store_evidence;
 mod guard_store_exact_cloud_apply;
+mod guard_store_exact_cloud_package;
 mod guard_store_exact_cloud_peek;
 mod guard_store_guard_event;
 #[cfg(test)]
@@ -554,6 +565,7 @@ mod guard_store_local_cli_vectors_tests;
 mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
 mod guard_store_local_once_mint;
+mod guard_store_mcp_policy_requests;
 mod guard_store_mcp_provider_reads;
 #[cfg(test)]
 mod guard_store_mcp_reads_tests;
@@ -607,6 +619,7 @@ mod guard_store_state_ops_vectors_tests;
 mod guard_store_storage_maintenance;
 #[cfg(test)]
 mod guard_store_storage_maintenance_vectors_tests;
+mod guard_store_sync_state;
 mod guard_store_temporary_mcp;
 mod guard_store_tool_call_evidence;
 #[cfg(test)]
@@ -935,6 +948,7 @@ mod opencode_proxy_entry;
 mod opencode_server_id;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
+mod package_approval_action;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
@@ -973,6 +987,7 @@ use guard_policy_bundle::{
     families as policy_bundle_families, json as policy_bundle_json, keys as policy_bundle_keys,
     python as policy_bundle_py, time as policy_bundle_time,
 };
+mod policy_bundle_cloud_exceptions;
 mod policy_bundle_op;
 mod policy_bundle_payload_hash;
 mod policy_bundle_store_identities;
@@ -1008,6 +1023,7 @@ mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
 mod proxy_credentials;
+mod supply_chain_bundle_cache_op;
 use guard_runtime_pyjson as pyjson;
 mod receipt_embedded_scripts;
 mod registry_trust;

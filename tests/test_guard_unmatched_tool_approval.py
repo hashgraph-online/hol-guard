@@ -8,7 +8,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
-from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+from tests.guard_signed_approval_fixtures import short_signed_link, write_synthetic_daemon_auth_token
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -91,7 +91,8 @@ def test_codex_unmatched_tool_block_returns_real_review_request(
     assert len(pending) == 1, payload
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "Open HOL Guard to approve or keep this blocked:" in reason
-    assert "guard-token=gld1." in reason
+    assert short_signed_link(pending[0]["approval_url"]).search(reason)
+    assert "guard-token=" not in reason
     assert "Approve it in HOL Guard, then retry." not in reason
     assert pending[0]["artifact_type"] == "tool_call"
     assert str(pending[0]["approval_url"]).endswith(f"/requests/{pending[0]['request_id']}")

@@ -20,7 +20,7 @@ def test_native_review_asks_the_resident_for_the_review_binding_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     """Queueing a review reuses the pause path's binding instead of a second resident round trip."""
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     result, receipt = _verdict()

@@ -8,11 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics, cleanup_expired_daemon_logs
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.runtime_artifact_reconciliation import RuntimeArtifactReconciliation
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics, cleanup_expired_daemon_logs
 from tests.coverage_ci import under_coverage_scale
 
 
@@ -202,58 +198,9 @@ def test_daemon_diagnostics_rotates_daily_with_seven_backups(tmp_path: Path) -> 
     assert list(diagnostics.log_directory.glob("daemon.log.*"))
 
 
-def test_daemon_lifecycle_writes_diagnostics(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-
-    daemon.start()
-    daemon.stop()
-
-    records = [json.loads(line) for line in (store.guard_home / "logs" / "daemon.log").read_text().splitlines()]
-    events = [record["event"] for record in records]
-    assert "daemon_ready" in events
-    assert "daemon_shutdown_requested" in events
-
-
-def test_daemon_reconciles_managed_artifacts_before_reporting_ready(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    configured_home = tmp_path / "configured-home"
-    observed: list[str] = []
-
-    def reconcile(
-        _store: GuardStore,
-        *,
-        home_dir: Path | None = None,
-    ) -> RuntimeArtifactReconciliation:
-        observed.append("reconciled")
-        assert home_dir == configured_home
-        return RuntimeArtifactReconciliation(
-            refreshed_launchers=("codex",),
-            repaired_harnesses=("codex",),
-            repaired_package_managers=("npm",),
-            failed_harnesses=(),
-            errors=(),
-        )
-
-    monkeypatch.setattr(daemon_server_module, "reconcile_runtime_artifacts", reconcile)
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=configured_home)
-
-    daemon.start()
-    observed.append("started")
-    daemon.stop()
-
-    records = [json.loads(line) for line in (store.guard_home / "logs" / "daemon.log").read_text().splitlines()]
-    events = [record["event"] for record in records]
-    assert observed == ["reconciled", "started"]
-    assert events.index("runtime_artifact_reconciliation_completed") < events.index("daemon_ready")
-
-
 @pytest.fixture
 def clean_startup_phases():
-    from codex_plugin_scanner.guard.daemon import startup_phase
+    from codex_plugin_scanner.guard.runtime_health import startup_phase
 
     startup_phase._pending.clear()  # pyright: ignore[reportPrivateUsage]
     startup_phase._default_sink = None  # pyright: ignore[reportPrivateUsage]

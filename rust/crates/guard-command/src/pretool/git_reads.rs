@@ -88,6 +88,25 @@ pub(super) fn safe_git_arguments(
             Some((subcommand, rest)) if subcommand == "tag" => {
                 return leading_safe && super::git_tag_listing::is_listing(rest);
             }
+            // The pattern `--get-regexp` matches names keys in the
+            // configuration file. Git never expands it over the files that
+            // are there, so `remote.*url` is not a glob that could select a
+            // private file, and the path screen that refuses every such
+            // pattern does not apply to it. Each remaining argument is still
+            // screened: the shell expands an unquoted one before Git sees it,
+            // and `git config *` in a directory holding `user.name` and
+            // `value` reaches Git as the write `git config user.name value`.
+            // Only the configuration probe can prove what the read prints.
+            Some((subcommand, rest)) if subcommand == "config" => {
+                return leading_safe
+                    && allow_helper_context
+                    && !super::git_config_reads::screened_arguments(rest)
+                        .iter()
+                        .any(|value| {
+                            value.starts_with(':') || super::sensitive_read_path_argument(value)
+                        })
+                    && super::git_config_reads::read_form(rest).is_some();
+            }
             // The pattern is search text, not a path: only the revisions and
             // pathspecs pass the path screen. Grep pages by default, so the
             // configuration probe has to clear the pager first.
@@ -213,11 +232,6 @@ pub(super) fn safe_git_arguments(
         // A commit walk honors pager.rev-list and can fetch from a partial
         // clone's promisor, so the configuration probe has to clear it first.
         return allow_helper_context && super::git_rev_list::read_form(&arguments[1..]);
-    }
-    if subcommand == "config" {
-        // Only the configuration probe can prove what the read prints.
-        return allow_helper_context
-            && super::git_config_reads::read_form(&arguments[1..]).is_some();
     }
     if subcommand == "clean" {
         // A dry run prints the untracked paths it would remove and removes
@@ -419,6 +433,10 @@ pub(super) fn inspection_writes_nothing(
             .any(|argument| names_refused_option(argument))
         && !has_argument(&inspected[1..option_end], &[], &["--exec-path="])
 }
+
+#[cfg(test)]
+#[path = "git_reads_config_pattern_tests.rs"]
+mod config_pattern_tests;
 
 #[cfg(test)]
 mod tests {

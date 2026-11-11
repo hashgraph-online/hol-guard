@@ -207,7 +207,7 @@ pub(super) fn answer(
 /// `hook_native_review_approval.py`). The queue write proves the bridge live
 /// and links its wait, so an approval releases the original call; a bridge
 /// that is gone leaves the request a manual retry.
-fn live_wait_facts(context: &Context<'_>) -> Option<Value> {
+pub(super) fn live_wait_facts(context: &Context<'_>) -> Option<Value> {
     if canonical_harness(context.harness) != CODEX {
         return None;
     }

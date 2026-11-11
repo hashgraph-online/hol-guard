@@ -10,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
 from codex_plugin_scanner.guard.cli import extension_controls_commands as cli
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError
 from codex_plugin_scanner.guard.native_command_control_authority import (
     AUTHORITY_FILE_NAME,
     AUTHORITY_MAX_BYTES,
@@ -19,6 +18,7 @@ from codex_plugin_scanner.guard.native_command_control_authority import (
 )
 from codex_plugin_scanner.guard.native_command_control_authority_io import write_private_state
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key, read_command_control_authority
+from codex_plugin_scanner.guard.native_daemon_client import GuardDaemonRequestError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore

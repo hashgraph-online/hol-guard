@@ -9,9 +9,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_worker_native as native_module
-from codex_plugin_scanner.guard.daemon import hook_worker_native_review as review
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review import hook_worker_native as native_module
+from codex_plugin_scanner.guard.hook_review import hook_worker_native_review as review
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
@@ -347,7 +347,7 @@ def test_superseded_watch_snapshot_without_fresh_ack_keeps_recording(
     )
     monkeypatch.setattr(worker, "_review_native_edge_with_snapshot", native)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker_native.render_recording_only_pre_tool",
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native.render_recording_only_pre_tool",
         lambda *_args, **_kwargs: {"policy_action": "allow"},
     )
     response = _pre_tool_call(worker, tmp_path, {"generation": 3, "mode": "observe"})

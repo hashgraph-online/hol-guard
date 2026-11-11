@@ -331,6 +331,47 @@ fn a_quiet_redirect_before_a_readable_filter_is_rejoined_in_the_sibling_root() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Text the peel refuses still names the sibling root the sink runs it from.
+///
+/// `>/dev/null` is inert, so the classifier reads the list as the reads it
+/// holds and contains it in the sibling root. The peel will not rebuild a
+/// core around that operator, and a refusal means the sink runs the whole
+/// text, `cd` included. Leaving the root out of the refusal rooted that run
+/// at the session workspace instead, where every step after the `cd` is
+/// outside the sandbox and fails.
+#[cfg(unix)]
+#[test]
+fn a_refused_null_sink_still_names_the_sibling_root_it_runs_in() {
+    let root = sibling_root("refused-null-sink");
+    let session = workspace("plan-refused-null-sink", true);
+    let workspace_path = session.to_str().expect("workspace path");
+    for sink in [
+        ">/dev/null",
+        "> /dev/null",
+        "1>/dev/null",
+        "&>/dev/null",
+        ">>/dev/null",
+    ] {
+        let command = format!("cd {} && pytest -q {sink} && ruff check .", root.display());
+        let plan = wrapper_plan(
+            &command,
+            workspace_path,
+            Some(workspace_path),
+            Some(HOME),
+            false,
+        );
+        assert_eq!(
+            (plan.refusal, plan.anchored_sibling_root.as_deref()),
+            (
+                Some(CONTAINED_WRAPPER_PLAN_UNSUPPORTED),
+                Some(root.as_path())
+            ),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// A `2` the shell passes to the program is never rewritten into a redirect.
 ///
 /// `cmd 2 >/dev/null` and `cmd '2'>/dev/null` send *standard output* to

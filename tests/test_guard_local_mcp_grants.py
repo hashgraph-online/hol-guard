@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -641,7 +641,7 @@ def test_recognize_mcp_package_persists_tools(tmp_path: Path, monkeypatch) -> No
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     identity = _identity()
@@ -665,7 +665,7 @@ def test_recognize_mcp_package_persists_tools(tmp_path: Path, monkeypatch) -> No
         )
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         _probe,
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -684,11 +684,11 @@ def test_recognize_failed_package_mcp_stays_built_in(tmp_path: Path, monkeypatch
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         lambda *args, **kwargs: None,
     )
     service = LocalCliApiService(store=GuardStore(home))

@@ -27,7 +27,8 @@ _MAX_ENTRIES = 8
 _ENABLED = os.name == "posix" and hasattr(os, "O_NOFOLLOW")
 _LOCK = threading.Lock()
 _Fingerprint = tuple[int, ...]
-_STATUSES: dict[_RequestKey, tuple[NativeRuntimeStatus, _Fingerprint, _Fingerprint | None]] = {}
+_DirectoryKey = tuple[int, int, str]
+_STATUSES: dict[_RequestKey, tuple[NativeRuntimeStatus, _Fingerprint, _Fingerprint | None, _DirectoryKey | None]] = {}
 
 
 def _fingerprint(path: Path, *, follow: bool) -> _Fingerprint | None:
@@ -41,6 +42,35 @@ def _fingerprint(path: Path, *, follow: bool) -> _Fingerprint | None:
     if changed_at <= 0 or time.time_ns() - changed_at < _MIN_AGE_NS:
         return None
     return (*full_stat_identity(metadata), int(metadata.st_uid), int(metadata.st_gid))
+
+
+def _parent_directory_key(path: Path) -> _DirectoryKey | None:
+    """Return the directory's identity and the path the kernel holds for it now.
+
+    The path comes from an open descriptor, so it reflects any rename of the
+    directory or its ancestors in one lookup rather than a walk. ``None`` (no
+    such directory, or no way to ask on this host) disables the literal-path
+    shortcut and the caller resolves the candidate in full.
+    """
+
+    import fcntl  # POSIX only; the cache is disabled elsewhere
+
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError:
+        return None
+    try:
+        metadata = os.fstat(descriptor)
+        get_path = getattr(fcntl, "F_GETPATH", None)
+        if get_path is not None:
+            current = os.fsdecode(fcntl.fcntl(descriptor, get_path, bytes(1024)).split(b"\0", 1)[0])
+        else:
+            current = os.readlink(f"/proc/self/fd/{descriptor}")
+    except OSError:
+        return None
+    finally:
+        os.close(descriptor)
+    return (int(metadata.st_dev), int(metadata.st_ino), current)
 
 
 def _manifest_path(binary: Path) -> Path:
@@ -82,10 +112,47 @@ def remember_process_status(
         manifest is None or _fingerprint(_manifest_path(path), follow=False) != manifest
     ):
         return
+    parent = _parent_directory_key(path.parent)
+    if parent is not None and parent[2] != str(path.parent):
+        parent = None
     with _LOCK:
         if key not in _STATUSES and len(_STATUSES) >= _MAX_ENTRIES:
             _STATUSES.pop(next(iter(_STATUSES)))
-        _STATUSES[key] = (status, binary, manifest if status.manifest is not None else None)
+        _STATUSES[key] = (
+            status,
+            binary,
+            manifest if status.manifest is not None else None,
+            parent,
+        )
+
+
+def _still_names(candidate: Path, path: Path, binary: _Fingerprint, parent: _DirectoryKey | None) -> bool:
+    """Whether ``candidate`` still leads to the cached runtime ``path``.
+
+    A candidate spelled exactly as the resolved path needs no full walk, which
+    stat-ed every path component on each call; the status is asked for on every
+    resident request. Two stats prove the spelling still names the verified
+    file instead: the last component is not a link (its own stat still matches
+    the binary's), and the directory it reaches is still the one verified.
+    Directories cannot be hard linked, so an ancestor redirected to another
+    tree, even one holding a hard link to the same binary, reaches a different
+    directory and falls back to the full walk. The directory's current path is
+    compared too: a tree moved elsewhere with a link left at its old name keeps
+    every inode, but no longer lives where the trust walk examined it.
+    """
+
+    try:
+        literal = candidate.expanduser() == path
+    except RuntimeError:
+        return False
+    if (
+        literal
+        and parent is not None
+        and _fingerprint(path, follow=False) == binary
+        and _parent_directory_key(path.parent) == parent
+    ):
+        return True
+    return _resolved_candidate_path(candidate) == path
 
 
 def process_status(key: _RequestKey, candidates: tuple[Path, ...]) -> NativeRuntimeStatus | None:
@@ -95,12 +162,12 @@ def process_status(key: _RequestKey, candidates: tuple[Path, ...]) -> NativeRunt
         entry = _STATUSES.get(key)
     if entry is None:
         return None
-    status, binary, manifest = entry
+    status, binary, manifest, parent = entry
     identity = status.identity
     if (
         identity is None
         or not candidates
-        or identity.path != _resolved_candidate_path(candidates[0])
+        or not _still_names(candidates[0], identity.path, binary, parent)
         or _fingerprint(identity.path, follow=True) != binary
         or (manifest is not None and _fingerprint(_manifest_path(identity.path), follow=False) != manifest)
     ):

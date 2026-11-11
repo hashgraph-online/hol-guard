@@ -149,3 +149,114 @@ def test_first_sync_anchors_review_key_after_policy_activation(
     first_key = cast(dict[str, object], typed_keys[0])
     assert first_key["fingerprintSha256"] == review_key.fingerprint_sha256
     assert review_keyring == [review_key.to_dict()]
+
+
+def _sync_with_review_keys(
+    store: GuardStore,
+    monkeypatch: pytest.MonkeyPatch,
+    review_keys: list[dict[str, object]],
+) -> dict[str, object]:
+    response = _Response(
+        {
+            "syncedAt": "2026-08-26T12:00:00+00:00",
+            "receiptsStored": 0,
+            "reviewVerificationKeys": review_keys,
+        }
+    )
+    guard_event_syncs: list[str] = []
+
+    def open_sync(_request: urllib.request.Request, timeout: float) -> _Response:
+        del _request, timeout
+        return response
+
+    def no_pain_signals(
+        _store: GuardStore,
+        auth_context: dict[str, object] | None = None,
+    ) -> int:
+        del _store, auth_context
+        return 0
+
+    def record_guard_event_sync(
+        _store: GuardStore,
+        auth_context: dict[str, object] | None = None,
+    ) -> int:
+        del _store, auth_context
+        guard_event_syncs.append("synced")
+        return 0
+
+    stub_authenticated_urlopen(monkeypatch, open_sync)
+    monkeypatch.setattr(runner, "sync_pain_signals", no_pain_signals)
+    monkeypatch.setattr(runner, "sync_guard_events", record_guard_event_sync)
+
+    summary = runner.sync_receipts(
+        store,
+        auth_context={
+            "access_token": "test-access-token",
+            "dpop_key_material": None,
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+    )
+    assert guard_event_syncs == ["synced"]
+    return summary
+
+
+def _unanchored_review_key() -> dict[str, object]:
+    other_key = policy_bundle_test_verification_key(workspace_id=_WORKSPACE_ID)
+    return policy_bundle_verification_key_from_public_key(
+        key_id="guard-review-unanchored",
+        public_key_pem=other_key.public_key_pem,
+        purpose="remote_approval",
+        workspace_id=_WORKSPACE_ID,
+    ).to_dict()
+
+
+def test_sync_completes_when_review_keys_do_not_anchor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    assert store.get_sync_payload("policy_bundle_keyring") is None
+
+    summary = _sync_with_review_keys(store, monkeypatch, [_unanchored_review_key()])
+
+    assert summary["review_verification_keys_rejected"] == "unknown_signing_key"
+    assert store.get_sync_payload("guard_review_verification_keyring") is None
+
+
+def test_rejected_review_keys_leave_the_stored_keyring_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    anchored_key = policy_bundle_verification_key_from_public_key(
+        key_id="guard-review-anchored",
+        public_key_pem=policy_bundle_test_verification_key(workspace_id=_WORKSPACE_ID).public_key_pem,
+        purpose="remote_approval",
+        workspace_id=_WORKSPACE_ID,
+    )
+    stored_keyring: list[object] = [anchored_key.to_dict()]
+    store.set_sync_payload("guard_review_verification_keyring", stored_keyring, "2026-08-26T11:59:00+00:00")
+    foreign_key = policy_bundle_verification_key_from_public_key(
+        key_id="guard-review-foreign",
+        public_key_pem=anchored_key.public_key_pem,
+        purpose="remote_approval",
+        workspace_id="workspace-2",
+    )
+
+    summary = _sync_with_review_keys(store, monkeypatch, [foreign_key.to_dict()])
+
+    assert summary["review_verification_keys_rejected"] == "signing_key_workspace_mismatch"
+    assert store.get_sync_payload("guard_review_verification_keyring") == stored_keyring
+
+
+def test_sync_completes_when_review_keys_arrive_without_a_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _connected_store(tmp_path)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: None)
+
+    summary = _sync_with_review_keys(store, monkeypatch, [_unanchored_review_key()])
+
+    assert summary["review_verification_keys_rejected"] == "review_verification_keys_workspace_missing"
+    assert store.get_sync_payload("guard_review_verification_keyring") is None

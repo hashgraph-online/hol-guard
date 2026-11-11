@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord, store_evidence

@@ -158,6 +158,16 @@ def test_windows_native_environment_uses_the_interpreter_crt_without_user_path(
     assert str(tmp_path / "Windows" / "System32") in environment["PATH"].split(os.pathsep)
 
 
+def test_the_resident_keeps_the_desktop_notice_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_NOTIFICATIONS", "off")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", "/elsewhere")
+
+    environment = native_runtime_module._isolated_environment()
+
+    assert environment["HOL_GUARD_DESKTOP_NOTIFICATIONS"] == "off"
+    assert "HOL_GUARD_NATIVE_BINARY" not in environment
+
+
 def test_override_is_ignored_in_auto_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     binary = tmp_path / "hol-guard-runtime"
     binary.write_text("not executable", encoding="utf-8")

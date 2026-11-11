@@ -36,7 +36,7 @@ def _run_preparation(
             'if [[ "${0##*/}" == "uv" && "${4:-}" == "scripts/ci/select_pytest_coverage.py" ]]; then\n'
             '  exec "$REAL_PYTHON" "$SELECTOR_SCRIPT" "${@:5}"\n'
             "fi\n"
-            'if [[ "${0##*/}" == "python" ]]; then printf "1.88.0\\n"; fi\n',
+            'if [[ "${0##*/}" == "python" ]]; then printf "1.89.0\\n"; fi\n',
             encoding="utf-8",
         )
         stub.chmod(0o700)

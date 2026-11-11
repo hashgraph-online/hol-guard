@@ -23,9 +23,9 @@ from codex_plugin_scanner.guard.catalog_delivery import (
     transport as remote,
 )
 from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import MANIFEST, descriptor
-from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -212,7 +212,7 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
             previous_registry, include_managed_controls=False, read_only=True
         )
         if old.engine != authority.engine and version == "3.50.0a1":
-            original_anchor = store._write_and_verify_anchor
+            original_anchor = store._mirror_resident_anchor
             original_migration = store._migrate_extension_control_catalog
 
             def check_upgrade_boundary(action, _migrate=original_migration, _old=old.engine, **kwargs):
@@ -235,13 +235,13 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
                 assert activation_store.read(store).engine == _old
                 return _migrate(action, **kwargs)
 
-            def interrupt_after_anchor(anchor, _write=original_anchor, **kwargs):
-                _write(anchor, **kwargs)
-                if anchor.phase is AuthorityPhase.ANCHORED:
+            def interrupt_after_anchor(sealed, _mirror=original_anchor):
+                _mirror(sealed)
+                if json.loads(json.loads(sealed)["record"])["phase"] == AuthorityPhase.ANCHORED.value:
                     raise RuntimeError("fixture interrupted after anchored upgrade")
 
             with monkeypatch.context() as interrupted:
-                interrupted.setattr(store, "_write_and_verify_anchor", interrupt_after_anchor)
+                interrupted.setattr(store, "_mirror_resident_anchor", interrupt_after_anchor)
                 interrupted.setattr(store, "_migrate_extension_control_catalog", check_upgrade_boundary)
                 with pytest.raises(RuntimeError, match="fixture interrupted after anchored upgrade"):
                     store.migrate_installed_command_pack_authority()

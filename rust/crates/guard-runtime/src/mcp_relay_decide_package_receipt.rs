@@ -74,7 +74,8 @@ pub(super) fn evidence(policy: &PackagePolicy) -> Vec<Value> {
 ///
 /// `artifact` is the package request's artifact and `workspace` the directory
 /// its intent was parsed against, which is what the drain rebuilds it from,
-/// together with the `PATH` the gate parsed under (`package_gate`).
+/// together with the `PATH` the gate parsed under (`package_gate`). `center`
+/// is the approval center origin the relay bound.
 pub(super) fn record(
     request: &McpRelayDecideRequestV1,
     identity: &Value,
@@ -82,6 +83,7 @@ pub(super) fn record(
     artifact: &GuardArtifact,
     workspace: &str,
     answer: &PackageAnswer,
+    center: Option<&str>,
 ) -> Result<Value, &'static str> {
     // A forward is the only route whose receipt binds the policy workspace,
     // because only `allow_tool_call` is given one.
@@ -115,10 +117,15 @@ pub(super) fn record(
         "decision": decision.to_value(),
         "package": package,
     });
-    // The silent inbox row the drain writes after a queued request's block
-    // receipt, which only the queued leg leaves.
+    // The silent inbox row written after a queued request's block receipt,
+    // which only the queued leg leaves. The center lets the resident write the
+    // row itself; the daemon links a row to its own origin and ignores it.
     if let Some(level) = &answer.redaction_level {
-        record["review"] = json!({"redaction_level": level});
+        let mut review = json!({"redaction_level": level});
+        if let Some(center) = center {
+            review["approval_center_url"] = json!(center);
+        }
+        record["review"] = review;
     }
     // The approval surface the drain raises after a queued request's block
     // receipt, which only the `ask` queued leg leaves. A record carries one or

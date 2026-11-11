@@ -20,13 +20,13 @@ EXPECTED = {
         "sha512-m8ArJUtVcQMSe1lLE/Ei7vX/JV7O39sWmWBsXV2NOU70F0qCp8GubA24pT3LnwTmM6LL2xV80/h6sQg85n69ew==",
     ),
     OMP_PACKAGE: (
-        "18.11.3",
-        "sha512-7MdQBaj/zGHG7uV0mJSrYGHsjX3xthYgXUxTxLeJeFFL15UAnyE99kAfDE66c8LdXU0dN34eTyw6lfM7K5ouCg==",
+        "18.16.0",
+        "sha512-YJ3Gh5IAnIIFEeOihEIKHk9oGtK5FUEq0zxoox5BZgMtr9jWc420yVjirZC7mOvIP6o9jyxcOIHHRLn56hc7aQ==",
     ),
 }
 EXPECTED_NODE = "v22.22.2"
 EXPECTED_NPM = "12.0.0"
-EXPECTED_BUN = "1.3.14"
+EXPECTED_BUN = "1.4.4"
 MINIMUM_TESTCASES = 10
 REQUIRED_TESTS = {
     "test_installed_pi_runner_cancels_generated_pending_tool_call",
@@ -75,7 +75,7 @@ def verify_lock(lock_path: Path) -> None:
     root = packages.get("")
     if not isinstance(root, dict) or root.get("dependencies") != {
         PI_PACKAGE: "0.87.1",
-        OMP_PACKAGE: "18.11.3",
+        OMP_PACKAGE: "18.16.0",
     }:
         fail("root package dependencies are not the reviewed exact SDK versions")
 

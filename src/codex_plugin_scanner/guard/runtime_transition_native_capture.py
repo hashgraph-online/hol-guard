@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .daemon.live_identity import DaemonArtifactBinding, verified_live_guard_daemon_identity
+from .native_daemon_peer import DaemonArtifactBinding, verified_live_guard_daemon_identity
 from .native_runtime import NativeRuntimeIdentity
 
 MAX_CHILDREN = 32
@@ -197,13 +197,19 @@ def _child_pids(pid: int, deadline: float) -> tuple[int, ...]:
             raise NativeCaptureError("native_capture_capacity")
         result = tuple(values[:count])
     elif sys.platform == "linux":
-        raw = _read_proc(Path(f"/proc/{pid}/task/{pid}/children"), 4096, deadline)
-        values = raw.split()
-        if len(values) > MAX_CHILDREN:
+        # Each thread lists only the children it spawned, and the native
+        # daemon starts its workers off its main thread.
+        listed: list[bytes] = []
+        for task in sorted(os.listdir(f"/proc/{pid}/task")):
+            try:
+                listed.extend(_read_proc(Path(f"/proc/{pid}/task/{task}/children"), 4096, deadline).split())
+            except FileNotFoundError:
+                continue
+        if len(listed) > MAX_CHILDREN:
             raise NativeCaptureError("native_capture_capacity")
-        if any(not value.isdigit() for value in values):
+        if any(not value.isdigit() for value in listed):
             raise NativeCaptureError("native_capture_process_invalid")
-        result = tuple(int(value) for value in values)
+        result = tuple(int(value) for value in listed)
     else:
         raise NativeCaptureError("native_capture_platform_unsupported")
     _check(deadline)

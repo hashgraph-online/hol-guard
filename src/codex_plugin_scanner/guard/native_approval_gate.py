@@ -160,6 +160,11 @@ def _session_signals() -> list[str]:
     return signals
 
 
+def session_signals() -> list[str]:
+    """This process's session facts, for a native client that runs elsewhere."""
+    return _session_signals()
+
+
 def _unavailable_error():
     return _gate_error_cls()(
         _UNAVAILABLE_CODE,

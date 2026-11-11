@@ -10,7 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.store import GuardStore
 
 

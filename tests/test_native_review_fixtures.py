@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import native_review_evidence_support as review_evidence_support
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
@@ -45,7 +45,7 @@ TRANSPORT_CALL_ID_KEYS = {
     "pi": ("tool_call_id",),
     "omp": ("tool_call_id",),
     "claude-code": ("tool_use_id", "prompt_id"),
-    "codex": ("tool_use_id",),
+    "codex": ("tool_use_id", "turn_id"),
     "cursor": ("generation_id", "tool_use_id"),
     "zcode": ("tool_use_id", "toolCallId", "turnId"),
 }
@@ -130,7 +130,7 @@ def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, obj
         return review_evidence_support.with_review_evidence(rendered, **kwargs)
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         review_raw_hook_native,
     )
     store = GuardStore(tmp_path / "guard-home")

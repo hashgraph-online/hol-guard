@@ -274,6 +274,103 @@ fn scratch_checkout_package_bins_list() {
     }
 }
 
+/// A package manager's own state directories inside `node_modules` list like
+/// `.bin` does. `.pnpm` is absent whenever the project installed with another
+/// manager, and asking which one it used is the point of the listing.
+#[test]
+fn scratch_checkout_package_state_directories_list() {
+    let fixture = fixture("module-state");
+    let installed = fixture.scratch.join("installed");
+    let installed = installed.display();
+    for command in [
+        format!("ls {installed}/node_modules/.pnpm"),
+        format!("ls {installed}/node_modules/.pnpm 2>/dev/null | wc -l"),
+        format!("ls {installed}/node_modules/.cache"),
+        format!("ls {installed}/node_modules/.vite"),
+        format!("ls -la {installed}/node_modules/.cache"),
+        format!(
+            "ls {installed}/node_modules/.bin 2>/dev/null | wc -l; \
+             ls {installed}/node_modules/.pnpm 2>/dev/null | wc -l"
+        ),
+    ] {
+        assert!(permitted(&fixture, &command), "{command}");
+    }
+}
+
+/// The same listing where the state directories are present, which is what
+/// an installed tree carries. The absent case above proves the probe, this
+/// one proves the listing a manager's own directory actually prints.
+#[test]
+fn present_scratch_checkout_package_state_directories_list() {
+    let fixture = fixture("module-state-present");
+    let installed = fixture.scratch.join("installed");
+    for relative in [
+        "node_modules/.pnpm/vitest@1.0.0/node_modules/vitest",
+        "node_modules/.cache/tsbuildinfo",
+        "node_modules/.vite/deps",
+    ] {
+        std::fs::create_dir_all(installed.join(relative)).unwrap();
+    }
+    let installed = installed.display();
+    for command in [
+        format!("ls {installed}/node_modules/.pnpm"),
+        format!("ls -la {installed}/node_modules/.cache"),
+        format!("ls {installed}/node_modules/.vite"),
+        format!("ls {installed}/node_modules/.pnpm 2>/dev/null | wc -l"),
+    ] {
+        assert!(permitted(&fixture, &command), "{command}");
+    }
+}
+
+/// The widened listing stays inside `node_modules`, and only for the state
+/// directories a package manager owns.
+#[test]
+fn package_state_listings_keep_their_screens() {
+    let fixture = fixture("module-state-reviewed");
+    let installed = fixture.scratch.join("installed");
+    // Each negative names a directory that exists, so the listing is refused
+    // on the rule rather than because the path is absent.
+    for relative in [
+        "node_modules/.husky",
+        "node_modules/.secrets",
+        "node_modules/.pnpm/pkg",
+        ".pnpm",
+        ".cache",
+    ] {
+        std::fs::create_dir_all(installed.join(relative)).unwrap();
+    }
+    // A state name planted as a link to a protected directory. The name is
+    // one a manager owns, so only resolving it keeps the screen.
+    symlink(
+        fixture.home.join(".ssh"),
+        installed.join("node_modules/.vite"),
+    )
+    .unwrap();
+    let installed = installed.display();
+    let home = fixture.home.display();
+    let mut allowed = Vec::new();
+    for command in [
+        // A dot directory `node_modules` does not own.
+        format!("ls {installed}/node_modules/.husky"),
+        format!("ls {installed}/node_modules/.secrets"),
+        // The same names outside `node_modules`.
+        format!("ls {installed}/.pnpm"),
+        format!("ls {installed}/.cache"),
+        // Below a state directory, where `ls` prints a package's own files.
+        format!("ls {installed}/node_modules/.pnpm/pkg"),
+        // A protected root keeps its screen.
+        format!("ls {home}/.ssh/node_modules/.pnpm"),
+        // A state name that is a link to a protected directory.
+        format!("ls {installed}/node_modules/.vite"),
+        format!("ls -la {installed}/node_modules/.vite"),
+    ] {
+        if permitted(&fixture, &command) {
+            allowed.push(command);
+        }
+    }
+    assert!(allowed.is_empty(), "{allowed:?}");
+}
+
 #[test]
 fn package_bin_listings_keep_link_and_credential_screens() {
     let fixture = fixture("bins-reviewed");
