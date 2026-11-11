@@ -26,7 +26,7 @@ from .codex_hook_launch_runtime import desktop_hook_proxy_context, run_isolated_
 from .codex_hook_recovery import _snapshot
 from .codex_hook_runtime_trust import TrustedCodexHookLaunch
 from .codex_install_transaction import require_codex_install_owner
-from .daemon.live_identity import DaemonArtifactBinding
+from .native_daemon_peer import DaemonArtifactBinding
 from .native_runtime import NativeRuntimeIdentity
 from .runtime.command_activity_correlation import (
     derive_proven_request_correlation,

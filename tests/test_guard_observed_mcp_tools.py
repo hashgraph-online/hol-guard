@@ -19,7 +19,7 @@ def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     store = GuardStore(tmp_path / "guard-home")
@@ -64,7 +64,7 @@ def test_permission_mutation_retires_native_readiness_before_writing(
     import threading
     import time
 
-    from codex_plugin_scanner.guard.daemon import local_cli_api as api_module
+    from codex_plugin_scanner.guard.local_clis import local_cli_api as api_module
     from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
     from tests.native_policy_snapshot_test_fixtures import _ack, _status
 

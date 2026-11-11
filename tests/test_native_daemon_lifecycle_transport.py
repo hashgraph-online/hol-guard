@@ -217,55 +217,9 @@ def test_fact_rounds_stop_at_the_operation_deadline(monkeypatch: pytest.MonkeyPa
     assert timeouts == [5.0]
 
 
-def test_resident_outage_is_not_a_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resident_outage_is_not_a_value_error() -> None:
     assert issubclass(transport.NativeDaemonLifecycleError, RuntimeError)
     assert not issubclass(transport.NativeDaemonLifecycleError, ValueError)
-
-    from codex_plugin_scanner.guard.daemon import manager
-
-    def boom(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise transport.NativeDaemonLifecycleError("native_daemon_lifecycle_unavailable")
-
-    monkeypatch.setattr(manager, "native_daemon_lifecycle", boom)
-    with pytest.raises(transport.NativeDaemonLifecycleError):
-        manager._healthz_payload_is_current("{}")
-
-
-def test_startup_and_retirement_bind_the_lifecycle_deadline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon import manager
-
-    clock = {"now": 1000.0}
-    seen: list[tuple[str, float | None]] = []
-    monkeypatch.setattr(manager.time, "monotonic", lambda: clock["now"])
-
-    def lifecycle(check: str, _query: object, **_kwargs: object) -> dict[str, object]:
-        seen.append((check, transport._DAEMON_LIFECYCLE_DEADLINE.get()))
-        return {"default": 4.0, "post_update": 30.0}
-
-    def live(*_args: object, **_kwargs: object) -> str:
-        seen.append(("live", transport._DAEMON_LIFECYCLE_DEADLINE.get()))
-        return "http://127.0.0.1:9"
-
-    monkeypatch.setattr(manager, "native_daemon_lifecycle", lifecycle)
-    monkeypatch.setattr(manager, "_live_or_newer_daemon_url", live)
-    url = manager.ensure_guard_daemon(
-        tmp_path,
-        deadline_monotonic=1010.0,
-        background_maintenance=False,
-    )
-    assert url == "http://127.0.0.1:9"
-    assert seen == [("start_timeouts", 1010.0), ("live", 1004.0)]
-    assert transport._DAEMON_LIFECYCLE_DEADLINE.get() is None
-
-    def inventory(_home: Path) -> list[tuple[int, int]]:
-        seen.append(("inventory", transport._DAEMON_LIFECYCLE_DEADLINE.get()))
-        return []
-
-    monkeypatch.setattr(manager, "_guard_daemon_process_inventory_for_guard_home", inventory)
-    monkeypatch.setattr(manager, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
-    assert manager.retire_all_guard_daemons_for_home(tmp_path, deadline=50.0) == []
-    assert seen[-1] == ("inventory", 50.0)
-    assert transport._DAEMON_LIFECYCLE_DEADLINE.get() is None
 
 
 def _answer(kwargs: dict[str, object], timeouts: list[float]) -> dict[str, object]:

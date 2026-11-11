@@ -18,20 +18,6 @@ from multiprocessing import freeze_support
 from pathlib import Path
 
 _FROZEN_DAEMON_SERVE_ARG = "--_hol-guard-daemon-serve"
-# Kept byte-identical to START_HEARTBEAT_CODE in
-# codex_plugin_scanner/guard/daemon/start_heartbeat.py (a test pins equality);
-# this script cannot import Guard before the heartbeat is written.
-_START_HEARTBEAT_CODE = (
-    "with __import__('contextlib').suppress(BaseException): "
-    "import os,time; "
-    "p=os.environ.pop('HOL_GUARD_DAEMON_START_HEARTBEAT',''); "
-    "p[0]; "
-    "t='%s.%d.tmp'%(p,os.getpid()); "
-    "fd=os.open(t,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),384); "
-    "os.write(fd,('%d %d'%(os.getpid(),time.time_ns())).encode()); "
-    "os.close(fd); "
-    "os.replace(t,p)"
-)
 
 
 def _packaged_version() -> str:
@@ -335,7 +321,6 @@ if __name__ == "__main__":
     # Dispatch PyInstaller multiprocessing children before importing Guard.
     # Otherwise private resource-tracker argv is parsed as a public CLI command.
     freeze_support()
-    exec(_START_HEARTBEAT_CODE)
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
         print(f"{Path(sys.argv[0]).name} {_packaged_version()}")
         raise SystemExit(0)

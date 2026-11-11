@@ -12,8 +12,8 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import context_usage_meter as meter
-from codex_plugin_scanner.guard.daemon import context_assistance_http as http
-from codex_plugin_scanner.guard.daemon import context_usage_http
+from codex_plugin_scanner.guard.routes import context_assistance_http as http
+from codex_plugin_scanner.guard.routes import context_usage_http
 
 NOW = time.time()
 TODAY = date.today()

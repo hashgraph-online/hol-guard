@@ -411,6 +411,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
         | "get_read_state"
+        | "get_sync_payload"
         | "count_guard_events_v1"
         | "get_request_resume"
         | "get_latest_request_resume"
@@ -458,6 +459,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         "complete_codex_live_decision" | "record_codex_live_completion" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
+        | "get_command_activity_persistence_health"
+        | "list_table_names"
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
         | "list_evidence"
@@ -477,7 +480,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_next_pending_request"
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
-        | "oldest_approval_request_created_at" => Kind::Snapshot,
+        | "oldest_approval_request_created_at"
+        | "cached_supply_chain_bundle" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,
@@ -529,6 +533,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "clear_evidence"
         | "upsert_guard_session"
         | "upsert_guard_operation"
+        | "get_mcp_policy_request"
         | "link_codex_live_wait"
         | "add_guard_operation_item"
         | "attach_guard_client"
@@ -557,6 +562,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "mark_request_unread"
         | "clear_read_state"
         | "set_device_label"
+        | "set_sync_payload"
         | "rotate_installation_id"
         | "add_event"
         | "add_guard_event_v1"
@@ -564,6 +570,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "mark_guard_events_v1_uploaded"
         | "maintain_storage"
         | "managed_keyring_reconcile"
+        | "upsert_runtime_state"
         | "record_local_cli_observation"
         | "replace_local_cli_commands"
         | "apply_custom_extension_continuity"
@@ -675,6 +682,8 @@ fn dispatch(
         }
         "list_command_activity_page" => api::list_page(connection, args),
         "command_activity_analytics" => api::analytics(connection, args),
+        "get_command_activity_persistence_health" => api::persistence_health(connection, args),
+        "list_table_names" => api::table_names(connection, args),
         "record_command_activity_feedback" => feedback::record_feedback(connection, args),
         "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
         "clear_command_activity_evidence" => privacy::clear_evidence(connection),
@@ -755,6 +764,9 @@ fn dispatch(
         "upsert_guard_operation" => sessions::upsert_operation(connection, args),
         "link_codex_live_wait" => sessions::link_codex_live_wait(connection, args),
         "get_guard_operation" => sessions::get_operation(connection, args),
+        "get_mcp_policy_request" => {
+            crate::guard_store_mcp_policy_requests::get_request(connection, args)
+        }
         "list_guard_operations" => sessions::list_operations(connection, args),
         "get_guard_operation_for_approval_request" => {
             sessions::operation_for_approval_request(connection, args)
@@ -900,10 +912,15 @@ fn dispatch(
         "get_read_state" => read_state::ids(connection, args),
         "clear_read_state" => read_state::clear(connection, args),
         "set_device_label" => devices::set_label(connection, args),
+        "get_sync_payload" => crate::guard_store_sync_state::get(connection, args),
+        "set_sync_payload" => crate::guard_store_sync_state::set(connection, args),
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "list_events_after" => cloud_events::list_after(connection, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
+        "cached_supply_chain_bundle" => {
+            crate::supply_chain_bundle_cache_op::cached_bundle(connection)
+        }
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),
         "count_guard_events_v1" => cloud_events::count(connection, args),

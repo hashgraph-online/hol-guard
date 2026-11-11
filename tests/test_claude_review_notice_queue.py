@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 from codex_plugin_scanner.guard.native_guard_store import GUARD_STORE_MAX_REQUEST_BYTES, NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.native_hook_adapter import native_review_query
 from codex_plugin_scanner.guard.store_approval_facade import StoreApprovalsMixin

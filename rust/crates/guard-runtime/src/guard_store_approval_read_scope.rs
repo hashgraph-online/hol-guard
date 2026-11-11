@@ -207,6 +207,24 @@ pub(crate) fn scope_contract(
         &crate::policy_store::PolicySnapshotStore,
     )>,
 ) -> StoreResult<Map<String, Value>> {
+    let item = scope_item(draft, cwd)?;
+    let mut view = View::new(&item);
+    view.native_bash_owner_verified = owner.is_some_and(|(connection, store)| {
+        crate::native_bash_review_scope::owner_verified(&item, store, Some(connection))
+    });
+    let Value::Object(mut contract) = contract_value(&contract(&view)) else {
+        return Err(unavailable());
+    };
+    contract.remove("exact_context_token");
+    Ok(contract)
+}
+
+/// `approval_scope_support._scope_item`: the request narrowed to the fields
+/// the scope contract reads, refused where the resident transport refused it.
+pub(crate) fn scope_item(
+    draft: &Map<String, Value>,
+    cwd: Option<&str>,
+) -> StoreResult<ApprovalScopeItemV1> {
     let mut item: Map<String, Value> = REQUEST_FIELDS
         .iter()
         .map(|name| {
@@ -243,16 +261,7 @@ pub(crate) fn scope_contract(
     {
         return Err(unavailable());
     }
-    let item: ApprovalScopeItemV1 = serde_json::from_value(item).map_err(|_| unavailable())?;
-    let mut view = View::new(&item);
-    view.native_bash_owner_verified = owner.is_some_and(|(connection, store)| {
-        crate::native_bash_review_scope::owner_verified(&item, store, Some(connection))
-    });
-    let Value::Object(mut contract) = contract_value(&contract(&view)) else {
-        return Err(unavailable());
-    };
-    contract.remove("exact_context_token");
-    Ok(contract)
+    serde_json::from_value(item).map_err(|_| unavailable())
 }
 
 /// `_derived_workspace_scope_target`: the stored workspace, else the

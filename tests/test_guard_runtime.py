@@ -26,6 +26,7 @@ from typing import ClassVar
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_prompt
 from codex_plugin_scanner.guard import synced_policy as synced_policy_module
@@ -39,7 +40,6 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import (
     GuardAction,
     GuardApprovalRequest,
@@ -4381,6 +4381,7 @@ clearer UX and an implementation plan with technical references.
                     "policy-bundle-v2-cloud-exceptions.v1",
                     "policy-document-exact-commands.v1",
                     "policy-document-review-rules.v1",
+                    "policy-document-command-pattern-allow.v1",
                 ],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",
@@ -20495,7 +20496,7 @@ def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(
 
     command = (
         "git diff -- "
-        "src/codex_plugin_scanner/guard/daemon/server.py "
+        "src/codex_plugin_scanner/guard/routes/request_handler.py "
         "dashboard/src/approval-center-layout.tsx "
         "dashboard/src/review-workspace.tsx "
         "tests/test_guard_approvals.py | sed -n '1,260p'"

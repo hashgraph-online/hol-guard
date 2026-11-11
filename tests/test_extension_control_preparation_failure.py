@@ -14,19 +14,19 @@ from codex_plugin_scanner.guard.catalog_delivery.authority import ExpiredDistrib
 from codex_plugin_scanner.guard.catalog_delivery.preparation import UnavailablePackError
 from codex_plugin_scanner.guard.catalog_delivery.revocations import RevokedPackError
 from codex_plugin_scanner.guard.catalog_delivery.transport import MissingReleaseError
-from codex_plugin_scanner.guard.daemon import background_diagnostics
-from codex_plugin_scanner.guard.daemon.extension_control_errors import (
-    _CAUSE_RECOVERY_ACTIONS,
-    ExtensionControlApiError,
-)
-from codex_plugin_scanner.guard.daemon.extension_control_preparation_failure import (
-    classify,
-    preparation_unavailable,
-)
 from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
     NativeRequestTooLargeError,
     NativeSourceCompilerError,
 )
+from codex_plugin_scanner.guard.extension_controls.extension_control_errors import (
+    _CAUSE_RECOVERY_ACTIONS,
+    ExtensionControlApiError,
+)
+from codex_plugin_scanner.guard.extension_controls.extension_control_preparation_failure import (
+    classify,
+    preparation_unavailable,
+)
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
 
 _CAUSES = (
     "installed_runtime_incomplete",

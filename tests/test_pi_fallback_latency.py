@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
+from codex_plugin_scanner.guard.native_daemon_manage import GUARD_DAEMON_COMPATIBILITY_VERSION
 from tests.test_pi_hook_latency import _bun_executable, _decode_json_object
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard import supply_chain_workspace_audit as workspace_audit_module
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.local_supply_chain import (
     evaluate_package_request_artifact,
     managed_install_audit_workspace_dirs,
@@ -640,7 +640,7 @@ def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
     sync_finished = threading.Event()
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         sync_finished.set()
         return {"synced_at": WORKSPACE_AUDIT_NOW, "receipts_stored": 1}
 

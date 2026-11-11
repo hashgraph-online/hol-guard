@@ -15,7 +15,8 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
+from ci.guard_daemon_harness import GuardDaemonServer
+from codex_plugin_scanner.guard.cloud_control import server_control_cloud_sync as _ctl_cloud_sync
 
 
 def fixture_home() -> Path:
@@ -35,7 +36,6 @@ def seed(home: Path, *, inverse: bool = False) -> int:
     from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
     from codex_plugin_scanner.guard.approval_gate import update_settings
     from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
-    from codex_plugin_scanner.guard.daemon import server
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.store import GuardStore
 
@@ -62,12 +62,8 @@ def seed(home: Path, *, inverse: bool = False) -> int:
     if not inverse:
         manifest.unlink()  # Generated incident fixture: receipt/config/key stay intact.
     store = GuardStore(context.guard_home)
-    for name in ("_start_aibom_inventory_refresh", "_start_supply_chain_bundle_refresh", "_start_headless_cloud_sync"):
-        setattr(server.GuardDaemonServer, name, lambda _self: None)
-    server.start_command_queue_worker = lambda _store, existing: existing
-    server.start_cloud_sync_sync_worker = lambda _store, existing, **_kwargs: existing
     _ctl_cloud_sync._queue_headless_cloud_sync = lambda **_kwargs: {"status": "not_configured"}
-    daemon = server.GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=home)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=home)
     try:
         if not inverse:
             daemon.start()

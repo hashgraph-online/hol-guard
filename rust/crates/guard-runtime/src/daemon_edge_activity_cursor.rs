@@ -4,7 +4,7 @@
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use hmac::{Hmac, Mac};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use sha2::Sha256;
 
 use super::{Parsed, API_SCHEMA_VERSION, CURSOR_PREFIX};
@@ -14,33 +14,40 @@ pub(super) fn signed_cursor(
     occurred_at: &str,
     activity_id: &str,
     binding: &Value,
-    token: &[u8],
+    key: &[u8],
 ) -> Option<String> {
     if !occurred_at.is_ascii() || !activity_id.is_ascii() {
         return None;
     }
-    // `json.dumps(sort_keys=True, separators=(",", ":"))`.
-    let raw = serde_json::to_string(&json!({
-        "activity_id": activity_id,
-        "binding": binding,
-        "occurred_at": occurred_at,
-        "version": API_SCHEMA_VERSION,
-    }))
-    .ok()?;
+    sign(
+        &json!({
+            "activity_id": activity_id,
+            "binding": binding,
+            "occurred_at": occurred_at,
+            "version": API_SCHEMA_VERSION,
+        }),
+        key,
+    )
+}
+
+/// `_signed_cursor`: the payload as `json.dumps(sort_keys=True,
+/// separators=(",", ":"))` writes it, signed with the daemon key. Text other
+/// than ASCII goes to the daemon, which escapes it.
+pub(super) fn sign(payload: &Value, key: &[u8]) -> Option<String> {
+    let raw = serde_json::to_string(payload).ok()?;
+    if !raw.is_ascii() {
+        return None;
+    }
     let encoded = URL_SAFE_NO_PAD.encode(raw);
-    let mut mac = Hmac::<Sha256>::new_from_slice(token).ok()?;
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).ok()?;
     mac.update(encoded.as_bytes());
     let signature = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
     Some(format!("{CURSOR_PREFIX}.{encoded}.{signature}"))
 }
 
-/// `decode_activity_cursor`: a cursor this daemon signed for the same
-/// filters, or the daemon's `invalid_cursor`.
-pub(super) fn verified_cursor(
-    cursor: &str,
-    binding: &Value,
-    token: &[u8],
-) -> Parsed<(String, String)> {
+/// `_verified_cursor`: the payload object of a cursor this daemon signed, or
+/// the daemon's `invalid_cursor`.
+pub(super) fn verify(cursor: &str, key: &[u8]) -> Parsed<Map<String, Value>> {
     const INVALID: &str = "invalid_cursor";
     if cursor.len() > 2_048 {
         return Some(Err(INVALID));
@@ -55,7 +62,7 @@ pub(super) fn verified_cursor(
     let Ok(supplied) = URL_SAFE_NO_PAD.decode(signature) else {
         return Some(Err(INVALID));
     };
-    let mut mac = Hmac::<Sha256>::new_from_slice(token).ok()?;
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).ok()?;
     mac.update(encoded.as_bytes());
     if mac.verify_slice(&supplied).is_err() {
         return Some(Err(INVALID));
@@ -65,8 +72,23 @@ pub(super) fn verified_cursor(
     };
     // Text `json.loads` reads differently (other encodings, NaN) goes to the
     // daemon.
-    let Value::Object(payload) = serde_json::from_slice::<Value>(&raw).ok()? else {
-        return Some(Err(INVALID));
+    match serde_json::from_slice::<Value>(&raw).ok()? {
+        Value::Object(payload) => Some(Ok(payload)),
+        _ => Some(Err(INVALID)),
+    }
+}
+
+/// `decode_activity_cursor`: a cursor this daemon signed for the same
+/// filters, or the daemon's `invalid_cursor`.
+pub(super) fn verified_cursor(
+    cursor: &str,
+    binding: &Value,
+    key: &[u8],
+) -> Parsed<(String, String)> {
+    const INVALID: &str = "invalid_cursor";
+    let payload = match verify(cursor, key)? {
+        Ok(payload) => payload,
+        Err(code) => return Some(Err(code)),
     };
     // Python compares `1 == True`; a number anywhere in the binding goes to
     // the daemon.

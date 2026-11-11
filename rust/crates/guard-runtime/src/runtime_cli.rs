@@ -82,9 +82,8 @@ pub(super) fn run() -> Result<(), String> {
         [command, config] if command == cline_hook_worker::WORKER_COMMAND => {
             std::process::exit(cline_hook_worker::run(config))
         }
-        #[cfg(unix)]
-        [command, rest @ ..] if command == daemon_edge::EDGE_COMMAND => {
-            std::process::exit(daemon_edge::run(rest))
+        [command, rest @ ..] if command == daemon_edge::standalone::SERVE_COMMAND => {
+            std::process::exit(daemon_edge::standalone::run(rest))
         }
         [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
             std::process::exit(pi_hook_bridge::run(config))
@@ -275,6 +274,17 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if desktop_foreign_remove::is_command(command) && flag == "--stdin" => {
             let response = desktop_foreign_remove::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if daemon_client::is_command(command) && flag == "--stdin" => {
+            let response = daemon_client::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if daemon_recovery::is_command(command) && flag == "--stdin" => {
+            daemon_recovery::run_session(io::stdin().lock(), io::stdout().lock())
+        }
+        [command, flag] if daemon_manage::is_command(command) && flag == "--stdin" => {
+            let response = daemon_manage::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {

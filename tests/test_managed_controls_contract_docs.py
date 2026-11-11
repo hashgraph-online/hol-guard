@@ -31,8 +31,8 @@ MANAGED_CONTROLS_DOCS = (
 )
 MANAGED_CONTROLS_CLOUD_BOUNDARY_DOCS = tuple(sorted((ROOT / "docs" / "guard").glob("managed-controls*.md")))
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-EXTENSION_CONTROL_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
-MANAGED_CONTROLS_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "managed_controls_api.py"
+EXTENSION_CONTROL_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "extension_controls" / "extension_control_api.py"
+MANAGED_CONTROLS_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "extension_controls" / "managed_controls_api.py"
 POLICY_COMMAND_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_dispatch_policy_document.py"
 
 EXPECTED_PRODUCT_DECISION: dict[str, object] = {

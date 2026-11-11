@@ -33,15 +33,11 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.daemon.server",
+        "module": "codex_plugin_scanner.guard.routes.request_handler",
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.daemon.hook_worker",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
-        "module": "codex_plugin_scanner.guard.daemon.runtime_hook_scheduler",
+        "module": "codex_plugin_scanner.guard.hook_review.hook_worker",
         "surface": "hook_http_and_cli_events"
       },
       {
@@ -222,7 +218,6 @@
           "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
           "src/codex_plugin_scanner/guard/insights_share.py",
           "src/codex_plugin_scanner/guard/access_graph_events.py",
-          "src/codex_plugin_scanner/guard/daemon/aibom_inventory_persist.py",
           "src/codex_plugin_scanner/guard/runtime/trust_attestation.py"
         ]
       },
@@ -237,12 +232,10 @@
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_replay*.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_enrollment.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_queue.py",
-          "src/codex_plugin_scanner/guard/runtime/native_business_review_*.py",
           "src/codex_plugin_scanner/guard/store_review_event_sequence_recovery.py",
           "src/codex_plugin_scanner/guard/cloud_exception_requests.py",
-          "src/codex_plugin_scanner/guard/daemon/cloud_review_settings*.py",
-          "src/codex_plugin_scanner/guard/daemon/first_cloud_sync.py",
-          "src/codex_plugin_scanner/guard/daemon/business_review_*.py",
+          "src/codex_plugin_scanner/guard/cloud_control/cloud_review_settings*.py",
+          "src/codex_plugin_scanner/guard/cloud_control/first_cloud_sync.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_review.py",
           "src/codex_plugin_scanner/guard/runtime/exact_cloud_review*.py",
           "src/codex_plugin_scanner/guard/review_oauth_binding.py"
@@ -258,7 +251,7 @@
           "src/codex_plugin_scanner/guard/native_workspace_snapshot.py",
           "src/codex_plugin_scanner/guard/native_workspace_fix.py",
           "src/codex_plugin_scanner/guard/store_workspace_assessment_schema.py",
-          "src/codex_plugin_scanner/guard/daemon/workspace_assessment_api.py"
+          "src/codex_plugin_scanner/guard/routes/workspace_assessment_api.py"
         ]
       },
       {
@@ -269,7 +262,7 @@
           "src/codex_plugin_scanner/guard/runtime/command_queue*.py",
           "src/codex_plugin_scanner/guard/runtime/command_capability.py",
           "src/codex_plugin_scanner/guard/runtime/command_executors.py",
-          "src/codex_plugin_scanner/guard/daemon/command_queue_worker.py"
+          "src/codex_plugin_scanner/guard/cloud_control/command_queue_worker.py"
         ]
       },
       {
@@ -286,12 +279,11 @@
           "src/codex_plugin_scanner/guard/runtime/local_mcp_probe.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_sync.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_handshake.py",
-          "src/codex_plugin_scanner/guard/daemon/extension_control_*.py",
-          "src/codex_plugin_scanner/guard/daemon/local_cli_profiles_api.py",
-          "src/codex_plugin_scanner/guard/daemon/mcp_discovery_jobs.py",
-          "src/codex_plugin_scanner/guard/daemon/mcp_policy_decisions.py",
-          "src/codex_plugin_scanner/guard/daemon/catalog_v2_client.py",
-          "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py",
+          "src/codex_plugin_scanner/guard/extension_controls/extension_control_*.py",
+          "src/codex_plugin_scanner/guard/extension_controls/__init__.py",
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_profiles_api.py",
+          "src/codex_plugin_scanner/guard/local_clis/mcp_discovery_jobs.py",
+          "src/codex_plugin_scanner/guard/routes/mcp_policy_decisions.py",
           "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py"
         ]
       },
@@ -305,8 +297,8 @@
           "src/codex_plugin_scanner/guard/runtime/codex_mcp_setup.py",
           "src/codex_plugin_scanner/guard/runtime/mcp_registry.py",
           "src/codex_plugin_scanner/guard/runtime/mcp_registry_setup.py",
-          "src/codex_plugin_scanner/guard/daemon/mcp_registry_undo.py",
-          "src/codex_plugin_scanner/guard/daemon/local_cli_registry_setup.py",
+          "src/codex_plugin_scanner/guard/local_clis/mcp_registry_undo.py",
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_registry_setup.py",
           "src/codex_plugin_scanner/guard/runtime/network_status*.py"
         ]
       },
@@ -317,8 +309,8 @@
         "path": [
           "src/codex_plugin_scanner/guard/cli/update_*.py",
           "src/codex_plugin_scanner/guard/update_staging.py",
-          "src/codex_plugin_scanner/guard/daemon/dashboard_update*.py",
-          "src/codex_plugin_scanner/guard/daemon/update_refresh_program.py",
+          "src/codex_plugin_scanner/guard/updates/dashboard_update*.py",
+          "src/codex_plugin_scanner/guard/updates/update_refresh_program.py",
           "src/codex_plugin_scanner/guard/onefile_extraction.py"
         ]
       },
@@ -410,35 +402,25 @@
         "category": "control_plane",
         "reason": "Approval-center/dashboard daemon APIs and daemon lifecycle plumbing (local CLI grants API, command-activity API, diagnostics, reapers); control plane served beside, not inside, the hook route.",
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/local_cli_api*.py",
-          "src/codex_plugin_scanner/guard/daemon/local_cli_continuity_api.py",
-          "src/codex_plugin_scanner/guard/daemon/command_activity_api.py",
-          "src/codex_plugin_scanner/guard/daemon/command_activity_health_repair.py",
-          "src/codex_plugin_scanner/guard/daemon/managed_controls_api.py",
-          "src/codex_plugin_scanner/guard/daemon/managed_policy_delivery.py",
-          "src/codex_plugin_scanner/guard/daemon/policy_authority_api.py",
-          "src/codex_plugin_scanner/guard/daemon/dashboard_reconnect.py",
-          "src/codex_plugin_scanner/guard/daemon/diagnostics.py",
-          "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
-          "src/codex_plugin_scanner/guard/daemon/approval_connector_recommendation.py",
-          "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
-          "src/codex_plugin_scanner/guard/daemon/local_cli_capability_api.py"
-        ]
-      },
-      {
-        "id": "daemon-dashboard-read-routes",
-        "category": "control_plane",
-        "reason": "Dashboard read routes and their support handlers split out of daemon/server.py: extension-control, runtime, inventory, settings, update, request-queue, receipt, policy, evidence and command-activity GET routes, plus the request list, capabilities, operator health, MCP policy request read, static asset, dashboard shell and event stream handlers. Each is reached only from an explicit /v1 GET branch (or a static dashboard path) dispatched by do_GET after the dashboard token check. Evidence: the transitive self-call closure of _handle_runtime_hook, _handle_runtime_hook_fast, _handle_hook_readiness, _execute_runtime_hook and _handle_daemon_identity_challenge contains none of the moved methods, and hook routes are POST-only so do_GET never reaches the hook path.",
-        "path": [
-          "src/codex_plugin_scanner/guard/daemon/server_dashboard_*.py"
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_api*.py",
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_continuity_api.py",
+          "src/codex_plugin_scanner/guard/cloud_control/command_activity_health_repair.py",
+          "src/codex_plugin_scanner/guard/extension_controls/managed_controls_api.py",
+          "src/codex_plugin_scanner/guard/runtime/managed_policy_delivery.py",
+          "src/codex_plugin_scanner/guard/policy_authority_api.py",
+          "src/codex_plugin_scanner/guard/runtime_health/diagnostics.py",
+          "src/codex_plugin_scanner/guard/hook_review/approval_extension_recommendation.py",
+          "src/codex_plugin_scanner/guard/hook_review/approval_connector_recommendation.py",
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
+          "src/codex_plugin_scanner/guard/local_clis/local_cli_capability_api.py"
         ]
       },
       {
         "id": "daemon-control-plane-routes",
         "category": "control_plane",
-        "reason": "Daemon control-plane routes split out of daemon/server.py: package-firewall and supply-chain actions, Guard Cloud connect and dashboard reconnect, headless app actions and receipts, harness/notification/insights/read-state routes, protection-repair and settings routes, and the headless cloud-sync queue and connect-state machines, plus the POST control-route dispatch chain (server_control_routes_post.py: extension-control, local-CLI, settings import, package actions, policy, request-resolution and the remaining /v1 control routes), and the handler bodies behind those routes (server_control_policy.py, server_control_sync.py, server_control_operations.py and server_control_health.py: policy decisions and approval-gate routes, headless policy sync and cloud-exception sync, operation and insight routes, and runtime health, containment and catalog responses). Each is reached only from a /v1 control route dispatched by do_GET/do_POST or from the daemon's background cloud-sync loop; do_POST keeps the origin check, route-class authentication, request-body parsing, daemon identity proof and the /v1/hooks routes in server.py. Evidence: the transitive self-call closure of _handle_runtime_hook, _handle_runtime_hook_fast, _handle_hook_readiness, _execute_runtime_hook and the _runtime_hook_* helpers contains none of the moved methods, and none of the moved module-level functions is referenced from those methods. Helpers shared with the admission path or the server (server_common.py: logger, clock, local-URL builder, string-dict guard, settings response shaper) stay in scope.",
+        "reason": "Daemon control-plane routes split out of routes/request_handler.py: package-firewall and supply-chain actions, Guard Cloud connect and dashboard reconnect, headless app actions and receipts, harness/notification/insights/read-state routes, protection-repair and settings routes, and the headless cloud-sync queue and connect-state machines, plus the POST control-route dispatch chain (server_control_routes_post.py: extension-control, local-CLI, settings import, package actions, policy, request-resolution and the remaining /v1 control routes), and the handler bodies behind those routes (server_control_policy.py, server_control_sync.py and server_control_health.py: policy decisions and approval-gate routes, headless policy sync and cloud-exception sync, insight routes, and runtime health, containment and catalog responses). Each is reached only from a /v1 control route dispatched by do_GET/do_POST or from the daemon's background cloud-sync loop; do_POST keeps the origin check, route-class authentication, request-body parsing, daemon identity proof and the /v1/hooks routes in server.py. Evidence: the transitive self-call closure of _handle_runtime_hook, _handle_runtime_hook_fast, _handle_hook_readiness, _execute_runtime_hook and the _runtime_hook_* helpers contains none of the moved methods, and none of the moved module-level functions is referenced from those methods. Helpers shared with the admission path or the server (server_common.py: logger, clock, local-URL builder, string-dict guard, settings response shaper) stay in scope.",
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/server_control_*.py"
+          "src/codex_plugin_scanner/guard/cloud_control/server_control_*.py"
         ]
       },
       {
@@ -517,13 +499,13 @@
       {
         "id": "repair-lifecycle",
         "category": "control_plane",
-        "reason": "Explicit and periodic Guard repair: `guard repair` (cli/commands_repair), POST /v1/repair and the removal endpoint (daemon/repair_api via _handle_repair_api) and the 600 s repair self-check thread (daemon/repair_self_check started by _start_repair_self_check). None runs inside hook admission, decision or enforcement. resident_state_prune.py and daemon/runtime_repair.py are reached only from repair_engine (repair_native_runtime, repair_daemon) and the daemon package's lazy export used by the repair CLI handler.",
+        "reason": "Explicit and periodic Guard repair: `guard repair` (cli/commands_repair), POST /v1/repair and the removal endpoint (repair_api via the route.repair library call) and the 600 s repair self-check thread (daemon/repair_self_check started by _start_repair_self_check). None runs inside hook admission, decision or enforcement. resident_state_prune.py and daemon/runtime_repair.py are reached only from repair_engine (repair_native_runtime, repair_daemon) and the daemon package's lazy export used by the repair CLI handler.",
         "path": [
           "src/codex_plugin_scanner/guard/repair_engine.py",
           "src/codex_plugin_scanner/guard/resident_state_prune.py",
-          "src/codex_plugin_scanner/guard/daemon/repair_api.py",
-          "src/codex_plugin_scanner/guard/daemon/repair_self_check.py",
-          "src/codex_plugin_scanner/guard/daemon/runtime_repair.py"
+          "src/codex_plugin_scanner/guard/repair_api.py",
+          "src/codex_plugin_scanner/guard/runtime_health/repair_self_check.py",
+          "src/codex_plugin_scanner/guard/runtime_health/runtime_repair.py"
         ]
       },
       {
@@ -538,20 +520,12 @@
         ]
       },
       {
-        "id": "ephemeral-daemon-reaper",
-        "category": "control_plane",
-        "reason": "Best-effort janitor that retires guard daemons and clears daemon state leaked by ephemeral (pytest temp) guard homes. It is scheduled once per interval on a daemon thread from ensure_guard_daemon (manager._schedule_stale_ephemeral_guard_daemon_reap), never joins, never gates the caller, and acts only on other homes (the caller's own home is excluded). It runs no hook admission, decision, authorization or enforcement, and the manager reaches it through a late-bound facade.",
-        "path": [
-          "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py"
-        ]
-      },
-      {
         "category": "control_plane",
         "id": "protection-capability-payloads",
         "path": [
           "src/codex_plugin_scanner/guard/protection_capabilities.py"
         ],
-        "reason": "Static protection-capability payloads for the dashboard and settings views. Its only callers are daemon/server_common.py's _settings_response_payload (called only from server_dashboard_runtime_read.py, server_control_repair.py and server_control_sync.py), server_dashboard_runtime_read.py and the excluded approvals runtime snapshot; no hook or tool request reads it."
+        "reason": "Static protection-capability payloads for the dashboard and settings views. Its only callers are daemon/server_common.py's _settings_response_payload (called only from server_dashboard_runtime_read.py and server_control_sync.py), server_dashboard_runtime_read.py and the excluded approvals runtime snapshot; no hook or tool request reads it."
       },
       {
         "category": "offline_reporting",
@@ -568,6 +542,10 @@
       }
     ],
     "reviewed_runtime": [
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime_health/background_diagnostics.py",
+        "reason": "Reviewed diagnostic sink: the extension-control authority commit and background catalog workers report a bounded failure line through it to the daemon log when a sink is installed, and drop it otherwise. Nothing reads a record back and no decision depends on it; count the complete module in runtime scope. No runtime behavior is excluded."
+      },
       {
         "path": "src/codex_plugin_scanner/guard/runtime/runner_native_sync.py",
         "reason": "Reviewed native runner-authority projections: store_cloud_events lazily imports cloud_exceptions from this module, alongside the sync URL, pain-signal, value-metric and policy-bundle projections the cloud sync transport uses. Every function ships a minimal projection to the resident and returns its answer unchanged; count the complete module in runtime scope. No runtime behavior is excluded."
@@ -600,9 +578,10 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/server_common.py",
+          "src/codex_plugin_scanner/guard/runtime_health/server_common.py",
           "src/codex_plugin_scanner/guard/harness_disconnect_gate.py",
-          "src/codex_plugin_scanner/guard/daemon/hook_*.py",
+          "src/codex_plugin_scanner/guard/hook_review/hook_*.py",
+          "src/codex_plugin_scanner/guard/evidence_drains/hook_*.py",
           "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
@@ -629,11 +608,11 @@
         "reason": "Reviewed: module is a decision, parser/scanner, transport, process-dispatch or containment component invoked by a runtime route."
       },
       {
-        "path": "src/codex_plugin_scanner/guard/daemon/mcp_relay_evidence_drain.py",
+        "path": "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_evidence_drain.py",
         "reason": "Reviewed and retained in runtime scope: the direct-evidence drain hands each MCP tool call the native relay decided to the receipt writers the Python MCP proxy calls. It validates the queued record, records a forward or block exactly as the resident decided it, and drops any record it cannot validate; it never recomputes a verdict."
       },
       {
-        "path": "src/codex_plugin_scanner/guard/daemon/mcp_relay_package_evidence_drain.py",
+        "path": "src/codex_plugin_scanner/guard/evidence_drains/mcp_relay_package_evidence_drain.py",
         "reason": "Reviewed and retained in runtime scope: the package half of the same drain. It writes the receipt the proxy's package lane writes, against the package request's own artifact, rebuilding that artifact from the parser input the resident read and dropping any record whose rebuilt artifact is not the one the resident decided; it never recomputes a verdict."
       },
       {
@@ -680,9 +659,10 @@
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
           "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
           "src/codex_plugin_scanner/guard/adapters/zcode_config.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py"
+          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
+          "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
-        "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope."
+        "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
       },
       {
         "path": [
@@ -704,15 +684,10 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/client.py",
-          "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
-          "src/codex_plugin_scanner/guard/daemon/live_identity.py",
-          "src/codex_plugin_scanner/guard/daemon/policy_authority_client.py",
-          "src/codex_plugin_scanner/guard/daemon/recovery_lifecycle.py",
-          "src/codex_plugin_scanner/guard/daemon/response_bounds.py",
-          "src/codex_plugin_scanner/guard/daemon/runtime_peer.py"
+          "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
+          "src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py"
         ],
-        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; recovery_lifecycle is invoked from daemon/manager on hook-failure recovery; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
+        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
       },
       {
         "path": [
@@ -1007,28 +982,6 @@
         "entry_points": [],
         "reason": "Preparing an authenticated Codex hook manifest repair. It runs only from the Codex authority repair flow.",
         "evidence": "PreparedCodexHookRepair and prepare_authenticated_hook_manifest_repair are used only by codex_hook_repair_request.py, codex_hook_repair.py and cli/codex_authority_repair.py (install-uninstall-doctor). The manifest build, publication, baseline and live verification functions that adapters/codex.py imports stay in scope. The report validates this reference closure on every run."
-      },
-      {
-        "id": "native-daemon-handler-control-routes",
-        "category": "control_plane",
-        "path": "src/codex_plugin_scanner/guard/native_daemon_handler.py",
-        "symbols": [
-          "_MAX_LIST_ITEMS",
-          "_BODY_KEYS",
-          "_field",
-          "native_body_handler",
-          "native_requests_list",
-          "native_harness_action",
-          "_fact",
-          "native_headless_action_error",
-          "native_headless_cursor_surface_error",
-          "native_headless_action_state",
-          "native_detection_app_statuses",
-          "native_supply_chain_error"
-        ],
-        "entry_points": [],
-        "reason": "Request-body, request-list, harness-action, headless-action, detection-status and supply-chain helpers for daemon control-plane and dashboard routes.",
-        "evidence": "Each excluded public helper is called only from daemon/server_control_policy.py, server_control_misc.py, server_control_headless.py, server_control_supply_chain.py (daemon-control-plane-routes) or daemon/server_dashboard_support.py (daemon-dashboard-read-routes). HandlerDecision, NativeDaemonHandlerError and native_events_cursor, which daemon/server.py imports, stay in scope. The report validates this reference closure on every run."
       },
       {
         "id": "store-evidence-dashboard-export",
@@ -1483,7 +1436,7 @@
           "_notify_manual_retry"
         ],
         "entry_points": [],
-        "evidence": "continue_request_after_application is called only from runtime/command_executors.py (cloud-command-queue), harness_resume.py (imported only by command_executors.py and daemon/local_approval_continuation.py) and daemon/local_approval_continuation.py (imported only by daemon/server_control_routes_post.py, daemon-control-plane-routes). None of these is in the runtime closure. continuation_offer_payload stays counted; the Codex live completion is recorded by the native store. The report validates this reference closure on every run.",
+        "evidence": "continue_request_after_application is called only from runtime/command_executors.py (cloud-command-queue), harness_resume.py (imported only by command_executors.py and continuation_runtime_local.py) and continuation_runtime_local.py (imported only by the daemon approval routes and library_calls.py, which the daemon runs through desktop library-call). None of these is in the runtime closure. continuation_offer_payload stays counted; the Codex live completion is recorded by the native store. The report validates this reference closure on every run.",
         "reason": "Replay of an approved request after the approval is applied: claim lease, store continuation plan, persisted attempt and manual-retry notice. It runs from the cloud command queue and the local approval continuation route, after the hook call has already returned."
       },
       {
@@ -1745,23 +1698,6 @@
         "evidence": "rg -n 'MCPolicyRequestRepository|PendingPolicyRequest|StageRequestInput' src -g '*.py' lists only mcp/policy_apply.py, mcp/policy_tools.py, mcp/tools.py, daemon/mcp_policy_decisions.py, daemon/business_policy_recovery.py and daemon/server_dashboard_support.py outside mcp/policy_store.py; none of them is in the runtime import closure."
       },
       {
-        "id": "daemon-peer-update-and-cli-endpoint",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
-        "symbols": [
-          "live_desktop_owned_daemon",
-          "load_guard_daemon_endpoint",
-          "load_guard_daemon_endpoint_url",
-          "retained_newer_runtime_payload",
-          "daemon_refresh_outcome_succeeded",
-          "retained_desktop_owner_payload",
-          "retained_desktop_owner_note"
-        ],
-        "entry_points": [],
-        "reason": "Desktop-owned daemon detection, retained-runtime payloads and refresh outcomes serve Guard self-update and desktop apply; the endpoint loaders serve CLI commands that talk to a running daemon. None of them runs on a hook or proxy request. daemon_source_is_desktop_core stays counted because retained runtime code reads it.",
-        "evidence": "rg -n 'live_desktop_owned_daemon|load_guard_daemon_endpoint|retained_newer_runtime_payload|daemon_refresh_outcome_succeeded|retained_desktop_owner_(payload|note)' src -g '*.py' lists only cli/update_commands.py, cli/update_desktop_apply.py, daemon/dashboard_update_runner.py and daemon/update_refresh_program.py (self-update), and cli/commands_dispatch_trust.py, cli/commands_support_service.py, cli/extension_controls_commands.py and cli/product.py outside daemon/runtime_peer.py; none of them is in the runtime import closure."
-      },
-      {
         "id": "policy-document-file-io",
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/policy_document_io.py",
@@ -1969,19 +1905,6 @@
         "evidence": "Every caller of apply_approval_resolution, build_runtime_snapshot and bulk_allow_read_only_once is outside runtime scope: the daemon control-plane routes (server_control_routes_post.py, server_control_policy.py), the dashboard read routes (server_dashboard_runtime_read.py) and the guard approvals command (cli/approval_commands.py). The remaining symbols are reached only from apply_approval_resolution, build_runtime_snapshot and bulk_allow_read_only_once. The retained in-scope part of approvals.py (request queueing, build_approval_request_url, primary_approval_request, silent_review_center_url) does not reference them, and the report validates this reference closure on every run."
       },
       {
-        "id": "daemon-health-details-probe",
-        "category": "control_plane",
-        "path": "src/codex_plugin_scanner/guard/daemon/client.py",
-        "symbols": [
-          "_HEALTH_PROBE_DEADLINE_SECONDS",
-          "_interrupt_health_socket",
-          "read_guard_health_details"
-        ],
-        "entry_points": [],
-        "reason": "Reading the daemon's authenticated health details to confirm a live daemon's identity. Only daemon identity checks during start, update and doctor flows call it; hook and MCP proxy requests use the surface client instead.",
-        "evidence": "The only caller of read_guard_health_details is daemon/live_identity.py, which is outside runtime scope. _interrupt_health_socket and _HEALTH_PROBE_DEADLINE_SECONDS are reached only from read_guard_health_details. The retained client (GuardSurfaceDaemonClient, the loaders and the error classes) does not reference them, and the report validates this reference closure on every run."
-      },
-      {
         "id": "codex-hook-health-intercept-check",
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/codex_hook_registration.py",
@@ -2099,7 +2022,7 @@
         ],
         "entry_points": [],
         "reason": "Validating a managed policy delivery received from Cloud and building the acknowledgements the supervisor reports back, including the failed one for a bundle that no longer validates. Both run in background sync, not when a hook or MCP proxy request is decided.",
-        "evidence": "validated_managed_policy_delivery is called only from runtime/managed_controls_sync.py and daemon/managed_policy_delivery.py, effective_policy_bundle_acknowledgement only from runtime/runner.py, and policy_bundle_failure_acknowledgement only from runtime/policy_bundle_failure_ack.py; all four callers are outside runtime scope. The retained effective_projection_digest and policy_bundle_acknowledgement_payload do not reference them, and the report validates this reference closure on every run."
+        "evidence": "validated_managed_policy_delivery is called only from runtime/managed_controls_sync.py and runtime/managed_policy_delivery.py, effective_policy_bundle_acknowledgement only from runtime/runner.py, and policy_bundle_failure_acknowledgement only from runtime/policy_bundle_failure_ack.py; all four callers are outside runtime scope. The retained effective_projection_digest and policy_bundle_acknowledgement_payload do not reference them, and the report validates this reference closure on every run."
       },
       {
         "id": "aibom-inventory-instruction-roles",

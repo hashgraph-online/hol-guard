@@ -349,16 +349,16 @@ fn stop(child: &mut Child, group: bool) {
 /// `process_group(0)` makes the child's pid its group id, so the group
 /// outlives the child for as long as any descendant is still in it.
 #[cfg(unix)]
-fn isolate_group(command: &mut Command) {
+pub(crate) fn isolate_group(command: &mut Command) {
     use std::os::unix::process::CommandExt;
     command.process_group(0);
 }
 
 #[cfg(not(unix))]
-fn isolate_group(_command: &mut Command) {}
+pub(crate) fn isolate_group(_command: &mut Command) {}
 
 #[cfg(unix)]
-fn kill_group(child: &Child) {
+pub(crate) fn kill_group(child: &Child) {
     use nix::sys::signal::{killpg, Signal};
     if let Ok(id) = i32::try_from(child.id()) {
         let _ = killpg(nix::unistd::Pid::from_raw(id), Signal::SIGKILL);
@@ -366,7 +366,7 @@ fn kill_group(child: &Child) {
 }
 
 #[cfg(not(unix))]
-fn kill_group(_child: &Child) {}
+pub(crate) fn kill_group(_child: &Child) {}
 
 #[cfg(test)]
 #[path = "onefile_open_paths_tests.rs"]

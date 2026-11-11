@@ -16,8 +16,8 @@ from ..approval_gate import (
     public_config,
     require_extension_control,
 )
-from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
-from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..native_daemon_client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
+from ..native_daemon_peer import load_guard_daemon_endpoint
 from ..native_extension_control import NativeExtensionControlError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -217,7 +217,7 @@ def _recover_authority(
             for warning in recovery_warnings:
                 print(f"Warning: {warning}", file=sys.stderr)
     else:
-        from ..daemon.manager import ensure_guard_daemon
+        from ..native_daemon_manage import ensure_guard_daemon
 
         try:
             ensure_guard_daemon(guard_home)
@@ -336,7 +336,7 @@ def run_extension_controls_command(
                 output_stream=output_stream,
             )
         if command != "status":
-            from ..daemon.manager import ensure_guard_daemon
+            from ..native_daemon_manage import ensure_guard_daemon
 
             try:
                 ensure_guard_daemon(guard_home)

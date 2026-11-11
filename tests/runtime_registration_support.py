@@ -15,9 +15,7 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardRuntimeRegistration
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     CONTAINMENT_POLICY_VERSION,
@@ -116,11 +114,6 @@ def start_daemon(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[GuardStore, GuardDaemonServer]:
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_guard_daemon_process_inventory_for_guard_home",
-        lambda _home: [],
-    )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -136,11 +129,6 @@ def stub_supported_repair(
         GuardStore,
         "setup_policy_integrity",
         lambda self, **_kwargs: {"mode": "protected"},
-    )
-    monkeypatch.setattr(
-        daemon_server_module._GuardDaemonHandler,  # pyright: ignore[reportPrivateUsage]
-        "_containment_health_payload",
-        lambda self, **_kwargs: passing_containment_health(),
     )
     monkeypatch.setattr(GuardStore, "maintain_command_activity", lambda self, **_kwargs: None)
     if stub_evidence_health:

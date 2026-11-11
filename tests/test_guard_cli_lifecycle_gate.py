@@ -23,7 +23,6 @@ from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import (
 )
 from codex_plugin_scanner.guard.cli.commands_parser import add_guard_root_parser
 from codex_plugin_scanner.guard.cli.commands_router import run_guard_command
-from codex_plugin_scanner.guard.daemon.user_recovery import AuthorizationDecision, RecoveryHooks
 
 
 @pytest.mark.parametrize(
@@ -304,7 +303,7 @@ def test_daemon_recovery_revalidates_action_grant_without_reprompting(
         return ApprovalGateInput(password=password)
 
     monkeypatch.setattr(commands_lifecycle_gate, "prompt_for_approval_gate", prompt)
-    observations: dict[str, AuthorizationDecision] = {}
+    observations: dict[str, dict[str, object]] = {}
     original_validate = commands_daemon_recovery.validate_lifecycle_gate_context
     validations: list[LifecycleGateContext] = []
 
@@ -314,32 +313,27 @@ def test_daemon_recovery_revalidates_action_grant_without_reprompting(
 
     monkeypatch.setattr(commands_daemon_recovery, "validate_lifecycle_gate_context", validate_context)
 
-    class FakeCoordinator:
-        def __init__(self, home: Path, *, hooks: RecoveryHooks, **_kwargs: object) -> None:
-            self.home = home
-            self.hooks = hooks
+    def fake_recovery(
+        _home: Path, _home_dir: object, mode: str, *, request_id: object = None, authorize=None, emit=None
+    ) -> dict[str, object]:
+        del emit
+        assert mode == "run" and authorize is not None
+        observations["first"] = authorize()
+        second = observations["second"] = authorize()
+        allowed = second["allowed"] is True
+        return {
+            "operationId": str(request_id),
+            "phase": "complete" if allowed else "awaiting_approval",
+            "service": "ready",
+            "protection": "verified",
+            "outcome": "reconnected" if allowed else "not_recovered",
+            "reasonCode": "healthy" if allowed else "approval_required",
+            "workerActive": False,
+            "retryAllowed": False,
+            "requiresHumanAction": not allowed,
+        }
 
-        def restart(self, *, request_id: object, emit: object = None) -> dict[str, object]:
-            del emit
-            authorize = self.hooks.authorize
-            assert authorize is not None
-            first = authorize(self.home)
-            observations["first"] = first
-            second = authorize(self.home)
-            observations["second"] = second
-            return {
-                "operationId": str(request_id),
-                "phase": "complete" if second.allowed else "awaiting_approval",
-                "service": "ready",
-                "protection": "verified",
-                "outcome": "reconnected" if second.allowed else "not_recovered",
-                "reasonCode": "healthy" if second.allowed else "approval_required",
-                "workerActive": False,
-                "retryAllowed": False,
-                "requiresHumanAction": not second.allowed,
-            }
-
-    monkeypatch.setattr(commands_daemon_recovery, "UserRecoveryCoordinator", FakeCoordinator)
+    monkeypatch.setattr(commands_daemon_recovery, "_native_recovery", fake_recovery)
     parser = argparse.ArgumentParser()
     add_guard_root_parser(parser)
     args = parser.parse_args(
@@ -357,8 +351,8 @@ def test_daemon_recovery_revalidates_action_grant_without_reprompting(
     exit_code = run_guard_command(args, output_stream=output)
 
     assert exit_code == 2
-    assert observations["first"].allowed is True
-    assert observations["second"].allowed is False
+    assert observations["first"]["allowed"] is True
+    assert observations["second"]["allowed"] is False
     assert prompt_calls == ["prompt"]
     assert len(validations) == 2
     context = validations[0]

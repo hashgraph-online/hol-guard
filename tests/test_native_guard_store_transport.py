@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, store_review_event_outbox
 from codex_plugin_scanner.guard.cli.connect_flow import build_connect_status_payload
-from codex_plugin_scanner.guard.daemon.cloud_review_settings import cloud_review_settings_status
+from codex_plugin_scanner.guard.cloud_control.cloud_review_settings import cloud_review_settings_status
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_store_shims import refresh_review_event_outbox_binding
@@ -221,24 +221,6 @@ def test_unquarantinable_oversized_event_fails_closed(tmp_path: Path, monkeypatc
     monkeypatch.setattr(store, "quarantine_review_event", lambda *_a, **_k: 0)
     with pytest.raises(ValueError, match="could not be quarantined"):
         _ = store.list_ready_review_events(now="2026-09-01T12:00:00+00:00", limit=10, **identity)
-
-
-def test_idle_watcher_does_not_stay_alive_on_an_unavailable_outbox(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import time
-
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=1)
-    _unavailable_native(monkeypatch)
-    monkeypatch.setattr(store, "get_cloud_sync_profile", lambda: {"workspace_id": "workspace-1"})
-    shutdowns: list[bool] = []
-    monkeypatch.setattr(daemon._server, "shutdown", lambda: shutdowns.append(True))
-    daemon._server.last_activity_monotonic = time.monotonic() - 30
-    daemon._watch_for_idle_shutdown()
-    assert shutdowns == [True]
 
 
 def test_the_request_digest_never_covers_the_policy_integrity_key() -> None:

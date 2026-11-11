@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
     CUSTOM_EXTENSION_CONTINUITY_FIELD,
     CUSTOM_EXTENSION_CONTINUITY_SCHEMA,

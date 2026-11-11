@@ -30,7 +30,7 @@ from pathlib import Path
 
 from record_approval_request_write_vectors import GROUP, NOW, SOURCE, build, insert, request, row
 
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 from codex_plugin_scanner.guard.store import GuardStore
 
 PINNED_CLOCK = "2026-03-01T13:00:00.654321+00:00"

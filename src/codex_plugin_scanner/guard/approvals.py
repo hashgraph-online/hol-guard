@@ -41,7 +41,6 @@ from .config import load_guard_config, maybe_auto_revert_watch
 from .consumer.projection import wire_artifact
 from .continuation_payload import parse_aware_timestamp
 from .continuation_runtime import continuation_offer_facts
-from .daemon.manager import load_guard_daemon_auth_token
 from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
@@ -68,6 +67,7 @@ from .native_approval_resolution import (
 )
 from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
+from .native_daemon_manage import load_guard_daemon_auth_token
 from .native_package_workspace_scope import NativePackageWorkspaceScopeError
 from .native_protection_health import NativeProtectionHealthError
 from .package_execution_context import package_execution_context_from_scanner_evidence
@@ -364,7 +364,7 @@ class _QueuedNotice:
 def silent_review_center_url(guard_home: Path) -> str:
     """Loopback origin stored on a silent review. Does not start the daemon."""
 
-    from .daemon.manager import guard_daemon_url_for_home
+    from .native_daemon_manage import guard_daemon_url_for_home
 
     return guard_daemon_url_for_home(guard_home)
 

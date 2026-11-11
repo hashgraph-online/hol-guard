@@ -12,7 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard import dashboard_launcher
 from codex_plugin_scanner.guard.cli import commands_dispatch_desktop, update_desktop_core_start
-from codex_plugin_scanner.guard.daemon.start_classification import GuardDaemonStillStartingError
+from codex_plugin_scanner.guard.native_daemon_manage import GuardDaemonStillStartingError
 from codex_plugin_scanner.version import __version__
 
 

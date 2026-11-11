@@ -95,6 +95,13 @@ fn object_listings_and_reads_proceed() {
             "git cat-file -s HEAD:src/one.ts",
             "git cat-file -e HEAD",
             "git cat-file blob HEAD:README.md",
+            // An index-stage name reads the staged blob.
+            "git cat-file -p :README.md",
+            "git cat-file -s :0:src/one.ts",
+            "git show :README.md",
+            "git show :./src/one.ts",
+            "git rev-parse :README.md",
+            "git -C ../api show :README.md",
             "git -C ../api ls-tree -r HEAD",
             "git -C ../api cat-file -p HEAD:README.md",
             routed_listing.as_str(),
@@ -129,7 +136,18 @@ fn driver_stdin_and_configured_object_reads_still_ask() {
             // Like `git show HEAD:.env`, a credential path keeps its review.
             "git cat-file -p HEAD:.env",
             "git ls-tree HEAD .env",
-            "git cat-file -p :README.md",
+            // The staged copy of a credential file is still that file.
+            "git cat-file -p :.env",
+            "git show :2:.env",
+            "git show :src/.env.local",
+            // Commit-message search, pathspec magic, an unknown stage, a
+            // path that climbs out, and a pathspec after `--`.
+            "git show :/Synthetic",
+            "git show ':(top)README.md'",
+            "git show ':!README.md'",
+            "git show :4:README.md",
+            "git show :../api/README.md",
+            "git show 'HEAD' -- :README.md",
         ] {
             let result = classify(&home, harness, command);
             assert_ne!(result.decision, "allow", "{harness}: {command}");
@@ -153,6 +171,30 @@ fn object_read_configuration_is_probed() {
     let result = classify(&home, "codex", "git ls-tree -r HEAD");
     assert_ne!(result.decision, "allow", "{result:?}");
     git(&project, &["config", "--unset", "pager.ls-tree"]);
+    // Loading the index can start a configured file-system monitor, which a
+    // committed object read never does.
+    git(&project, &["config", "core.fsmonitor", "sh -c id"]);
+    let result = classify(&home, "codex", "git show :README.md");
+    assert_ne!(result.decision, "allow", "{result:?}");
+    let result = classify(&home, "codex", "git cat-file -p :README.md");
+    assert_ne!(result.decision, "allow", "{result:?}");
+    // The two diff switches turn off the external driver and textconv, not
+    // the monitor, so the staged read still waits for it.
+    let result = classify(
+        &home,
+        "codex",
+        "git show --no-ext-diff --no-textconv :README.md",
+    );
+    assert_ne!(result.decision, "allow", "{result:?}");
+    git(&project, &["config", "--unset", "core.fsmonitor"]);
+    let result = classify(&home, "codex", "git cat-file -p :README.md");
+    assert_eq!(result.decision, "allow", "{result:?}");
+    let result = classify(
+        &home,
+        "codex",
+        "git show --no-ext-diff --no-textconv :README.md",
+    );
+    assert_eq!(result.decision, "allow", "{result:?}");
     // A promisor remote can fetch a missing object during the read.
     git(&project, &["config", "remote.origin.promisor", "true"]);
     let result = classify(&home, "codex", "git ls-tree -r HEAD");

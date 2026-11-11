@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -20,7 +21,6 @@ from codex_plugin_scanner.guard.approval_gate import (
 from codex_plugin_scanner.guard.approval_gate import (
     update_settings as update_approval_gate_settings,
 )
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.harness_disconnect_gate import require_harness_disconnect_gate
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_totp_support import totp_code_at_counter

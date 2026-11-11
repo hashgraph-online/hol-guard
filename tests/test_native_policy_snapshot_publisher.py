@@ -283,7 +283,7 @@ def test_auto_hook_uses_barrier_without_loading_config_per_request(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+    import codex_plugin_scanner.guard.hook_review.hook_worker as hook_worker_module
 
     wait_deadlines: list[float] = []
 
@@ -328,7 +328,7 @@ def test_prepare_workspace_policy_uses_bounded_first_workspace_handshake(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+    import codex_plugin_scanner.guard.hook_review.hook_worker as hook_worker_module
 
     registered: list[Path | None] = []
     wait_deadlines: list[float] = []
@@ -373,7 +373,7 @@ def test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+    import codex_plugin_scanner.guard.hook_review.hook_worker as hook_worker_module
 
     wait_deadlines: list[float] = []
 
@@ -422,7 +422,7 @@ def test_prepare_workspace_policy_skips_wait_after_publisher_error(
     monkeypatch: pytest.MonkeyPatch,
     publisher_error: object,
 ) -> None:
-    import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+    import codex_plugin_scanner.guard.hook_review.hook_worker as hook_worker_module
 
     wait_deadlines: list[float] = []
 
@@ -461,7 +461,7 @@ def test_prepare_workspace_policy_waits_for_transient_resident_restart_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+    import codex_plugin_scanner.guard.hook_review.hook_worker as hook_worker_module
 
     wait_deadlines: list[float] = []
 

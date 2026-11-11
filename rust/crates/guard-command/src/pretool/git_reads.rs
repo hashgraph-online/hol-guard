@@ -142,10 +142,11 @@ pub(super) fn safe_git_arguments(
     // A replacement listing's pattern is matched against the refs under
     // `refs/replace/`, not expanded over the files that are there.
     let replacement = super::git_side_record_reads::listing_pattern_position(arguments, context);
+    let index_objects = super::git_listing_reads::index_stage_object_positions(arguments, context);
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
             && replacement != Some(index)
-            && (value.starts_with(':')
+            && ((value.starts_with(':') && !index_objects.contains(&index))
                 || (super::sensitive_read_path_argument(value)
                     && listed.is_none_or(|start| index < start)))
     }) {

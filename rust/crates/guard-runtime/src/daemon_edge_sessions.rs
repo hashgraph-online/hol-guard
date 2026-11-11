@@ -96,15 +96,21 @@ impl<'a> Route<'a> {
     }
 }
 
+/// The surface `initialize` names, as `_handle_initialize` reads it.
+pub(super) fn initialize_surface(payload: &Dict) -> String {
+    optional_string(payload, "surface").unwrap_or_else(|| "cli".to_owned())
+}
+
 pub(super) fn respond(
     route: &Route<'_>,
     payload: &Dict,
+    include_sessions: bool,
     config: &ReadConfig,
     reads: &NativeReads,
 ) -> Option<(u16, Value)> {
     let writer = Writer { config, reads };
     match route {
-        Route::Initialize => initialize::respond(payload, config, reads),
+        Route::Initialize => initialize::respond(payload, include_sessions, config, reads),
         Route::SessionStart => writer.start_session(payload),
         Route::OperationStart => writer.start_operation(payload),
         Route::Item(operation_id) => writer.add_item(operation_id, payload),
@@ -470,6 +476,6 @@ fn uuid4_hex() -> Option<String> {
 #[path = "daemon_edge_initialize.rs"]
 mod initialize;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "daemon_edge_sessions_tests.rs"]
 mod tests;
