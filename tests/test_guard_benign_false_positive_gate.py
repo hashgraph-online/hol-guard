@@ -204,11 +204,12 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     # NPM_CONFIG_*, NODE_*, PIP_* and CARGO_* are the same shape: a CI runner or
     # a developer shell that exports one makes npm, pip or cargo read a
     # redirected configuration, which keeps their probes on review no matter
-    # what the case says.
+    # what the case says. OPENSSL_* points openssl at another configuration,
+    # module or engine directory, which keeps the digest cases on review.
     for name in list(os.environ):
         upper = name.upper()
         if (
-            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_"))
+            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_", "OPENSSL_"))
             or upper == "RIPGREP_CONFIG_PATH"
         ):
             patch.delenv(name)
