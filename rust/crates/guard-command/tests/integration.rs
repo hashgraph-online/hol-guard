@@ -263,6 +263,7 @@ pub mod pretool_scratch_checkout_copies;
 pub mod pretool_scratch_edits;
 pub mod pretool_script_content;
 pub mod pretool_search_data;
+pub mod pretool_sed_stream_edits;
 pub mod pretool_sed_substitution_filters;
 pub mod pretool_sibling_absent_reads;
 pub mod pretool_sibling_glob_reads;
