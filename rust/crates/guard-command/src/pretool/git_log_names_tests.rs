@@ -123,6 +123,12 @@ fn ls_files_keeps_credential_escaping_and_option_pathspecs_reviewed() {
         "ls-files src/* .env",
         "ls-files src/* --exclude-from=list.txt",
         "ls-files src/* -- **/deploy.sh",
+        // Options that open a file: the value is not a pathspec.
+        "ls-files -X list.txt **/deploy.sh",
+        "ls-files --exclude-from=list.txt **/deploy.sh",
+        "ls-files --exclude-from list.txt **/deploy.sh",
+        "ls-files --exclude-per-directory=.ignore src/*/index.ts",
+        "ls-files -X list.txt -- **/deploy.sh",
     ] {
         assert!(!proven(text), "{text}");
     }

@@ -84,17 +84,28 @@ pub(super) fn pathspec_start(
 
 /// Index in `rest` of the first `ls-files` pathspec, or `None`.
 ///
-/// The options in front are left to the `ls-files` grammar, which refuses
-/// every one that reads a file or expands a format. The pathspecs follow
+/// The options in front must clear the `ls-files` grammar, which refuses
+/// every one that reads a file or expands a format: `-X list.txt` and
+/// `--exclude-from=list.txt` open a file, and the value of a separate option
+/// would otherwise be taken for the first pathspec. The pathspecs follow
 /// them, after an optional `--`, and each must be a plain repository-relative
 /// glob; an option-shaped word among them keeps the review.
 fn ls_files_pathspec_start(rest: &[String]) -> Option<usize> {
+    if !super::super::git_listing_reads::read_form("ls-files", rest) {
+        return None;
+    }
     let start = match rest.iter().position(|argument| argument == "--") {
-        Some(separator) if rest[..separator].iter().all(|argument| argument.starts_with('-')) => {
+        Some(separator)
+            if rest[..separator]
+                .iter()
+                .all(|argument| argument.starts_with('-')) =>
+        {
             separator + 1
         }
         Some(_) => return None,
-        None => rest.iter().position(|argument| !argument.starts_with('-'))?,
+        None => rest
+            .iter()
+            .position(|argument| !argument.starts_with('-'))?,
     };
     let pathspecs = &rest[start..];
     (!pathspecs.is_empty() && pathspecs.iter().all(|pathspec| listed_pathspec(pathspec)))
