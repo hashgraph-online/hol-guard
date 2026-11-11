@@ -13,6 +13,17 @@ use super::{Asked, File};
 use std::path::Path;
 
 const WORDS: [&str; 4] = ["docstring", "docstrings", "doctest", "doctests"];
+const EXAMPLES: [&str; 4] = ["doctest", "doctests", "example", "examples"];
+/// Words of a prompt that reads a docstring for what code should do.
+const BEHAVIOR: [&str; 7] = [
+    "implement",
+    "implemented",
+    "says",
+    "describe",
+    "describes",
+    "bug",
+    "fails",
+];
 /// The most lines of a long function's signature and docstring shown.
 const MAX_HEAD_LINES: usize = 80;
 const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in an example \
@@ -21,33 +32,67 @@ const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modu
 `python -m doctest` loads the file outside its package, so its relative imports fail.";
 const DOCTEST: &str = "\nRun just its doctest with `{command}`. That run is the check an added \
 example needs, and the edit's own reply confirms the edit, so the file need not be read again.";
+const DOCTEST_AGAIN: &str = "\nRun just its doctest with `{command}`.";
 const OUTSIDE: &str = " `python -m doctest` would load the file outside its package, where its \
 relative imports fail.";
 
-/// True when the prompt asks about docstrings or doctests.
+/// True when the prompt asks to write a docstring or doctest: it shows a
+/// `>>>` line, or names a docstring and asks for an example or does not read
+/// it for what the code should do ("implement it so it does what its
+/// docstring says" asks for the code). An example alone is not one: "fix
+/// example.py" or "the examples folder" name no docstring.
 pub(super) fn asks_for_docstring(prompt: &str) -> bool {
-    prompt_words(prompt).any(|word| WORDS.contains(&word.as_str()))
+    let words: Vec<String> = prompt_words(prompt).collect();
+    let has = |list: &[&str]| words.iter().any(|word| list.contains(&word.as_str()));
+    prompt.contains(">>>") || (has(&WORDS) && (has(&EXAMPLES) || !has(&BEHAVIOR)))
+}
+
+/// The notes given beside a function shown earlier: each is said in full
+/// once, and a later function gets only the command for its own doctest.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Said {
+    raw: bool,
+    run: bool,
+}
+
+impl Said {
+    /// What has been said once `note` is shown too.
+    pub(super) fn and(self, note: &str) -> Said {
+        Said {
+            raw: self.raw || note.contains(NOT_RAW),
+            run: self.run || note.contains("doctest"),
+        }
+    }
 }
 
 /// The code shown for a named definition, the span it fills and a note to
 /// put after it: the whole definition when it is short, or, for a prompt
 /// about docstrings, a long Python function's signature and docstring, with
-/// how to write a backslash and run the doctests when that matters.
-pub(super) fn shown(file: &File, at: usize, asked: &Asked) -> Option<(Span, String, String)> {
+/// how to write a backslash and run the doctests when that matters, unless
+/// `said` holds it already.
+pub(super) fn shown(
+    file: &File,
+    at: usize,
+    asked: &Asked,
+    said: Said,
+) -> Option<(Span, String, String)> {
     let python = asked.docstring && file.path.ends_with(".py") && !file.container(at);
     let head = python.then(|| head(file, at)).flatten();
     let mut note = String::new();
-    if head.is_some_and(|(_, raw)| raw == Some(false)) {
+    if !said.raw && head.is_some_and(|(_, raw)| raw == Some(false)) {
         note.push_str(NOT_RAW);
     }
     match python.then(|| command(file, at, &asked.root)).flatten() {
+        Some(command) if said.run => {
+            note.push_str(&DOCTEST_AGAIN.replace("{command}", &command));
+        }
         Some(command) => {
             note.push_str(&DOCTEST.replace("{command}", &command));
             if relative(file) {
                 note.push_str(OUTSIDE);
             }
         }
-        None if python && plain(file.path) && relative(file) => {
+        None if python && !said.run && plain(file.path) && relative(file) => {
             note.push_str(&DOCTESTS.replace("{path}", file.path));
         }
         None => {}

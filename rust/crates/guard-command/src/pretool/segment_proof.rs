@@ -413,6 +413,7 @@ pub(super) fn exact_safe_segment_with_context(
         "printenv" => super::safe_scalar::safe_printenv_arguments(&segment.arguments),
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
+        "launchctl" => super::safe_scalar::safe_launchctl_arguments(&segment.arguments),
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
         "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
         // Signal 0 is delivered to nothing. The kernel performs the
