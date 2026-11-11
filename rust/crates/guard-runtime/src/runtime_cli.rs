@@ -232,6 +232,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if codex_hook_authority_record::is_command(command) && flag == "--stdin" => {
+            let response = codex_hook_authority_record::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if local_authority_integrity_op::is_command(command) && flag == "--stdin" => {
             let response = local_authority_integrity_op::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

@@ -189,6 +189,7 @@ mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
+mod codex_hook_authority_record;
 mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
 mod codex_hook_bridge_direct_resident;
