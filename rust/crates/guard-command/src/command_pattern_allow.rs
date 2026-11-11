@@ -31,9 +31,7 @@
 
 use guard_contracts::{CommandConditionV1, CommandExpressionV1};
 
-use crate::command_expression_match::{
-    matches_expression, normalize_command_text, validate_expression,
-};
+use crate::command_expression_match::{normalize_command_text, validate_expression};
 
 #[cfg(test)]
 #[path = "command_pattern_allow_tests.rs"]
@@ -132,6 +130,7 @@ const GIT_EXEC_LONG_OPTIONS: &[&str] = &[
 /// Short git options, by subcommand, that do the same (`clone -u`,
 /// `rebase -x`, `grep -O`).
 const GIT_EXEC_SHORT_OPTIONS: &[(&str, &[char])] = &[
+    ("archive", &['o']),
     ("clone", &['c', 'u']),
     ("grep", &['O']),
     ("ls-remote", &['u']),
@@ -221,7 +220,8 @@ pub fn validate_allow_pattern(expression: &CommandExpressionV1) -> Result<String
 }
 
 /// The program and the word after it are plain words the shell passes through
-/// unchanged: no wildcard, quote, escape, expansion or brace. A leading `~/`
+/// unchanged: no wildcard, quote, escape, expansion (`%VAR%` in CMD
+/// included) or brace. A leading `~/`
 /// (the home folder, which one simple command cannot change) is the one
 /// expansion allowed.
 fn literal_head(words: &[&str]) -> Result<(), String> {
@@ -230,7 +230,7 @@ fn literal_head(words: &[&str]) -> Result<(), String> {
         !word.is_empty()
             && word
                 .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"._/@%+=,:-".contains(&byte))
+                .all(|byte| byte.is_ascii_alphanumeric() || b"._/@+=,:-".contains(&byte))
     };
     if words.len() < 2 || !words[..2].iter().all(plain) {
         return Err("command_pattern_allow_literal_head".to_owned());
@@ -317,33 +317,118 @@ pub fn is_simple_command(command: &str) -> bool {
 /// Whether `pattern` allows `command`: a simple command whose program is the
 /// pattern's literal program and which the expression matches.
 pub fn allows(pattern: &CommandPatternAllow, command: &str) -> bool {
-    if !is_simple_command(command) {
+    allows_on(pattern, command, cfg!(windows))
+}
+
+/// [`allows`], where `cmd_may_run` says whether CMD may run the command.
+/// CMD expands `%VAR%` and `!VAR!` everywhere, treats `^` as an escape, and
+/// does not treat single quotes as quotes, so `git push 'a&whoami'` runs
+/// `whoami` there; a command with any of those characters never matches.
+fn allows_on(pattern: &CommandPatternAllow, command: &str, cmd_may_run: bool) -> bool {
+    if !is_simple_command(command)
+        || cmd_may_run && command.contains(['%', '!', '^', '&', '|', '<', '>'])
+        || normalize_command_text(command).is_err()
+    {
         return false;
     }
-    let Ok(normalized) = normalize_command_text(command) else {
-        return false;
-    };
+    let normalized = normalize_words(command);
     if normalized.split(' ').next() != Some(pattern.program.as_str()) {
         return false;
     }
     let condition = &pattern.expression.conditions[0];
-    if condition.operator == "startsWith" {
-        // A prefix ends at a word boundary: `startsWith "x.sh"` allows
-        // `x.sh 1`, not `x.sh.evil`.
-        let Ok(prefix) = normalize_command_text(&condition.value) else {
-            return false;
-        };
-        if normalized != prefix && !normalized.starts_with(&format!("{prefix} ")) {
-            return false;
-        }
-    }
     if condition.operator != "exact"
         && program_base(&pattern.program) == "git"
         && git_runs_given_program(&shell_words(&normalized))
     {
         return false;
     }
-    matches_expression(&pattern.expression, &normalized).unwrap_or(false)
+    let value = normalize_words(&condition.value);
+    match condition.operator.as_str() {
+        "exact" => normalized == value,
+        // A prefix ends at a word boundary: `startsWith "x.sh"` allows
+        // `x.sh 1`, not `x.sh.evil`.
+        "startsWith" => normalized == value || normalized.starts_with(&format!("{value} ")),
+        "glob" => glob_matches(&value, &normalized),
+        _ => false,
+    }
+}
+
+/// `text` with each run of whitespace between words collapsed to one space,
+/// and quoted text kept as written: `'safe  file'` and `'safe file'` name
+/// different files, so they must not compare equal.
+fn normalize_words(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    let mut single = false;
+    let mut double = false;
+    let mut pending_space = false;
+    let mut characters = text.trim().chars();
+    while let Some(character) = characters.next() {
+        if !single && !double && character.is_whitespace() {
+            pending_space = true;
+            continue;
+        }
+        if pending_space {
+            normalized.push(' ');
+            pending_space = false;
+        }
+        normalized.push(character);
+        if single {
+            single = character != '\'';
+            continue;
+        }
+        match character {
+            '\\' => {
+                if let Some(escaped) = characters.next() {
+                    normalized.push(escaped);
+                }
+            }
+            '"' => double = !double,
+            '\'' if !double => single = true,
+            _ => {}
+        }
+    }
+    normalized
+}
+
+/// Whether a glob whose only wildcard is `*` (backslash escapes a literal)
+/// matches all of `text`. The literal pieces are found left to right, so the
+/// match is linear in the length of `text`.
+fn glob_matches(pattern: &str, text: &str) -> bool {
+    let mut pieces = vec![String::new()];
+    let mut characters = pattern.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' => pieces
+                .last_mut()
+                .expect("pieces is never empty")
+                .extend(characters.next()),
+            '*' => pieces.push(String::new()),
+            _ => pieces
+                .last_mut()
+                .expect("pieces is never empty")
+                .push(character),
+        }
+    }
+    let first = &pieces[0];
+    if pieces.len() == 1 {
+        return text == first;
+    }
+    let last = &pieces[pieces.len() - 1];
+    if !text.starts_with(first.as_str())
+        || text.len() < first.len() + last.len()
+        || !text.ends_with(last.as_str())
+    {
+        return false;
+    }
+    let end = text.len() - last.len();
+    let mut cursor = first.len();
+    for piece in &pieces[1..pieces.len() - 1] {
+        match text[cursor..end].find(piece.as_str()) {
+            Some(found) => cursor += found + piece.len(),
+            None => return false,
+        }
+    }
+    true
 }
 
 /// Whether a git command's words carry an option that runs a program or code

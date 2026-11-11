@@ -1,5 +1,11 @@
-use super::{allows, is_simple_command, parse_allow_pattern, CommandPatternAllow};
+use super::{allows_on, is_simple_command, parse_allow_pattern, CommandPatternAllow};
 use serde_json::json;
+
+/// Matching where only a POSIX shell runs the command; the CMD rules have
+/// their own test.
+fn allows(pattern: &CommandPatternAllow, command: &str) -> bool {
+    allows_on(pattern, command, false)
+}
 
 fn pattern(operator: &str, value: &str) -> Result<CommandPatternAllow, String> {
     parse_allow_pattern(&json!({
@@ -160,6 +166,8 @@ fn the_literal_head_is_a_plain_word_the_shell_passes_through() {
         "bash ~root/x.sh *",
         "bash ~+/x.sh *",
         "bash x~/y *",
+        "cmd %MODE% *",
+        "git %ALIAS% *",
     ] {
         assert_eq!(
             pattern("glob", value).map(|_| ()),
@@ -354,4 +362,44 @@ fn git_subcommands_that_run_a_program_cannot_open_a_wildcard() {
             "{value}"
         );
     }
+}
+
+#[test]
+fn git_archive_output_options_cannot_open_a_wildcard() {
+    let archive = glob("git archive *");
+    assert!(!allows(&archive, "git archive -o out.tar HEAD"));
+    assert!(!allows(&archive, "git archive -vo out.tar HEAD"));
+    assert!(!allows(&archive, "git archive --output=out.tar HEAD"));
+    assert!(allows(&archive, "git archive --format=tar HEAD"));
+}
+
+#[test]
+fn characters_cmd_reads_never_match_where_cmd_may_run() {
+    let push = glob("git push *");
+    for command in [
+        "git push 'origin&whoami&'",
+        "git push origin '|calc'",
+        "git push origin %BRANCH%",
+        "git push origin !BRANCH!",
+        "git push origin ^&x",
+        "git push origin '>out'",
+    ] {
+        assert!(!allows_on(&push, command, true), "{command}");
+    }
+    assert!(allows_on(&push, "git push origin feature", true));
+    assert!(allows_on(&push, "git push 'origin&whoami&'", false));
+}
+
+#[test]
+fn quoted_whitespace_is_part_of_the_word() {
+    let exact = pattern("exact", "python3 tool.py 'safe file'").expect("exact pattern");
+    assert!(allows(&exact, "python3  tool.py   'safe file'"));
+    assert!(!allows(&exact, "python3 tool.py 'safe  file'"));
+    assert!(!allows(&exact, "python3 tool.py 'safe\tfile'"));
+    let prefix = pattern("startsWith", "bash run.sh \"a  b\"").expect("prefix pattern");
+    assert!(allows(&prefix, "bash run.sh \"a  b\" 1"));
+    assert!(!allows(&prefix, "bash run.sh \"a b\" 1"));
+    let wildcard = glob("bash run.sh 'a  b' *");
+    assert!(allows(&wildcard, "bash  run.sh 'a  b' 1"));
+    assert!(!allows(&wildcard, "bash run.sh 'a b' 1"));
 }
