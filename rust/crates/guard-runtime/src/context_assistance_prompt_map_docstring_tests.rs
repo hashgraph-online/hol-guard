@@ -51,6 +51,48 @@ fn prompts_about_docstrings_or_doctests_are_told_apart_from_docs() {
     assert!(asks_for_docstring("make the doctests pass"));
     assert!(!asks_for_docstring("Update the docs for remap"));
     assert!(!asks_for_docstring("document remap"));
+    assert!(asks_for_docstring(
+        "Add a usage example to remap's docstring"
+    ));
+    assert!(asks_for_docstring("put a little >>> line in remap"));
+    // An example names no docstring by itself.
+    assert!(!asks_for_docstring(
+        "Fix remap, for example when root is empty"
+    ));
+    assert!(!asks_for_docstring("Fix remap in example.py"));
+    assert!(!asks_for_docstring("update the examples folder"));
+    // A prompt that reads a docstring for what to build asks for the code.
+    assert!(!asks_for_docstring(
+        "remap was stubbed out. Implement it again so it does what its docstring says."
+    ));
+    assert!(!asks_for_docstring(
+        "Write the implementation; the docstring and tests describe the expected behavior."
+    ));
+}
+
+/// The doctest and backslash notes are said in full once, for the first
+/// function shown: a function shown beside it gets the command for its own
+/// doctest only.
+#[test]
+fn the_doctest_note_is_given_once() {
+    let text = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n    return root\n\n\n\
+def walk(root):\n    \"\"\"Walk it.\"\"\"\n    return root\n";
+    let asked = Asked {
+        docstring: true,
+        ..Asked::default()
+    };
+    let list = files(&[("src/iterutils.py", text)]);
+    let terms = looking_for(&[("remap", true, 1), ("walk", true, 1)]);
+    let shown = map(&list, &terms, &asked, later()).unwrap().text;
+    assert_eq!(shown.matches("```").count(), 4, "{shown}");
+    assert_eq!(shown.matches(CHECK).count(), 1, "{shown}");
+    assert_eq!(shown.matches("--doctest-modules").count(), 2, "{shown}");
+    assert!(shown.contains("iterutils.py::iterutils.walk`."), "{shown}");
+    assert_eq!(shown.matches("not a raw string").count(), 1, "{shown}");
+    // With no command to name, the backslash note is still said once.
+    let spaced = files(&[("my src/iterutils.py", text)]);
+    let shown = map(&spaced, &terms, &asked, later()).unwrap().text;
+    assert_eq!(shown.matches("not a raw string").count(), 1, "{shown}");
 }
 
 /// A prompt about the docstring of a function too long to show whole gets
