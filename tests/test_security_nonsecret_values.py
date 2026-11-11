@@ -170,3 +170,21 @@ def test_dummy_secrets_in_test_files_are_skipped():
     # Interpolated mixed value stays a finding.
     content = 'TOKEN = "$(TOKEN)actual-secret-937"\n'
     assert _first_hardcoded_secret_line(Path("tests/foo_test.ts"), content) is not None
+
+
+def test_quoted_command_substitution_literal_is_reported():
+    """Regression: '$(mysecret...)' is not a pure env interpolation and must still flag."""
+    from pathlib import Path
+    from codex_plugin_scanner.checks.security import _first_hardcoded_secret_line
+
+    # Production path
+    content = "password='$(mysecretP4ssword2026)'\n"
+    assert _first_hardcoded_secret_line(Path("src/app.py"), content) is not None
+
+    # Test path
+    content = 'password="$(mysecretP4ssword2026)"\n'
+    assert _first_hardcoded_secret_line(Path("tests/foo_test.ts"), content) is not None
+
+    # Pure env expansion still skipped
+    content = 'password="${OPENAI_API_KEY}"\n'
+    assert _first_hardcoded_secret_line(Path("src/app.py"), content) is None

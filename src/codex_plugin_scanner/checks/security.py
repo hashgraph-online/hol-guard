@@ -315,16 +315,18 @@ _PURE_TEMPLATE_EXPANSION_RE = re.compile(r"^\{\{[^}]+\}\}$")
 
 
 def _looks_like_interpolated_secret(value: str) -> bool:
-    """True only for complete env/template references with no literal payload."""
+    """True only for complete env/template references with no literal payload.
+
+    Note: $(VAR) command-substitution forms are intentionally not treated as pure
+    interpolations, because a quoted literal such as '$(mysecret...)' can be a
+    real credential (command substitution is not the same as $VAR / ${VAR} env
+    expansion).
+    """
     normalized = _normalize_secret_candidate(value)
-    if _PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized):
-        return True
-    # also $(VAR) command-substitution form
-    if re.fullmatch(r"^\$\([A-Za-z_][A-Za-z0-9_]*\)$", normalized):
-        return True
-    return False
-
-
+    return bool(
+        _PURE_SHELL_EXPANSION_RE.fullmatch(normalized)
+        or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized)
+    )
 BRACKETED_PLACEHOLDER_RE = re.compile(
     r"^(?:<[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,80}>|\[[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,120}\])$"
 )
