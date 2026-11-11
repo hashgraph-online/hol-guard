@@ -37,7 +37,7 @@ pub(super) fn open_recovery(
     if raw.len() > kind.max_bytes() {
         return Err("record_invalid");
     }
-    let Ok(Value::Object(mut payload)) = parse_python_json(raw) else {
+    let Ok((Value::Object(mut payload), nonfinite)) = parse_python_json(raw) else {
         return Err("record_invalid");
     };
     let has_authentication = matches!(payload.get("authentication"), Some(Value::Object(_)));
@@ -46,6 +46,9 @@ pub(super) fn open_recovery(
         || text(payload.get("guard_home")) != Some(guard_home)
         || text(payload.get("installation_id")) != Some(secret.installation_id.as_str())
     {
+        return Err("authentication_invalid");
+    }
+    if nonfinite {
         return Err("authentication_invalid");
     }
     let signed_at =
@@ -87,7 +90,7 @@ pub(super) fn open_receipt(raw: &str, guard_home: &str, config: &str, secret: &S
     if raw.len() > kind.max_bytes() {
         return Err("receipt_invalid");
     }
-    let Ok(Value::Object(mut payload)) = parse_python_json(raw) else {
+    let Ok((Value::Object(mut payload), nonfinite)) = parse_python_json(raw) else {
         return Err("receipt_invalid");
     };
     if !keys_are(&payload, &RECEIPT_FIELDS) {
@@ -98,6 +101,9 @@ pub(super) fn open_receipt(raw: &str, guard_home: &str, config: &str, secret: &S
         || text(payload.get("config_path")) != Some(config)
         || text(payload.get("installation_id")) != Some(secret.installation_id.as_str())
     {
+        return Err("receipt_authentication_invalid");
+    }
+    if nonfinite {
         return Err("receipt_authentication_invalid");
     }
     let signed_at =
@@ -124,7 +130,7 @@ pub(super) fn open_request(
     if raw.len() > kind.max_bytes() {
         return Err("invalid");
     }
-    let Ok(Value::Object(mut payload)) = parse_python_json(raw) else {
+    let Ok((Value::Object(mut payload), nonfinite)) = parse_python_json(raw) else {
         return Err("invalid");
     };
     if !keys_are(&payload, &REQUEST_FIELDS) {
@@ -144,6 +150,9 @@ pub(super) fn open_request(
         _ => false,
     };
     if !complete || text(payload.get("installation_id")) != Some(secret.installation_id.as_str()) {
+        return Err("authentication_invalid");
+    }
+    if nonfinite {
         return Err("authentication_invalid");
     }
     let signed_at =

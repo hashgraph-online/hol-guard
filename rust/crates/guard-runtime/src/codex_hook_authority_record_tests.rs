@@ -1,4 +1,3 @@
-use super::python_json::python_float;
 use super::*;
 
 const KEY_HEX: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -85,26 +84,17 @@ fn python_canonical_json_matches_json_dumps() {
 }
 
 #[test]
-fn python_float_matches_repr() {
-    for (number, repr) in [
-        (0.0, "0.0"),
-        (-0.5, "-0.5"),
-        (1234.5678, "1234.5678"),
-        (1e15, "1000000000000000.0"),
-        (1.5e300, "1.5e+300"),
-        (5e-324, "5e-324"),
-        (0.00012, "0.00012"),
-    ] {
-        assert_eq!(python_float(number).as_deref(), Some(repr), "{number}");
-    }
-    assert_eq!(python_float(f64::NAN), None);
-}
-
-#[test]
 fn nonfinite_literals_parse_like_json_loads() {
     assert_eq!(
         parse_python_json(r#"{"a":NaN,"b":[-Infinity,Infinity],"c":"NaN \" Infinity"}"#).unwrap(),
-        json!({"a": null, "b": [null, null], "c": "NaN \" Infinity"})
+        (
+            json!({"a": null, "b": [null, null], "c": "NaN \" Infinity"}),
+            true
+        )
+    );
+    assert_eq!(
+        parse_python_json(r#"{"c":"NaN"}"#).unwrap(),
+        (json!({"c": "NaN"}), false)
     );
     assert!(parse_python_json("{\"a\":nan}").is_err());
 }
@@ -284,6 +274,22 @@ fn recovery_round_trips_and_checks_phase() {
     other_home.insert("guard_home".to_owned(), json!("/elsewhere"));
     assert_eq!(
         call(Value::Object(other_home))["error"],
+        "authentication_invalid"
+    );
+}
+
+#[test]
+fn a_null_edited_to_nan_does_not_authenticate() {
+    let mut payload = recovery_payload("prepared");
+    payload["before_manifest"] = Value::Null;
+    let text = sealed_text(&seal_request("recovery", payload, Some("t")));
+    assert!(open_request("recovery", &text, json!({}))
+        .get("error")
+        .is_none());
+    let edited = text.replace("\"before_manifest\":null", "\"before_manifest\":NaN");
+    assert_ne!(edited, text);
+    assert_eq!(
+        open_request("recovery", &edited, json!({}))["error"],
         "authentication_invalid"
     );
 }
