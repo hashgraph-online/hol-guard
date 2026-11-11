@@ -128,10 +128,11 @@ pub(super) fn safe_df_arguments(arguments: &[String]) -> bool {
 /// other operand takes the ordinary file proof. Both operands as `-`, or a
 /// dash with nothing piped into the segment, keeps the review.
 pub(super) fn safe_diff_arguments(
-    arguments: &[String],
-    piped_input: bool,
+    segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
+    let arguments = &segment.arguments;
+    let piped_input = segment.pipeline_index > 0;
     let mut operands = Vec::new();
     let mut after_options = false;
     let mut values = arguments.iter();
@@ -217,10 +218,11 @@ fn diff_option(option: &str) -> bool {
 ///
 /// After a pipe one of the two files may be `-`, as for `diff`.
 pub(super) fn safe_cmp_arguments(
-    arguments: &[String],
-    piped_input: bool,
+    segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
+    let arguments = &segment.arguments;
+    let piped_input = segment.pipeline_index > 0;
     let mut operands = Vec::new();
     let mut after_options = false;
     let mut values = arguments.iter();
