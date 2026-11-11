@@ -108,7 +108,8 @@ fn managed_accept_loop(
     let mut failures = 0;
     let result = (|| {
         while owner_alive.load(Ordering::Acquire)
-            && last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+            && (last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+                || policy_store.swarm().has_active_runs())
             && !super::shutdown_requested()
         {
             match listener.accept() {
@@ -180,7 +181,8 @@ pub(super) fn serve_loopback_managed(
     let mut failures = 0;
     let result = loop {
         if !(owner_alive.load(Ordering::Acquire)
-            && last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+            && (last_activity.elapsed() < super::MANAGED_IDLE_TIMEOUT
+                || policy_store.swarm().has_active_runs())
             && !super::shutdown_requested())
         {
             break Ok(());

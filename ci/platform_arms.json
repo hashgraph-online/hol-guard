@@ -2273,6 +2273,14 @@
    "item": "fn stable(metadata: &Metadata) -> (u64, Option<std::time::SystemTime>)",
    "cfg": "not(unix)",
    "body": "e351f21443b3"
+  },
+  {
+   "verdict": "other-platform",
+   "note": "This arm compiles only on targets that are neither Unix nor Windows, which HOL Guard does not ship for. It polls the owned Child without process-tree containment. Windows takes its separate cfg(windows) arm and the suspended-child kill-on-close Job Object in ChildTree; guard-runtime-windows-process/tests/child_tree.rs exercises that implementation on Windows. No Windows qualification is claimed for this fallback.",
+   "file": "rust/crates/guard-swarm/src/process.rs",
+   "item": "fn finished -- non-Unix block",
+   "cfg": "not(any(unix, windows))",
+   "body": "4d0f5762038f"
   }
  ]
 }

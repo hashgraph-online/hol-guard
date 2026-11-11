@@ -11,26 +11,49 @@ export class ContextAssistanceApiError extends Error {
   }
 }
 
+function waitForStatusRetry(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason); return; }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, 1_000);
+    function onAbort(): void {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 async function request(path: string, action?: ContextControlAction, signal?: AbortSignal): Promise<ContextAssistanceStatus> {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context assistance setup requires a local Guard installation.");
   const timeout = AbortSignal.timeout(10_000);
-  const response = await fetchWithGuardAuth(path, {
-    cache: "no-store",
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    ...(action ? {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
-    } : {}),
-  });
-  if (!response.ok) {
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  for (let retry = 0; ; retry += 1) {
+    requestSignal.throwIfAborted();
+    const response = await fetchWithGuardAuth(path, {
+      cache: "no-store",
+      signal: requestSignal,
+      ...(action ? {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      } : {}),
+    });
+    if (response.ok) return parseContextAssistanceStatus(await response.json());
     const body: unknown = await response.json().catch(() => null);
     const code = body !== null && typeof body === "object" && "code" in body
       && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
+    // Startup may briefly occupy the native actor. Retry only status reads,
+    // within the original deadline; never replay a control or access grant.
+    if (!action && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
+      await waitForStatusRetry(requestSignal);
+      continue;
+    }
     throw new ContextAssistanceApiError(code,
       response.status === 404
         ? "This Guard installation needs a native core with context assistance support. Update Guard to continue."
         : "Context assistance is unavailable. Refresh its status before trying again.");
   }
-  return parseContextAssistanceStatus(await response.json());
 }
 
 export const fetchContextAssistance = (signal?: AbortSignal) => request("/v1/context-assistance", undefined, signal);

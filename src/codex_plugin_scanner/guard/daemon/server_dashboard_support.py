@@ -312,6 +312,7 @@ class _DashboardSupportRoutes:
             "/releases",
             "/settings",
             "/cigar",
+            "/swarm",
             "/about",
             "/protection/repair",
             "/requests",
