@@ -15,9 +15,11 @@ Object.defineProperty(globalThis, "window", { configurable: true, value: {
 const calls: Array<{ url: string; init?: RequestInit }> = [];
 let payload: unknown = native;
 let status = 200;
+const replies: Array<{ payload: unknown; status: number }> = [];
 globalThis.fetch = async (input, init) => {
   calls.push({ url: String(input), init });
-  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
+  const reply = replies.shift() ?? { payload, status };
+  return new Response(JSON.stringify(reply.payload), { status: reply.status, headers: { "Content-Type": "application/json" } });
 };
 try {
   assert.equal((await fetchContextAssistance()).effective_enabled, true);
@@ -27,6 +29,45 @@ try {
   assert.equal(new Headers(calls[0].init?.headers).get("X-Guard-Dashboard-Session"), "context-test-session");
   await fetchContextInstallations();
   assert.match(calls.at(-1)!.url, /\/context-assistance\/installations$/);
+  const busy = { code: "native_context_assistance_busy" };
+  for (const read of [fetchContextAssistance, fetchContextInstallations]) {
+    const before = calls.length;
+    replies.push({ payload: busy, status: 409 }, { payload: native, status: 200 });
+    assert.equal((await read()).effective_enabled, true, "a busy startup recovers without reloading");
+    const attempts = calls.slice(before);
+    assert.equal(attempts.length, 2);
+    assert.ok(attempts.every((attempt) => !attempt.init?.method && attempt.init?.signal === attempts[0].init?.signal),
+      "status retries must remain reads and share the original deadline");
+    assert.ok(attempts.every((attempt) => new Headers(attempt.init?.headers).get("X-Guard-Dashboard-Session") === "context-test-session"));
+  }
+  for (const action of ["activate", "recheck", "stop"] as const) {
+    const before = calls.length;
+    replies.push({ payload: busy, status: 409 });
+    await assert.rejects(controlContextAssistance(action), (error: unknown) =>
+      error instanceof ContextAssistanceApiError && error.code === busy.code);
+    assert.equal(calls.length, before + 1, "a busy control must never replay itself");
+  }
+  for (const reply of [{ payload: busy, status: 403 }, { payload: { code: "native_context_assistance_context_scope_denied" }, status: 409 }]) {
+    const before = calls.length;
+    replies.push(reply);
+    await assert.rejects(fetchContextAssistance(), ContextAssistanceApiError);
+    assert.equal(calls.length, before + 1, "other refusals must not retry");
+  }
+  const controller = new AbortController();
+  const beforeCancel = calls.length;
+  replies.push({ payload: busy, status: 409 });
+  const cancelled = fetchContextInstallations(controller.signal);
+  setTimeout(() => controller.abort(), 10);
+  await assert.rejects(cancelled, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+  assert.equal(calls.length, beforeCancel + 1, "leaving the page must cancel a queued status retry");
+  payload = busy;
+  status = 409;
+  const beforeExhaustion = calls.length;
+  await assert.rejects(fetchContextAssistance(), (error: unknown) =>
+    error instanceof ContextAssistanceApiError && error.code === busy.code);
+  assert.equal(calls.length, beforeExhaustion + 9, "a persistently busy actor must stop retrying");
+  payload = native;
+  status = 200;
   for (const action of ["activate", "recheck", "stop"] as const) {
     await controlContextAssistance(action);
     const request = calls.at(-1)!;
@@ -84,4 +125,4 @@ try {
   if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
   else Reflect.deleteProperty(globalThis, "window");
 }
-console.log("Authenticated context controls, off-state reads and incompatible native replies passed.");
+console.log("Authenticated context controls, bounded cancellable startup reads and incompatible native replies passed.");

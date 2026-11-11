@@ -11,12 +11,13 @@ const observed = makeAgent({ id: "process-codex", origin: "observed", state: "ob
 const scope = (): ContextWorkspaceScope => ({ scope_id: "scope:picked", workspace: project, app: "dashboard", policy_revision: "a".repeat(64),
   sources: [{ source_id: "file:readme", path: "README.md", sha256: "b".repeat(64), documents: 1 }], retained_contexts: 0, revoked: false });
 
-async function fixture(page: Page, options: { existing?: boolean; enabled?: boolean; unknown?: boolean; harness?: string } = {}) {
+async function fixture(page: Page, options: { existing?: boolean; enabled?: boolean; unknown?: boolean; harness?: string; startupBusy?: number } = {}) {
   await swarmFixture(page, [{ ...observed, ...(options.unknown ? { workspace: null } : {}), ...(options.harness ? { harness: options.harness } : {}) }]);
   const enabled = options.enabled !== false;
   const preferences = { ...ready.preferences, enabled, features: { ...ready.preferences.features, agent_context: true },
     sources: { ...ready.preferences.sources, workspace_documents: true, source_set_id: "selected-workspaces" } };
   const state = { scopes: options.existing ? [scope()] : [] as ContextWorkspaceScope[], failCompile: false, failGrant: false,
+    startupBusy: options.startupBusy ?? 0,
     calls: [] as { path: string; body: any }[] };
   const status = { ...ready, availability: enabled ? "ready" : "off", requested_enabled: enabled, effective_enabled: enabled,
     preferences, effective_preferences: preferences, runtime: enabled ? ready.runtime : null, diagnostic: null, job: null };
@@ -49,8 +50,12 @@ async function fixture(page: Page, options: { existing?: boolean; enabled?: bool
       await route.fulfill({ json: { schema: "guard-context-folders.v1", mode: "files", workspace: body.workspace, path: "", entries: [],
         max_file_bytes: 65536, truncated: false, suggested: [{ relative: "README.md", size: 120 }],
         files: [{ name: "README.md", relative: "README.md", size: 120, available: true, reason: null }] } });
-    } else if (path.endsWith("/installations")) await route.fulfill({ json: { ...status, installation_options: [] } });
-    else if (path === "/v1/context-assistance") await route.fulfill({ json: status });
+    } else if (path.endsWith("/installations")) {
+      if (state.startupBusy > 0) {
+        state.startupBusy -= 1;
+        await route.fulfill({ status: 409, json: { code: "native_context_assistance_busy" } });
+      } else await route.fulfill({ json: { ...status, installation_options: [] } });
+    } else if (path === "/v1/context-assistance") await route.fulfill({ json: status });
     else await route.fallback();
   });
   return state;
@@ -119,6 +124,19 @@ test("a refused grant keeps the chosen files and approval dialog available for r
   await proof.getByRole("button", { name: "Add project", exact: true }).click();
   await expect(proof).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Show what your AI would get", exact: true })).toBeEnabled();
+});
+
+test("a busy CIGAR startup recovers the Swarm handoff without reloading or granting access", async ({ page }) => {
+  const state = await fixture(page, { existing: true, startupBusy: 2 });
+  await openContext(page);
+  const preview = page.getByRole("button", { name: "Show what your AI would get", exact: true });
+  await expect(preview).toBeEnabled({ timeout: 10_000 });
+  expect(state.startupBusy).toBe(0);
+  await preview.click();
+  await expect(page.getByRole("region", { name: "What your AI would get", exact: true })).toContainText("Reviewed project context");
+  expect(state.calls.some((call) => /\/(?:workspace-grant|activate|recheck|stop)$/.test(call.path))).toBe(false);
+  await page.getByRole("button", { name: "Back to agent" }).click();
+  await expect(page.locator(".swarm-context-panel")).toContainText("Project context ready");
 });
 
 test("unknown projects require a folder; external apps retain MCP pairing and off CIGAR retains the handoff", async ({ page }) => {

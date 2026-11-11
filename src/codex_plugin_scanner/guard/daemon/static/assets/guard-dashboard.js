@@ -24053,27 +24053,50 @@ class ContextAssistanceApiError extends Error {
   }
   code;
 }
+function waitForStatusRetry(signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, 1e3);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 async function request$1(path, action, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context assistance setup requires a local Guard installation.");
   const timeout = AbortSignal.timeout(1e4);
-  const response = await fetchWithGuardAuth(path, {
-    cache: "no-store",
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    ...action ? {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}"
-    } : {}
-  });
-  if (!response.ok) {
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  for (let retry = 0; ; retry += 1) {
+    requestSignal.throwIfAborted();
+    const response = await fetchWithGuardAuth(path, {
+      cache: "no-store",
+      signal: requestSignal,
+      ...action ? {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      } : {}
+    });
+    if (response.ok) return parseContextAssistanceStatus(await response.json());
     const body = await response.json().catch(() => null);
     const code = body !== null && typeof body === "object" && "code" in body && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
+    if (!action && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
+      await waitForStatusRetry(requestSignal);
+      continue;
+    }
     throw new ContextAssistanceApiError(
       code,
       response.status === 404 ? "This Guard installation needs a native core with context assistance support. Update Guard to continue." : "Context assistance is unavailable. Refresh its status before trying again."
     );
   }
-  return parseContextAssistanceStatus(await response.json());
 }
 const fetchContextAssistance = (signal) => request$1("/v1/context-assistance", void 0, signal);
 const fetchContextInstallations = (signal) => request$1("/v1/context-assistance/installations", void 0, signal);
