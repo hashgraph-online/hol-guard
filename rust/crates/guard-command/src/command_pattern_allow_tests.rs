@@ -473,3 +473,13 @@ fn a_package_manager_wildcard_never_supplies_its_options() {
     let exact = pattern("exact", "npm run test --silent").expect("exact pattern");
     assert!(allows(&exact, "npm run test --silent"));
 }
+
+#[test]
+fn a_package_manager_wildcard_never_repeats_a_named_option() {
+    let publish = glob("npm publish --tag next *");
+    assert!(allows(&publish, "npm publish --tag next ./pkg"));
+    assert!(!allows(&publish, "npm publish --tag next --tag latest"));
+    let workspace = glob("npm run test -w pkg-a *");
+    assert!(allows(&workspace, "npm run test -w pkg-a unit"));
+    assert!(!allows(&workspace, "npm run test -w pkg-a -w other"));
+}

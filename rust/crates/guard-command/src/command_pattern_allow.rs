@@ -466,16 +466,23 @@ fn glob_matches(pattern: &str, text: &str) -> bool {
 }
 
 /// Whether a package manager command passes an option, before a bare `--`,
-/// that the pattern does not name word for word. npm reads options such as
-/// `--script-shell` and `--node-options` there, and accepts abbreviations of
-/// them, so a wildcard must not be able to supply any option the package
-/// manager reads. Words after `--` go to the script.
+/// more often than the pattern names it word for word. npm reads options such
+/// as `--script-shell` and `--node-options` there, accepts abbreviations of
+/// them, and keeps the last of a repeated option, so a wildcard must not be
+/// able to supply or repeat any option the package manager reads. Words after
+/// `--` go to the script.
 fn adds_package_manager_option(words: &[String], pattern_words: &[String]) -> bool {
-    words
+    let options: Vec<&String> = words
         .iter()
         .skip(1)
         .take_while(|word| word.as_str() != "--")
-        .any(|word| word.starts_with('-') && !pattern_words.contains(word))
+        .filter(|word| word.starts_with('-'))
+        .collect();
+    options.iter().any(|option| {
+        let used = options.iter().filter(|other| *other == option).count();
+        let named = pattern_words.iter().filter(|word| word == option).count();
+        used > named
+    })
 }
 
 /// Whether a git command's words carry an option that runs a program or code
