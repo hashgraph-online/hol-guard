@@ -244,6 +244,9 @@ pub(crate) mod wget_reads;
 #[path = "workspace_contained_effects_tests.rs"]
 mod workspace_contained_effects_tests;
 #[cfg(test)]
+#[path = "workspace_contained_name_pattern_tests.rs"]
+mod workspace_contained_name_pattern_tests;
+#[cfg(test)]
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
 #[cfg(test)]
