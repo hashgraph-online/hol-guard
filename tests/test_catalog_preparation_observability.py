@@ -142,7 +142,7 @@ def test_recorded_detail_is_bounded(prepared, recorded, monkeypatch) -> None:
 def test_a_failure_reaches_the_daemon_log(prepared, tmp_path, sink, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
-    diagnostics = DaemonDiagnostics(guard_home, start_worker=False, rotate=False)
+    diagnostics = DaemonDiagnostics(guard_home)
     sink(diagnostics.record_background)
     fail_preparation(monkeypatch, ValueError("source compiler manifest size does not match the executable"))
 
