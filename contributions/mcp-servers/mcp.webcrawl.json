@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.webcrawl",
+  "version": "1.0.0",
+  "name": "webcrawl",
+  "description": "Lets agents search the web, read pages as clean Markdown, extract structured data, map and crawl sites, parse documents, and monitor pages. Runs locally with no API key, or with webcrawl.app. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.brainfish-ai",
+    "displayName": "Brainfish",
+    "url": "https://github.com/brainfish-ai"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://webcrawl.app",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@webcrawl/mcp"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-content-ingestion",
+    "package-or-source-installation",
+    "external-shared-state-write",
+    "external-message-egress"
+  ],
+  "tools": [
+    {
+      "name": "web_search",
+      "state": "review"
+    },
+    {
+      "name": "web_read",
+      "state": "review"
+    },
+    {
+      "name": "web_parse",
+      "state": "review"
+    },
+    {
+      "name": "web_parse_status",
+      "state": "inherit"
+    },
+    {
+      "name": "web_map",
+      "state": "review"
+    },
+    {
+      "name": "web_crawl",
+      "state": "review"
+    },
+    {
+      "name": "web_extract",
+      "state": "review"
+    },
+    {
+      "name": "web_rerank",
+      "state": "inherit"
+    },
+    {
+      "name": "web_monitor",
+      "state": "review"
+    },
+    {
+      "name": "search_categories",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/brainfish-ai/webcrawl-anything",
+    "https://www.npmjs.com/package/@webcrawl/mcp",
+    "https://webcrawl.app"
+  ],
+  "saferAlternatives": [
+    "Prefer search_categories, web_parse_status, and web_rerank; they do not start a new web fetch.",
+    "Review every URL and query in web_search, web_read, web_parse, web_map, web_crawl, web_extract, and web_monitor before approving. Those tools fetch remote content or start network work.",
+    "web_monitor can create, change, or delete scheduled watches and send email or webhook alerts. Review the action, URLs, and notify targets before approving.",
+    "Leave the cloud API key unset to keep the server on the local engine and avoid calling webcrawl.app.",
+    "Pin the npm package to a reviewed version such as @webcrawl/mcp@1.4.5."
+  ]
+}
