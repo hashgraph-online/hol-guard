@@ -245,18 +245,21 @@ Swarm does not automatically create worktrees or coordinate conflicting edits.
 - Rust 1.89.0 workspace formatting and Clippy for `guard-swarm` and
   `hol-guard-runtime` pass, including all targets with warnings denied.
 - Python: 12 native reply binding, error handling, and HTTP framing tests pass,
-  along with 128 existing native transport and review-boundary tests.
+  along with 128 existing native transport and review-boundary tests. All 85
+  ownership-gate tests and the full native ownership gate pass with Swarm's
+  Rust service and Python transport registered in the ownership contract.
 - Dashboard: model/parser, existing routing and navigation checks; five browser
   journeys exercise desktop, 390px/320px layouts, launch, instruction queue,
   stop confirmation, uncertain retries, stale state, filters, CIGAR, and dialog
   keyboard behavior. Screenshots remain outside Git.
-- Four additional browser journeys cover observed-agent context handoff, file
+- Five additional browser journeys cover observed-agent context handoff, file
   selection and approval, preview citations, return-to-agent status, reuse of
   existing grants, refused grants and failed previews, unknown folders, MCP
-  pairing guidance, and keeping the handoff while CIGAR is off.
+  pairing guidance, keeping the handoff while CIGAR is off, and recovery from
+  temporary native startup contention without replaying controls or grants.
 - The full dashboard test command (`bun run test`) passes. Swarm model tests
   now run as part of that command in CI. The rebase also passes the 20 existing
-  CIGAR workspace browser journeys, for 29 browser checks in total.
+  CIGAR workspace browser journeys, for 30 browser checks in total.
 - Production Vite build passes and shipped assets are rebuilt. Existing shared
   chunk hashes change with the dashboard entry point; no generated evidence,
   vendored dependencies, or old CIGAR branch content is included.
@@ -268,8 +271,10 @@ After rebasing onto main at `alpha/v3.60.0a66`, an isolated live macOS dashboard
 reads, real process inventory, and installed Codex detection through the resident/HTTP path.
 The context regression then exercised an observed agent's handoff, both saved
 projects (eight selected files each), successful cited previews, and return to
-the same inspector. After CIGAR startup completed, both previews succeeded and
-the browser reported no page errors.
+the same inspector. A cold-start check recovered automatically from five
+temporary busy responses and completed both previews. Status reads retry within
+their original ten-second deadline; navigation cancels pending retries, and
+controls and grants are never replayed by this recovery.
 
 Use an optimized native runtime for source-checkout UI previews:
 
