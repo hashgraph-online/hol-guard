@@ -159,11 +159,21 @@ def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
 
     from ..native_hook_authority_state import hook_authority_integrity_key
 
-    return hook_authority_integrity_key(store) or {}
+    key: dict[str, object] = dict(hook_authority_integrity_key(store) or {})
+    return key
+
+
+def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
+
+    from ..adapters.zcode_contained_tests import contained_sink_command_prefix
+
+    return {"sink_command": list(contained_sink_command_prefix())}
 
 
 HOOK_CALLS = {
     "hook.integrity_key": hook_integrity_key,
+    "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.warm": hook_warm,

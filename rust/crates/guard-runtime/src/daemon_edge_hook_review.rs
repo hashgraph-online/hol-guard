@@ -28,6 +28,8 @@ use admission::{
 mod admission;
 #[path = "daemon_edge_hook_counters.rs"]
 mod counters;
+#[path = "daemon_edge_hook_cursor_sink.rs"]
+mod cursor_sink;
 #[path = "daemon_edge_hook_lifecycle.rs"]
 mod lifecycle;
 
@@ -509,6 +511,20 @@ impl Hook<'_> {
             }
         };
         if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {
+            permit.release();
+            return answer;
+        }
+        if let Some(answer) = self.cursor_sink(
+            &reply_harness,
+            &event,
+            &payload,
+            (
+                workspace.as_deref(),
+                home_dir.as_deref(),
+                guard_home.as_deref(),
+            ),
+            expires,
+        ) {
             permit.release();
             return answer;
         }
