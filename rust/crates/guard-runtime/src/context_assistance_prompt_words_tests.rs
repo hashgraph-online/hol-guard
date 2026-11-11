@@ -175,3 +175,25 @@ fn a_long_quote_is_searched_by_its_first_words() {
     assert_eq!(pasted, found);
     assert_eq!(quoted(&docstring.to_lowercase(), &pasted), [true]);
 }
+
+/// A question that says not to change anything asks where code is, so its
+/// note lists tests instead of showing them; a fix that keeps the tests
+/// unchanged is not one.
+#[test]
+fn a_prompt_that_asks_for_no_change_is_told_apart() {
+    for prompt in [
+        "Question, no code changes: which function does this?",
+        "quick question, don\u{2019}t change anything: where is the parser?",
+        "Explain how retries work without changing anything.",
+        "Do not edit files, just tell me where the cache is cleared.",
+    ] {
+        assert!(asks_no_change(prompt), "{prompt}");
+    }
+    for prompt in [
+        "Find every root cause and fix them all without changing the tests.",
+        "Rename `a` to `b` everywhere. Behavior must not change.",
+        "Implement it again so the existing tests pass.",
+    ] {
+        assert!(!asks_no_change(prompt), "{prompt}");
+    }
+}

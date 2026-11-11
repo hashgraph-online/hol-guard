@@ -117,7 +117,7 @@ pub(super) fn changelog_file(path: &str) -> bool {
 /// scores the rarity of the words it uses, so the few tests that use a rare
 /// word outrank the many that say "option". The best file's short close
 /// tests are shown whole, as a named function is, since an agent fixing or
-/// writing the code reads them next; not for a rename or a review, nor when
+/// writing the code reads them next; not for a rename, a review or a question, nor when
 /// `earlier` holds them, shown by an earlier prompt or above.
 pub(super) fn tests(
     files: &[File],
@@ -217,7 +217,7 @@ pub(super) fn tests(
         ));
     }
     found.sort_by(|a, b| b.0.total_cmp(&a.0).then(b.1.cmp(&a.1)));
-    let mut room = if asked.everywhere || asked.changes {
+    let mut room = if asked.everywhere || asked.changes || asked.lookup {
         0
     } else {
         MAX_SHOWN_CHARS
@@ -458,13 +458,13 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
     } else {
         MAX_SHOWN_DEFINITION_CHARS
     };
+    let mut hint = true;
     for pick in chosen {
         let mut item = Entry::plain(entry(files, pick));
-        let code = pick
-            .whole
-            .then(|| docstring::shown(&files[pick.file], pick.at, asked));
+        let code = (pick.whole).then(|| docstring::shown(&files[pick.file], pick.at, asked, hint));
         if let Some((span, code, note)) = code.flatten() {
             if code.len() <= room && !asked.earlier.contains(&span) {
+                hint &= !note.contains("doctest");
                 room -= code.len();
                 let shown = fenced(&code);
                 item.code += shown.len();

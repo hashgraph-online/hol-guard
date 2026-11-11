@@ -13,6 +13,17 @@ use super::{Asked, File};
 use std::path::Path;
 
 const WORDS: [&str; 4] = ["docstring", "docstrings", "doctest", "doctests"];
+const EXAMPLES: [&str; 4] = ["doctest", "doctests", "example", "examples"];
+/// Words of a prompt that reads a docstring for what code should do.
+const BEHAVIOR: [&str; 7] = [
+    "implement",
+    "implemented",
+    "says",
+    "describe",
+    "describes",
+    "bug",
+    "fails",
+];
 /// The most lines of a long function's signature and docstring shown.
 const MAX_HEAD_LINES: usize = 80;
 const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in an example \
@@ -24,30 +35,44 @@ example needs, and the edit's own reply confirms the edit, so the file need not 
 const OUTSIDE: &str = " `python -m doctest` would load the file outside its package, where its \
 relative imports fail.";
 
-/// True when the prompt asks about docstrings or doctests.
+/// True when the prompt asks to write a docstring or doctest. A prompt that
+/// only reads a docstring for what the code should do ("implement it so it
+/// does what its docstring says") asks for the code, so it is not one,
+/// unless it also asks for an example.
 pub(super) fn asks_for_docstring(prompt: &str) -> bool {
-    prompt_words(prompt).any(|word| WORDS.contains(&word.as_str()))
+    let words: Vec<String> = prompt_words(prompt).collect();
+    let has = |list: &[&str]| words.iter().any(|word| list.contains(&word.as_str()));
+    has(&EXAMPLES) || prompt.contains(">>>") || (has(&WORDS) && !has(&BEHAVIOR))
 }
 
 /// The code shown for a named definition, the span it fills and a note to
 /// put after it: the whole definition when it is short, or, for a prompt
 /// about docstrings, a long Python function's signature and docstring, with
-/// how to write a backslash and run the doctests when that matters.
-pub(super) fn shown(file: &File, at: usize, asked: &Asked) -> Option<(Span, String, String)> {
+/// how to write a backslash and run the doctests when that matters and
+/// `hint` asks for it: a note says that once, for the first function shown.
+pub(super) fn shown(
+    file: &File,
+    at: usize,
+    asked: &Asked,
+    hint: bool,
+) -> Option<(Span, String, String)> {
     let python = asked.docstring && file.path.ends_with(".py") && !file.container(at);
     let head = python.then(|| head(file, at)).flatten();
     let mut note = String::new();
-    if head.is_some_and(|(_, raw)| raw == Some(false)) {
+    if hint && head.is_some_and(|(_, raw)| raw == Some(false)) {
         note.push_str(NOT_RAW);
     }
-    match python.then(|| command(file, at, &asked.root)).flatten() {
+    match (python && hint)
+        .then(|| command(file, at, &asked.root))
+        .flatten()
+    {
         Some(command) => {
             note.push_str(&DOCTEST.replace("{command}", &command));
             if relative(file) {
                 note.push_str(OUTSIDE);
             }
         }
-        None if python && plain(file.path) && relative(file) => {
+        None if python && hint && plain(file.path) && relative(file) => {
             note.push_str(&DOCTESTS.replace("{path}", file.path));
         }
         None => {}

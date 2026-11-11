@@ -481,3 +481,19 @@ pub(crate) fn in_path(relative: &str, terms: &[String]) -> Vec<bool> {
         .map(|term| lower.contains(term.as_str()))
         .collect()
 }
+
+/// Phrases of a prompt that asks for an answer and no change to the code.
+const NO_CHANGE: [&str; 6] = [
+    "no code change",
+    "no changes",
+    "change anything",
+    "changing anything",
+    "don't edit",
+    "do not edit",
+];
+
+/// True when the prompt says not to change anything, as a question does.
+pub(crate) fn asks_no_change(prompt: &str) -> bool {
+    let lower = prompt.to_lowercase().replace('\u{2019}', "'");
+    NO_CHANGE.iter().any(|phrase| lower.contains(phrase))
+}
