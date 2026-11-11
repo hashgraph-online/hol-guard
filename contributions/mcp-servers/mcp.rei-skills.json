@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
-    "package": "rei-skills"
+    "package": "rei-skills@6.2.0"
   },
   "riskClasses": [
     "external-filesystem-write",

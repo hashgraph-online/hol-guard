@@ -17,6 +17,7 @@ from .mcp_contribution_client import mcp_tool_state
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
+_REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -36,6 +37,26 @@ def _dev_mcp_payload() -> dict[str, object]:
     payload = json.loads(_DEV_MCP.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _rei_skills_payload() -> dict[str, object]:
+    payload = json.loads(_REI_SKILLS.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_rei_skills_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed rei-skills launch on the exact npm version."""
+    payload = _rei_skills_payload()
+    validate_mcp_contribution(payload, filename=_REI_SKILLS.name)
+    assert payload["id"] == "mcp.rei-skills"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "rei-skills@6.2.0",
+    }
 
 
 def test_tether_contribution_is_external_opt_in() -> None:
