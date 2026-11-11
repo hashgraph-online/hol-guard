@@ -163,6 +163,9 @@ fn url_carries_credential(url: &Url) -> bool {
         .path_segments()
         .map(|segments| segments.map(str::to_owned).collect())
         .unwrap_or_default();
+    // A connection string spans several segments (`/postgres://user:pass@db`),
+    // so the whole path is read as one part too.
+    parts.push(url.path().to_owned());
     for (key, value) in url.query_pairs() {
         parts.push(key.into_owned());
         parts.push(value.into_owned());
@@ -345,6 +348,15 @@ mod tests {
                 STANDARD.encode(STANDARD.encode(&aws))
             ),
             format!("https://{}.collect.example.test/", hex("HOME=/home/dev")),
+            format!(
+                "https://collect.example.test/{}",
+                joined(&[
+                    "postgres:",
+                    "//admin:",
+                    "pw4fixture",
+                    "@db.example.test/app"
+                ])
+            ),
         ] {
             assert!(!plain_public_url(&risky), "{risky}");
         }

@@ -991,10 +991,7 @@ fn evaluate_envelope(
     // beyond any later Guard review, so planting a credential upload there is
     // reviewed now rather than treated as an ordinary workspace edit.
     if result.reason_code == "native_exact_safe_file_write"
-        && signals
-            .path_values
-            .iter()
-            .any(|path| super::ci_workflow_writes::plants_credential_upload(path, payload))
+        && super::ci_workflow_writes::plants_credential_upload(&signals.path_values, payload)
     {
         let (reason_code, _) = result::review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(
