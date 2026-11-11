@@ -27,6 +27,10 @@ _PUBLISH_FEATURE = "native-policy-snapshot-publish-v1"
 _PUBLISH_SCHEMA = "guard-native-policy-publish.v1"
 # The build, a push, a renewal build and its push, plus process start-up.
 _PUBLISH_PROCESS_MARGIN_SECONDS = 2.0
+_STOP_POLL_SECONDS = 0.05
+# A push envelope rides inside a JSON string, where escaping can grow each
+# byte to six (`\u00XX`).
+_RELAY_LINE_LIMIT = 6 * POLICY_SNAPSHOT_MAX_BYTES + 64
 
 
 def _stamp_runtime_program_digest(
@@ -105,7 +109,10 @@ def _publish_snapshot_v3(
         business_policy=business_policy,
     )
     master_key = b""
-    try:
+
+    def make_head() -> tuple[bytearray, float]:
+        # Count runtime selection and process startup against the shared
+        # deadline: Rust starts the budget it is given only after launch.
         build_budget_ms = int((build_deadline - time.monotonic()) * 1_000)
         if build_budget_ms <= 0:
             raise NativePolicySnapshotError("native_policy_snapshot_deadline_exceeded")
@@ -118,9 +125,8 @@ def _publish_snapshot_v3(
         }
         if direct_lane is not None:
             settings["direct_lane"] = direct_lane
-        head = _publish_head(settings, request)
-    finally:
-        _clear_request_key(request)
+        lifetime = build_budget_ms / 1_000 + publish_timeout + 2 * _PUBLISH_STARTUP_TIMEOUT_SECONDS
+        return _publish_head(settings, request), lifetime
 
     def relay(payload: bytes, timeout_ms: int) -> bytes | None:
         return client(
@@ -131,8 +137,10 @@ def _publish_snapshot_v3(
             deadline_monotonic=time.monotonic() + timeout_ms / 1_000,
         )
 
-    lifetime = build_budget_ms / 1_000 + publish_timeout + 2 * _PUBLISH_STARTUP_TIMEOUT_SECONDS
-    return _run_publish(head, relay, business=business_policy is not None, lifetime=lifetime)
+    try:
+        return _run_publish(make_head, relay, business=business_policy is not None)
+    finally:
+        _clear_request_key(request)
 
 
 def _publish_head(settings: Mapping[str, object], request: Mapping[str, object]) -> bytearray:
@@ -147,17 +155,20 @@ def _publish_head(settings: Mapping[str, object], request: Mapping[str, object])
 
 
 def _run_publish(
-    head: bytearray,
+    make_head: Callable[[], tuple[bytearray, float]],
     relay: Callable[[bytes, int], bytes | None],
     *,
     business: bool,
-    lifetime: float,
 ) -> tuple[dict[str, object], int]:
     from .native_policy_snapshot_business_bridge import _selected_runtime
     from .native_policy_snapshot_windows_key import _reported_code
+    from .native_process_stop_scope import scoped_native_stop_event
     from .native_resident_client import native_resident_client_failure_code
     from .native_runtime import _isolated_environment
 
+    stop_event = scoped_native_stop_event()
+    if stop_event is not None and stop_event.is_set():
+        raise NativePolicySnapshotError("native_policy_snapshot_runtime_unavailable")
     status = _selected_runtime(business=business)
     assert status.identity is not None and status.capabilities is not None
     if _PUBLISH_FEATURE not in status.capabilities.features:
@@ -176,16 +187,29 @@ def _run_publish(
     except OSError as error:
         raise NativePolicySnapshotError("native_policy_snapshot_runtime_unavailable") from error
     expired = threading.Event()
+    stopped = threading.Event()
+    finished = threading.Event()
 
-    def expire() -> None:
-        expired.set()
+    def watch(lifetime: float) -> None:
+        # Kill the publisher at its lifetime, or as soon as the owner closes,
+        # so a close during a generation-lock wait cannot block in readline.
+        deadline = time.monotonic() + lifetime + _PUBLISH_PROCESS_MARGIN_SECONDS
+        while not finished.wait(_STOP_POLL_SECONDS):
+            if stop_event is not None and stop_event.is_set():
+                stopped.set()
+                break
+            if time.monotonic() >= deadline:
+                expired.set()
+                break
+        else:
+            return
         process.kill()
 
-    watchdog = threading.Timer(lifetime + _PUBLISH_PROCESS_MARGIN_SECONDS, expire)
-    watchdog.daemon = True
-    watchdog.start()
     assert process.stdin is not None and process.stdout is not None and process.stderr is not None
     try:
+        head, lifetime = make_head()
+        watchdog = threading.Thread(target=watch, args=(lifetime,), daemon=True)
+        watchdog.start()
         try:
             process.stdin.write(head)
             process.stdin.flush()
@@ -195,7 +219,7 @@ def _run_publish(
             # The head carries the verifier key; drop this copy once sent.
             head[:] = bytes(len(head))
         while True:
-            line = process.stdout.readline(POLICY_SNAPSHOT_MAX_BYTES + 64)
+            line = process.stdout.readline(_RELAY_LINE_LIMIT)
             if not line.endswith(b"\n"):
                 break
             message = _strict_json_loads_v3(line[:-1])
@@ -226,13 +250,15 @@ def _run_publish(
             if isinstance(error, str) and error:
                 raise NativePolicySnapshotError(error)
             return _published(message.get("published"))
+        if stopped.is_set():
+            raise NativePolicySnapshotError("native_policy_snapshot_runtime_unavailable")
         if expired.is_set():
             raise NativePolicySnapshotError("native_policy_snapshot_deadline_exceeded")
         process.stdin.close()
         stderr = process.stderr.read(4096).decode("utf-8", "replace")
         raise NativePolicySnapshotError(_reported_code(stderr) or "native_policy_snapshot_build_invalid")
     finally:
-        watchdog.cancel()
+        finished.set()
         if process.poll() is None:
             process.kill()
         process.wait()
