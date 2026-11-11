@@ -179,6 +179,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # of that path, not of the repository's own mailmap, and a contained
         # run reaches only the sandbox's copy of it.
         "neg-git-check-mailmap-other-file",
+        # An index listing whose `-X` exclude file is named by the caller: the
+        # read keeps its review, and a contained run opens only the workspace
+        # copy of that file.
+        "neg-git-ls-files-glob-with-exclude-file",
         # `--in-place` makes the trailer filter edit the file it names, and a
         # contained run keeps that edit inside the sandbox.
         "neg-git-interpret-trailers-in-place",

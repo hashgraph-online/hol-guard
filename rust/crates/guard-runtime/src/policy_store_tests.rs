@@ -50,7 +50,7 @@ pub(super) fn policy_with_default(default_action: &str) -> EffectiveNativePolicy
     value
 }
 
-pub(super) fn fixture_directory(path: &Path) {
+pub(crate) fn fixture_directory(path: &Path) {
     #[cfg(windows)]
     {
         crate::resident_state::ensure_private_directory(path, true).unwrap();
@@ -116,7 +116,7 @@ pub(super) fn signed_snapshot_with_policy(
     snapshot
 }
 
-pub(super) fn test_root(label: &str) -> PathBuf {
+pub(crate) fn test_root(label: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-policy-store-{label}-{}-{}",
         std::process::id(),

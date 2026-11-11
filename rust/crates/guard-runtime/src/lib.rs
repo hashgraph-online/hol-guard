@@ -479,6 +479,7 @@ mod guard_config_update_value;
 mod guard_home_resolve;
 mod guard_paths;
 mod guard_product_copy;
+mod guard_repair_report;
 mod guard_shim_profile;
 mod guard_store_advisory_cache;
 #[cfg(test)]
@@ -591,6 +592,7 @@ mod guard_store_outbox_reads_tests;
 mod guard_store_outbox_recover;
 mod guard_store_outbox_requeue;
 mod guard_store_policy_clear;
+mod guard_store_policy_import;
 mod guard_store_policy_source_context;
 #[cfg(test)]
 mod guard_store_policy_source_context_vectors_tests;
@@ -1011,6 +1013,7 @@ mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
+mod policy_snapshot_publish;
 mod policy_store;
 mod policy_verifier_key_provision;
 mod posix_processes;
