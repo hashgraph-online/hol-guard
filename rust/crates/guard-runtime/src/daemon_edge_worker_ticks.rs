@@ -1,6 +1,7 @@
 //! The background passes the daemon runs itself rather than as Guard
 //! library calls: the runtime heartbeat, the idle-shutdown hold and storage
-//! maintenance. Each answers what its `workers/ticks.py` call did.
+//! maintenance, which also rotates `daemon.log`. Each answers what its
+//! `workers/ticks.py` call did.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -98,6 +99,7 @@ pub(super) fn maintain(reads: &NativeReads, config: &ReadConfig) -> bool {
         return false;
     };
     let now = now_micros();
+    crate::storage_retention::daemon_log::rotate(config.guard_home(), now);
     let Some(args) = activity_args(now, retain_days) else {
         return false;
     };

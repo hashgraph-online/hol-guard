@@ -435,6 +435,9 @@ fn invalid() -> String {
     "storage_retention_request_invalid".to_owned()
 }
 
+#[path = "daemon_log_retention.rs"]
+pub(crate) mod daemon_log;
+
 #[cfg(test)]
 #[path = "storage_retention_tests.rs"]
 mod tests;
