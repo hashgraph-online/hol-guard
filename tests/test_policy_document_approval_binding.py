@@ -139,12 +139,11 @@ def test_native_grant_binds_complete_document_and_import_mode(
         if entrypoint == "import":
             store.import_policy_document(candidate, rows, mode=mode, now=grant.issued_at, approval_gate_grant=grant)
         else:
-            with store._connect() as connection:
-                connection.execute("begin immediate")
-                store.apply_policy_creation_request(
-                    candidate, rows, mode=mode, now=grant.issued_at, approval_gate_grant=grant, connection=connection
-                )
-                connection.commit()
+            args = store.policy_creation_import_args(
+                candidate, rows, mode=mode, now=grant.issued_at, approval_gate_grant=grant
+            )
+            payload = store._native_store_call("import_policy_rows", args)
+            store.finalize_policy_import(payload.get("next_control_state"))
 
     if change == "none":
         apply()

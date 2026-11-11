@@ -100,16 +100,13 @@ def test_import_rejects_rows_that_do_not_match_the_document(
                 document, rows, mode="replace", now="2026-07-16T12:00:00Z", approval_gate_grant=None
             )
         else:
-            with store._connect() as connection:
-                connection.execute("begin immediate")
-                store.apply_policy_creation_request(
-                    document,
-                    rows,
-                    mode="replace",
-                    now="2026-07-16T12:00:00Z",
-                    approval_gate_grant=None,
-                    connection=connection,
-                )
+            store.policy_creation_import_args(
+                document,
+                rows,
+                mode="replace",
+                now="2026-07-16T12:00:00Z",
+                approval_gate_grant=None,
+            )
     assert [dict(row) for row in _rows(store)] == before
 
 

@@ -64,6 +64,7 @@ use crate::guard_store_local_cli_grants as local_cli_grants;
 use crate::guard_store_local_cli_inventory as local_cli_inventory;
 use crate::guard_store_local_mcp_declarations as local_mcp_declarations;
 use crate::guard_store_local_mcp_observation as local_mcp;
+use crate::guard_store_mcp_policy_requests as mcp_policy_requests;
 use crate::guard_store_mcp_provider_reads as mcp_provider_reads;
 use crate::guard_store_mcp_workflow_reads as mcp_workflow_reads;
 use crate::guard_store_native_receipts as native_receipts;
@@ -80,6 +81,7 @@ use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
 use crate::guard_store_policy_clear::clear_policy_decisions;
+use crate::guard_store_policy_import as policy_import;
 use crate::guard_store_policy_source_context::policy_source_contexts;
 use crate::guard_store_policy_upsert::upsert_policy;
 use crate::guard_store_queue_live_wait::queue_with_live_wait;
@@ -583,7 +585,14 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "prune_inactive_local_cli_observations"
         | "cache_advisories"
         | "upsert_policy"
-        | "clear_policy_decisions" => Kind::Write,
+        | "clear_policy_decisions"
+        | "import_policy_rows"
+        | "apply_mcp_policy_request"
+        | "stage_mcp_policy_request"
+        | "expire_mcp_policy_request"
+        | "decline_mcp_policy_request"
+        | "fail_mcp_policy_request" => Kind::Write,
+        "list_pending_mcp_policy_requests" | "policy_rows_fingerprint" => Kind::Snapshot,
         "find_local_mcp_observation" => Kind::Read,
         "ensure_local_mcp_observation"
         | "reconcile_remote_mcp_declarations"
@@ -605,6 +614,14 @@ fn dispatch(
     match method {
         "upsert_policy" => upsert_policy(connection, args),
         "clear_policy_decisions" => clear_policy_decisions(connection, args),
+        "import_policy_rows" => policy_import::import_policy_rows(connection, args),
+        "apply_mcp_policy_request" => policy_import::apply_mcp_policy_request(connection, args),
+        "policy_rows_fingerprint" => policy_import::policy_rows_fingerprint(connection, args),
+        "stage_mcp_policy_request" => mcp_policy_requests::stage(connection, args),
+        "expire_mcp_policy_request" => mcp_policy_requests::expire(connection, args),
+        "decline_mcp_policy_request" => mcp_policy_requests::decline(connection, args),
+        "fail_mcp_policy_request" => mcp_policy_requests::fail(connection, args),
+        "list_pending_mcp_policy_requests" => mcp_policy_requests::list_pending(connection, args),
         "review_event_outbox_status" => queries::status(connection, source, args),
         "list_ready_review_events" => reads::list_ready(connection, source, args),
         "list_review_event_snapshots" => reads::list_snapshots(connection, source, args),
