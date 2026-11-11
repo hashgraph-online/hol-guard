@@ -32,7 +32,6 @@ def _tether_payload() -> dict[str, object]:
     return payload
 
 
-
 def _dev_mcp_payload() -> dict[str, object]:
     payload = json.loads(_DEV_MCP.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
