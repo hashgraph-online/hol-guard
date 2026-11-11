@@ -65,6 +65,31 @@ fn device(input: &Value, key: &str) -> Result<String, Error> {
 
 /// Compile the rules of a canonical bundle that apply to one named device.
 pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> {
+    let (document, evaluating) = device_document(input)?;
+    let rows = compiler::compile_effects(&document, deadline, compiler::Effects::WithReview)?;
+    Ok(if evaluating {
+        Value::Array(Vec::new())
+    } else {
+        rows
+    })
+}
+
+/// The command-pattern Allow rules of a canonical bundle that apply to one
+/// named device ([`compiler::command_patterns`]). An Evaluate policy allows
+/// nothing, so it yields none.
+pub(super) fn command_patterns(input: &Value, deadline: Instant) -> Result<Value, Error> {
+    let (document, evaluating) = device_document(input)?;
+    let patterns = compiler::command_patterns(&document, deadline)?;
+    Ok(if evaluating {
+        Value::Array(Vec::new())
+    } else {
+        patterns
+    })
+}
+
+/// The bundle's policy document holding only the rules this device is in
+/// scope for, mapped for compilation, and whether the policy only evaluates.
+fn device_document(input: &Value) -> Result<(Value, bool), Error> {
     let device_id = device(input, "device_id")?;
     let device_name = device(input, "device_name")?;
     let Some(payload) = input["bundle"]["payload"].as_object() else {
@@ -92,14 +117,6 @@ pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> 
     spec.insert("rules".to_owned(), Value::Array(local));
     let mut document = payload.clone();
     document.insert("spec".to_owned(), Value::Object(spec));
-    let rows = compiler::compile_effects(
-        &mapping::parse("GuardPolicyDocument", &Value::Object(document))?.mapping,
-        deadline,
-        compiler::Effects::WithReview,
-    )?;
-    Ok(if evaluating {
-        Value::Array(Vec::new())
-    } else {
-        rows
-    })
+    let document = mapping::parse("GuardPolicyDocument", &Value::Object(document))?.mapping;
+    Ok((document, evaluating))
 }

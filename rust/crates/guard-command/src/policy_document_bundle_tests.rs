@@ -205,3 +205,77 @@ fn a_review_rule_on_an_exact_command_is_refused_rather_than_left_unenforced() {
         "unsupported_exact_command_review"
     );
 }
+
+fn pattern_rule(id: &str, effect: &str, value: &str) -> Value {
+    let mut rule = rule(
+        id,
+        json!({"commands": {"combinator": "all", "conditions": [
+            {"field": "command", "operator": "glob", "value": value, "caseSensitive": true}
+        ]}}),
+    );
+    rule["effect"] = json!(effect);
+    rule
+}
+
+fn patterns(input: &Value) -> Value {
+    crate::policy_document::evaluate(
+        "command_patterns_bundle",
+        input,
+        Instant::now() + Duration::from_secs(30),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_pattern_allow_compiles_to_no_row_and_is_read_from_the_bundle() {
+    let input = request(json!([
+        pattern_rule("pr-view", "allow", "gh pr view * --repo owner/name"),
+        rule("every-device", json!({})),
+    ]));
+    assert_eq!(
+        compiled(input["bundle"]["payload"]["spec"]["rules"].clone()),
+        ["every-device"]
+    );
+    let found = patterns(&input)["ok"].clone();
+    assert_eq!(found.as_array().map(Vec::len), Some(1), "{found}");
+    assert_eq!(found[0]["rule_id"], "pr-view");
+    assert_eq!(found[0]["harnesses"], Value::Null);
+    assert_eq!(
+        found[0]["expression"]["conditions"][0]["value"],
+        "gh pr view * --repo owner/name"
+    );
+}
+
+#[test]
+fn a_pattern_may_only_allow() {
+    for effect in ["block", "review"] {
+        let refused = refusal(&request(json!([pattern_rule("p", effect, "gh pr view *")])));
+        assert!(
+            refused
+                .to_string()
+                .contains("command_expression_requires_guard_3_1_runtime"),
+            "{effect}: {refused}"
+        );
+    }
+}
+
+#[test]
+fn an_unsafe_pattern_refuses_the_bundle() {
+    for value in ["git *", "bash -c *", "sudo git push *"] {
+        let refused = refusal(&request(json!([pattern_rule("p", "allow", value)])));
+        assert!(
+            refused.to_string().contains("command_pattern_allow"),
+            "{value}: {refused}"
+        );
+    }
+}
+
+#[test]
+fn a_pattern_scoped_to_another_device_or_evaluated_allows_nothing() {
+    let mut scoped = pattern_rule("p", "allow", "gh pr view *");
+    scoped["match"]["devices"] = json!(["device-9"]);
+    assert_eq!(patterns(&request(json!([scoped])))["ok"], json!([]));
+    let mut input = request(json!([pattern_rule("p", "allow", "gh pr view *")]));
+    input["bundle"]["payload"]["spec"]["defaults"]["mode"] = json!("observe");
+    assert_eq!(patterns(&input)["ok"], json!([]));
+}

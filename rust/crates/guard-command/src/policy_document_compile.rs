@@ -423,7 +423,16 @@ fn compile_range(
         let matcher = rule["match"]
             .as_object()
             .ok_or_else(|| error("unsupported_policy_match", id))?;
-        if matcher.get("commands").is_some_and(Value::is_object) {
+        if let Some(expression) = matcher.get("commands").filter(|value| value.is_object()) {
+            // A signed Cloud bundle may allow a command pattern. It compiles
+            // to no row: the hook reads it from the bundle
+            // ([`command_patterns`]) and applies it only to a simple command.
+            if effects == Effects::WithReview && rule["effect"] == "allow" {
+                pattern_selectors(rule, id)?;
+                crate::command_pattern_allow::parse_allow_pattern(expression)
+                    .map_err(|code| error(&code, id))?;
+                continue;
+            }
             return Err(error("command_expression_requires_guard_3_1_runtime", id));
         }
         if matcher.iter().any(|(key, value)| {
@@ -502,4 +511,57 @@ fn compile_range(
         }
     }
     Ok((result, total))
+}
+
+/// The selectors a pattern Allow may combine with: harnesses and folders. A
+/// pattern names a command, so artifact, tool and publisher selectors are
+/// refused the way they are beside an exact command.
+fn pattern_selectors(rule: &Value, id: &str) -> Result<(Vec<Value>, Vec<Value>), Error> {
+    let matcher = &rule["match"];
+    if ["artifacts", "tools", "publishers"]
+        .iter()
+        .any(|key| has_selector(matcher, key))
+    {
+        return Err(error("unsupported_policy_match", id));
+    }
+    Ok((
+        selectors(matcher, "harnesses", id)?,
+        selectors(matcher, "workspaces", id)?,
+    ))
+}
+
+/// The enabled pattern Allow rules of a signed Cloud bundle document, each as
+/// `{rule_id, harnesses, workspaces, expires_at, expression}`, where a null
+/// selector list matches every harness or folder. The document must already
+/// compile under [`Effects::WithReview`], which validates every pattern.
+pub(super) fn command_patterns(document: &Value, deadline: Instant) -> Result<Value, Error> {
+    compile_effects(document, deadline, Effects::WithReview)?;
+    let mut patterns = Vec::new();
+    for rule in document["spec"]["rules"].as_array().into_iter().flatten() {
+        let id = rule["id"].as_str().unwrap_or("unknown");
+        let expression = &rule["match"]["commands"];
+        if rule["enabled"] != true || rule["effect"] != "allow" || !expression.is_object() {
+            continue;
+        }
+        let (harnesses, workspaces) = pattern_selectors(rule, id)?;
+        let expires = expiry(
+            if rule["lifetime"]["mode"] == "until" {
+                &rule["lifetime"]["expiresAt"]
+            } else {
+                &Value::Null
+            },
+            id,
+            "invalid_policy_expiry",
+        )?;
+        let list = |values: Vec<Value>| {
+            if values == [Value::Null] {
+                Value::Null
+            } else {
+                Value::Array(values)
+            }
+        };
+        patterns.push(json!({"rule_id":id,"harnesses":list(harnesses),
+            "workspaces":list(workspaces),"expires_at":expires,"expression":expression}));
+    }
+    Ok(Value::Array(patterns))
 }

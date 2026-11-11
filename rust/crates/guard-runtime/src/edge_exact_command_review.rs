@@ -135,6 +135,26 @@ pub(crate) fn apply_with(
     result: PreToolResultV1,
     identities: crate::edge_exact_command_allow::BundleIdentities,
 ) -> PreToolResultV1 {
+    apply_with_sources(
+        guard_home,
+        call,
+        now_micros,
+        result,
+        identities,
+        crate::edge_command_pattern_allow::cached_patterns,
+    )
+}
+
+/// [`apply_with`] with the source of the signed bundle's command-pattern
+/// Allow rules too.
+pub(crate) fn apply_with_sources(
+    guard_home: &Path,
+    call: &Call<'_>,
+    now_micros: Option<i64>,
+    result: PreToolResultV1,
+    identities: crate::edge_exact_command_allow::BundleIdentities,
+    patterns: crate::edge_command_pattern_allow::BundlePatterns,
+) -> PreToolResultV1 {
     if result.action.event != "PreToolUse" || !is_shell_action(&result.action.action_type) {
         return result;
     }
@@ -176,18 +196,25 @@ pub(crate) fn apply_with(
             ),
         ),
         // No block or review rule names the command under any spelling, and
-        // every step was read, so a Guard Cloud allow on its exact text may
-        // settle the review.
+        // every step was read, so a Guard Cloud allow on its exact text, or a
+        // pattern Allow every spelling matches, may settle the review.
         Ok(Rules {
             review: None,
             incomplete: false,
             ..
-        }) => crate::edge_exact_command_allow::apply(
+        }) => crate::edge_command_pattern_allow::apply(
             &connection,
             &call.commands,
+            call.workspace,
             now_micros,
-            result,
-            identities,
+            crate::edge_exact_command_allow::apply(
+                &connection,
+                &call.commands,
+                now_micros,
+                result,
+                identities,
+            ),
+            patterns,
         ),
         Ok(_) => result,
         Err(Unreadable) => unreadable(result, reviewable),
