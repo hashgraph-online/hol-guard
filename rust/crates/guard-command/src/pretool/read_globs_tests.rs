@@ -198,3 +198,47 @@ fn a_bare_pattern_still_refuses_an_option_or_a_secret() {
 
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A pattern that matches nothing reads nothing: the shell passes the word on
+/// unchanged and no file of that name can exist, since it would have matched.
+/// A copy has nothing to copy, and a missing directory, a bare word a reader
+/// would take for an option, or a dotfile the pattern could match under
+/// `dotglob` is not an empty match.
+#[test]
+fn a_pattern_that_matches_nothing_reads_nothing() {
+    let root =
+        std::path::Path::new("/tmp").join(format!("guard-glob-empty-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let home = root.join("home");
+    let workspace = home.join("project");
+    std::fs::create_dir_all(workspace.join("src")).unwrap();
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(workspace.join("src/main.rs"), "fn main() {}\n").unwrap();
+    std::fs::write(workspace.join("src/.local.toml"), "x = 1\n").unwrap();
+    let home = std::fs::canonicalize(&home).unwrap();
+    let workspace = std::fs::canonicalize(&workspace).unwrap();
+    let context = super::super::super::PathContext {
+        home_dir: home.to_str(),
+        cwd: workspace.to_str(),
+        ..Default::default()
+    };
+
+    for value in ["snapshot*.py", "src/snapshot*.py", "./src/v?.md"] {
+        assert!(
+            super::bounded_glob_file_read_target(value, context),
+            "{value}"
+        );
+        assert_eq!(super::glob_file_matches(value, context), None, "{value}");
+    }
+    let absolute = format!("{}/src/snapshot*.py", workspace.display());
+    assert!(super::bounded_glob_file_read_target(&absolute, context));
+
+    for value in ["-n*", "missing/*.py", "src/*.toml"] {
+        assert!(
+            !super::bounded_glob_file_read_target(value, context),
+            "{value}"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&root);
+}
