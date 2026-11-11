@@ -249,6 +249,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-policy-snapshot-build-v1",
     "native-policy-snapshot-inspect-v1",
     "native-policy-snapshot-materialize-v1",
+    "native-policy-snapshot-publish-v1",
     "native-business-policy-retained-floor-v1",
     "native-business-policy-document-compile-v1",
     "native-removal-evidence-v1",

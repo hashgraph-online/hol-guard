@@ -102,6 +102,9 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             write_bytes_response(&native_exact_action_op::observe_bash_host_bytes(&bytes)?)
         }
+        [command, flag] if policy_snapshot_publish::is_command(command) && flag == "--stdin" => {
+            policy_snapshot_publish::run(io::stdin().lock(), io::stdout().lock())
+        }
         [command, flag] if policy_snapshot_build::is_command(command) && flag == "--stdin" => {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
