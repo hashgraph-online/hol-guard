@@ -237,4 +237,4 @@ def test_only_the_authority_apply_writes_capabilities() -> None:
     }
     callers = _calls("record_local_custom_extension_mutation") - {"runtime/custom_extension_continuity.py"}
     with_capabilities = {path for path in callers if "capabilities=" in (_SRC / path).read_text(encoding="utf-8")}
-    assert with_capabilities == {"daemon/local_cli_api.py"}
+    assert with_capabilities == {"local_clis/local_cli_api.py"}

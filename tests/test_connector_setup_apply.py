@@ -360,7 +360,7 @@ _GRANT_WRITERS = {
     "upsert_local_cli_grant",
 }
 _KNOWN_WRITE_SITES = {
-    ("daemon/local_cli_api.py", "apply", "record_local_custom_extension_mutation"),
+    ("local_clis/local_cli_api.py", "apply", "record_local_custom_extension_mutation"),
     (
         "runtime/custom_extension_continuity.py",
         "record_local_custom_extension_mutation",
@@ -400,9 +400,9 @@ def test_no_other_path_can_set_a_connector_allowed() -> None:
     assert {site for site in sites if site in _KNOWN_WRITE_SITES} == _KNOWN_WRITE_SITES
     assert sites <= _KNOWN_WRITE_SITES, sorted(sites - _KNOWN_WRITE_SITES)
     connector_modules = {
-        "daemon/approval_connector_recommendation.py",
-        "daemon/local_cli_connector_group.py",
-        "daemon/local_cli_http.py",
+        "hook_review/approval_connector_recommendation.py",
+        "local_clis/local_cli_connector_group.py",
+        "routes/service_calls.py",
         "runtime/connector_setup_items.py",
     }
     assert not {site for site in sites if site[0] in connector_modules}
