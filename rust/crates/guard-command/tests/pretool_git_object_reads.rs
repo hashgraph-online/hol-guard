@@ -178,8 +178,22 @@ fn object_read_configuration_is_probed() {
     assert_ne!(result.decision, "allow", "{result:?}");
     let result = classify(&home, "codex", "git cat-file -p :README.md");
     assert_ne!(result.decision, "allow", "{result:?}");
+    // The two diff switches turn off the external driver and textconv, not
+    // the monitor, so the staged read still waits for it.
+    let result = classify(
+        &home,
+        "codex",
+        "git show --no-ext-diff --no-textconv :README.md",
+    );
+    assert_ne!(result.decision, "allow", "{result:?}");
     git(&project, &["config", "--unset", "core.fsmonitor"]);
     let result = classify(&home, "codex", "git cat-file -p :README.md");
+    assert_eq!(result.decision, "allow", "{result:?}");
+    let result = classify(
+        &home,
+        "codex",
+        "git show --no-ext-diff --no-textconv :README.md",
+    );
     assert_eq!(result.decision, "allow", "{result:?}");
     // A promisor remote can fetch a missing object during the read.
     git(&project, &["config", "remote.origin.promisor", "true"]);
