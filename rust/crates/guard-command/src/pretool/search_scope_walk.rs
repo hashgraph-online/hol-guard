@@ -13,7 +13,7 @@ use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
-use super::search_scope_tracked::TrackedFiles;
+use super::search_scope_tracked::{Tracked, TrackedFiles};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Instant;
@@ -419,8 +419,15 @@ fn walk_scope_inner(
             } else if searched
                 && !names
                 && sensitive_scope_file(&path, home)
-                && !tracked.non_secret(&path)
-                && !clearance.is_some_and(|clearance| clearance.clears(&path))
+                && !match tracked.classify(&path) {
+                    Tracked::Clean => true,
+                    // A committed `Secret` manifest is held for the values it
+                    // declares; a pattern that cannot occur in it prints none.
+                    Tracked::SecretManifest => {
+                        clearance.is_some_and(|clearance| clearance.clears_secret_manifest(&path))
+                    }
+                    Tracked::Unproven => clearance.is_some_and(|clearance| clearance.clears(&path)),
+                }
             {
                 *blocker = Some(path);
                 return Err(ScopeUnproven);

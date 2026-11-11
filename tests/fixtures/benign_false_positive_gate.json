@@ -6659,6 +6659,20 @@
       "expect": "allow"
     },
     {
+      "id": "neg-grep-worktree-pattern-in-secret-manifest",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "path": "${WORKTREE}",
+        "pattern": "kind: Secret"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "grep-worktree",
       "fix_area": "omp",
       "harnesses": [
