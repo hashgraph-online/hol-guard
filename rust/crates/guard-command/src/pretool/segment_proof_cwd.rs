@@ -469,7 +469,9 @@ fn cwd_effectful_executable(executable: Option<&str>) -> bool {
 /// name is missing here is refused for the name alone, so the spellings that
 /// read the way `grep` and `rg` do belong beside them.
 pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool {
-    if executable.is_some_and(super::super::digest_reads::digest_program) {
+    if executable.is_some_and(|name| {
+        super::super::digest_reads::digest_program(name) || name == "openssl"
+    }) {
         return true;
     }
     matches!(

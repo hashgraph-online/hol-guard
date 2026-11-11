@@ -81,6 +81,12 @@ fn digests_of_named_files_proceed() {
         "sha1sum dist/app.whl dist/app.tar.gz",
         "cksum README.md",
         "sha256sum dist/app.whl | tail -1",
+        "openssl dgst -sha256 dist/app.whl",
+        "openssl dgst -sha256 -r dist/app.whl dist/app.tar.gz",
+        "openssl dgst -sha3-256 -hex -- dist/app.whl",
+        "openssl sha256 dist/app.whl",
+        "openssl dgst -sha256 dist/app.whl 2>&1 | head -5",
+        "cat dist/app.whl | openssl dgst -sha256",
     ] {
         assert_eq!(shell(&home, command), "allow", "{command}");
     }
@@ -102,6 +108,18 @@ fn digests_that_reach_further_keep_their_review() {
         // BSD `md5 -p` copies standard input through, so a screened operand
         // does not cover everything the command prints.
         "md5 -p README.md",
+        // `dgst` options that bring in a key, a secret or a library, or that
+        // write a file, reach further than the operands the proof screened.
+        "openssl dgst -sha256 -out digest.txt dist/app.whl",
+        "openssl dgst -sha256 -sign key.pem dist/app.whl",
+        "openssl dgst -sha256 -verify key.pem -signature sig dist/app.whl",
+        "openssl dgst -sha256 -hmac secret dist/app.whl",
+        "openssl dgst -sha256 -engine pkcs11 dist/app.whl",
+        "openssl dgst -sha256 -rand README.md dist/app.whl",
+        // Other subcommands are not digests.
+        "openssl enc -aes-256-cbc -in dist/app.whl",
+        "openssl rsa -in key.pem",
+        "openssl dgst -sha256",
     ] {
         assert_eq!(shell(&home, command), "review", "{command}");
     }
@@ -116,6 +134,7 @@ fn digests_of_a_private_key_do_not_proceed() {
     for command in [
         "shasum -a 256 ~/.ssh/id_ed25519",
         "sha256sum ~/.ssh/id_ed25519",
+        "openssl dgst -sha256 ~/.ssh/id_ed25519",
     ] {
         assert_ne!(shell(&home, command), "allow", "{command}");
     }

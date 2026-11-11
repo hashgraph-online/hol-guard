@@ -1,4 +1,4 @@
-//! Digest printers: `shasum`, the `*sum` family and BSD `md5`.
+//! Digest printers: `shasum`, the `*sum` family, BSD `md5` and `openssl dgst`.
 //!
 //! An agent checks a build artifact by printing its digest, so
 //! `shasum -a 256 dist/app.whl` and `sha256sum target/release/app` are
@@ -53,6 +53,84 @@ fn algorithm_name(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
 }
 
+/// `openssl dgst -sha256 dist/app.whl` prints the same one line per file the
+/// `*sum` family prints, and `openssl sha256 dist/app.whl` is its older
+/// spelling. Only the digest names and the printing switches are admitted.
+/// Everything else `dgst` takes reaches further: `-sign`, `-verify`,
+/// `-prverify`, `-hmac`, `-mac` and `-passin` bring in a key or a secret,
+/// `-out` and `-writerand` write a file, `-rand` opens more files, and
+/// `-engine` and `-provider` load a shared library.
+pub(in crate::pretool) fn safe_openssl_digest_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some((command, rest)) = arguments.split_first() else {
+        return false;
+    };
+    let mut digest_chosen = openssl_digest_name(command);
+    if command != "dgst" && !digest_chosen {
+        return false;
+    }
+    let mut operands = false;
+    let mut separator = false;
+    let mut saw_target = false;
+    for argument in rest {
+        if !operands && argument == "--" {
+            operands = true;
+            separator = true;
+            continue;
+        }
+        if !operands && argument.starts_with('-') && argument != "-" {
+            let switch = &argument[1..];
+            if openssl_digest_name(switch) && !digest_chosen {
+                digest_chosen = true;
+            } else if !matches!(switch, "r" | "c" | "hex" | "binary") {
+                return false;
+            }
+            continue;
+        }
+        operands = true;
+        if argument == "-"
+            || (argument.starts_with('-') && !separator)
+            || !digest_target(argument, context)
+        {
+            return false;
+        }
+        saw_target = true;
+    }
+    saw_target || piped_input
+}
+
+/// The digests OpenSSL names on its own command line. A name outside this
+/// list is one of the options above, or a typo that only makes it exit.
+fn openssl_digest_name(name: &str) -> bool {
+    matches!(
+        name,
+        "md5"
+            | "sha1"
+            | "sha224"
+            | "sha256"
+            | "sha384"
+            | "sha512"
+            | "sha512-224"
+            | "sha512-256"
+            | "sha3-224"
+            | "sha3-256"
+            | "sha3-384"
+            | "sha3-512"
+            | "blake2b512"
+            | "blake2s256"
+            | "ripemd160"
+            | "sm3"
+    )
+}
+
+fn digest_target(argument: &str, context: super::PathContext<'_>) -> bool {
+    verified_path_context(context.home_dir, context.cwd)
+        && command_read_target(argument, context, false)
+}
+
 fn safe_digest_with_targets(
     arguments: &[String],
     piped_input: bool,
@@ -89,8 +167,7 @@ fn safe_digest_with_targets(
             }
         } else if !allow_targets
             || (argument.starts_with('-') && !separator)
-            || !verified_path_context(context.home_dir, context.cwd)
-            || !command_read_target(argument, context, false)
+            || !digest_target(argument, context)
         {
             return false;
         }

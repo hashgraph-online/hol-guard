@@ -135,6 +135,7 @@ pub(crate) fn benign_command_segments(
             // home/cwd context retain the bounded path proof below.
             let requires_path_context = !path_free
                 && (super::digest_reads::digest_program(basename)
+                    || basename == "openssl"
                     || matches!(
                         basename,
                     "ls" | "cat"
@@ -590,6 +591,11 @@ pub(super) fn exact_safe_segment_with_context(
             context,
         ),
         "od" => safe_reads::safe_byte_dump_arguments(
+            &segment.arguments,
+            segment.pipeline_index > 0,
+            context,
+        ),
+        "openssl" => super::digest_reads::safe_openssl_digest_arguments(
             &segment.arguments,
             segment.pipeline_index > 0,
             context,
