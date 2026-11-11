@@ -112,7 +112,7 @@ def test_inspect_command_reviews_python_environ_dump() -> None:
 def _guard_log_tail(guard_home: Path) -> str:
     """Return the end of Guard's own log, where a generic hook deny records its cause."""
 
-    log_path = DaemonDiagnostics(guard_home, start_worker=False, rotate=False).log_path
+    log_path = DaemonDiagnostics(guard_home).log_path
     try:
         return log_path.read_text(encoding="utf-8", errors="replace")[-6000:]
     except OSError as error:

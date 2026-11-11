@@ -3,10 +3,11 @@
 //! extraction cleanup, the plugin report, the runtime heartbeat, the idle
 //! shutdown and the worker host.
 //!
-//! The daemon owns each schedule. One pass of a job is one Guard library call
-//! (`workers/ticks.py`) answering `{"ok": bool}`: the job waits its interval
-//! after a pass that succeeded and its backoff after one that did not, or
-//! could not run at all.
+//! The daemon owns each schedule. One pass of a job answers `{"ok": bool}`:
+//! the job waits its interval after a pass that succeeded and its backoff
+//! after one that did not, or could not run at all. The heartbeat, the idle
+//! hold and storage maintenance run here (`daemon_edge_worker_ticks.rs`);
+//! every other pass is one Guard library call (`workers/ticks.py`).
 //!
 //! Workers that wait on their own signals rather than a tick (the command
 //! queue, Cloud review sync, approval attention, the repair self-check, the
@@ -199,6 +200,9 @@ pub(super) fn reconcile_artifacts(reads: &NativeReads, user_home: Option<&str>) 
 
 fn pass(reads: &NativeReads, call: &str, args: Value) -> Option<Value> {
     let config = reads.config()?;
+    if let Some(answer) = ticks::native(reads, &config, call, &args) {
+        return answer;
+    }
     if call == RESIDENT_JOB {
         return library::call_resident(&config, call, args).ok();
     }
@@ -249,6 +253,9 @@ fn watch_idle(reads: &NativeReads, timeout: Duration, mut sleep: impl FnMut(Dura
         sleep(IDLE_HOLD);
     }
 }
+
+#[path = "daemon_edge_worker_ticks.rs"]
+mod ticks;
 
 #[cfg(all(test, unix))]
 #[path = "daemon_edge_workers_tests.rs"]

@@ -120,14 +120,7 @@ def _replay_server_class() -> type:
             self.active_stream_clients = 0
             self.active_stream_clients_lock = threading.Lock()
             self.shutdown_started = threading.Event()
-            self.diagnostics = DaemonDiagnostics(store.guard_home, start_worker=False, rotate=False)
-            self.auth_audit_lock, self.denial_audit_lock = threading.Lock(), threading.Lock()
-            self.auth_audit_windows = {}
-            self.audit_persistence = daemon_server.AuditPersistence(
-                store,
-                self.diagnostics,
-                attempt_timeout_seconds=daemon_server._AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS,
-            )
+            self.diagnostics = DaemonDiagnostics(store.guard_home)
             from ..workers.host import DurableWorkerRefresh
 
             self.command_queue_lifecycle = DurableWorkerRefresh(store)
