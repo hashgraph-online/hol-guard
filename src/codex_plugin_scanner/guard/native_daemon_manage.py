@@ -261,11 +261,19 @@ def _current_state() -> dict[str, object]:
     }
 
 
-def _guard_daemon_state_matches_current_runtime(payload: dict[str, object], guard_home: Path | None = None) -> bool:
+def _guard_daemon_state_matches_current_runtime(
+    payload: dict[str, object],
+    guard_home: Path | None = None,
+    *,
+    current_version: str | None = None,
+) -> bool:
+    current = _current_state()
+    if current_version is not None:
+        current["package_version"] = current_version
     answer = _daemon_manage(
         "state_matches",
         guard_home or _implicit_daemon_guard_home(),
-        args={"current": _current_state(), "state": payload},
+        args={"current": current, "state": payload},
     )
     if answer is not None and answer.get("matches") is True:
         return True

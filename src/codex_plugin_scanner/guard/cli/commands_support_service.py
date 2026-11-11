@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from .commands_support_interaction import _emit, _resolve_cisco_scan_options
     from .commands_support_runtime_artifacts import _optional_string
 
-from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..native_daemon_peer import load_guard_daemon_endpoint_url
 from ..daemon.start_classification import GuardDaemonStillStartingError
 from ._commands_shared import *
 from .commands_parser_helpers import *

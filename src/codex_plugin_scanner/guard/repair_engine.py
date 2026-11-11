@@ -76,7 +76,7 @@ def repair_daemon(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[st
         return _step("daemon", "ok", "No daemon is recorded for this Guard home.")
     try:
         if dry_run:
-            from .daemon.live_identity import verified_live_guard_daemon_identity
+            from .native_daemon_peer import verified_live_guard_daemon_identity
 
             healthy = verified_live_guard_daemon_identity(guard_home) is not None
             if healthy:

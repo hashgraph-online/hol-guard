@@ -81,7 +81,7 @@ def _codex_observer(plan: TransitionPlan, context: HarnessContext, store: GuardS
         if len(sides) != 1:
             raise TransitionError("daemon_artifact_binding_invalid")
         side = sides[0]
-        from ..daemon.live_identity import DaemonArtifactBinding
+        from ..native_daemon_peer import DaemonArtifactBinding
 
         artifact_binding = DaemonArtifactBinding.from_transition_plan(plan, side)
         native = cast(Mapping[str, object], (plan.native_runtimes or {})[side])

@@ -392,7 +392,7 @@ def test_reopened_coordinator_recovers_only_inverse_with_one_deadline(transition
 
 @pytest.mark.parametrize("side", ["candidate", "predecessor"])
 def test_daemon_binding_uses_planned_executable_digest_instead_of_artifact_archive(transition, side):
-    from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
+    from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
     _, plan, *_ = transition
     artifact = plan.candidate if side == "candidate" else plan.predecessor

@@ -19,12 +19,12 @@ from codex_plugin_scanner.guard import daemon as daemon_api
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
 from codex_plugin_scanner.guard.frozen_runtime_commands import (
     frozen_daemon_recovery_command,
     frozen_daemon_serve_command,
     frozen_windows_extension_control_commands,
 )
+from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
 
 @pytest.fixture

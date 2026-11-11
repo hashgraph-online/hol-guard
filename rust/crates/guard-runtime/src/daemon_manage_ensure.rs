@@ -363,7 +363,11 @@ fn runtime_matches_current(current: &Map<String, Value>, payload: &Map<String, V
     )
 }
 
-fn version_at_least(candidate: Option<&str>, current: Option<&str>, strictly: bool) -> bool {
+pub(super) fn version_at_least(
+    candidate: Option<&str>,
+    current: Option<&str>,
+    strictly: bool,
+) -> bool {
     let parse = |value: Option<&str>| {
         value
             .filter(|v| !v.trim().is_empty())
@@ -377,7 +381,7 @@ fn version_at_least(candidate: Option<&str>, current: Option<&str>, strictly: bo
 }
 
 /// `daemon_source_is_desktop_core`.
-fn source_is_desktop_core(source_root: &str) -> bool {
+pub(super) fn source_is_desktop_core(source_root: &str) -> bool {
     let lowered = source_root.replace('\\', "/").to_lowercase();
     let parts: Vec<&str> = lowered.split('/').filter(|part| !part.is_empty()).collect();
     let n = parts.len();
@@ -412,7 +416,7 @@ fn source_is_desktop_core(source_root: &str) -> bool {
 }
 
 /// `daemon_desktop_core_source_available`.
-fn desktop_core_source_available(source_root: Option<&Value>) -> bool {
+pub(super) fn desktop_core_source_available(source_root: Option<&Value>) -> bool {
     let Some(root) = source_root
         .and_then(Value::as_str)
         .filter(|r| !r.trim().is_empty())

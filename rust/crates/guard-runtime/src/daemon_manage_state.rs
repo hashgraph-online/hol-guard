@@ -26,6 +26,7 @@ use crate::daemon_policy_authority::{
 
 use super::ensure;
 use super::host::{self, Caller};
+use super::live_probe;
 use super::records::{self, int, text};
 use super::recover;
 use super::retire::{self, Deadline, Expected};
@@ -96,6 +97,9 @@ pub(super) fn answer(
             }
             _ => value_error("current and state are required"),
         },
+        "live_identity" => live_identity(home, args),
+        "peer" => super::peer::answer(caller, args)
+            .unwrap_or_else(|| value_error("peer query is invalid")),
         "state" => json!({"state": records::load_state_unverified(home)}),
         "authenticated" => json!({"state": load_authenticated_daemon_state(home)}),
         "auth" => json!({"auth": load_guard_daemon_auth_token(home)}),
@@ -198,6 +202,24 @@ pub(super) fn answer(
         }
         _ => return None,
     })
+}
+
+/// `probe_live_guard_daemon_identity`: the authenticated live identity and
+/// a safe reason; the caller's auth value never leaves the runtime.
+fn live_identity(home: &Path, args: &Map<String, Value>) -> Value {
+    let expected = match live_probe::ExpectedArtifact::from_args(args) {
+        Some(Err(())) => return value_error("Exact daemon artifact binding is invalid."),
+        Some(Ok(expected)) => Some(expected),
+        None => None,
+    };
+    let timeout = args.get("timeout").and_then(Value::as_f64).unwrap_or(1.0);
+    let verify_dashboard = args
+        .get("verify_dashboard")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let (identity, reason) =
+        live_probe::probe_live_with(home, timeout, verify_dashboard, expected.as_ref());
+    json!({"identity": identity, "reason": reason})
 }
 
 fn ensure_auth(home: &Path) -> std::io::Result<String> {

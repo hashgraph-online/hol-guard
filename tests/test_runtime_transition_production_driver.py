@@ -33,7 +33,6 @@ from codex_plugin_scanner.guard.approval_gate import (
 from codex_plugin_scanner.guard.cli.desktop_runtime_transition import run_desktop_runtime_transition
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.live_identity import verified_live_guard_daemon_identity
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
 from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_is_proven_dead,
@@ -41,6 +40,7 @@ from codex_plugin_scanner.guard.native_daemon_manage import (
     ensure_guard_daemon,
     load_authenticated_daemon_state,
 )
+from codex_plugin_scanner.guard.native_daemon_peer import verified_live_guard_daemon_identity
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, native_runtime_status
 from codex_plugin_scanner.guard.runtime_transition import (

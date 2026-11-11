@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.native_daemon_manage import (
     repair_approval_center_locator,
     retire_all_guard_daemons_for_home,
 )
-from codex_plugin_scanner.guard.daemon.runtime_peer import live_desktop_owned_daemon
+from codex_plugin_scanner.guard.native_daemon_peer import live_desktop_owned_daemon
 
 payload = json.loads(sys.stdin.read())
 guard_home = Path(payload["guard_home"]).expanduser().resolve()

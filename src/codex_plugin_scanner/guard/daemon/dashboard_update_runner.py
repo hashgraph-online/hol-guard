@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     clear_dashboard_update_lock,
     write_dashboard_update_outcome,
 )
-from codex_plugin_scanner.guard.daemon.runtime_peer import daemon_refresh_outcome_succeeded
 from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_identity_for_retirement,
     _retire_guard_daemon_pid,
@@ -24,6 +23,7 @@ from codex_plugin_scanner.guard.native_daemon_manage import (
     guard_daemon_retirement_is_complete,
     retire_all_guard_daemons_for_home,
 )
+from codex_plugin_scanner.guard.native_daemon_peer import daemon_refresh_outcome_succeeded
 from codex_plugin_scanner.guard.store import GuardStore
 
 _DASHBOARD_UPDATE_DAEMON_SETTLE_SECONDS = 1.5

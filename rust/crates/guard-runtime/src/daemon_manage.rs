@@ -28,6 +28,8 @@ mod ensure;
 mod host;
 #[path = "daemon_manage_live_probe.rs"]
 mod live_probe;
+#[path = "daemon_manage_peer.rs"]
+mod peer;
 #[path = "daemon_manage_records.rs"]
 mod records;
 #[path = "daemon_manage_recover.rs"]

@@ -9,6 +9,7 @@ from packaging.version import InvalidVersion, Version
 from ...version import __version__
 from ..cursor_hook_rebind import rebind_stale_cursor_hooks
 from ..native_daemon_manage import (
+    _guard_daemon_state_matches_current_runtime,
     clear_guard_daemon_state,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
@@ -16,8 +17,7 @@ from ..native_daemon_manage import (
     retire_all_guard_daemons_for_home,
 )
 from ..native_daemon_manage import guard_daemon_start_lock as _guard_daemon_start_lock
-from .live_identity import verified_live_guard_daemon_identity
-from .runtime_peer import daemon_state_matches_current_runtime
+from ..native_daemon_peer import verified_live_guard_daemon_identity
 
 
 def _verified_live_runtime(
@@ -62,7 +62,7 @@ def _keep_live_runtime_result(
 ) -> dict[str, object] | None:
     if verified_runtime is None or identity is None:
         return None
-    if not daemon_state_matches_current_runtime(identity, current_version=str(current_version)):
+    if not _guard_daemon_state_matches_current_runtime(identity, current_version=str(current_version)):
         return None
     daemon_version, daemon_version_text, _ = verified_runtime
     return {

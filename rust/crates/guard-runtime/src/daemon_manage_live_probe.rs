@@ -21,6 +21,65 @@ const UPDATE_STALE: Duration = Duration::from_secs(30 * 60);
 /// `probe_live_guard_daemon_identity`: health details prove the process
 /// and home; a dashboard session proves the normal surface accepts one.
 pub(super) fn probe_live(home: &Path, timeout: f64) -> (Option<Map<String, Value>>, &'static str) {
+    probe_live_with(home, timeout, true, None)
+}
+
+/// The executable a caller expects the live daemon to run: a read-only
+/// identity filter (`DaemonArtifactBinding.matches`), never an authorization.
+pub(super) struct ExpectedArtifact {
+    pub(super) executable: String,
+    pub(super) sha256: String,
+    pub(super) version: String,
+}
+
+impl ExpectedArtifact {
+    pub(super) fn from_args(args: &Map<String, Value>) -> Option<Result<Self, ()>> {
+        let raw = args.get("expected_artifact")?;
+        let Some(raw) = raw.as_object() else {
+            return Some(Err(()));
+        };
+        let text = |key: &str| raw.get(key).and_then(Value::as_str).map(str::to_owned);
+        let (Some(executable), Some(sha256), Some(version)) = (
+            text("executable"),
+            text("executable_sha256"),
+            text("package_version"),
+        ) else {
+            return Some(Err(()));
+        };
+        let valid = Path::new(&executable).is_absolute()
+            && sha256.len() == 64
+            && sha256
+                .bytes()
+                .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+            && !version.is_empty();
+        Some(if valid {
+            Ok(Self {
+                executable,
+                sha256,
+                version,
+            })
+        } else {
+            Err(())
+        })
+    }
+
+    fn matches(&self, state: &Map<String, Value>) -> bool {
+        let text = |key: &str| state.get(key).and_then(Value::as_str);
+        text("executable") == Some(self.executable.as_str())
+            && text("source_root") == Some(self.executable.as_str())
+            && text("runtime_fingerprint") == Some(self.sha256.as_str())
+            && text("package_version") == Some(self.version.as_str())
+    }
+}
+
+/// `probe_live_guard_daemon_identity` with its dashboard check optional and
+/// an optional expected artifact.
+pub(super) fn probe_live_with(
+    home: &Path,
+    timeout: f64,
+    verify_dashboard: bool,
+    expected: Option<&ExpectedArtifact>,
+) -> (Option<Map<String, Value>>, &'static str) {
     if !timeout.is_finite() || timeout <= 0.0 {
         return (None, "service_unresponsive");
     }
@@ -29,6 +88,9 @@ pub(super) fn probe_live(home: &Path, timeout: f64) -> (Option<Map<String, Value
     let Some((state, auth)) = load_authenticated_daemon_identity(home) else {
         return (None, "identity_unverified");
     };
+    if expected.is_some_and(|expected| !expected.matches(&state)) {
+        return (None, "identity_unverified");
+    }
     let Some(port) = daemon_port(&state) else {
         return (None, "identity_unverified");
     };
@@ -44,6 +106,15 @@ pub(super) fn probe_live(home: &Path, timeout: f64) -> (Option<Map<String, Value
         "daemon_url".into(),
         json!(format!("http://127.0.0.1:{port}")),
     );
+    if !verify_dashboard {
+        // The state must still describe the process that passed the probe.
+        let unchanged = load_authenticated_daemon_identity(home)
+            .is_some_and(|(refreshed, _)| refreshed == state);
+        if !unchanged || remaining().is_zero() {
+            return (None, "identity_unverified");
+        }
+        return (Some(identity), "healthy");
+    }
     if remaining().is_zero() || !dashboard_session(port, &auth, deadline) {
         return (Some(identity), "session_invalid");
     }

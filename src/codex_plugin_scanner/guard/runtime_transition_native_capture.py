@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .daemon.live_identity import DaemonArtifactBinding, verified_live_guard_daemon_identity
+from .native_daemon_peer import DaemonArtifactBinding, verified_live_guard_daemon_identity
 from .native_runtime import NativeRuntimeIdentity
 
 MAX_CHILDREN = 32

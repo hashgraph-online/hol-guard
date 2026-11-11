@@ -34,15 +34,15 @@ from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_manage
 from ..adapters.pi_extension_source import managed_extension_source
 from ..adapters.pi_support import json_payload
 from ..config import load_guard_config, resolve_guard_home
-from ..daemon.runtime_peer import (
-    daemon_refresh_outcome_succeeded as _daemon_refresh_outcome_succeeded,
-)
-from ..daemon.runtime_peer import retained_desktop_owner_note, retained_desktop_owner_payload
-from ..daemon.runtime_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
 from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
+from ..native_daemon_peer import (
+    daemon_refresh_outcome_succeeded as _daemon_refresh_outcome_succeeded,
+)
+from ..native_daemon_peer import retained_desktop_owner_note, retained_desktop_owner_payload
+from ..native_daemon_peer import retained_newer_runtime_payload as _verified_newer_guard_daemon
 from ..native_resident_update_lock import (
     NativeResidentUpdateLock,
     NativeResidentUpdateLockError,
