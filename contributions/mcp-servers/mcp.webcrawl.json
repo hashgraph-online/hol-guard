@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
-    "package": "@webcrawl/mcp"
+    "package": "@webcrawl/mcp@1.4.5"
   },
   "riskClasses": [
     "external-network-read",
