@@ -1,5 +1,5 @@
 //! Daemon recovery after a hook failure, in place of
-//! `guard/daemon/recovery_lifecycle.py` and `recovery_worker.py`.
+//! the retired Python `recovery_lifecycle.py` and `recovery_worker.py`.
 //!
 //! `recover` serializes one recovery per Guard home, keeps a running
 //! current daemon (an overloaded daemon is busy, not dead), and otherwise

@@ -1,5 +1,5 @@
 //! `daemon-manage --stdin`: retiring a Guard home's daemons and repairing its
-//! approval-center locator, in place of `guard/daemon/manager.py`.
+//! approval-center locator, in place of the retired Python `manager.py`.
 //!
 //! Ops (schema `daemon-manage.v1`):
 //! - `retire`: stop every daemon of the home except one on `keep_port`;

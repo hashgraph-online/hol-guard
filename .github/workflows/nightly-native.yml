@@ -145,7 +145,7 @@ jobs:
           uv run --no-sync python scripts/ci/rust_pretool_no_python_gate.py --root .
           uv run --no-sync python - <<'PY'
           from pathlib import Path
-          hook = Path('src/codex_plugin_scanner/guard/daemon/hook_worker.py').read_text()
+          hook = Path('src/codex_plugin_scanner/guard/hook_review/hook_worker.py').read_text()
           native = Path('src/codex_plugin_scanner/guard/native_runtime.py').read_text()
           if 'if response is None:\n                response = self.engine.review(request)' in hook:
               raise SystemExit('Python HookReviewEngine fallback remains')

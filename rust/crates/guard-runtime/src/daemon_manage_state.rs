@@ -1,6 +1,6 @@
 //! The daemon-manage ops that answer `guard/native_daemon_manage.py`, in place
 //! of the state, process, wake and maintenance helpers of
-//! `guard/daemon/manager.py` and `manager_ephemeral_reap.py`.
+//! the retired Python `manager.py` and `manager_ephemeral_reap.py`.
 //!
 //! Every op reads its arguments from the request's `args` object and answers
 //! one JSON object. A missing or malformed argument answers

@@ -1,6 +1,6 @@
 //! What the operating system says about one process, for daemon management.
 //!
-//! Each probe answers the same question `guard/daemon/manager.py` asked of
+//! Each probe answers the same question the retired Python `manager.py` asked of
 //! Python before it moved here, through the code the runtime already uses for
 //! that question: `process-identity` for start markers and owners,
 //! `posix-processes` and `windows-process-command-lines` for command lines and

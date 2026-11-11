@@ -1,5 +1,5 @@
 //! The Extension Control Center's effective-state projection. Ported from
-//! `daemon/extension_control_projection.py`.
+//! the retired Python `extension_control_projection.py`.
 //!
 //! Every extension and permission resolves for command evaluation against the
 //! same layers, through the resolver the command path uses, and each also

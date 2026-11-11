@@ -1,6 +1,6 @@
 //! The daemon's lifecycle records under a Guard home: the signed state, the
 //! signed pending-launch receipt and the discovery file, with the tombstone
-//! and quarantine rules `guard/daemon/manager.py` applied to them.
+//! and quarantine rules the retired Python `manager.py` applied to them.
 
 use std::fs::{self, File};
 use std::io::Read;

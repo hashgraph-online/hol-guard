@@ -1,5 +1,5 @@
 //! `posix-processes --stdin`: the bounded POSIX process queries the daemon
-//! ownership checks read (`guard/daemon/manager_process_query.py` before it
+//! ownership checks read (the retired Python `manager_process_query.py` before it
 //! moved here).
 //!
 //! - `inventory` answers `ps -axo pid=,command=` as `listing`, or, on Linux
