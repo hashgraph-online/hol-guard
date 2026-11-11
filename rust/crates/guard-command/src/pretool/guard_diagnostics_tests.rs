@@ -130,6 +130,14 @@ fn admits_only_exact_read_only_diagnostics() {
         "desktop --help",
         "disconnect --help",
         "remote-pair --help",
+        "extensions --help",
+        "extensions generate --help",
+        "help extensions",
+        "guard extensions validate --help",
+        "codebases --help",
+        "codebases add --help",
+        "context --help",
+        "context lean --help",
     ] {
         assert!(safe_hol_guard_arguments(&arguments(command)), "{command}");
     }
@@ -173,6 +181,11 @@ fn admits_only_exact_read_only_diagnostics() {
         "__guard-claude-hook --help",
         "status --json --help",
         "help npm",
+        "extensions",
+        "extensions generate",
+        "extensions apply --write",
+        "codebases add .",
+        "context lean",
         "a b c --help",
         "command ../test --help",
         "command -x --help",
