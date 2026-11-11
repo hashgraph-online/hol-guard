@@ -263,3 +263,9 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 029f6e816d3bfda39fc459be662433da45d922b0:rust/crates/guard-runtime/testdata/inventory_item_description/description_vectors.json:generic-api-key:787
 # Resume handle variable in the daemon edge session writes, renamed in a follow-up commit; not a credential.
 a3d54c9b6298f3905bfb176744259c771d72364c:rust/crates/guard-runtime/src/daemon_edge_sessions.rs:generic-api-key:270
+0e020fd16a9337cbdfffff2e0a48b56b39e645b5:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:9
+0e020fd16a9337cbdfffff2e0a48b56b39e645b5:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:10
+538fefd8906198efe479da55528ae299a0a4be2f:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:9
+538fefd8906198efe479da55528ae299a0a4be2f:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:10
+6fcf7e37361c9e0da39fecde6c13e0473a3a0580:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:9
+6fcf7e37361c9e0da39fecde6c13e0473a3a0580:contributions/authoring/command.secret-blast-radius/record.json:generic-api-key:10
