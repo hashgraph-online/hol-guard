@@ -52,6 +52,6 @@
   ],
   "saferAlternatives": [
     "Leave the server off and use the agent's draft as written instead of sending it to reright.",
-    "Use rewrite_result to read a draft already sent. Use keep_original when an unchecked rewrite changes a fact; quote the phrases. Reject pending rewrites in review. Neither sends new text."
+    "Use rewrite_result to check a sent draft's state. Use keep_original only if an unchecked rewrite changes a fact or reverses meaning, quoting changed phrases. If review is enabled, reject pending rewrites in the review UI. Neither tool sends new text."
   ]
 }
