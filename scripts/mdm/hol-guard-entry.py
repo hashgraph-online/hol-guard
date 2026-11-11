@@ -12,12 +12,40 @@ import re
 import stat
 import sys
 import tempfile
+import time
 from contextlib import suppress
 from datetime import datetime, timezone
 from multiprocessing import freeze_support
 from pathlib import Path
 
 _FROZEN_DAEMON_SERVE_ARG = "--_hol-guard-daemon-serve"
+_START_HEARTBEAT_ENV = "HOL_GUARD_DAEMON_START_HEARTBEAT"
+
+
+def _write_start_heartbeat() -> None:
+    """Tell the daemon launcher this process is starting, before Guard loads.
+
+    A cold Core on a loaded machine can spend most of the launcher's start
+    window unpacking and importing. The launcher names a file in this variable
+    only for a daemon launch; ``<pid> <time_ns>`` there keeps it from killing
+    a slow start as a stuck one. The record is written to a private temp file
+    without following links and renamed into place, and never raises.
+    """
+
+    path = os.environ.pop(_START_HEARTBEAT_ENV, "")
+    if not path:
+        return
+    temp = f"{path}.{os.getpid()}.tmp"
+    with suppress(BaseException):
+        descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            os.write(descriptor, f"{os.getpid()} {time.time_ns()}".encode("ascii"))
+        finally:
+            os.close(descriptor)
+        try:
+            os.replace(temp, path)
+        except OSError:
+            os.unlink(temp)
 
 
 def _packaged_version() -> str:
@@ -321,6 +349,7 @@ if __name__ == "__main__":
     # Dispatch PyInstaller multiprocessing children before importing Guard.
     # Otherwise private resource-tracker argv is parsed as a public CLI command.
     freeze_support()
+    _write_start_heartbeat()
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
         print(f"{Path(sys.argv[0]).name} {_packaged_version()}")
         raise SystemExit(0)

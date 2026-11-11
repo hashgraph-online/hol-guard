@@ -147,3 +147,37 @@ def test_entry_marker_literals_match_module_constants() -> None:
     source = _ENTRY_SCRIPT.read_text(encoding="utf-8")
     assert f'"{onefile_extraction.OWNER_MARKER_NAME}"' in source
     assert f'"{onefile_extraction._OWNER_MARKER_SCHEMA}"' in source  # pyright: ignore[reportPrivateUsage]
+
+
+def test_start_heartbeat_names_this_process_privately(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: types.ModuleType
+) -> None:
+    """The daemon launcher keeps a slow cold start alive only on this record."""
+
+    heartbeat = tmp_path / "daemon-start-heartbeat"
+    monkeypatch.setenv("HOL_GUARD_DAEMON_START_HEARTBEAT", str(heartbeat))
+    entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
+
+    pid, recorded_at_ns = heartbeat.read_text(encoding="ascii").split()
+    assert int(pid) == os.getpid()
+    assert int(recorded_at_ns) > 0
+    assert stat.S_IMODE(heartbeat.stat().st_mode) == 0o600
+    assert "HOL_GUARD_DAEMON_START_HEARTBEAT" not in os.environ
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["daemon-start-heartbeat"]
+
+
+def test_start_heartbeat_is_skipped_outside_a_daemon_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: types.ModuleType
+) -> None:
+    monkeypatch.delenv("HOL_GUARD_DAEMON_START_HEARTBEAT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_entry_writes_start_heartbeat_before_guard_imports() -> None:
+    source = _ENTRY_SCRIPT.read_text(encoding="utf-8")
+    main = source[source.index('if __name__ == "__main__":') :]
+    heartbeat = main.index("_write_start_heartbeat()\n")
+    heavy = main.index("from codex_plugin_scanner.guard.frozen_daemon_runtime import")
+    assert main.index("freeze_support()\n") < heartbeat < heavy
