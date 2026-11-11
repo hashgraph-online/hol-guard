@@ -83,6 +83,14 @@ fn runtime(message: &str) -> Failure {
     Failure::Runtime(message.to_owned())
 }
 
+/// A launch is starting and has not handed off yet; the caller waits for it.
+fn still_starting(home: &Path) -> Failure {
+    Failure::Timeout(format!(
+        "Guard daemon is still starting; retry shortly. Expected state file at {}.",
+        records::state_path(home).display()
+    ))
+}
+
 struct Context<'a> {
     caller: &'a Caller,
     request: &'a Ensure<'a>,
@@ -244,12 +252,13 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 clear_progress(&home);
                 return Ok(url);
             }
-            // A launch still inside its start window is never signalled for
-            // a caller's shorter deadline. Its marker stays, so once the
-            // window passes a later start finds it and retires it.
+            // `retire_all` never signals a launch whose pending receipt is
+            // still open, so a launch inside its start window survives this
+            // caller's shorter deadline. Its marker stays and the caller is
+            // told to wait; once the window passes, a later start retires it.
             retire::retire_all(caller, None, deadline);
             if !retire::retirement_is_complete(caller) {
-                return Err(runtime(IN_PROGRESS));
+                return Err(still_starting(&home));
             }
             clear_progress(&home);
         } else if start_progress::retire_stalled(caller, &progress, deadline) {
@@ -785,10 +794,7 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         Ok(Handoff::Done(outcome)) => outcome.map(Some),
         // Still starting: the child keeps running under its pending receipt
         // and signed progress marker, and the caller waits for its handoff.
-        Ok(Handoff::StillStarting) => Err(Failure::Timeout(format!(
-            "Guard daemon is still starting; retry shortly. Expected state file at {}.",
-            records::state_path(home).display()
-        ))),
+        Ok(Handoff::StillStarting) => Err(still_starting(home)),
         Ok(Handoff::Missing) => {
             terminate(&mut child);
             Err(runtime(NOT_CONTAINED))

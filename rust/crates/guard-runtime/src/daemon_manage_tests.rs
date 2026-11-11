@@ -387,6 +387,10 @@ fn a_heartbeat_without_this_launchs_nonce_does_not_count() {
     assert!(super::start_progress::load_progress(home.path()).is_none());
 }
 
+/// The stand-in Core execs `/bin/sleep`, which is not a Guard daemon command,
+/// so its progress marker no longer counts as live, the same verdict an
+/// expired marker gets. The second start therefore takes the stalled-launch
+/// path: it settles that launch's receipt instead of refusing to start.
 #[test]
 fn a_still_starting_launch_that_never_hands_off_does_not_block_the_next_start() {
     let home = private_home();
