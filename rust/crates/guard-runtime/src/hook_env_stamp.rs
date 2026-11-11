@@ -161,11 +161,19 @@ fn lookup<'a>(environment: &'a DecodedEnvironment, name: &str) -> Option<&'a str
         .map(|(_, value)| value.as_str())
 }
 
+/// Git pages through `less` when no pager is configured, so `cat` or `less`
+/// with flags that take no argument adds nothing to the default. Cursor's
+/// agent terminal exports `sh -c "head -n 10000 | cat"`: a fixed script that
+/// finds `sh`, `head` and `cat` on the PATH Git would search for `less` and
+/// writes only to the terminal.
 fn pager_default_equivalent(value: Option<&str>) -> bool {
     static PAGER: OnceLock<Regex> = OnceLock::new();
     let pattern = PAGER.get_or_init(|| {
-        Regex::new(r"^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?$")
-            .expect("pager pattern compiles")
+        Regex::new(concat!(
+            r"^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*",
+            r#"|sh -c "head -n 10000 [|] cat")?$"#
+        ))
+        .expect("pager pattern compiles")
     });
     value.is_some_and(|value| pattern.is_match(value))
 }
