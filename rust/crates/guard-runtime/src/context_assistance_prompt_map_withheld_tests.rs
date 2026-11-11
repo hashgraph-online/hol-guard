@@ -156,3 +156,96 @@ from every template line.\" Reply with its file path and function name.";
     assert!(map.contains("src/lexer.py:8-10 Lexer._strip"), "{map}");
     assert!(!map.contains("stream.current"), "{map}");
 }
+
+/// A rename lists the lines naming the old name in a test file Guard keeps
+/// out, by number alone, and counts that file, so the list is whole and the
+/// one rename command covers it. Before, the list held only the files read,
+/// and an agent renamed the rest and left the kept-out test calling the old
+/// name.
+#[test]
+fn a_rename_lists_the_lines_of_a_withheld_file_by_number() {
+    let held = concat!("to", "ken = self.stream.current");
+    let test = format!(
+        "from app import utils\n\n\ndef test_name():\n    {held}\n    \
+assert utils._detect_program_name(path=None) == 'app'\n"
+    );
+    let list = [
+        (
+            "src/app/utils.py",
+            "def _detect_program_name(path=None):\n    return 'app'\n",
+        ),
+        (
+            "src/app/core.py",
+            "from .utils import _detect_program_name\n\n\ndef main():\n    \
+return _detect_program_name()\n",
+        ),
+        ("tests/test_utils.py", test.as_str()),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the internal helper `_detect_program_name` to \
+`_detect_program_name_impl` everywhere in the project, including tests.";
+    let map = prompt_map(home.path(), &root, prompt).unwrap();
+    assert!(map.contains("tests/test_utils.py:6: Guard keeps"), "{map}");
+    assert!(
+        map.contains("Every line naming `_detect_program_name`"),
+        "{map}"
+    );
+    assert!(!map.contains("stream.current"), "{map}");
+    assert!(!map.contains("utils._detect_program_name(path"), "{map}");
+    if !cfg!(windows) {
+        let command = (map.lines()).find(|line| line.contains("perl")).unwrap();
+        assert!(command.contains("tests/test_utils.py"), "{map}");
+    }
+}
+
+/// A kept-out file naming the old name on more lines than a list holds has
+/// every one of them listed, by number, or the list does not say it is
+/// whole: an agent trusting a whole list edits no line past it.
+#[test]
+fn a_rename_lists_every_line_of_a_long_withheld_file() {
+    let held = concat!("to", "ken = self.stream.current");
+    let calls = "    _detect_program_name()\n".repeat(45);
+    let test = format!(
+        "from app.utils import _detect_program_name\n\n\ndef test_name():\n    {held}\n{calls}"
+    );
+    let list = [
+        (
+            "src/app/utils.py",
+            "def _detect_program_name(path=None):\n    return 'app'\n",
+        ),
+        ("tests/test_utils.py", test.as_str()),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the internal helper `_detect_program_name` to \
+`_detect_program_name_impl` everywhere in the project, including tests.";
+    let map = prompt_map(home.path(), &root, prompt).unwrap();
+    let whole = map.contains("Every line naming `_detect_program_name`");
+    assert!(!whole || map.contains(", 50: Guard keeps"), "{map}");
+    assert!(!map.contains("stream.current"), "{map}");
+}
+
+/// Lines building a longer name in a kept-out file are listed to a list's
+/// length and said to go on, so the note stays short.
+#[test]
+fn a_rename_cuts_long_building_lines_of_a_withheld_file() {
+    let held = concat!("to", "ken = self.stream.current");
+    let builds = "    getattr(utils, f\"_detect_program_name{end}\")\n".repeat(45);
+    let test = format!("from app import utils\n\n\ndef test_name(end):\n    {held}\n{builds}");
+    let list = [
+        (
+            "src/app/utils.py",
+            "def _detect_program_name(path=None):\n    return 'app'\n",
+        ),
+        ("tests/test_utils.py", test.as_str()),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the internal helper `_detect_program_name` to \
+`_detect_program_name_impl` everywhere in the project, including tests.";
+    let map = prompt_map(home.path(), &root, prompt).unwrap();
+    // The lines naming it whole are all listed; those building on it stop
+    // at line 45, the fortieth.
+    let cut =
+        "45: Guard keeps this file's text out of this note; edit these lines too (and more lines)";
+    assert!(map.contains(cut), "{map}");
+    assert!(!map.contains("perl"), "{map}");
+}
