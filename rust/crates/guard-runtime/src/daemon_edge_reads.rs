@@ -79,6 +79,11 @@ struct Handshake {
 }
 
 impl ReadConfig {
+    /// The Guard home the daemon serves.
+    pub(super) fn guard_home(&self) -> &Path {
+        Path::new(&self.guard_home)
+    }
+
     /// What the edge needs to run the daemon's Guard CLI: its argv prefix,
     /// the Guard home and the daemon's working directory.
     /// The dashboard bundle every response names.
@@ -363,7 +368,12 @@ impl NativeReads {
 
     /// `store_call` for a write: `Err(true)` when the call failed after its
     /// write committed, which the daemon must not repeat.
-    fn store_write(&self, config: &ReadConfig, method: &str, args: Value) -> Result<Value, bool> {
+    pub(in crate::daemon_edge) fn store_write(
+        &self,
+        config: &ReadConfig,
+        method: &str,
+        args: Value,
+    ) -> Result<Value, bool> {
         self.store_within(config, method, args, config.busy_timeout_ms)
     }
 
@@ -385,7 +395,7 @@ impl NativeReads {
         .ok()
     }
 
-    fn store_within(
+    pub(in crate::daemon_edge) fn store_within(
         &self,
         config: &ReadConfig,
         method: &str,

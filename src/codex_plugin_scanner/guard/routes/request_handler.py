@@ -15,9 +15,8 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypeAlias, TypedDict
+from typing import Any
 
-from ..evidence_drains.audit_persistence import AuditPersistence
 from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
 from ..native_daemon_manage import (
     write_guard_daemon_state,
@@ -40,19 +39,6 @@ _MAX_CONCURRENT_DAEMON_REQUESTS = 32
 _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS = 8
 _MAX_CONCURRENT_DAEMON_CRITICAL_REQUESTS = 8
 _MAX_CONCURRENT_DAEMON_CONNECTIONS = 128
-_AUTH_AUDIT_COALESCE_SECONDS = 60.0
-_AUTH_AUDIT_KEY_LIMIT = 64
-_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS = 0.25
-_AuthAuditKey: TypeAlias = tuple[str, str, str | None, str | None, bool, bool, bool]
-
-
-class _AuthAuditWindow(TypedDict):
-    started_at: float
-    suppressed_count: int
-    pending: bool
-    persisted: bool
-
-
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
@@ -134,10 +120,6 @@ class _GuardDaemonHTTPServer:
     saturation_probes: dict[int, tuple[socket.socket, tuple[str, int], float]]
     unclassified_connections_lock: threading.Lock
     diagnostics: DaemonDiagnostics
-    auth_audit_lock: threading.Lock
-    denial_audit_lock: threading.Lock
-    audit_persistence: AuditPersistence
-    auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: Any
     server_address: Any
     extension_control_runtime: Any

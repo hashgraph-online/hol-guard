@@ -257,21 +257,11 @@ def test_control_library_steps_read_the_daemon_state(tmp_path: Path) -> None:
     assert set(listed) == {"payload"}  # type: ignore[arg-type]
 
 
-def test_worker_passes_answer_ok(tmp_path: Path) -> None:
-    holds = _call(tmp_path, "worker.idle_holds", {})
-    assert holds["ok"] == {"ok": True, "hold": False}
-    maintained = _call(tmp_path, "worker.maintain_activity", {})
-    assert isinstance(maintained["ok"]["ok"], bool)  # type: ignore[index]
-    heartbeat = _call(
-        tmp_path,
-        "worker.runtime_heartbeat",
-        {"session_id": "s1", "host": "127.0.0.1", "port": 5474, "started_at": "2026-01-01T00:00:00+00:00"},
-    )
-    assert heartbeat["ok"] == {"ok": True}
-
-
-def test_worker_heartbeat_refuses_malformed_arguments(tmp_path: Path) -> None:
-    assert "error" in _call(tmp_path, "worker.runtime_heartbeat", {"port": "x"})
+def test_native_daemon_worker_passes_are_not_library_calls(tmp_path: Path) -> None:
+    # The native daemon runs the heartbeat, the idle hold and storage
+    # maintenance itself.
+    for name in ("worker.idle_holds", "worker.maintain_activity", "worker.runtime_heartbeat"):
+        assert _call(tmp_path, name, {})["error"]["message"] == "unknown_call"  # type: ignore[index]
 
 
 def test_worker_reconcile_leaves_an_unmanaged_home_untouched(tmp_path: Path) -> None:

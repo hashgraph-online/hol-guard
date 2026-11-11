@@ -18,6 +18,7 @@ use super::super::http::{query_value, Request};
 use super::super::library;
 use super::{authorize_token, hook_scheduler, json_response, refusals, NativeReads, ReadConfig};
 use crate::claude_hook_bridge_render::py_strip;
+use crate::pyjson::PyVal;
 use admission::{
     client_key, exec_workdir, expires_at, lane, payload_reference, reply_event, runtime_event,
     take_hint, truthy, Directories, Rejection, MAX_PAYLOAD_REFERENCE_BYTES,
@@ -43,6 +44,9 @@ const REFERENCE_CODE: &str = "invalid_hook_payload_reference";
 const READINESS_WAIT: Duration = Duration::from_secs(60);
 /// How long past its deadline a hook still waits for a review to finish.
 const LATE_ANSWER_GRACE: Duration = Duration::from_millis(400);
+/// How long a refused-directory audit waits for a store another writer
+/// holds, as the Python daemon's one inline attempt did.
+const AUDIT_BUSY_MS: u64 = 250;
 /// The longest a hook waits for the start-time worker warm-up.
 const WARM_WAIT: Duration = Duration::from_secs(20);
 
@@ -148,6 +152,7 @@ pub(in crate::daemon_edge) fn respond(
     reads.report_activity();
     let hook = Hook {
         config,
+        reads,
         port,
         daemon_pid: reads.daemon_pid(),
         path: request.path,
@@ -166,6 +171,7 @@ pub(in crate::daemon_edge) fn respond(
 /// One hook request, and the resident library steps it calls.
 struct Hook<'a> {
     config: &'a ReadConfig,
+    reads: &'a NativeReads,
     port: u16,
     daemon_pid: u32,
     path: &'a str,
@@ -244,13 +250,34 @@ impl Hook<'_> {
             .is_ok_and(|probe| probe.harness_unmanaged)
     }
 
-    /// Audits a directory the request named and the daemon refused.
-    fn audit_rejection(&self, rejection: &Value, expires: Option<f64>) {
-        let extra = json!({ "rejection": rejection });
-        let _ = match expires {
-            Some(expires) => self.call_by("hook.path_rejected", extra, expires),
-            None => self.call("hook.path_rejected", extra),
+    /// Audits a directory the request named and the daemon refused. The
+    /// row is best effort: a store held past the audit's short wait loses
+    /// it rather than delaying the hook.
+    fn audit_rejection(&self, rejection: &Value) {
+        let text = |key: &str| {
+            PyVal::Str(
+                rejection
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .map(py_strip)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_default()
+                    .to_owned(),
+            )
         };
+        let payload = PyVal::Dict(vec![
+            ("method".to_owned(), PyVal::Str("POST".to_owned())),
+            ("path".to_owned(), PyVal::Str(self.path.to_owned())),
+            ("parameter".to_owned(), text("parameter")),
+            ("reason".to_owned(), text("reason")),
+        ]);
+        let _ = refusals::record_within(
+            "daemon.hook.path_rejected",
+            &payload,
+            self.config,
+            self.reads,
+            AUDIT_BUSY_MS,
+        );
     }
 
     /// Settles the directories a request named against this daemon's homes.
@@ -278,7 +305,7 @@ impl Hook<'_> {
         };
         let guard_home = self.settle(&[("guard-home", self.param("guard-home"), None)]);
         if let Err(rejection) = guard_home.require("guard-home") {
-            self.audit_rejection(&rejection.to_value(), None);
+            self.audit_rejection(&rejection.to_value());
             return invalid(&rejection);
         }
         let candidate = self.raw_param("workspace").or_else(|| {
@@ -311,7 +338,7 @@ impl Hook<'_> {
             );
         }
         if let Some(rejection) = rejection {
-            self.audit_rejection(&rejection.to_value(), None);
+            self.audit_rejection(&rejection.to_value());
             return invalid(&rejection);
         }
         let Some(workspace) = workspace else {
@@ -434,7 +461,7 @@ impl Hook<'_> {
         };
 
         if let Some(rejection) = &rejection {
-            self.audit_rejection(rejection, Some(expires));
+            self.audit_rejection(rejection);
         }
         // Leftover hooks of an app Guard is not protecting pass through.
         let managed_harness = self.managed_harness();

@@ -68,25 +68,6 @@ def _params(args: Mapping[str, Any]) -> dict[str, list[str]]:
     return parse_qs(query) if isinstance(query, str) else {}
 
 
-def _record_path_rejection(server: Any, args: Mapping[str, Any]) -> None:
-    rejection = args.get("rejection")
-    if not isinstance(rejection, dict):
-        return
-    from ..runtime_health.server_common import _now
-
-    with server.denial_audit_lock:
-        _ = server.audit_persistence.persist(
-            "daemon.hook.path_rejected",
-            {
-                "method": "POST",
-                "path": _text(args.get("path")) or "",
-                "parameter": _text(rejection.get("parameter")) or "",
-                "reason": _text(rejection.get("reason")) or "",
-            },
-            _now(),
-        )
-
-
 def hook_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Counts the hook the daemon received and names the harness its capacity counts under."""
 
@@ -112,13 +93,6 @@ def hook_warm(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
 
     server = _server(store, args)
     _ = server.hook_worker
-    return {}
-
-
-def hook_path_rejected(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """Audits a directory the daemon refused to take from a hook request."""
-
-    _record_path_rejection(_server(store, args), args)
     return {}
 
 
@@ -198,7 +172,6 @@ def hook_review(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 
 HOOK_CALLS = {
     "hook.begin": hook_begin,
-    "hook.path_rejected": hook_path_rejected,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.warm": hook_warm,
