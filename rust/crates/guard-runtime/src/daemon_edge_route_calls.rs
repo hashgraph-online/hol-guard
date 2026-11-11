@@ -1,5 +1,5 @@
 //! Control routes whose work is one Guard library call that also shapes the
-//! reply: policy writes and lookups, bulk allow-once and the resume retry.
+//! reply: policy lookups, bulk allow-once and the resume retry.
 //!
 //! The route, the caller check and the body read are the daemon's. The call
 //! answers `{"status", "body", "no_store"}` and the daemon writes exactly
@@ -13,8 +13,6 @@ use super::DROPPED;
 /// The library call that answers `POST path`, with its path arguments.
 pub(in crate::daemon_edge) fn route(path: &str) -> Option<(&'static str, Map<String, Value>)> {
     let name = match path {
-        "/v1/policy/clear" => "route.policy_clear",
-        "/v1/policy/decisions" => "route.policy_upsert",
         "/v1/policy/resolve" => "route.policy_resolve",
         "/v1/policy/claim" => "route.policy_claim",
         "/v1/requests/bulk-allow-once" => "route.bulk_allow_once",

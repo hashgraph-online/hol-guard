@@ -70,10 +70,55 @@ pub(super) fn require_settings_write(
     grant: Option<Box<ApprovalGateGrantWireV1>>,
     config: &ReadConfig,
 ) -> Option<Gate> {
-    let granted = grant.is_some();
-    let answer = call(
+    require_with_grant(
         ApprovalGateMethodV1::RequireSettingsWrite,
         None,
+        grant,
+        config,
+    )
+}
+
+/// `require_policy_write(guard_home, params={"action", "scope"},
+/// approval_gate_grant=grant)`, run after `require_high_risk` passed.
+pub(super) fn require_policy_write(
+    action: &str,
+    scope: &str,
+    grant: Option<Box<ApprovalGateGrantWireV1>>,
+    config: &ReadConfig,
+) -> Option<Gate> {
+    require_with_grant(
+        ApprovalGateMethodV1::RequirePolicyWrite,
+        Some(json!({"action": action, "scope": scope})),
+        grant,
+        config,
+    )
+}
+
+/// `require_policy_clear(guard_home, approval_gate_grant=grant)`, run after
+/// `require_high_risk` passed.
+pub(super) fn require_policy_clear(
+    grant: Option<Box<ApprovalGateGrantWireV1>>,
+    config: &ReadConfig,
+) -> Option<Gate> {
+    require_with_grant(
+        ApprovalGateMethodV1::RequirePolicyClear,
+        None,
+        grant,
+        config,
+    )
+}
+
+/// A consumer check run with the grant `require_high_risk` issued.
+fn require_with_grant(
+    method: ApprovalGateMethodV1,
+    params: Option<Value>,
+    grant: Option<Box<ApprovalGateGrantWireV1>>,
+    config: &ReadConfig,
+) -> Option<Gate> {
+    let granted = grant.is_some();
+    let answer = call(
+        method,
+        params,
         None,
         grant.map(|grant| *grant),
         None,

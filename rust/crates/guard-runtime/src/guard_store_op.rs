@@ -79,6 +79,7 @@ use crate::guard_store_outbox_queries as queries;
 use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
+use crate::guard_store_policy_clear::clear_policy_decisions;
 use crate::guard_store_policy_source_context::policy_source_contexts;
 use crate::guard_store_policy_upsert::upsert_policy;
 use crate::guard_store_queue_live_wait::queue_with_live_wait;
@@ -581,7 +582,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "local_cli_replay_allowed"
         | "prune_inactive_local_cli_observations"
         | "cache_advisories"
-        | "upsert_policy" => Kind::Write,
+        | "upsert_policy"
+        | "clear_policy_decisions" => Kind::Write,
         "find_local_mcp_observation" => Kind::Read,
         "ensure_local_mcp_observation"
         | "reconcile_remote_mcp_declarations"
@@ -602,6 +604,7 @@ fn dispatch(
 ) -> StoreResult<Value> {
     match method {
         "upsert_policy" => upsert_policy(connection, args),
+        "clear_policy_decisions" => clear_policy_decisions(connection, args),
         "review_event_outbox_status" => queries::status(connection, source, args),
         "list_ready_review_events" => reads::list_ready(connection, source, args),
         "list_review_event_snapshots" => reads::list_snapshots(connection, source, args),
