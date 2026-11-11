@@ -98,23 +98,14 @@ pub(super) fn reaches_outside(
     }
     // A name pattern is matched against what the walk finds and never opened,
     // so `-not -path './.git/*'` or `--exclude-dir=.git` reaches nothing.
-    let mut pattern_next = false;
-    segment.arguments.iter().any(|argument| {
-        if std::mem::take(&mut pattern_next) {
-            return false;
-        }
-        if granted_script == Some(argument.as_str()) || (guide && argument == SAFETY_GUIDE) {
-            return false;
-        }
-        if name_patterns::separated(name, argument) {
-            pattern_next = true;
+    name_patterns::opened(name, &segment.arguments).any(|argument| {
+        if granted_script == Some(argument) || (guide && argument == SAFETY_GUIDE) {
             return false;
         }
         let value = match argument.split_once('=') {
-            Some((option, _)) if name_patterns::attached(name, option) => return false,
             Some((option, value)) if option.starts_with('-') => value,
             _ if argument.starts_with('-') => return false,
-            _ => argument.as_str(),
+            _ => argument,
         };
         outside_from(value, name, workspace, below)
     })

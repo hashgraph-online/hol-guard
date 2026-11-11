@@ -64,6 +64,10 @@ fn a_path_into_git_metadata_still_keeps_the_review() {
         // `find` tests that open or write their argument.
         "find . -newer .git/HEAD -type f",
         "find . -name '*.py' -fprint .git/hooks/pre-commit",
+        // The command `-exec` runs parses its own arguments, so a `-name`
+        // there is grep's pattern and the next word a file grep reads.
+        "find . -exec grep -e -name .git/HEAD \\;",
+        "find . -type f -exec grep -e -name .git/HEAD {} +",
         // Only `grep` reads its name globs; another tool's same option
         // spelling is not a pattern.
         "cp --exclude-dir=.git src/lib.py .git/hooks/pre-commit",
