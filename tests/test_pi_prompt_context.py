@@ -35,6 +35,7 @@ function inputApprovalResumeBindingIsActive(ctx, binding) {
   return binding.generation === inputApprovalResumeGeneration && binding.cwd === ctx.cwd;
 }
 function approvalBlockedReason(_response, reason) { return reason; }
+function approvalUrlFromResponse(response) { return response.approval_url ?? null; }
 function scheduleApprovalResume() {}
 async function daemonWorkspaceReadiness() {
   await new Promise(resolve => setTimeout(resolve, setupDelayMs));
@@ -43,6 +44,9 @@ async function daemonWorkspaceReadiness() {
 async function runGuard(payload) {
   payloads.push(payload);
   if (payload.prompt === 'protected') return {decision: 'deny', reason: 'protected'};
+  if (payload.prompt === 'needs approval') {
+    return {decision: 'deny', reason: 'held', approval_url: 'https://guard.example/approve/1'};
+  }
   if (payload.prompt === 'no match') {
     return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit'}};
   }
@@ -173,20 +177,21 @@ def test_prompt_resumed_while_the_agent_is_busy_is_queued_without_context(tmp_pa
 
 
 HEADLESS_STEPS = """
-const aborted = [];
-const headless = {...ctx, abort: () => aborted.push(true)};
+const aborted = [], notes = [];
+const headless = {...ctx, abort: () => aborted.push(true), ui: {notify: (text) => notes.push(text)}};
 // Print mode and the SDK start a turn without an "input" event.
 const begin = (prompt, reason = 'prompt') =>
   callbacks.before_agent_start({type: 'before_agent_start', reason, prompt}, headless);
 const matched = await begin('fix the cart total');
 const empty = await begin('no match');
 const blocked = await begin('protected');
+const held = await begin('needs approval');
 const stopped = aborted.length;
 const revived = await begin('fix the cart total', 'revive');
 // Once the host emits "input", prompts are reviewed there and only there.
 const typed = await turn('fix the theme');
 const later = await begin('fix the cart total');
-console.log(JSON.stringify({matched, empty, blocked, stopped, revived, typed, later, payloads}));
+console.log(JSON.stringify({matched, empty, blocked, held, stopped, notes, revived, typed, later, payloads}));
 """
 
 
@@ -197,11 +202,18 @@ def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harnes
     assert result["matched"] == context_message("fix the cart total")
     assert "empty" not in result
     assert "blocked" not in result
-    assert result["stopped"] == 1, "a denied headless prompt stops its turn"
+    assert "held" not in result
+    assert result["stopped"] == 2, "a denied headless prompt stops its turn"
+    # Nothing resumes a headless turn after approval, so the note asks for a rerun.
+    assert result["notes"] == [
+        "protected",
+        "held\n\nHOL Guard approval page: https://guard.example/approve/1\n"
+        "This prompt was stopped. Run it again after approving it in HOL Guard.",
+    ]
     assert "revived" not in result
     assert result["typed"] == {"input": {"action": "continue"}, "start": context_message("fix the theme")}
     assert "later" not in result
     reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
-    assert reviewed == ["fix the cart total", "no match", "protected", "fix the theme"]
+    assert reviewed == ["fix the cart total", "no match", "protected", "needs approval", "fix the theme"]
     assert all(payload["guard_prompt_context"] is True for payload in result["payloads"])
     assert all(payload["session_id"] == "session-a" for payload in result["payloads"])
