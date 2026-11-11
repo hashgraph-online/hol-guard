@@ -99,6 +99,123 @@ fn sed_substitution_flags_rest(text: &str) -> Option<&str> {
     }
     Some("")
 }
+/// Upper bound on statements in one stream-edit script.
+const MAX_STREAM_STATEMENTS: usize = 16;
+
+/// A script whose every statement edits only the stream it reads.
+///
+/// Trimming a listing is spelled with more than a substitution:
+/// `sed '1d;$d'` drops a header and a footer, `sed '/^#/d'` drops comments,
+/// `sed 5q` stops after five lines and `sed '12s/a/b/'` rewrites one line.
+/// Each statement takes an optional address or address range -- a line
+/// number, `$`, or a plain `/regex/` -- an optional `!`, and one of `d`, `p`,
+/// `q`, `Q`, `=` or a substitution. All of them print, drop or rewrite lines
+/// of the input and nothing else. The commands that reach past the stream --
+/// `w`/`W` write a file, `r`/`R` read one, `e` runs a shell -- and every
+/// block, label, branch, hold-space or text command are not in that list, so
+/// a script that spells one stays unread and keeps its review.
+pub(crate) fn sed_script_is_stream_edit(script: &str) -> bool {
+    let mut rest = py_strip(script);
+    if rest.is_empty() {
+        return false;
+    }
+    for _ in 0..MAX_STREAM_STATEMENTS {
+        let Some(after) = stream_statement_rest(rest) else {
+            return false;
+        };
+        rest = py_strip(after);
+        let Some(next) = rest.strip_prefix(';') else {
+            return rest.is_empty();
+        };
+        rest = py_strip(next);
+        if rest.is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// One stream statement, and the script text left after it.
+fn stream_statement_rest(text: &str) -> Option<&str> {
+    let mut rest = text;
+    if let Some((first, after)) = address_rest(rest) {
+        rest = after.trim_start_matches([' ', '\t']);
+        if let Some(after_comma) = rest.strip_prefix(',') {
+            let (second, after) = address_rest(after_comma.trim_start_matches([' ', '\t']))?;
+            // Line 0 only opens a range that a pattern closes (`0,/re/`).
+            if second == Address::Zero || (first == Address::Zero && second != Address::Pattern) {
+                return None;
+            }
+            rest = after;
+        } else if first == Address::Zero {
+            return None;
+        }
+        rest = rest.trim_start_matches([' ', '\t']);
+        rest = rest.strip_prefix('!').unwrap_or(rest);
+        rest = rest.trim_start_matches([' ', '\t']);
+    }
+    let after = match rest.chars().next()? {
+        'd' | 'p' | '=' => &rest[1..],
+        'q' | 'Q' => rest[1..].trim_start_matches(|c: char| c.is_ascii_digit()),
+        's' => sed_substitution_rest(rest)?,
+        _ => return None,
+    };
+    // A command ends at `;`, at blank space, or at the end of the script.
+    (after.is_empty() || after.starts_with(';') || after.starts_with([' ', '\t'])).then_some(after)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Address {
+    Zero,
+    Line,
+    Pattern,
+}
+
+/// One address -- a line number, `$`, or a `/regex/` with optional `I`/`M`
+/// flags -- and the text after it. A `/` inside a bracket expression is
+/// refused rather than guessed at, since sed implementations disagree on
+/// whether it closes the address.
+fn address_rest(text: &str) -> Option<(Address, &str)> {
+    if let Some(after) = text.strip_prefix('$') {
+        return Some((Address::Line, after));
+    }
+    let digits = text.len() - text.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+    if digits > 0 {
+        if digits > 6 {
+            return None;
+        }
+        let line = text[..digits].parse::<u32>().ok()?;
+        let kind = if line == 0 {
+            Address::Zero
+        } else {
+            Address::Line
+        };
+        return Some((kind, &text[digits..]));
+    }
+    let body = text.strip_prefix('/')?;
+    let mut escaped = false;
+    let mut in_bracket = false;
+    for (index, character) in body.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' => escaped = true,
+            '[' => in_bracket = true,
+            ']' => in_bracket = false,
+            '/' if in_bracket => return None,
+            '/' if index == 0 => return None,
+            '/' => {
+                let after = body[index + 1..].trim_start_matches(['I', 'M']);
+                return Some((Address::Pattern, after));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

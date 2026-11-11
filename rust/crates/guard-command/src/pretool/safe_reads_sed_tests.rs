@@ -58,19 +58,88 @@ fn a_pattern_address_never_carries_a_write_or_a_second_command() {
     assert!(!reads(&["-n", "/export/p;/export/w outp", "Cargo.toml"]));
     assert!(!reads(&["-n", "/export/e id", "Cargo.toml"]));
     assert!(!reads(&["-n", "/export/r /etc/passwd", "Cargo.toml"]));
-    assert!(!reads(&["-n", "/export/!p", "Cargo.toml"]));
     assert!(!reads(&["-n", "//p", "Cargo.toml"]));
     assert!(!reads(&["-n", "\\%export%p", "Cargo.toml"]));
     assert!(!reads(&["-n", "/a/,/b/,/c/p", "Cargo.toml"]));
-    assert!(!reads(&["-n", "/export/d", "Cargo.toml"]));
     assert!(!reads(&["-i", "/export/p", "Cargo.toml"]));
-    // A statement of digits alone keeps the stricter line rule.
+    // Line 0 names no line.
     assert!(!reads(&["-n", "0p", "Cargo.toml"]));
-    assert!(!reads(&["-n", "p", "Cargo.toml"]));
 
     // A `;` inside a pattern belongs to the address, so the program is read
     // whole; a delimiter left open is a program this reading never finished.
     assert!(!reads(&["-n", "/export;p", "Cargo.toml"]));
     assert!(!reads(&["-n", "/export/p;/timeout", "Cargo.toml"]));
     assert!(!reads(&["-n", "/export/p;w /tmp/out/x", "Cargo.toml"]));
+}
+
+/// Trimming a listing spells more than a print or a substitution: `1d;$d`
+/// drops a header and footer, `/^#/d` drops comments, `5q` stops early and
+/// `12s/a/b/` rewrites one line. Each only prints, drops or rewrites lines of
+/// the file it reads, so it reads like the print does.
+#[test]
+fn a_line_delete_quit_or_addressed_substitution_reads_like_a_print() {
+    for program in [
+        "1d",
+        "$d",
+        "1d;$d",
+        "/^#/d",
+        "/^$/d",
+        "2,4d",
+        "2,4!d",
+        "5q",
+        "3Q",
+        "12s/foo/bar/",
+        "/^use /s/foo/bar/g",
+        "1,/^}/s/a/b/",
+        "0,/export/s/a/b/",
+        "1d; s/a/b/; $d",
+        "/[0-9]/d",
+        "=",
+    ] {
+        assert!(reads(&[program, "Cargo.toml"]), "{program}");
+    }
+    assert!(reads(&["-n", "/export/d", "Cargo.toml"]));
+    assert!(reads(&["-n", "/export/!p", "Cargo.toml"]));
+    assert!(reads(&["-n", "p", "Cargo.toml"]));
+    assert!(reads(&["-e", "1d", "-e", "$d", "Cargo.toml"]));
+    assert!(reads(&["-E", "/^[[:space:]]*$/d", "Cargo.toml"]));
+}
+
+/// The stream reading admits no command that reaches past the stream, no
+/// block, label, branch, hold-space or text command, and no in-place edit.
+#[test]
+fn a_stream_edit_never_writes_reads_or_runs() {
+    for program in [
+        "1d;w out.txt",
+        "1d;r /etc/hosts",
+        "1d;R /etc/hosts",
+        "1d;W out.txt",
+        "1d;e id",
+        "12s/a/b/w out.txt",
+        "12s/a/b/e",
+        "1!G;h;$!d",
+        "/^$/N;/\\n$/D",
+        "/x/{d}",
+        ":a;N;ba",
+        "1i hello",
+        "$a footer",
+        "2c text",
+        "y/abc/xyz/",
+        "1l",
+        "0d",
+        "1,0d",
+        "//d",
+        "/a[/]/d",
+        "/a/,+3d",
+        "1d 2d",
+        "dw out.txt",
+        "qw",
+        "",
+    ] {
+        assert!(!reads(&[program, "Cargo.toml"]), "{program}");
+    }
+    assert!(!reads(&["-i", "1d", "Cargo.toml"]));
+    assert!(!reads(&["-i", "", "1d", "Cargo.toml"]));
+    assert!(!reads(&["1d", "Cargo.toml", "-i"]));
+    assert!(!reads(&["-f", "script.sed", "Cargo.toml"]));
 }

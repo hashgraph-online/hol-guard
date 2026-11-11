@@ -232,7 +232,13 @@ pub(super) fn safe_sed_arguments(
     let substitution = programs
         .iter()
         .all(|program| crate::sed_substitution::sed_script_is_pure_substitution(program));
-    (bounded_print || substitution)
+    // Line deletes, early quits and addressed substitutions trim the same
+    // stream (`sed '1d;$d'`, `sed 5q`, `sed '12s/a/b/'`); the reading admits
+    // only commands that print, drop or rewrite the lines it reads.
+    let stream_edit = programs
+        .iter()
+        .all(|program| crate::sed_substitution::sed_script_is_stream_edit(program));
+    (bounded_print || substitution || stream_edit)
         && (matches!(targets, [target] if (target == "-" && piped_input) || (!target.starts_with('-') && command_read_target(target, context, false)))
             || (targets.is_empty() && piped_input))
 }
