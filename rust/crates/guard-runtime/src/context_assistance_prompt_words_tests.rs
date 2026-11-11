@@ -201,6 +201,7 @@ fn a_prompt_that_asks_for_no_change_is_told_apart() {
         "Don't edit files in tests/, fix the parser.",
         "Change anything needed to fix this.",
         "Tune the piano changes in score.py.",
+        "Fix `parse` so it returns \"no changes\" for empty input.",
     ] {
         assert!(!asks_no_change(prompt), "{prompt}");
     }

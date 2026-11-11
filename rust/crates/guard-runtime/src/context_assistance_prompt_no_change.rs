@@ -23,13 +23,17 @@ const STILL_WHOLE: [&str; 4] = ["just", "please", "yet", "i"];
 /// decide: "don't edit files, just answer" but "don't edit files in tests/".
 const EVERYTHING: [&str; 5] = ["files", "code", "anything", "at", "all"];
 
+/// Marks before a phrase that quote it, as expected output, not an instruction.
+const QUOTES: &str = "\"'`\u{201c}\u{2018}";
+
 /// True when the prompt says not to change anything at all.
 pub(crate) fn asks_no_change(prompt: &str) -> bool {
     let lower = prompt.to_lowercase().replace('\u{2019}', "'");
     NO_CHANGE.iter().any(|phrase| {
         lower.match_indices(phrase).any(|(at, _)| {
             let before = lower[..at].chars().next_back();
-            !before.is_some_and(char::is_alphanumeric) && whole(&lower[at + phrase.len()..])
+            !before.is_some_and(|c| c.is_alphanumeric() || QUOTES.contains(c))
+                && whole(&lower[at + phrase.len()..])
         })
     })
 }
