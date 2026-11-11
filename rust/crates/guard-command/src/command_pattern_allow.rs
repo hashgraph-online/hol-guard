@@ -10,14 +10,17 @@
 //! - the pattern is one condition, `exact`, `startsWith` or `glob`, matched
 //!   case-sensitively, whose only wildcard is `*` (`?` and `[` must be
 //!   escaped);
-//! - the program and the word after it are literal, so `git *` or `* status`
-//!   cannot be written. A wrapper that runs another program (`env`, `sudo`,
-//!   `xargs`, ...) cannot be the program at all, and an interpreter cannot be
-//!   followed by an option, so `bash -c *` cannot allow any script;
+//! - the program and the word after it are plain literal words (no quotes,
+//!   escapes, expansions or wildcards), so `git *`, `* status` or
+//!   `bash '-c' *` cannot be written. A wrapper that runs another program
+//!   (`env`, `sudo`, `xargs`, `npx`, ...) cannot be the program at all, an
+//!   interpreter cannot be followed by an option (`bash -c *`, `cmd /c *`),
+//!   and a tool cannot be followed by the subcommand that runs a program or
+//!   code it is given (`npm exec *`, `deno eval *`, `uv run *`);
 //! - the command it allows is one simple command: no unquoted `;`, `&`, `|`,
-//!   `<`, `>`, parentheses or line breaks, and no command substitution even
-//!   inside double quotes. A `*` that would otherwise cover `x; curl … | sh`
-//!   matches nothing.
+//!   `<`, `>`, parentheses, comments or line breaks, and no `$` expansion or
+//!   command substitution outside single quotes. A `*` that would otherwise
+//!   cover `x; curl … | sh` matches nothing.
 //!
 //! Block and review rules keep the exact-command form, which matches every
 //! spelling of a command; a pattern only narrows what a person must approve.
@@ -36,29 +39,64 @@ mod tests;
 /// that starts with one could allow anything.
 const WRAPPERS: &[&str] = &[
     "builtin",
+    "bunx",
     "busybox",
     "caffeinate",
     "chroot",
+    "chronic",
     "command",
     "doas",
     "env",
     "eval",
     "exec",
+    "faketime",
+    "flock",
+    "ionice",
+    "ltrace",
     "nice",
     "nohup",
+    "npx",
+    "parallel",
     "pkexec",
+    "pnpx",
     "runuser",
     "script",
     "setsid",
     "stdbuf",
+    "strace",
     "su",
     "sudo",
+    "systemd-run",
+    "taskset",
     "time",
     "timeout",
     "unbuffer",
+    "uvx",
     "watch",
     "xargs",
 ];
+
+/// Subcommands that run a program, script or code given in the words after
+/// them, so `npm exec *` could allow anything.
+const RUNNER_SUBCOMMANDS: &[(&str, &[&str])] = &[
+    ("bun", &["exec", "run", "x"]),
+    ("conda", &["run"]),
+    ("deno", &["eval", "run"]),
+    ("go", &["run"]),
+    ("hatch", &["run"]),
+    ("mise", &["exec", "x"]),
+    ("npm", &["exec", "x"]),
+    ("pdm", &["run"]),
+    ("pipenv", &["run"]),
+    ("pipx", &["run"]),
+    ("pnpm", &["dlx", "exec"]),
+    ("poetry", &["run"]),
+    ("uv", &["run", "tool"]),
+    ("yarn", &["dlx", "exec"]),
+];
+
+/// Interpreters whose code-running switches start with `/` (`cmd /c`).
+const SLASH_SWITCH_INTERPRETERS: &[&str] = &["cmd", "powershell", "pwsh"];
 
 /// Programs that run code passed as an option (`-c`, `-e`, `--eval`), so the
 /// word after them must be a literal non-option such as a script path.
@@ -125,16 +163,31 @@ pub fn validate_allow_pattern(expression: &CommandExpressionV1) -> Result<String
         if WRAPPERS.contains(&base.as_str()) {
             return Err("command_pattern_allow_wrapper".to_owned());
         }
-        if INTERPRETERS.contains(&base.as_str()) && words[1].starts_with('-') {
+        let option = words[1].starts_with('-')
+            || words[1].starts_with('/') && SLASH_SWITCH_INTERPRETERS.contains(&base.as_str());
+        if INTERPRETERS.contains(&base.as_str()) && option {
             return Err("command_pattern_allow_interpreter_option".to_owned());
+        }
+        if RUNNER_SUBCOMMANDS
+            .iter()
+            .any(|(runner, subcommands)| *runner == base && subcommands.contains(&words[1]))
+        {
+            return Err("command_pattern_allow_runner".to_owned());
         }
     }
     Ok(program.to_owned())
 }
 
-/// The program and the word after it carry no wildcard.
+/// The program and the word after it are plain words the shell passes through
+/// unchanged: no wildcard, quote, escape, expansion or brace.
 fn literal_head(words: &[&str]) -> Result<(), String> {
-    if words.len() < 2 || words[..2].iter().any(|word| word.contains(['*', '?', '['])) {
+    let plain = |word: &&str| {
+        !word.is_empty()
+            && word
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"._/@%+=,:-".contains(&byte))
+    };
+    if words.len() < 2 || !words[..2].iter().all(plain) {
         return Err("command_pattern_allow_literal_head".to_owned());
     }
     Ok(())
@@ -174,12 +227,17 @@ fn program_base(program: &str) -> String {
 }
 
 /// Whether `command` is one simple command: nothing that chains, pipes,
-/// redirects, groups or substitutes another command, and no line break.
+/// redirects, groups or substitutes another command, no comment that hides
+/// the rest of the line, no `$` expansion outside single quotes, and no line
+/// break.
 pub fn is_simple_command(command: &str) -> bool {
     let mut characters = command.chars().peekable();
     let mut single = false;
     let mut double = false;
+    let mut word_start = true;
     while let Some(character) = characters.next() {
+        let at_word_start =
+            std::mem::replace(&mut word_start, character == ' ' || character == '\t');
         if matches!(character, '\n' | '\r' | '\0') {
             return false;
         }
@@ -188,8 +246,8 @@ pub fn is_simple_command(command: &str) -> bool {
             continue;
         }
         match character {
-            '`' => return false,
-            '$' if characters.peek() == Some(&'(') => return false,
+            '`' | '$' => return false,
+            '#' if at_word_start && !double => return false,
             '\\' => {
                 // An escaped line break continues the line; anything else
                 // escaped is a literal character.

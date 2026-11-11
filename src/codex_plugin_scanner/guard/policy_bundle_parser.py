@@ -54,7 +54,8 @@ _CANONICAL_COMPILE_REMEDIATION = {
         "a deliberate policy decision."
     ),
     "command_pattern_allow_single_condition": (
-        "A command pattern allows with one condition. Split a rule with several conditions into one rule each."
+        "A command pattern allows with one condition. Write every limit the command must meet into that one "
+        "pattern; use separate rules only for commands that are each acceptable on their own."
     ),
     "command_pattern_allow_case_sensitive": "A command pattern must match case-sensitively.",
     "command_pattern_allow_operator": (
@@ -65,16 +66,21 @@ _CANONICAL_COMPILE_REMEDIATION = {
         "A command pattern's only wildcard is *. Escape ? and [ with a backslash to match them literally."
     ),
     "command_pattern_allow_literal_head": (
-        "A command pattern keeps the program and the word after it literal, so it cannot allow every use of a program."
+        "A command pattern keeps the program and the word after it as plain literal words, with no wildcard, "
+        "quote, escape or expansion, so it cannot allow every use of a program."
     ),
     "command_pattern_allow_program_literal": "A command pattern must start with a literal program name.",
     "command_pattern_allow_wrapper": (
-        "A command pattern cannot start with a program that runs another one, such as env, sudo or xargs. "
+        "A command pattern cannot start with a program that runs another one, such as env, sudo, xargs or npx. "
         "Allow the exact command instead."
     ),
     "command_pattern_allow_interpreter_option": (
-        "A command pattern cannot follow an interpreter with an option such as -c or -e, which would allow "
-        "any script. Name the script file, or allow the exact command."
+        "A command pattern cannot follow an interpreter with an option such as -c, -e or /c, which would "
+        "allow any script. Name the script file, or allow the exact command."
+    ),
+    "command_pattern_allow_runner": (
+        "A command pattern cannot follow a tool with the subcommand that runs a program or code it is given, "
+        "such as npm exec, deno eval or uv run. Allow the exact command instead."
     ),
     "policy_compilation_limit": (
         "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "

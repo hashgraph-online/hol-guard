@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use serde_json::{Map, Value};
 
-use super::{compiler, failure, mapping, text, Error};
+use super::{compile_patterns, compiler, failure, mapping, text, Error};
 
 #[cfg(test)]
 #[path = "policy_document_bundle_tests.rs"]
@@ -75,11 +75,11 @@ pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> 
 }
 
 /// The command-pattern Allow rules of a canonical bundle that apply to one
-/// named device ([`compiler::command_patterns`]). An Evaluate policy allows
+/// named device ([`compile_patterns::command_patterns`]). An Evaluate policy allows
 /// nothing, so it yields none.
 pub(super) fn command_patterns(input: &Value, deadline: Instant) -> Result<Value, Error> {
     let (document, evaluating) = device_document(input)?;
-    let patterns = compiler::command_patterns(&document, deadline)?;
+    let patterns = compile_patterns::command_patterns(&document, deadline)?;
     Ok(if evaluating {
         Value::Array(Vec::new())
     } else {

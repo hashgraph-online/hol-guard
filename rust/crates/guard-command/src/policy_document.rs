@@ -11,6 +11,8 @@ mod bounds;
 mod bundle;
 #[path = "policy_document_command_dto.rs"]
 mod command_dto;
+#[path = "policy_document_compile_patterns.rs"]
+mod compile_patterns;
 #[path = "policy_document_compile.rs"]
 mod compiler;
 #[path = "policy_document_diff.rs"]

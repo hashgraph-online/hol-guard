@@ -147,3 +147,93 @@ fn simple_commands_are_read_with_their_quoting() {
     assert!(!is_simple_command("echo \"unterminated"));
     assert!(!is_simple_command("a\rb"));
 }
+
+#[test]
+fn the_literal_head_is_a_plain_word_the_shell_passes_through() {
+    for value in [
+        "bash '-c' *",
+        "bash \"-c\" *",
+        "bash \\-c *",
+        "bash ${TARGET} *",
+        "bash $TARGET *",
+        "bash {-c,x} *",
+        "bash ~/x.sh *",
+    ] {
+        assert_eq!(
+            pattern("glob", value).map(|_| ()),
+            Err("command_pattern_allow_literal_head".to_owned()),
+            "{value}"
+        );
+    }
+    assert!(pattern("glob", "gh pr-view * --repo owner/name").is_ok());
+    assert!(pattern("startsWith", "git push").is_ok());
+}
+
+#[test]
+fn slash_switches_and_runner_subcommands_cannot_open_a_wildcard() {
+    for value in ["cmd /c *", "cmd.exe /k *", "pwsh /Command *"] {
+        assert_eq!(
+            pattern("glob", value).map(|_| ()),
+            Err("command_pattern_allow_interpreter_option".to_owned()),
+            "{value}"
+        );
+    }
+    for value in [
+        "npm exec *",
+        "npm x *",
+        "pnpm dlx *",
+        "yarn dlx *",
+        "bun x *",
+        "bun run *",
+        "deno eval *",
+        "deno run *",
+        "uv run *",
+        "uv tool *",
+        "pipx run *",
+        "poetry run *",
+        "go run *",
+    ] {
+        assert_eq!(
+            pattern("glob", value).map(|_| ()),
+            Err("command_pattern_allow_runner".to_owned()),
+            "{value}"
+        );
+    }
+    for value in [
+        "npx --yes *",
+        "bunx cowsay *",
+        "uvx ruff *",
+        "parallel echo *",
+    ] {
+        assert_eq!(
+            pattern("glob", value).map(|_| ()),
+            Err("command_pattern_allow_wrapper".to_owned()),
+            "{value}"
+        );
+    }
+    assert!(pattern("glob", "npm test *").is_ok());
+    assert!(pattern("glob", "cmd scripts/run.bat *").is_ok());
+}
+
+#[test]
+fn comments_and_expansions_never_match() {
+    let rule = glob("gh pr view * --repo owner/name");
+    for command in [
+        "gh pr view 1 # --repo owner/name",
+        "gh pr view 1 #--repo owner/name",
+        "gh pr view $PR --repo owner/name",
+        "gh pr view ${PR} --repo owner/name",
+        "gh pr view \"$PR\" --repo owner/name",
+        "gh pr view $'\\x41' --repo owner/name",
+    ] {
+        assert!(!allows(&rule, command), "{command:?} was allowed");
+    }
+    assert!(allows(&rule, "gh pr view issue#5 --repo owner/name"));
+    assert!(allows(
+        &rule,
+        "gh pr view '# not a comment' --repo owner/name"
+    ));
+    assert!(allows(&rule, "gh pr view \"a #b\" --repo owner/name"));
+    assert!(allows(&rule, "gh pr view \\#1 --repo owner/name"));
+    assert!(allows(&rule, "gh pr view '$PR' --repo owner/name"));
+}

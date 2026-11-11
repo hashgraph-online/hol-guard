@@ -279,3 +279,28 @@ fn a_pattern_scoped_to_another_device_or_evaluated_allows_nothing() {
     input["bundle"]["payload"]["spec"]["defaults"]["mode"] = json!("observe");
     assert_eq!(patterns(&input)["ok"], json!([]));
 }
+
+#[test]
+fn a_pattern_narrowed_by_a_selector_the_hook_cannot_apply_refuses_the_bundle() {
+    for (key, value) in [
+        ("repositories", json!(["owner/private"])),
+        ("domains", json!(["example.test"])),
+        ("actors", json!(["someone"])),
+        ("artifacts", json!(["skill:x"])),
+    ] {
+        let mut narrowed = pattern_rule("p", "allow", "gh pr view * --repo owner/name");
+        narrowed["match"][key] = value;
+        let refused = refusal(&request(json!([narrowed])));
+        assert!(
+            refused.to_string().contains("unsupported_policy_match"),
+            "{key}: {refused}"
+        );
+    }
+    let mut scoped = pattern_rule("p", "allow", "gh pr view * --repo owner/name");
+    scoped["match"]["harnesses"] = json!(["codex"]);
+    scoped["match"]["workspaces"] = json!(["/work/repo"]);
+    scoped["match"]["repositories"] = json!([]);
+    scoped["match"]["x-note"] = json!("kept");
+    let found = patterns(&request(json!([scoped])))["ok"].clone();
+    assert_eq!(found[0]["harnesses"], json!(["codex"]), "{found}");
+}
