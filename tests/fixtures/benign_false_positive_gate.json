@@ -54705,7 +54705,8 @@
         "command": "git ls-files -X list.txt '**/deploy.sh'"
       },
       "cwd": "org_app",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     }
   ],
   "mcp_cases": [
