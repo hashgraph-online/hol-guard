@@ -96,7 +96,7 @@
     },
     {
       "name": "show_artifact",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "login",
