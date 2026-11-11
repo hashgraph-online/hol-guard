@@ -597,11 +597,16 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0,
             context,
         ),
-        "openssl" => super::digest_reads::safe_openssl_digest_arguments(
-            &segment.arguments,
-            segment.pipeline_index > 0,
-            context,
-        ),
+        // An unquoted Windows drive path loses its backslashes to the shell,
+        // so the file `openssl` opens is not the one the proof screened.
+        "openssl" => {
+            super::directory_targets::drive_targets_quoted(segment)
+                && super::digest_reads::safe_openssl_digest_arguments(
+                    &segment.arguments,
+                    segment.pipeline_index > 0,
+                    context,
+                )
+        }
         name if super::digest_reads::digest_program(name) => {
             super::digest_reads::safe_digest_arguments(
                 &segment.arguments,

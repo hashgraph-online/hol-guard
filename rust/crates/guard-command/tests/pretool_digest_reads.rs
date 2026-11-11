@@ -109,7 +109,13 @@ fn digests_of_named_files_proceed() {
         "openssl dgst -sha256 dist/app.whl 2>&1 | head -5",
         "cat dist/app.whl | openssl dgst -sha256",
     ] {
-        assert_eq!(shell(&home, command), "allow", "{command}");
+        // A clean stamp, so the verdict does not depend on whatever OpenSSL
+        // variables the test runner happens to export.
+        assert_eq!(
+            shell_with_names(&home, command, &["PATH"]),
+            "allow",
+            "{command}"
+        );
     }
 }
 
