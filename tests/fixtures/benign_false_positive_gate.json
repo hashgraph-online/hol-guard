@@ -43471,7 +43471,8 @@
         "command": "grep -rn TODO src --exclude-dir node_modules"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-grep-late-exclude-dir-over-env-backup",
@@ -43505,7 +43506,8 @@
         "command": "grep -rln \"export\" src --include=\"*.ts\" --exclude=\"*.min.js\""
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "tree-working-directory-listing",
