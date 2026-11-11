@@ -373,6 +373,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_home_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if guard_repair_report::is_command(command) && flag == "--stdin" => {
+            let response = guard_repair_report::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hook_launch_scan::is_command(command) && flag == "--stdin" => {
             let response = hook_launch_scan::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

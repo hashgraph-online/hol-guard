@@ -8,6 +8,12 @@
 //! install-time file proof satisfied while every hook reaches a client the
 //! resident no longer serves. Either way the reconciliation pass rewrites the
 //! harness. This command only reads; Python still owns the rewrite.
+//!
+//! `hook-launch-scan.v2` scans every managed install in one call. Each install
+//! carries its stored manifest, as JSON text, and the files a fresh install
+//! would rewrite; the scan reads every absolute file path the manifest names,
+//! in manifest order, and answers whether the install needs its hooks
+//! reinstalled.
 
 use std::collections::BTreeSet;
 use std::fs::{self, File};
@@ -16,15 +22,24 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use regex::Regex;
+use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::daemon_lifecycle_text::{py_isspace as py_space, shlex_split};
 use crate::guard_store_json::dumps_default;
 
 const COMMAND: &str = "hook-launch-scan";
 const SCHEMA: &str = "hook-launch-scan.v1";
-const MAX_REQUEST_BYTES: u64 = 256 * 1024;
+const BATCH_SCHEMA: &str = "hook-launch-scan.v2";
+const MAX_INSTALLS: usize = 64;
+/// Bounds on one manifest's walk. Paths come back in manifest order, so the
+/// bound drops the last artifacts, never the hook launchers an adapter lists
+/// first.
+const MANIFEST_MAX_PATHS: usize = 16;
+const MANIFEST_MAX_NODES: usize = 512;
+/// A batch carries every managed install's manifest.
+const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 const MAX_PATHS: usize = 64;
 /// Guard writes hook artifacts of a few kilobytes. A manifest path that names
 /// a far larger file is not one of them; stop there rather than read to EOF.
@@ -71,13 +86,217 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     if bytes.len() as u64 > MAX_REQUEST_BYTES {
         return Err("hook_launch_scan_request_too_large".to_owned());
     }
-    let request: Request = serde_json::from_slice(&bytes)
-        .map_err(|_| "hook_launch_scan_request_invalid".to_owned())?;
-    if request.schema != SCHEMA || request.paths.len() > MAX_PATHS {
-        return Err("hook_launch_scan_request_invalid".to_owned());
+    let invalid = || "hook_launch_scan_request_invalid".to_owned();
+    let schema: Schema = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    let answer = if schema.schema == BATCH_SCHEMA {
+        let request: BatchRequest = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+        if request.installs.len() > MAX_INSTALLS
+            || request
+                .installs
+                .iter()
+                .any(|install| install.extra_paths.len() > MANIFEST_MAX_PATHS)
+        {
+            return Err(invalid());
+        }
+        scan_installs(&request)?
+    } else {
+        let request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+        if request.schema != SCHEMA || request.paths.len() > MAX_PATHS {
+            return Err(invalid());
+        }
+        scan(&request)
+    };
+    serde_json::to_vec(&answer).map_err(|_| "hook_launch_scan_response_unencodable".to_owned())
+}
+
+#[derive(Deserialize)]
+struct Schema {
+    schema: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BatchRequest {
+    #[allow(dead_code)]
+    schema: String,
+    runtime_digest: Option<String>,
+    interpreter: Interpreter,
+    installs: Vec<Install>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Install {
+    harness: String,
+    /// The stored install manifest as JSON text, so its key order survives.
+    #[serde(default)]
+    manifest_json: Option<String>,
+    /// Existing files a fresh install would rewrite that the manifest may
+    /// not name.
+    #[serde(default)]
+    extra_paths: Vec<String>,
+    /// Whether the harness's live hooks verify (Grok: its hooks are ready).
+    hooks_ready: bool,
+}
+
+/// Per harness: what the launch scan found and whether its hooks need a
+/// reinstall. A launcher pinning an older runtime or running another Guard
+/// install's Python needs one even when its hooks verify.
+fn scan_installs(request: &BatchRequest) -> Result<Value, String> {
+    let mut answers = Map::new();
+    for install in &request.installs {
+        let mut paths = match install.manifest_json.as_deref() {
+            Some(text) => manifest_file_paths(text)?,
+            None => Vec::new(),
+        };
+        for extra in &install.extra_paths {
+            if !paths.contains(extra) {
+                paths.push(extra.clone());
+            }
+        }
+        let scanned = scan(&Request {
+            schema: SCHEMA.to_owned(),
+            paths,
+            runtime_digest: request.runtime_digest.clone(),
+            interpreter: Some(Interpreter {
+                current: request.interpreter.current.clone(),
+                guard_home: request.interpreter.guard_home.clone(),
+            }),
+        });
+        let stale_client =
+            scanned["stale_runtime"] == true || scanned["foreign_interpreter"] == true;
+        answers.insert(
+            install.harness.clone(),
+            json!({
+                "stale_runtime": scanned["stale_runtime"],
+                "foreign_interpreter": scanned["foreign_interpreter"],
+                "needs_repair": stale_client || !install.hooks_ready,
+            }),
+        );
     }
-    serde_json::to_vec(&scan(&request))
-        .map_err(|_| "hook_launch_scan_response_unencodable".to_owned())
+    Ok(json!({ "installs": answers }))
+}
+
+/// Every existing absolute file a manifest names, in manifest order, bounded.
+///
+/// Harnesses record their artifacts under their own keys: Cursor keeps a list
+/// of written files, OpenCode names `managed_config_path` and Hermes points
+/// `config_path` at its YAML while its hook lives in `pretool_hook_path`.
+/// Reading every string the manifest holds covers all of them without a
+/// per-harness table that would silently miss the next adapter.
+fn manifest_file_paths(text: &str) -> Result<Vec<String>, String> {
+    let mut strings = Vec::new();
+    let mut nodes = 0;
+    let mut deserializer = serde_json::Deserializer::from_str(text);
+    Walk {
+        strings: &mut strings,
+        nodes: &mut nodes,
+    }
+    .deserialize(&mut deserializer)
+    .map_err(|_| "hook_launch_scan_request_invalid".to_owned())?;
+    let mut found: Vec<String> = Vec::new();
+    for candidate in strings {
+        if found.len() >= MANIFEST_MAX_PATHS {
+            break;
+        }
+        if found.contains(&candidate) {
+            continue;
+        }
+        // A persisted path can hold an embedded NUL or an unreadable mount;
+        // that is this harness's problem, not the whole pass's.
+        let path = Path::new(&candidate);
+        if path.is_absolute() && fs::metadata(path).is_ok_and(|meta| meta.is_file()) {
+            found.push(candidate);
+        }
+    }
+    Ok(found)
+}
+
+/// A depth-first walk in document order that keeps every non-empty, unseen
+/// string among the first `MANIFEST_MAX_NODES` nodes.
+struct Walk<'a> {
+    strings: &'a mut Vec<String>,
+    nodes: &'a mut usize,
+}
+
+impl Walk<'_> {
+    fn visit(&mut self) -> bool {
+        *self.nodes += 1;
+        *self.nodes <= MANIFEST_MAX_NODES
+    }
+
+    fn keep(&mut self, value: &str) {
+        if self.visit() && !value.is_empty() && !self.strings.iter().any(|seen| seen == value) {
+            self.strings.push(value.to_owned());
+        }
+    }
+
+    fn child(&mut self) -> Walk<'_> {
+        Walk {
+            strings: &mut *self.strings,
+            nodes: &mut *self.nodes,
+        }
+    }
+}
+
+impl<'de> DeserializeSeed<'de> for Walk<'_> {
+    type Value = ();
+
+    fn deserialize<D: de::Deserializer<'de>>(self, deserializer: D) -> Result<(), D::Error> {
+        deserializer.deserialize_any(self)
+    }
+}
+
+impl<'de> Visitor<'de> for Walk<'_> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a JSON value")
+    }
+
+    fn visit_str<E: de::Error>(mut self, value: &str) -> Result<(), E> {
+        self.keep(value);
+        Ok(())
+    }
+
+    fn visit_bool<E: de::Error>(mut self, _value: bool) -> Result<(), E> {
+        self.visit();
+        Ok(())
+    }
+
+    fn visit_i64<E: de::Error>(mut self, _value: i64) -> Result<(), E> {
+        self.visit();
+        Ok(())
+    }
+
+    fn visit_u64<E: de::Error>(mut self, _value: u64) -> Result<(), E> {
+        self.visit();
+        Ok(())
+    }
+
+    fn visit_f64<E: de::Error>(mut self, _value: f64) -> Result<(), E> {
+        self.visit();
+        Ok(())
+    }
+
+    fn visit_unit<E: de::Error>(mut self) -> Result<(), E> {
+        self.visit();
+        Ok(())
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(mut self, mut seq: A) -> Result<(), A::Error> {
+        self.visit();
+        while seq.next_element_seed(self.child())?.is_some() {}
+        Ok(())
+    }
+
+    fn visit_map<A: MapAccess<'de>>(mut self, mut map: A) -> Result<(), A::Error> {
+        self.visit();
+        while map.next_key::<IgnoredAny>()?.is_some() {
+            map.next_value_seed(self.child())?;
+        }
+        Ok(())
+    }
 }
 
 fn scan(request: &Request) -> Value {

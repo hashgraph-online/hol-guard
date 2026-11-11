@@ -351,3 +351,91 @@ fn requests_are_validated() {
         Err("hook_launch_scan_request_too_large".to_owned())
     );
 }
+
+fn batch(installs: Value) -> Value {
+    let request = json!({
+        "schema": BATCH_SCHEMA,
+        "runtime_digest": NEW_DIGEST,
+        "interpreter": {"current": CURRENT, "guard_home": HOME},
+        "installs": installs,
+    });
+    let bytes = serde_json::to_vec(&request).expect("request");
+    serde_json::from_slice(&run_command(bytes.as_slice()).expect("answer")).expect("json")
+}
+
+#[test]
+fn a_batch_scan_reads_every_file_its_manifest_names() {
+    let stale_hook = artifact(pinned(OLD_DIGEST));
+    let current_hook = artifact(pinned(NEW_DIGEST));
+    let stale_path = stale_hook.path.to_str().unwrap();
+    let current_path = current_hook.path.to_str().unwrap();
+    let manifest = config(&json!({
+        "harness": "cursor",
+        "files": ["relative/path", "", current_path, {"nested": [stale_path]}],
+        "count": 2,
+        "active": true,
+    }));
+    let answer = batch(json!([
+        {"harness": "cursor", "manifest_json": manifest, "hooks_ready": true},
+        {"harness": "codex", "manifest_json": null, "extra_paths": [current_path], "hooks_ready": true},
+        {"harness": "grok", "extra_paths": [stale_path], "hooks_ready": false},
+        {"harness": "hermes", "hooks_ready": false},
+    ]));
+    let installs = &answer["installs"];
+    assert_eq!(
+        installs["cursor"],
+        json!({"stale_runtime": true, "foreign_interpreter": false, "needs_repair": true})
+    );
+    assert_eq!(installs["codex"]["needs_repair"], false);
+    assert_eq!(installs["grok"]["stale_runtime"], true);
+    assert_eq!(
+        installs["hermes"],
+        json!({"stale_runtime": false, "foreign_interpreter": false, "needs_repair": true})
+    );
+}
+
+#[test]
+fn a_manifest_walk_keeps_document_order_and_its_bounds() {
+    let files: Vec<Artifact> = (0..20).map(|index| artifact(format!("{index}"))).collect();
+    let paths: Vec<String> = files
+        .iter()
+        .map(|file| file.path.to_str().unwrap().to_owned())
+        .collect();
+    // Keys sort the other way, so a walk over a parsed map would read `a` first.
+    let text = format!(
+        r#"{{"z": {first}, "a": {rest}}}"#,
+        first = serde_json::to_string(&paths[0]).unwrap(),
+        rest = serde_json::to_string(&paths[1..]).unwrap(),
+    );
+    let found = manifest_file_paths(&text).unwrap();
+    assert_eq!(found.len(), MANIFEST_MAX_PATHS);
+    assert_eq!(found[0], paths[0]);
+    assert_eq!(found[1], paths[1]);
+
+    let late = artifact("late");
+    let padding = vec![0; MANIFEST_MAX_NODES];
+    let text = config(&json!([padding, late.path.to_str().unwrap()]));
+    assert!(manifest_file_paths(&text).unwrap().is_empty());
+    let duplicated = config(&json!([paths[0], paths[0]]));
+    assert_eq!(
+        manifest_file_paths(&duplicated).unwrap(),
+        vec![paths[0].clone()]
+    );
+}
+
+#[test]
+fn a_batch_with_bad_manifest_or_too_many_installs_is_refused() {
+    let request = |installs: Value| {
+        serde_json::to_vec(&json!({
+            "schema": BATCH_SCHEMA, "runtime_digest": null,
+            "interpreter": {"current": null, "guard_home": HOME}, "installs": installs,
+        }))
+        .unwrap()
+    };
+    let broken = request(json!([{"harness": "codex", "manifest_json": "{", "hooks_ready": true}]));
+    assert!(run_command(broken.as_slice()).is_err());
+    let many: Vec<Value> = (0..=MAX_INSTALLS)
+        .map(|index| json!({"harness": format!("h{index}"), "hooks_ready": true}))
+        .collect();
+    assert!(run_command(request(json!(many)).as_slice()).is_err());
+}
