@@ -55252,7 +55252,8 @@
         "command": "grep -rn \"report\\|example\" integrations"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-grep-second-pattern-matching-plugin-manifest",
@@ -55268,7 +55269,8 @@
         "command": "grep -rn -e report -e author integrations"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     }
   ],
   "mcp_cases": [
