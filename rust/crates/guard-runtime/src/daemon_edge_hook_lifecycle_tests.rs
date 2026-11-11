@@ -1,6 +1,8 @@
 use serde_json::{json, Map, Value};
 
-use super::{claude_op, fallback, request, PERMISSION_REQUEST, TURN_STOP};
+use super::{
+    claude_op, fallback, question, request, settled, Settled, PERMISSION_REQUEST, TURN_STOP,
+};
 
 fn object(value: Value) -> Map<String, Value> {
     value.as_object().unwrap().clone()
@@ -80,4 +82,73 @@ fn a_blank_session_and_a_missing_key_are_left_out() {
     let built = request("/g/guard.db", "/g", TURN_STOP, "now", None, &payload).unwrap();
     assert_eq!(built.session_id, None);
     assert_eq!(built.integrity_key_b64, None);
+}
+
+#[test]
+fn only_an_ask_user_question_call_is_the_question() {
+    let bash = object(json!({"tool_name": "Bash", "tool_input": {}}));
+    assert_eq!(question(&bash), None);
+    let asked = object(json!({
+        "tool_name": " AskUserQuestion ",
+        "tool_input": {"questions": []},
+        "tool_response": {"answers": {"Allow?": "Allow once"}, "note": "n"},
+    }));
+    let built = question(&asked).unwrap();
+    assert_eq!(built["event"], json!("PostToolUse"));
+    assert_eq!(built["tool_name"], json!(" AskUserQuestion "));
+    assert_eq!(built["tool_response"], json!({"note": "n"}));
+    assert_eq!(built["response_answers"], json!([["Allow?", "Allow once"]]));
+}
+
+#[test]
+fn a_response_without_an_answers_map_has_no_pairs() {
+    let asked = object(json!({"tool_name": "askuserquestion", "tool_response": "done"}));
+    let built = question(&asked).unwrap();
+    assert_eq!(built["tool_response"], json!("done"));
+    assert_eq!(built["tool_input"], Value::Null);
+    assert_eq!(built["response_answers"], Value::Null);
+}
+
+#[test]
+fn answers_to_several_questions_are_left_to_the_review() {
+    let asked = object(json!({
+        "tool_name": "AskUserQuestion",
+        "tool_response": {"answers": {"a": "1", "b": "2"}},
+    }));
+    assert_eq!(question(&asked), None);
+}
+
+#[test]
+fn the_reply_is_read_as_the_python_settlement_read_it() {
+    assert_eq!(settled(&json!({"outcome": "none"})), None);
+    assert_eq!(
+        settled(&json!({"outcome": "unseen"})),
+        Some(Settled::Answered)
+    );
+    assert_eq!(
+        settled(&json!({"outcome": "unanswered"})),
+        Some(Settled::Answered)
+    );
+    assert_eq!(settled(&json!({"outcome": "unseen", "extra": 1})), None);
+    assert_eq!(settled(&json!({"outcome": 1})), None);
+    let save = json!({
+        "outcome": "save",
+        "artifact_id": "a",
+        "reason": "r",
+        "source": "s",
+        "plan": {},
+    });
+    let Some(Settled::Save(fields)) = settled(&save) else {
+        panic!("save expected");
+    };
+    assert_eq!(
+        Value::Object(fields),
+        json!({"artifact_id": "a", "reason": "r", "source": "s", "plan": {}})
+    );
+    let mut empty = save.clone();
+    empty["reason"] = json!("");
+    assert_eq!(settled(&empty), None);
+    let mut extra = save;
+    extra["more"] = json!(true);
+    assert_eq!(settled(&extra), None);
 }

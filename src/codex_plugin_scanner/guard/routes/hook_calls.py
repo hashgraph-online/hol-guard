@@ -171,7 +171,45 @@ def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
     return {"sink_command": list(contained_sink_command_prefix())}
 
 
+def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """Saves the answer the daemon read from Claude's HOL Guard approval question.
+
+    The daemon settles the question against the session's pending review and
+    hands over the plan the op returned; the policy write holds the integrity
+    lock, so it stays here. ``valid`` is false for a plan the library refuses.
+    """
+
+    from ..cli import commands_support  # noqa: F401
+    from ..cli._commands_shared import _now
+    from ..cli.commands_support_hook_state import _remove_claude_pending_permission
+    from ..cli.commands_support_permission_store import _write_claude_native_permission_plan
+    from ..native_hook_decision import NativeHookDecisionError, validated_permission_persist_plan
+
+    session_id = _text(args.get("session_id"))
+    artifact_id = _text(args.get("artifact_id"))
+    reason = _text(args.get("reason"))
+    source = _text(args.get("source"))
+    if not (session_id and artifact_id and reason and source):
+        return {"valid": False}
+    try:
+        plan = validated_permission_persist_plan(args.get("plan"))
+    except NativeHookDecisionError:
+        return {"valid": False}
+    saved = _write_claude_native_permission_plan(
+        store=store,
+        plan=plan,
+        artifact_id=artifact_id,
+        reason=reason,
+        source=source,
+        now=_now(),
+    )
+    if saved:
+        _remove_claude_pending_permission(store, session_id=session_id, artifact_id=artifact_id)
+    return {"valid": True, "saved": bool(saved)}
+
+
 HOOK_CALLS = {
+    "hook.claude_question_save": hook_claude_question_save,
     "hook.integrity_key": hook_integrity_key,
     "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,
