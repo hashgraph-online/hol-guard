@@ -112,6 +112,15 @@ const RUNNER_SUBCOMMANDS: &[(&str, &[&str])] = &[
     ("yarn", &["dlx", "exec"]),
 ];
 
+/// Subcommands that run a package script the next word names, so the script
+/// name must stay literal: `npm run test *` is a pattern, `npm run *` would let
+/// the wildcard pick any script.
+const SCRIPT_RUNNERS: &[(&str, &[&str])] = &[
+    ("npm", &["rum", "run", "run-script", "urn"]),
+    ("pnpm", &["run", "run-script"]),
+    ("yarn", &["run"]),
+];
+
 /// Long git options that run a program, load hooks or settings, or write a
 /// file the command names. Git accepts any unambiguous prefix of a long
 /// option (`--rec` for `--receive-pack`), so every prefix is refused too.
@@ -154,6 +163,7 @@ const INTERPRETERS: &[&str] = &[
     "ksh",
     "lua",
     "node",
+    "nodejs",
     "osascript",
     "perl",
     "php",
@@ -215,8 +225,26 @@ pub fn validate_allow_pattern(expression: &CommandExpressionV1) -> Result<String
         }) {
             return Err("command_pattern_allow_runner".to_owned());
         }
+        let runs_script = SCRIPT_RUNNERS
+            .iter()
+            .any(|(runner, subcommands)| *runner == base && subcommands.contains(&words[1]));
+        if runs_script
+            && !words
+                .get(2)
+                .is_some_and(|script| plain_word(script) && !script.starts_with('-'))
+        {
+            return Err("command_pattern_allow_runner".to_owned());
+        }
     }
     Ok(program.to_owned())
+}
+
+fn plain_word(word: &str) -> bool {
+    let word = word.strip_prefix("~/").unwrap_or(word);
+    !word.is_empty()
+        && word
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._/@+=,:-".contains(&byte))
 }
 
 /// The program and the word after it are plain words the shell passes through
@@ -225,14 +253,7 @@ pub fn validate_allow_pattern(expression: &CommandExpressionV1) -> Result<String
 /// (the home folder, which one simple command cannot change) is the one
 /// expansion allowed.
 fn literal_head(words: &[&str]) -> Result<(), String> {
-    let plain = |word: &&str| {
-        let word = word.strip_prefix("~/").unwrap_or(word);
-        !word.is_empty()
-            && word
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"._/@+=,:-".contains(&byte))
-    };
-    if words.len() < 2 || !words[..2].iter().all(plain) {
+    if words.len() < 2 || !words[..2].iter().all(|word| plain_word(word)) {
         return Err("command_pattern_allow_literal_head".to_owned());
     }
     Ok(())

@@ -81,7 +81,8 @@ _CANONICAL_COMPILE_REMEDIATION = {
     "command_pattern_allow_runner": (
         "A command pattern cannot follow a tool with the subcommand that runs a program or code it is given, "
         "such as npm exec, deno eval, uv run or git submodule, or start such a tool with an option, such as "
-        "npm --silent or git -c. Allow the exact command instead."
+        "npm --silent or git -c. After npm run, name the script, as in npm run test *. "
+        "Otherwise allow the exact command."
     ),
     "policy_compilation_limit": (
         "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "

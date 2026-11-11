@@ -403,3 +403,46 @@ fn quoted_whitespace_is_part_of_the_word() {
     assert!(allows(&wildcard, "bash  run.sh 'a  b' 1"));
     assert!(!allows(&wildcard, "bash run.sh 'a b' 1"));
 }
+
+#[test]
+fn a_package_script_name_stays_literal() {
+    for value in [
+        "npm run *",
+        "npm run-script *",
+        "npm rum *",
+        "npm urn *",
+        "npm run --if-present *",
+        "pnpm run *",
+        "pnpm run-script *",
+        "yarn run *",
+        "npm run te*",
+    ] {
+        assert_eq!(
+            pattern("glob", value).map(|_| ()),
+            Err("command_pattern_allow_runner".to_owned()),
+            "{value}"
+        );
+    }
+    assert_eq!(
+        pattern("startsWith", "npm run").map(|_| ()),
+        Err("command_pattern_allow_runner".to_owned())
+    );
+    let test = glob("npm run test *");
+    assert!(allows(&test, "npm run test -- --watch=false"));
+    assert!(!allows(&test, "npm run build"));
+    assert!(pattern("startsWith", "pnpm run lint").is_ok());
+    assert!(pattern("glob", "npm test *").is_ok());
+    assert!(pattern("exact", "npm run build").is_ok());
+}
+
+#[test]
+fn nodejs_is_an_interpreter() {
+    for value in ["nodejs -e *", "nodejs --eval *", "nodejs -p *"] {
+        assert_eq!(
+            pattern("glob", value).map(|_| ()),
+            Err("command_pattern_allow_interpreter_option".to_owned()),
+            "{value}"
+        );
+    }
+    assert!(pattern("glob", "nodejs scripts/build.js *").is_ok());
+}
