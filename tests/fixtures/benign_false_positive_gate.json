@@ -54658,7 +54658,8 @@
         "command": "perl -V"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-ruby-version-then-script",
@@ -54675,7 +54676,8 @@
         "command": "ruby -v script.rb"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     }
   ],
   "mcp_cases": [
