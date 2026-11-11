@@ -211,7 +211,12 @@ def build_fixture(root: Path) -> BenignFixture:
     for directory in (home, guard_home):
         directory.mkdir(parents=True)
     _write(home / ".gitconfig", LFS_GITCONFIG)
-    _write(home / ".rustup" / "settings.toml", 'version = "12"\ndefault_toolchain = "stable"\n')
+    # `rustup override set nightly` in some other checkout leaves an official
+    # channel in the override table. It must not cost the version banners.
+    _write(
+        home / ".rustup" / "settings.toml",
+        'version = "12"\ndefault_toolchain = "stable"\n\n[overrides]\n"/opt/other-checkout" = "nightly"\n',
+    )
     _write(home / ".agent" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
     _write(home / ".agent" / "artifacts" / "report.md", "# Report\nInert build report text.\n")
     _write(home / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
