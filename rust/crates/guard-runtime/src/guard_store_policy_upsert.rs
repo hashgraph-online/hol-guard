@@ -93,7 +93,7 @@ pub(crate) fn upsert_policy(connection: &Connection, args: &Args) -> StoreResult
             material.key_id,
             now,
             material.current_generation,
-            Some(decision_id),
+            &[decision_id],
         )?,
         _ => Value::Null,
     };
@@ -144,7 +144,7 @@ pub(crate) fn advance_generation(
     key_id: &str,
     now: &str,
     current_generation: i64,
-    forced_decision_id: Option<i64>,
+    forced_decision_ids: &[i64],
 ) -> StoreResult<Value> {
     let next_generation = current_generation
         .checked_add(1)
@@ -157,7 +157,7 @@ pub(crate) fn advance_generation(
             .and_then(Value::as_i64)
             .ok_or(StoreError::Invalid("native_guard_store_cell_invalid"))?;
         let row = Value::Object(row);
-        if Some(decision_id) != forced_decision_id
+        if !forced_decision_ids.contains(&decision_id)
             && verify_local_policy_row(
                 &row,
                 Some(key),

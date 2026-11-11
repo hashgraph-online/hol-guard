@@ -6,7 +6,8 @@
 //! does after a save. The control state stays with the caller, which persists
 //! the pending state before this call and the final state after.
 //!
-//! A clear by `artifact_id` widens to every artifact row the dashboard shows
+//! A clear by `decision_ids` deletes only those rows; an empty list deletes
+//! nothing. Otherwise a clear by `artifact_id` widens to every artifact row the dashboard shows
 //! as the same remembered command, as `remembered_artifact_decision_ids` did,
 //! so one click removes the whole displayed row.
 //!
@@ -33,7 +34,9 @@ const APPROVAL_GATE_POLICY_SOURCE: &str = "approval-gate";
 
 /// `GuardStore.clear_policy_decisions` (`store_policy_integrity_runtime.py`).
 pub(crate) fn clear_policy_decisions(connection: &Connection, args: &Args) -> StoreResult<Value> {
-    let (conditions, params) = filters(connection, args)?;
+    let Some((conditions, params)) = filters(connection, args)? else {
+        return Ok(json!({"cleared": 0, "next_control_state": null}));
+    };
     let filter = if conditions.is_empty() {
         String::new()
     } else {
@@ -59,7 +62,7 @@ pub(crate) fn clear_policy_decisions(connection: &Connection, args: &Args) -> St
             material.key_id,
             args.str("now")?,
             material.current_generation,
-            None,
+            &[],
         )?,
         None => Value::Null,
     };
@@ -86,8 +89,9 @@ fn local_matches(connection: &Connection, filter: &str, params: &[Value]) -> Sto
 
 type Filters = (Vec<String>, Vec<Value>);
 
-/// The `where` clauses and their parameters.
-fn filters(connection: &Connection, args: &Args) -> StoreResult<Filters> {
+/// The `where` clauses and their parameters; `None` when an empty
+/// `decision_ids` list can match nothing.
+fn filters(connection: &Connection, args: &Args) -> StoreResult<Option<Filters>> {
     let harness = args.opt_str("harness")?;
     let mut artifact_id = args.opt_str("artifact_id")?;
     let mut artifact_hash = args.opt_str("artifact_hash")?;
@@ -95,16 +99,30 @@ fn filters(connection: &Connection, args: &Args) -> StoreResult<Filters> {
     let mut artifact_hash_is_null = args.flag("artifact_hash_is_null")?;
     let mut conditions = Vec::new();
     let mut params = Vec::new();
-    if let Some(target) = artifact_id {
+    let mut decision_ids = match args.raw("decision_ids") {
+        Some(_) => Some(
+            args.ints("decision_ids")?
+                .into_iter()
+                .collect::<BTreeSet<i64>>(),
+        ),
+        None => None,
+    };
+    if let (Some(target), None) = (artifact_id, &decision_ids) {
         let siblings = remembered_artifact_decision_ids(connection, harness, target)?;
         if !siblings.is_empty() {
-            conditions.push(format!("decision_id in ({})", placeholders(siblings.len())));
-            params.extend(siblings.into_iter().map(Value::from));
+            decision_ids = Some(siblings.into_iter().collect());
             artifact_id = None;
             artifact_hash = None;
             artifact_id_is_null = false;
             artifact_hash_is_null = false;
         }
+    }
+    if let Some(ids) = decision_ids {
+        if ids.is_empty() {
+            return Ok(None);
+        }
+        conditions.push(format!("decision_id in ({})", placeholders(ids.len())));
+        params.extend(ids.into_iter().map(Value::from));
     }
     if let Some(harness) = harness {
         conditions.push("harness = ?".to_owned());
@@ -147,7 +165,7 @@ fn filters(connection: &Connection, args: &Args) -> StoreResult<Filters> {
         conditions.push("publisher = ?".to_owned());
         params.push(json!(publisher));
     }
-    Ok((conditions, params))
+    Ok(Some((conditions, params)))
 }
 
 /// `remembered_artifact_decision_ids` (`store_policy_list.py`) over
