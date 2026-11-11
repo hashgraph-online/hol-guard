@@ -10,9 +10,11 @@
 //! as the same remembered command, as `remembered_artifact_decision_ids` did,
 //! so one click removes the whole displayed row.
 //!
-//! `count_only` answers how many local rows the filters match without
-//! deleting anything: the caller asks first, so it only begins a generation
-//! when the clear will sign one.
+//! `unsigned_only` asks for a clear that removes no local row. When the
+//! filters match one and no key came with the call, nothing is deleted and
+//! the answer is `{"needs_signing": true}`: the caller begins a generation
+//! and clears again with the key. The check and the delete share one
+//! transaction, so a row written between them cannot slip out unsigned.
 
 use std::collections::BTreeSet;
 
@@ -37,22 +39,12 @@ pub(crate) fn clear_policy_decisions(connection: &Connection, args: &Args) -> St
     } else {
         conditions.join(" and ")
     };
-    if args.flag("count_only")? {
-        let mut sql = format!(
-            "select count(*) as local from policy_decisions where source not in ({})",
-            placeholders(REMOTE_POLICY_SOURCES.len())
-        );
-        if !filter.is_empty() {
-            sql.push_str(" and ");
-            sql.push_str(&filter);
-        }
-        let mut bound: Vec<Value> = REMOTE_POLICY_SOURCES.iter().map(|s| json!(s)).collect();
-        bound.extend(params);
-        let local = query_all(connection, &sql, &bound)?
-            .first()
-            .and_then(|row| row.get("local").and_then(Value::as_i64))
-            .unwrap_or(0);
-        return Ok(json!({"local": local}));
+    let signing = signing_material(args)?;
+    if signing.is_none()
+        && args.flag("unsigned_only")?
+        && local_matches(connection, &filter, &params)? > 0
+    {
+        return Ok(json!({"needs_signing": true}));
     }
     let mut sql = "delete from policy_decisions".to_owned();
     if !filter.is_empty() {
@@ -60,7 +52,7 @@ pub(crate) fn clear_policy_decisions(connection: &Connection, args: &Args) -> St
         sql.push_str(&filter);
     }
     let cleared = exec(connection, &sql, &params)?;
-    let next_control_state = match signing_material(args)? {
+    let next_control_state = match signing {
         Some(material) => advance_generation(
             connection,
             &material.key,
@@ -72,6 +64,24 @@ pub(crate) fn clear_policy_decisions(connection: &Connection, args: &Args) -> St
         None => Value::Null,
     };
     Ok(json!({"cleared": cleared, "next_control_state": next_control_state}))
+}
+
+/// How many local (not remotely synced) rows the filters match.
+fn local_matches(connection: &Connection, filter: &str, params: &[Value]) -> StoreResult<i64> {
+    let mut sql = format!(
+        "select count(*) as local from policy_decisions where source not in ({})",
+        placeholders(REMOTE_POLICY_SOURCES.len())
+    );
+    if !filter.is_empty() {
+        sql.push_str(" and ");
+        sql.push_str(filter);
+    }
+    let mut bound: Vec<Value> = REMOTE_POLICY_SOURCES.iter().map(|s| json!(s)).collect();
+    bound.extend_from_slice(params);
+    Ok(query_all(connection, &sql, &bound)?
+        .first()
+        .and_then(|row| row.get("local").and_then(Value::as_i64))
+        .unwrap_or(0))
 }
 
 type Filters = (Vec<String>, Vec<Value>);

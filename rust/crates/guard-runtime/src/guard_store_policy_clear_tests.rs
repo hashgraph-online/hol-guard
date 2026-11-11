@@ -60,18 +60,35 @@ fn clears_the_match_and_signs_the_rest_forward() {
 }
 
 #[test]
-fn count_only_counts_local_matches_and_deletes_nothing() {
+fn an_unsigned_only_clear_over_local_rows_deletes_nothing() {
+    let connection = store(&signed_rows());
+
+    let reply = call(
+        &connection,
+        &args(json!({"harness": "codex", "unsigned_only": true}), false),
+    );
+
+    assert_eq!(reply, json!({"needs_signing": true}));
+    assert_eq!(dump(&connection).len(), 2);
+}
+
+#[test]
+fn an_unsigned_only_clear_removes_remote_rows() {
     let mut rows = signed_rows();
     rows[1]["source"] = json!("cloud-sync");
     let connection = store(&rows);
 
     let reply = call(
         &connection,
-        &args(json!({"harness": "codex", "count_only": true}), false),
+        &args(
+            json!({"harness": "codex", "source": "cloud-sync", "unsigned_only": true}),
+            false,
+        ),
     );
 
-    assert_eq!(reply, json!({"local": 1}));
-    assert_eq!(dump(&connection).len(), 2);
+    assert_eq!(reply["cleared"], json!(1));
+    assert_eq!(reply["next_control_state"], Value::Null);
+    assert_eq!(dump(&connection).len(), 1);
 }
 
 #[test]

@@ -136,21 +136,23 @@ pub(super) fn clear(
     };
     let cleared = locked(config, || {
         let now = now_isoformat()?;
-        let mut count = filters.clone();
-        count.insert("count_only".to_owned(), Value::Bool(true));
-        let local = reads
-            .store_write(config, "clear_policy_decisions", Value::Object(count))
-            .ok()?
-            .get("local")?
-            .as_i64()?;
-        let mut args = filters.clone();
-        args.insert("now".to_owned(), Value::String(now.clone()));
+        let clear = |sign: bool| {
+            let mut args = filters.clone();
+            args.insert("now".to_owned(), Value::String(now.clone()));
+            // An unsigned clear may remove remote rows only; the store
+            // refuses it in the same transaction when a local row matches.
+            args.insert("unsigned_only".to_owned(), Value::Bool(!sign));
+            args.extend(integrity_begin(config, &now, sign)?);
+            reads
+                .store_write(config, "clear_policy_decisions", Value::Object(args))
+                .ok()
+        };
         // The integrity status refreshes on every clear; a generation begins
         // only when local rows go, so there are rows left to sign over.
-        args.extend(integrity_begin(config, &now, local > 0)?);
-        let answer = reads
-            .store_write(config, "clear_policy_decisions", Value::Object(args))
-            .ok()?;
+        let mut answer = clear(false)?;
+        if answer.get("needs_signing") == Some(&Value::Bool(true)) {
+            answer = clear(true)?;
+        }
         integrity_finalize(config, answer.get("next_control_state"))?;
         answer.get("cleared")?.as_i64()
     });

@@ -68,7 +68,12 @@ def integrity_finalize(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
     next_control_state = args.get("next_control_state")
     if not isinstance(next_control_state, dict):
         raise _invalid()
-    store._finalize_policy_integrity_control_state(next_control_state)
+    # A state that does not persist leaves the rows signed past the trusted
+    # generation, so the daemon must not report the write as done.
+    if not store._store_policy_integrity_control_state(next_control_state):
+        from ..library_calls import LibraryCallError
+
+        raise LibraryCallError("policy_integrity_finalize_failed")
     return {"ok": True}
 
 
