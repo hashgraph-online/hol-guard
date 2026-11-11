@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
+from .native_policy_snapshot_direct_lane_owner import renewable
 from .native_policy_snapshot_direct_lane_windows import unlink_windows_ack, write_windows_ack
 
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
@@ -353,7 +354,7 @@ class NativePolicySnapshotDirectLaneAck:
                 self._direct_lane_evidence_bound = False
                 self._unlink_direct_lane_ack()
                 return
-            if self._acked_value and self._direct_lane_ack_target is not None:
+            if self._acked_value and renewable(self.guard_home, self._direct_lane_ack_target):
                 self._write_direct_lane_ack_locked()
 
     def _recheck_direct_lane_local_cli(self, revision: int | None) -> None:
