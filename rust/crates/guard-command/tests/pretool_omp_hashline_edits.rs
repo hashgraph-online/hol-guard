@@ -254,6 +254,24 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         })),
         ("block".to_owned(), "native_missing_path".to_owned())
     );
+    // Oh My Pi trims the header before it cuts the tag, so a space before
+    // `#` stays in its copy. The header still names the trimmed file.
+    assert_eq!(
+        evaluate(json!({
+            "input": patch(&["[src/a.ts #0AC4]\nPUT 1.=1:\n+export const a = 3;\n"]),
+            "path": "src/a.ts ",
+            "paths": ["src/a.ts "],
+        })),
+        allowed
+    );
+    assert_eq!(
+        evaluate(json!({
+            "input": patch(&["[REQUEST #94FA]\nPUT 1.=1:\n+x\n"]),
+            "path": "REQUEST ",
+            "paths": ["REQUEST "],
+        })),
+        ("block".to_owned(), "native_missing_path".to_owned())
+    );
     // Fields that are not an exact copy of the headers keep the review.
     for tool_input in [
         json!({"input": patch(&[put_a]), "path": ".env", "paths": ["src/a.ts"]}),
