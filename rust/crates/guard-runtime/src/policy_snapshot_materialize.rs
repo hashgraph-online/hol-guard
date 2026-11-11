@@ -44,11 +44,11 @@ const MAX_LOCK_WAIT_MS: u64 = 60_000;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct MaterializeRequest {
+pub(crate) struct MaterializeRequest {
     schema: String,
     version: u16,
-    verifier_key: PublisherKey,
-    guard_home: PathBuf,
+    pub(crate) verifier_key: PublisherKey,
+    pub(crate) guard_home: PathBuf,
     runtime_identity: String,
     rule_digest: String,
     mode: String,
@@ -57,12 +57,15 @@ struct MaterializeRequest {
     #[serde(default)]
     command_extensions: Option<NativeCommandControlBindingV1>,
     #[serde(default, deserialize_with = "present_business_binding")]
-    business_policy: Option<BusinessPolicyBindingV1>,
+    pub(crate) business_policy: Option<BusinessPolicyBindingV1>,
     issued_at_ms: u64,
     expires_at_ms: u64,
     #[serde(default)]
-    renew_after_generation: Option<u64>,
-    lock_wait_ms: u64,
+    pub(crate) renew_after_generation: Option<u64>,
+    /// The publisher sets this from its own remaining budget, so its caller
+    /// leaves it out.
+    #[serde(default)]
+    pub(crate) lock_wait_ms: u64,
 }
 
 /// The committed generation and the policy digest it was allocated for.
@@ -89,8 +92,19 @@ impl Home {
 
 pub(crate) fn materialize_from_reader(reader: impl Read) -> Result<Vec<u8>, String> {
     let (bytes, filled) = read_request(reader)?;
-    let request: MaterializeRequest =
-        serde_json::from_slice(&bytes[..filled]).map_err(|_| ERROR.to_owned())?;
+    materialize(parse_request(&bytes[..filled])?)
+}
+
+pub(crate) fn parse_request(bytes: &[u8]) -> Result<MaterializeRequest, String> {
+    serde_json::from_slice(bytes).map_err(|_| ERROR.to_owned())
+}
+
+/// The runtime directory under a guard home that holds the verifier key.
+pub(crate) fn runtime_directory(guard_home: &Path) -> PathBuf {
+    guard_home.join(RUNTIME_DIRECTORY)
+}
+
+pub(crate) fn materialize(request: MaterializeRequest) -> Result<Vec<u8>, String> {
     if request.schema != SCHEMA || request.version != 1 {
         return Err(ERROR.into());
     }
@@ -101,7 +115,7 @@ pub(crate) fn materialize_from_reader(reader: impl Read) -> Result<Vec<u8>, Stri
         return Err(ERROR.into());
     }
     let home = Home {
-        runtime: request.guard_home.join(RUNTIME_DIRECTORY),
+        runtime: runtime_directory(&request.guard_home),
         root: request.guard_home,
     };
     let key = request.verifier_key;
