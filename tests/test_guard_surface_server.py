@@ -1009,7 +1009,7 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert hook_payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-        assert hook_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+        assert hook_payload["hookSpecificOutput"]["permissionDecision"] == "ask", hook_payload
         assert hook_payload["reason_code"] == "native_policy_reapproval_required"
         assert hook_payload["prompted"] is True
         assert hook_payload["hookSpecificOutput"]["permissionDecisionReason"]

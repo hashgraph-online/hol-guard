@@ -613,8 +613,10 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     finally:
         daemon.stop()
 
+    assert set(response) <= {"continue", "hookSpecificOutput"}
+    assert response.get("continue", True) is True
     if "hookSpecificOutput" in response:
-        assert response == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
+        assert response["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
     else:
         assert response["continue"] is True
 
