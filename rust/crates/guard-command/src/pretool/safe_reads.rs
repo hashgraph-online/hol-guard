@@ -384,7 +384,14 @@ fn safe_byte_dump_with_targets(
 ) -> bool {
     let mut options = true;
     let mut target = false;
+    let mut pending: Option<char> = None;
     for argument in arguments {
+        if let Some(option) = pending.take() {
+            if !byte_dump_option_value(option, argument) {
+                return false;
+            }
+            continue;
+        }
         if options && argument == "--" {
             options = false;
             continue;
@@ -392,23 +399,27 @@ fn safe_byte_dump_with_targets(
         if options
             && matches!(
                 argument.as_str(),
-                "-a" | "-b"
-                    | "-c"
-                    | "-d"
-                    | "-f"
-                    | "-o"
-                    | "-s"
-                    | "-v"
-                    | "-x"
-                    | "-An"
-                    | "-Ad"
-                    | "-Ao"
-                    | "-Ax"
-                    | "-tc"
-                    | "-tx1"
+                "-a" | "-b" | "-c" | "-d" | "-f" | "-o" | "-s" | "-v" | "-x"
             )
         {
             continue;
+        }
+        if options {
+            if let Some(option @ ('A' | 'j' | 'N' | 't' | 'w')) = argument
+                .strip_prefix('-')
+                .and_then(|rest| rest.chars().next())
+            {
+                let value = &argument[2..];
+                if value.is_empty() {
+                    // `-w` alone takes no value; the others read the next word.
+                    if option != 'w' {
+                        pending = Some(option);
+                    }
+                } else if !byte_dump_option_value(option, value) {
+                    return false;
+                }
+                continue;
+            }
         }
         if target {
             return false;
@@ -427,7 +438,77 @@ fn safe_byte_dump_with_targets(
         options = false;
         target = true;
     }
-    target || piped_input
+    pending.is_none() && (target || piped_input)
+}
+
+/// The value of an `od` option that only shapes the dump: an address radix,
+/// a byte count or offset, an output type, or a line width. None of them
+/// names a file, so the dumped file is still the one operand checked below.
+fn byte_dump_option_value(option: char, value: &str) -> bool {
+    match option {
+        'A' => matches!(value, "n" | "d" | "o" | "x"),
+        'j' | 'N' => byte_dump_count(value),
+        't' => value.len() <= 16 && byte_dump_types(value),
+        'w' => {
+            !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
+/// A byte count or offset as `od` parses it: decimal, `0x` hexadecimal, or
+/// octal after a leading zero. `08` is not a number to `od`, so it is not
+/// one here either.
+fn byte_dump_count(value: &str) -> bool {
+    let (digits, radix) = if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (hex, 16)
+    } else if value.len() > 1 && value.starts_with('0') {
+        (&value[1..], 8)
+    } else {
+        (value, 10)
+    };
+    !digits.is_empty() && digits.len() <= 20 && digits.chars().all(|digit| digit.is_digit(radix))
+}
+
+/// An `od -t` type list: `a` and `c` stand alone, `d`, `o`, `u` and `x` take
+/// an optional byte size or one of `C`, `S`, `I`, `L`, and `f` an optional
+/// size or one of `F`, `D`, `L`. Each type may end in `z`.
+fn byte_dump_types(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let size_letters: &[u8] = match bytes[index] {
+            b'a' | b'c' => b"",
+            b'd' | b'o' | b'u' | b'x' => b"CSIL",
+            b'f' => b"FDL",
+            _ => return false,
+        };
+        let kind = bytes[index];
+        index += 1;
+        if kind != b'a' && kind != b'c' {
+            if bytes
+                .get(index)
+                .is_some_and(|byte| size_letters.contains(byte))
+            {
+                index += 1;
+            } else {
+                let start = index;
+                while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+                    index += 1;
+                }
+                if index - start > 2 {
+                    return false;
+                }
+            }
+        }
+        if bytes.get(index) == Some(&b'z') {
+            index += 1;
+        }
+    }
+    !bytes.is_empty()
 }
 
 fn safe_word_count_with_targets(
