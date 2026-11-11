@@ -66,9 +66,14 @@ fn invalid_fields_answer_before_the_library_runs() {
         ),
     ];
     for (path, body, error) in cases {
-        let reply = respond(path, &payload(body), local(), true, |_| {
-            panic!("not called")
-        });
+        let reply = respond(
+            path,
+            &payload(body),
+            local(),
+            true,
+            |_, _| None,
+            |_| panic!("not called"),
+        );
         assert_eq!(
             reply,
             Some((400, json!({"resolved": false, "error": error}), false)),
@@ -91,6 +96,7 @@ fn library_receives_the_resolved_request() {
         &payload(body.clone()),
         local(),
         true,
+        |_, _| None,
         |args| {
             *seen.borrow_mut() = args;
             Ok(json!({"updated": {"resolved": true, "copy": {"title": "t", "body": "b"}}}))
@@ -133,7 +139,9 @@ fn copy_names_each_harness() {
 fn library_answers_map_to_daemon_replies() {
     let path = "/v1/requests/r1/approve";
     let body = payload(json!({"scope": "artifact"}));
-    let reply = |answer: Result<Value, CallError>| respond(path, &body, local(), true, |_| answer);
+    let reply = |answer: Result<Value, CallError>| {
+        respond(path, &body, local(), true, |_, _| None, |_| answer)
+    };
     assert_eq!(
         reply(Ok(
             json!({"idempotent": {"resolved": true, "idempotent": true}})
@@ -229,6 +237,7 @@ fn ipv6_queue_links_are_bracketed() {
         &payload(json!({"scope": "artifact"})),
         local,
         true,
+        |_, _| None,
         |_| raised(json!({"kind": "not_found", "message": ""})),
     );
     assert_eq!(
