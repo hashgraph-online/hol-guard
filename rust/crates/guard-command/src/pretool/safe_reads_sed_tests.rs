@@ -111,6 +111,8 @@ fn a_line_delete_quit_or_addressed_substitution_reads_like_a_print() {
 fn a_stream_edit_never_writes_reads_or_runs() {
     for program in [
         "1d;w out.txt",
+        // A trailing `;` is refused, as the line-range reading refuses it.
+        "1d;",
         "1d;r /etc/hosts",
         "1d;R /etc/hosts",
         "1d;W out.txt",

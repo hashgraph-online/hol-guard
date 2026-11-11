@@ -90,6 +90,11 @@ fn a_script_that_leaves_the_stream_or_a_sensitive_file_keeps_the_review() {
         "sed '2s/use/import/w copy.txt' src/main.rs",
         "sed '1d;r .env.bak' README.md",
         "sed '1d;e id' README.md",
+        // BSD sed reads these brackets through to the next delimiter, so its
+        // second command is a write or a shell command.
+        "sed '/[]/d;s/]/w copy.txt/g' README.md",
+        "sed '/[[:space:]/p;s/]/w copy.txt/g' README.md",
+        "sed '1s@[@]@;s@w copy@x@' README.md",
         "sed '1!G;h;$!d' README.md",
         "sed '1d' .env.bak",
         "cat .env.bak | sed '1d'",

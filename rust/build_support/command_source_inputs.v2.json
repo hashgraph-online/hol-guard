@@ -558,6 +558,7 @@
       "src/pretool/safe_copies.rs",
       "src/pretool/safe_links.rs",
       "src/pretool/safe_reads.rs",
+      "src/pretool/safe_reads_sed.rs",
       "src/pretool/safe_scalar.rs",
       "src/pretool/safe_writes.rs",
       "src/pretool/script_content.rs",
