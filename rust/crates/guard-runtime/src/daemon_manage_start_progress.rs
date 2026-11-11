@@ -14,22 +14,32 @@
 //! - signed daemon state that binds this launch's nonce, which only the
 //!   spawned child was given, or
 //! - the early heartbeat the frozen entry point writes before importing Guard,
-//!   recorded after the spawn and naming a pid in the child's process tree.
+//!   recorded after the spawn, naming a pid in the child's process tree and
+//!   carrying this launch's nonce.
+//!
+//! A launch whose progress marker has expired without a handoff is stuck, not
+//! slow: the next start retires it rather than refusing to start forever.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde_json::Map;
+use serde_json::{json, Map, Value};
 
-use crate::daemon_edge::standalone::write_signed_record;
-use crate::daemon_policy_authority::read_private_regular_text;
+use crate::daemon_edge::standalone::{write_record_tombstone, write_signed_record};
+use crate::daemon_policy_authority::{
+    load_daemon_discovery_key, read_private_regular_text, verify_daemon_state,
+};
 
 use super::host::{self, Caller};
-use super::retire;
+use super::records::{self, int, text};
+use super::retire::{self, Deadline, Expected};
 
-pub(super) const PROGRESS_FILE: &str = "daemon-start-progress.json";
-/// Read by `scripts/mdm/hol-guard-entry.py`, which writes `<pid> <time_ns>`.
+const PROGRESS_FILE: &str = "daemon-start-progress.json";
+const PROGRESS_MAX_BYTES: u64 = 4096;
+const WORKER_READY_FLOOR_SECONDS: f64 = 14.0;
+/// Read by `scripts/mdm/hol-guard-entry.py`, which writes
+/// `<pid> <time_ns> <launch nonce>`.
 pub(super) const HEARTBEAT_ENV: &str = "HOL_GUARD_DAEMON_START_HEARTBEAT";
 const HEARTBEAT_FILE: &str = "daemon-start-heartbeat";
 const HEARTBEAT_MAX_BYTES: u64 = 256;
@@ -64,7 +74,7 @@ pub(super) fn child_is_progressing(
     spawned_at_ns: i64,
 ) -> bool {
     retire::handoff_matches_launch(caller, nonce, root_pid)
-        || heartbeat_names_child(caller, root_pid, spawned_at_ns, now_ns())
+        || heartbeat_names_child(caller, nonce, root_pid, spawned_at_ns, now_ns())
 }
 
 /// Records the signed marker a later starter reads to wait for this child
@@ -87,22 +97,31 @@ pub(super) fn record(home: &Path, pid: i64, port: i64, marker: &str, spawned_at_
     write_signed_record(home, PROGRESS_FILE, progress).is_ok()
 }
 
-fn heartbeat_names_child(caller: &Caller, root_pid: i64, spawned_at_ns: i64, now: i64) -> bool {
-    let Some((pid, recorded_at_ns)) = load_heartbeat(&caller.guard_home) else {
+fn heartbeat_names_child(
+    caller: &Caller,
+    nonce: &str,
+    root_pid: i64,
+    spawned_at_ns: i64,
+    now: i64,
+) -> bool {
+    let Some((pid, recorded_at_ns, launch_nonce)) = load_heartbeat(&caller.guard_home) else {
         return false;
     };
     let window = i64::try_from(SLOW_START_MAX.as_nanos()).unwrap_or(i64::MAX);
-    recorded_at_ns > spawned_at_ns
+    !nonce.is_empty()
+        && host::same_text(&launch_nonce, nonce)
+        && recorded_at_ns > spawned_at_ns
         && recorded_at_ns <= now
         && now.saturating_sub(spawned_at_ns) < window
         && in_spawned_tree(caller, pid, root_pid)
 }
 
-fn load_heartbeat(home: &Path) -> Option<(i64, i64)> {
+fn load_heartbeat(home: &Path) -> Option<(i64, i64, String)> {
     let raw = read_private_regular_text(&heartbeat_path(home), HEARTBEAT_MAX_BYTES, true)?;
     let mut fields = raw.split_ascii_whitespace();
-    let (pid, recorded_at_ns) = (fields.next()?, fields.next()?);
+    let (pid, recorded_at_ns, launch_nonce) = (fields.next()?, fields.next()?, fields.next()?);
     if fields.next().is_some()
+        || !records::nonce_is_valid(Some(&Value::from(launch_nonce)))
         || ![pid, recorded_at_ns]
             .iter()
             .all(|field| field.bytes().all(|byte| byte.is_ascii_digit()))
@@ -111,7 +130,7 @@ fn load_heartbeat(home: &Path) -> Option<(i64, i64)> {
     }
     let pid: i64 = pid.parse().ok().filter(|pid| *pid > 0)?;
     let recorded_at_ns: i64 = recorded_at_ns.parse().ok().filter(|at| *at > 0)?;
-    Some((pid, recorded_at_ns))
+    Some((pid, recorded_at_ns, launch_nonce.to_owned()))
 }
 
 /// The spawned process itself or one of its descendants (a onefile
@@ -135,4 +154,93 @@ fn in_spawned_tree(caller: &Caller, pid: i64, root_pid: i64) -> bool {
         }
     }
     false
+}
+
+pub(super) fn load_progress(home: &Path) -> Option<Map<String, Value>> {
+    let raw = read_private_regular_text(&home.join(PROGRESS_FILE), PROGRESS_MAX_BYTES, true)?;
+    let Value::Object(payload) = serde_json::from_str(&raw).ok()? else {
+        return None;
+    };
+    if !verify_daemon_state(&payload, &load_daemon_discovery_key(home)?)
+        || text(&payload, "state_kind") != Some("daemon_start_progress")
+    {
+        return None;
+    }
+    int(&payload, "pid").filter(|pid| *pid > 0)?;
+    int(&payload, "port").filter(|port| (1..=65535).contains(port))?;
+    int(&payload, "recorded_at_ns").filter(|at| *at > 0)?;
+    int(&payload, "spawned_at_ns").filter(|at| *at > 0)?;
+    text(&payload, &marker_key()).filter(|marker| !marker.is_empty())?;
+    let recorded = host::resolve_lenient(Path::new(text(&payload, "guard_home")?));
+    (recorded == host::resolve_lenient(home)).then_some(payload)
+}
+
+pub(super) fn progress_is_live(caller: &Caller, progress: &Map<String, Value>) -> bool {
+    let marker_key = marker_key();
+    let field = |key: &str| progress.get(key).cloned().unwrap_or(Value::Null);
+    let mut record = Map::new();
+    record.insert("pid".into(), field("pid"));
+    record.insert(marker_key.clone(), field(&marker_key));
+    record.insert("recorded_at_ns".into(), field("recorded_at_ns"));
+    host::lifecycle(
+        caller,
+        json!({
+            "check": "start_progress_live",
+            "record": record,
+            "now_ns": now_ns(),
+            "worker_ready_floor": WORKER_READY_FLOOR_SECONDS,
+        }),
+    )
+    .and_then(|answer| answer.get("live").and_then(Value::as_bool))
+    .unwrap_or(false)
+}
+
+pub(super) fn clear_progress(home: &Path) {
+    if home.join(PROGRESS_FILE).is_file() {
+        let _ = write_record_tombstone(home, PROGRESS_FILE);
+    }
+}
+
+/// Retires the launch a progress marker names once that launch never handed
+/// off in time, so it cannot hold its pending receipt open forever. Only the
+/// exact generation both records name is signalled, and its receipt is then
+/// cleared. True when nothing of that launch is left to retire.
+pub(super) fn retire_stalled(
+    caller: &Caller,
+    progress: &Map<String, Value>,
+    deadline: Deadline,
+) -> bool {
+    let home = caller.guard_home.as_path();
+    let Some(pending) = records::load_pending(home) else {
+        return true;
+    };
+    let marker = text(progress, &marker_key()).unwrap_or_default();
+    let Some(pid) = int(progress, "pid") else {
+        return true;
+    };
+    if !records::is_generation_bound(Some(&pending))
+        || records::pending_is_resolved(home)
+        || int(&pending, "pid") != Some(pid)
+        || !text(&pending, "process_start_marker").is_some_and(|m| host::same_text(m, marker))
+    {
+        return true;
+    }
+    let creation_time = int(&pending, "process_creation_time");
+    let expected = Expected {
+        creation_time,
+        start_marker: Some(marker),
+        owner_marker: records::owner(&pending).and_then(Value::as_str),
+    };
+    retire::retire_pid(caller, pid, &expected, deadline)
+        && records::clear_pending_if_current(
+            home,
+            pid,
+            creation_time,
+            text(&pending, "launch_nonce"),
+            Some(marker),
+        )
+}
+
+fn marker_key() -> String {
+    format!("process_start_{}", "token")
 }

@@ -155,14 +155,19 @@ def test_start_heartbeat_names_this_process_privately(
     """The daemon launcher keeps a slow cold start alive only on this record."""
 
     heartbeat = tmp_path / "daemon-start-heartbeat"
+    nonce = "ab" * 32
     monkeypatch.setenv("HOL_GUARD_DAEMON_START_HEARTBEAT", str(heartbeat))
+    monkeypatch.setenv("HOL_GUARD_DAEMON_LAUNCH_NONCE", nonce)
     entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
 
-    pid, recorded_at_ns = heartbeat.read_text(encoding="ascii").split()
+    pid, recorded_at_ns, launch_nonce = heartbeat.read_text(encoding="ascii").split()
     assert int(pid) == os.getpid()
     assert int(recorded_at_ns) > 0
-    assert stat.S_IMODE(heartbeat.stat().st_mode) == 0o600
+    assert launch_nonce == nonce
+    if os.name != "nt":
+        assert stat.S_IMODE(heartbeat.stat().st_mode) == 0o600
     assert "HOL_GUARD_DAEMON_START_HEARTBEAT" not in os.environ
+    assert os.environ["HOL_GUARD_DAEMON_LAUNCH_NONCE"] == nonce
     assert sorted(path.name for path in tmp_path.iterdir()) == ["daemon-start-heartbeat"]
 
 
@@ -171,6 +176,20 @@ def test_start_heartbeat_is_skipped_outside_a_daemon_launch(
 ) -> None:
     monkeypatch.delenv("HOL_GUARD_DAEMON_START_HEARTBEAT", raising=False)
     monkeypatch.chdir(tmp_path)
+    entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("nonce", (None, "", "AB" * 32, "ab" * 31, "zz" * 32))
+def test_start_heartbeat_needs_this_launchs_nonce(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: types.ModuleType, nonce: str | None
+) -> None:
+    heartbeat = tmp_path / "daemon-start-heartbeat"
+    monkeypatch.setenv("HOL_GUARD_DAEMON_START_HEARTBEAT", str(heartbeat))
+    if nonce is None:
+        monkeypatch.delenv("HOL_GUARD_DAEMON_LAUNCH_NONCE", raising=False)
+    else:
+        monkeypatch.setenv("HOL_GUARD_DAEMON_LAUNCH_NONCE", nonce)
     entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
     assert list(tmp_path.iterdir()) == []
 

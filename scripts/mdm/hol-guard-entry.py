@@ -20,6 +20,8 @@ from pathlib import Path
 
 _FROZEN_DAEMON_SERVE_ARG = "--_hol-guard-daemon-serve"
 _START_HEARTBEAT_ENV = "HOL_GUARD_DAEMON_START_HEARTBEAT"
+_LAUNCH_NONCE_ENV = "HOL_GUARD_DAEMON_LAUNCH_NONCE"
+_LAUNCH_NONCE_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 def _write_start_heartbeat() -> None:
@@ -27,19 +29,23 @@ def _write_start_heartbeat() -> None:
 
     A cold Core on a loaded machine can spend most of the launcher's start
     window unpacking and importing. The launcher names a file in this variable
-    only for a daemon launch; ``<pid> <time_ns>`` there keeps it from killing
-    a slow start as a stuck one. The record is written to a private temp file
-    without following links and renamed into place, and never raises.
+    only for a daemon launch; ``<pid> <time_ns> <launch nonce>`` there keeps it
+    from killing a slow start as a stuck one. The nonce is the one this launch
+    was given, so a record from any other process does not count. The record
+    is written to a private temp file without following links and renamed
+    into place, and never raises.
     """
 
     path = os.environ.pop(_START_HEARTBEAT_ENV, "")
-    if not path:
+    # The native daemon reads the nonce later, so it stays in the environment.
+    nonce = os.environ.get(_LAUNCH_NONCE_ENV, "")
+    if not path or _LAUNCH_NONCE_PATTERN.fullmatch(nonce) is None:
         return
     temp = f"{path}.{os.getpid()}.tmp"
     with suppress(BaseException):
         descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
         try:
-            os.write(descriptor, f"{os.getpid()} {time.time_ns()}".encode("ascii"))
+            os.write(descriptor, f"{os.getpid()} {time.time_ns()} {nonce}".encode("ascii"))
         finally:
             os.close(descriptor)
         try:

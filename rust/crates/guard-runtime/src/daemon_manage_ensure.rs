@@ -17,25 +17,20 @@ use fs2::FileExt;
 use pep440_rs::Version;
 use serde_json::{json, Map, Value};
 
-use crate::daemon_edge::standalone::{
-    self, write_record_tombstone, write_signed_record, LaunchConfig,
-};
+use crate::daemon_edge::standalone::{self, write_signed_record, LaunchConfig};
 use crate::daemon_policy_authority::{
     daemon_pid_matches_command, healthz_payload_is_current, healthz_payload_matches_guard_home,
-    http_get_json, load_authenticated_daemon_identity, load_daemon_discovery_key,
-    read_private_regular_text, verify_daemon_state,
+    http_get_json, load_authenticated_daemon_identity,
 };
 
 use super::host::{self, Caller};
 use super::records::{self, int, text};
 use super::retire::{self, Deadline};
-use super::start_progress::{self, PROGRESS_FILE};
+use super::start_progress::{self, clear_progress, load_progress, progress_is_live};
 
 const COMPATIBILITY_VERSION: i64 = 2;
 const START_LOCK_FILE: &str = "daemon-start.lock";
 const PENDING_FILE: &str = "daemon-launch-pending.json";
-const PROGRESS_MAX_BYTES: u64 = 4096;
-const WORKER_READY_FLOOR_SECONDS: f64 = 14.0;
 const MARKER_ATTEMPTS: usize = 10;
 const MARKER_RETRY: Duration = Duration::from_millis(20);
 const TERMINATE_WAIT: Duration = Duration::from_secs(1);
@@ -128,10 +123,9 @@ pub(super) fn ensure(
     let home = context.home().to_path_buf();
     let initial_pending = records::load_pending(&home);
     let initial_progress = load_progress(&home);
-    let progress_live = initial_progress
-        .as_ref()
-        .is_some_and(|progress| progress_is_live(caller, progress));
-    if !progress_live
+    // A launch that recorded start progress is settled under the start lock,
+    // where an expired one is retired instead of blocking every later start.
+    if initial_progress.is_none()
         && records::is_generation_bound(initial_pending.as_ref())
         && !records::pending_is_resolved(&home)
         && !retire::resolve_abandoned(caller, initial_pending.as_ref())
@@ -250,12 +244,15 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
                 clear_progress(&home);
                 return Ok(url);
             }
-            clear_progress(&home);
+            // A launch still inside its start window is never signalled for
+            // a caller's shorter deadline. Its marker stays, so once the
+            // window passes a later start finds it and retires it.
             retire::retire_all(caller, None, deadline);
             if !retire::retirement_is_complete(caller) {
                 return Err(runtime(IN_PROGRESS));
             }
-        } else {
+            clear_progress(&home);
+        } else if start_progress::retire_stalled(caller, &progress, deadline) {
             clear_progress(&home);
         }
     }
@@ -663,64 +660,6 @@ fn launch_config(context: &Context<'_>, port: u16, nonce: Option<&str>) -> Optio
         None => launch.remove("launch_nonce"),
     };
     LaunchConfig::parse(&serde_json::to_vec(&Value::Object(launch)).ok()?)
-}
-
-pub(super) fn load_progress(home: &Path) -> Option<Map<String, Value>> {
-    let raw = read_private_regular_text(&home.join(PROGRESS_FILE), PROGRESS_MAX_BYTES, true)?;
-    let Value::Object(payload) = serde_json::from_str(&raw).ok()? else {
-        return None;
-    };
-    if !verify_daemon_state(&payload, &load_daemon_discovery_key(home)?)
-        || text(&payload, "state_kind") != Some("daemon_start_progress")
-    {
-        return None;
-    }
-    int(&payload, "pid").filter(|pid| *pid > 0)?;
-    int(&payload, "port").filter(|port| (1..=65535).contains(port))?;
-    int(&payload, "recorded_at_ns").filter(|at| *at > 0)?;
-    int(&payload, "spawned_at_ns").filter(|at| *at > 0)?;
-    let marker_key = format!("process_start_{}", "token");
-    text(&payload, &marker_key).filter(|marker| !marker.is_empty())?;
-    let recorded = host::resolve_lenient(Path::new(text(&payload, "guard_home")?));
-    (recorded == host::resolve_lenient(home)).then_some(payload)
-}
-
-fn progress_is_live(caller: &Caller, progress: &Map<String, Value>) -> bool {
-    let marker_key = format!("process_start_{}", "token");
-    let now_ns = start_progress::now_ns();
-    let mut record = Map::new();
-    record.insert(
-        "pid".into(),
-        progress.get("pid").cloned().unwrap_or(Value::Null),
-    );
-    record.insert(
-        marker_key.clone(),
-        progress.get(&marker_key).cloned().unwrap_or(Value::Null),
-    );
-    record.insert(
-        "recorded_at_ns".into(),
-        progress
-            .get("recorded_at_ns")
-            .cloned()
-            .unwrap_or(Value::Null),
-    );
-    host::lifecycle(
-        caller,
-        json!({
-            "check": "start_progress_live",
-            "record": record,
-            "now_ns": now_ns,
-            "worker_ready_floor": WORKER_READY_FLOOR_SECONDS,
-        }),
-    )
-    .and_then(|answer| answer.get("live").and_then(Value::as_bool))
-    .unwrap_or(false)
-}
-
-fn clear_progress(home: &Path) {
-    if home.join(PROGRESS_FILE).is_file() {
-        let _ = write_record_tombstone(home, PROGRESS_FILE);
-    }
 }
 
 /// `_retire_guard_daemon_process`: a stale state's daemon, signalled only
