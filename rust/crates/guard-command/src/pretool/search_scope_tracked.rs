@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 const MAX_FILE_BYTES: u64 = 256 * 1024;
 /// Content one walk may read and scan across all of its fixtures.
 const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024;
+/// The largest tracked image a walk may pass. Only its text chunks count
+/// against the content budget.
+const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_INDEX_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_ANCESTORS: usize = 64;
 const STORE_DIRECTORIES: &[&str] = &[
@@ -65,23 +68,72 @@ impl TrackedFiles {
     }
 
     pub(super) fn classify(&mut self, path: &Path) -> Tracked {
-        let Ok(metadata) = std::fs::symlink_metadata(path) else {
+        let Some((length, rendered)) = self.tracked(path, MAX_FILE_BYTES) else {
             return Tracked::Unproven;
         };
-        if !metadata.is_file() || metadata.len() > MAX_FILE_BYTES {
+        // Past the budget the scope stays unproven and the search is reviewed.
+        self.spent += length;
+        if self.spent > MAX_TOTAL_BYTES {
             return Tracked::Unproven;
         }
-        let Some(repository) = path
+        let Ok(bytes) = std::fs::read(path) else {
+            return Tracked::Unproven;
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        // A Kubernetes `Secret` holds base64 values the detector does not
+        // flag, so a manifest that declares one is never a fixture, whether
+        // a tool names it or a recursive search walks into it.
+        if names::secret_object(&text) {
+            return Tracked::SecretManifest;
+        }
+        if clean(&text, &rendered) {
+            Tracked::Clean
+        } else {
+            Tracked::Unproven
+        }
+    }
+
+    /// Whether `path` is a PNG image the repository tracks, outside every
+    /// credential store, that holds pixels and nothing a search could print
+    /// as a secret. Screenshots are named for the screen they show
+    /// (`auth-desktop-login.png`). Without `-a` grep and rg print no line
+    /// from a binary file, but with it they print whatever text the file
+    /// carries, so the whole chunk layout is walked: every chunk must be one
+    /// the format defines, nothing may follow `IEND`, and the chunks that hold
+    /// text are scanned the way a fixture is, against the same budget. Text
+    /// the walk cannot read, a compressed `zTXt` or `iTXt`, keeps the review.
+    pub(super) fn tracked_image(&mut self, path: &Path) -> bool {
+        let png = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("png"));
+        if !png {
+            return false;
+        }
+        let Some((length, rendered)) = self.tracked(path, MAX_IMAGE_BYTES) else {
+            return false;
+        };
+        let Some(text) = png_text(path, length) else {
+            return false;
+        };
+        self.spent += text.len() as u64;
+        self.spent <= MAX_TOTAL_BYTES && clean(&String::from_utf8_lossy(&text), &rendered)
+    }
+
+    /// The length of `path` and its name in the repository index, when it is
+    /// a regular file of at most `limit` bytes that the nearest repository
+    /// tracks outside every credential store.
+    fn tracked(&mut self, path: &Path, limit: u64) -> Option<(u64, Vec<u8>)> {
+        let metadata = std::fs::symlink_metadata(path).ok()?;
+        if !metadata.is_file() || metadata.len() > limit {
+            return None;
+        }
+        let repository = path
             .ancestors()
             .skip(1)
             .take(MAX_ANCESTORS)
-            .find(|directory| std::fs::symlink_metadata(directory.join(".git")).is_ok())
-        else {
-            return Tracked::Unproven;
-        };
-        let Ok(relative) = path.strip_prefix(repository) else {
-            return Tracked::Unproven;
-        };
+            .find(|directory| std::fs::symlink_metadata(directory.join(".git")).is_ok())?;
+        let relative = path.strip_prefix(repository).ok()?;
         // The directories are judged by the directory rule, not the file-name
         // rule: `auth-evidence/` names a feature, while `secrets/` and
         // `api-tokens/` name a store and keep the review.
@@ -101,54 +153,89 @@ impl TrackedFiles {
             || store_part(repository)
             || guard_secure_fs::credential_directory_path(repository)
         {
-            return Tracked::Unproven;
+            return None;
         }
-        let Some(rendered) = relative
+        let rendered = relative
             .components()
             .map(|part| part.as_os_str().to_str())
             .collect::<Option<Vec<_>>>()
-            .map(|parts| parts.join("/").into_bytes())
-        else {
-            return Tracked::Unproven;
-        };
-        let tracked = self
-            .indexes
+            .map(|parts| parts.join("/").into_bytes())?;
+        self.indexes
             .entry(repository.to_path_buf())
             .or_insert_with(|| read_index(repository))
             .as_ref()
-            .is_some_and(|names| names.contains(&rendered));
-        if !tracked {
-            return Tracked::Unproven;
-        }
-        // Past the budget the scope stays unproven and the search is reviewed.
-        self.spent += metadata.len();
-        if self.spent > MAX_TOTAL_BYTES {
-            return Tracked::Unproven;
-        }
-        let Ok(bytes) = std::fs::read(path) else {
-            return Tracked::Unproven;
-        };
-        let text = String::from_utf8_lossy(&bytes);
-        // A Kubernetes `Secret` holds base64 values the detector does not
-        // flag, so a manifest that declares one is never a fixture, whether
-        // a tool names it or a recursive search walks into it.
-        if names::secret_object(&text) {
-            return Tracked::SecretManifest;
-        }
-        // The real name can make the detector stricter (`.env`) but also more
-        // lenient (tests/, docs/); both readings must be clean.
-        let name = String::from_utf8_lossy(&rendered);
-        let clean = ["", name.as_ref()].iter().all(|label| {
-            guard_scanner::secret_detection::scan_secret_text(&text, label, "search", None, 1)
-                .findings
-                .is_empty()
-        });
-        if clean {
-            Tracked::Clean
-        } else {
-            Tracked::Unproven
-        }
+            .is_some_and(|names| names.contains(&rendered))
+            .then_some((metadata.len(), rendered))
     }
+}
+
+/// Whether Guard's secret detector finds nothing in `text`. The real name
+/// can make the detector stricter (`.env`) but also more lenient (tests/,
+/// docs/); both readings must be clean.
+fn clean(text: &str, rendered: &[u8]) -> bool {
+    let name = String::from_utf8_lossy(rendered);
+    ["", name.as_ref()].iter().all(|label| {
+        guard_scanner::secret_detection::scan_secret_text(text, label, "search", None, 1)
+            .findings
+            .is_empty()
+    })
+}
+
+/// Chunks that carry pixels, colour data or layout, never text.
+const PNG_PIXEL_CHUNKS: &[&[u8; 4]] = &[
+    b"IHDR", b"PLTE", b"IDAT", b"tRNS", b"cHRM", b"gAMA", b"iCCP", b"sBIT", b"sRGB", b"cICP",
+    b"mDCv", b"cLLi", b"bKGD", b"hIST", b"pHYs", b"sPLT", b"tIME", b"acTL", b"fcTL", b"fdAT",
+    b"iDOT",
+];
+const MAX_PNG_CHUNKS: usize = 8192;
+
+/// The text a PNG at `path`, `length` bytes long, carries in its text and
+/// metadata chunks, or `None` when its layout is not a plain PNG: a bad
+/// signature, a chunk the format does not define, a compressed text chunk,
+/// or bytes after `IEND`.
+fn png_text(path: &Path, length: u64) -> Option<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut signature = [0_u8; 8];
+    file.read_exact(&mut signature).ok()?;
+    if &signature != b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    let mut at = 8_u64;
+    let mut text = Vec::new();
+    for _ in 0..MAX_PNG_CHUNKS {
+        let mut header = [0_u8; 8];
+        file.read_exact(&mut header).ok()?;
+        let size = u64::from(u32::from_be_bytes(header[..4].try_into().ok()?));
+        let kind: &[u8; 4] = header[4..].try_into().ok()?;
+        let next = at.checked_add(12)?.checked_add(size)?;
+        if next > length {
+            return None;
+        }
+        match kind {
+            b"IEND" => return (size == 0 && next == length).then_some(text),
+            b"tEXt" | b"iTXt" | b"eXIf" => {
+                let start = text.len();
+                text.resize(start + usize::try_from(size).ok()?, 0);
+                file.read_exact(&mut text[start..]).ok()?;
+                // An `iTXt` keyword ends at a NUL, then a compression flag.
+                if kind == b"iTXt" {
+                    let keyword = text[start..].iter().position(|byte| *byte == 0)?;
+                    if text.get(start + keyword + 1).copied() != Some(0) {
+                        return None;
+                    }
+                }
+                text.push(b'\n');
+                file.seek(SeekFrom::Current(4)).ok()?;
+            }
+            _ if PNG_PIXEL_CHUNKS.contains(&kind) => {
+                file.seek(SeekFrom::Start(next)).ok()?;
+            }
+            _ => return None,
+        }
+        at = next;
+    }
+    None
 }
 
 /// The index of the repository at `directory`, or a linked worktree's own.

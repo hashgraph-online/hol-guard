@@ -10,7 +10,7 @@ const CATALOG_TEXT: &str =
 
 /// A home with one repository under the build tree, which the location
 /// screens accept as an ordinary workspace.
-fn fixture() -> (PathBuf, PathBuf) {
+pub(super) fn fixture() -> (PathBuf, PathBuf) {
     let nonce = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target")
@@ -34,7 +34,7 @@ fn write(path: &Path, contents: &str) {
 }
 
 /// A version 2 index at `git_dir` listing `names`, as `git add` writes it.
-fn write_index(git_dir: &Path, names: &[&str]) {
+pub(super) fn write_index(git_dir: &Path, names: &[&str]) {
     let mut bytes = b"DIRC".to_vec();
     bytes.extend_from_slice(&2_u32.to_be_bytes());
     bytes.extend_from_slice(&(names.len() as u32).to_be_bytes());
@@ -317,7 +317,11 @@ fn hook_fixture() -> (PathBuf, PathBuf) {
 }
 
 #[cfg(unix)]
-fn hook(tool: serde_json::Value, home: &Path, project: &Path) -> guard_contracts::PreToolResultV1 {
+pub(super) fn hook(
+    tool: serde_json::Value,
+    home: &Path,
+    project: &Path,
+) -> guard_contracts::PreToolResultV1 {
     let controls = crate::pretool::workspace_contained_tests::controls();
     crate::pretool::evaluate_pre_tool_envelope_with_context(
         "claude-code",
@@ -343,7 +347,7 @@ fn edit(path: &Path) -> serde_json::Value {
 }
 
 #[cfg(unix)]
-fn bash(command: &str) -> serde_json::Value {
+pub(super) fn bash(command: &str) -> serde_json::Value {
     serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}})
 }
 
