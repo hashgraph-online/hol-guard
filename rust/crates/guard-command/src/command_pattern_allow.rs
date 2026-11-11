@@ -121,6 +121,10 @@ const SCRIPT_RUNNERS: &[(&str, &[&str])] = &[
     ("yarn", &["run"]),
 ];
 
+/// Package managers that read their own options anywhere before a bare `--`,
+/// some of which choose the shell or Node options a script runs with.
+const PACKAGE_MANAGERS: &[&str] = &["npm", "pnpm", "yarn"];
+
 /// Long git options that run a program, load hooks or settings, or write a
 /// file the command names. Git accepts any unambiguous prefix of a long
 /// option (`--rec` for `--receive-pack`), so every prefix is refused too.
@@ -363,6 +367,15 @@ fn allows_on(pattern: &CommandPatternAllow, command: &str, cmd_may_run: bool) ->
     {
         return false;
     }
+    if condition.operator != "exact"
+        && PACKAGE_MANAGERS.contains(&program_base(&pattern.program).as_str())
+        && adds_package_manager_option(
+            &shell_words(&normalized),
+            &shell_words(&normalize_words(&condition.value)),
+        )
+    {
+        return false;
+    }
     let value = normalize_words(&condition.value);
     match condition.operator.as_str() {
         "exact" => normalized == value,
@@ -450,6 +463,19 @@ fn glob_matches(pattern: &str, text: &str) -> bool {
         }
     }
     true
+}
+
+/// Whether a package manager command passes an option, before a bare `--`,
+/// that the pattern does not name word for word. npm reads options such as
+/// `--script-shell` and `--node-options` there, and accepts abbreviations of
+/// them, so a wildcard must not be able to supply any option the package
+/// manager reads. Words after `--` go to the script.
+fn adds_package_manager_option(words: &[String], pattern_words: &[String]) -> bool {
+    words
+        .iter()
+        .skip(1)
+        .take_while(|word| word.as_str() != "--")
+        .any(|word| word.starts_with('-') && !pattern_words.contains(word))
 }
 
 /// Whether a git command's words carry an option that runs a program or code

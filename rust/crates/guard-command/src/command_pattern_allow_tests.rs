@@ -446,3 +446,30 @@ fn nodejs_is_an_interpreter() {
     }
     assert!(pattern("glob", "nodejs scripts/build.js *").is_ok());
 }
+
+#[test]
+fn a_package_manager_wildcard_never_supplies_its_options() {
+    let test = glob("npm run test *");
+    for command in [
+        "npm run test --script-shell=./evil.sh",
+        "npm run test --script-sh=./evil.sh",
+        "npm run test x '--node-options=--require=./x.js'",
+        "npm run test --prefix /other",
+        "npm run test -w other",
+    ] {
+        assert!(!allows(&test, command), "{command}");
+    }
+    assert!(allows(&test, "npm run test -- --script-shell=./evil.sh"));
+    assert!(allows(&test, "npm run test unit"));
+    let publish = glob("npm publish --tag *");
+    assert!(allows(&publish, "npm publish --tag next"));
+    assert!(!allows(
+        &publish,
+        "npm publish --tag next --registry=https://example.test"
+    ));
+    let lint = pattern("startsWith", "pnpm lint").expect("prefix pattern");
+    assert!(!allows(&lint, "pnpm lint --dir /other"));
+    assert!(!allows(&glob("yarn build *"), "yarn build --cwd /other"));
+    let exact = pattern("exact", "npm run test --silent").expect("exact pattern");
+    assert!(allows(&exact, "npm run test --silent"));
+}
