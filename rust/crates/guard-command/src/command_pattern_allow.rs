@@ -19,8 +19,12 @@
 //!   code it is given (`npm exec *`, `deno eval *`, `uv run *`);
 //! - the command it allows is one simple command: no unquoted `;`, `&`, `|`,
 //!   `<`, `>`, parentheses, comments or line breaks, and no `$` expansion or
-//!   command substitution outside single quotes. A `*` that would otherwise
-//!   cover `x; curl … | sh` matches nothing.
+//!   command substitution outside single quotes, and no whitespace the shell
+//!   would not split on. A `*` that would otherwise cover `x; curl … | sh`
+//!   matches nothing;
+//! - a `startsWith` prefix ends at a word boundary, and a git pattern never
+//!   covers an option that runs a program it names (`--receive-pack`,
+//!   `--upload-pack`, `rebase -x`, ...).
 //!
 //! Block and review rules keep the exact-command form, which matches every
 //! spelling of a command; a pattern only narrows what a person must approve.
@@ -84,7 +88,19 @@ const RUNNER_SUBCOMMANDS: &[(&str, &[&str])] = &[
     ("bun", &["exec", "run", "x"]),
     ("conda", &["run"]),
     ("deno", &["eval", "run"]),
-    ("git", &[]),
+    (
+        "git",
+        &[
+            "bisect",
+            "config",
+            "difftool",
+            "filter-branch",
+            "instaweb",
+            "mergetool",
+            "send-email",
+            "submodule",
+        ],
+    ),
     ("go", &["run"]),
     ("hatch", &["run"]),
     ("mise", &["exec", "x"]),
@@ -96,6 +112,30 @@ const RUNNER_SUBCOMMANDS: &[(&str, &[&str])] = &[
     ("poetry", &["run"]),
     ("uv", &["run", "tool"]),
     ("yarn", &["dlx", "exec"]),
+];
+
+/// Long git options that run a program, load hooks or settings, or write a
+/// file the command names. Git accepts any unambiguous prefix of a long
+/// option (`--rec` for `--receive-pack`), so every prefix is refused too.
+const GIT_EXEC_LONG_OPTIONS: &[&str] = &[
+    "config",
+    "exec",
+    "exec-path",
+    "extcmd",
+    "open-files-in-pager",
+    "output",
+    "receive-pack",
+    "template",
+    "upload-pack",
+];
+
+/// Short git options, by subcommand, that do the same (`clone -u`,
+/// `rebase -x`, `grep -O`).
+const GIT_EXEC_SHORT_OPTIONS: &[(&str, &[char])] = &[
+    ("clone", &['c', 'u']),
+    ("grep", &['O']),
+    ("ls-remote", &['u']),
+    ("rebase", &['x']),
 ];
 
 /// Interpreters whose code-running switches start with `/` (`cmd /c`).
@@ -240,12 +280,17 @@ pub fn is_simple_command(command: &str) -> bool {
     let mut single = false;
     let mut double = false;
     let mut word_start = true;
+    // The shell splits words only at a space or a tab, but matching reads
+    // every whitespace character as a separator: a vertical tab, form feed or
+    // no-break space would let `x.sh\u{b}evil` match a pattern for `x.sh *`.
+    if command.chars().any(|character| {
+        (character.is_control() || character.is_whitespace()) && !matches!(character, ' ' | '\t')
+    }) {
+        return false;
+    }
     while let Some(character) = characters.next() {
         let at_word_start =
             std::mem::replace(&mut word_start, character == ' ' || character == '\t');
-        if matches!(character, '\n' | '\r' | '\0') {
-            return false;
-        }
         if single {
             single = character != '\'';
             continue;
@@ -281,7 +326,99 @@ pub fn allows(pattern: &CommandPatternAllow, command: &str) -> bool {
     if normalized.split(' ').next() != Some(pattern.program.as_str()) {
         return false;
     }
+    let condition = &pattern.expression.conditions[0];
+    if condition.operator == "startsWith" {
+        // A prefix ends at a word boundary: `startsWith "x.sh"` allows
+        // `x.sh 1`, not `x.sh.evil`.
+        let Ok(prefix) = normalize_command_text(&condition.value) else {
+            return false;
+        };
+        if normalized != prefix && !normalized.starts_with(&format!("{prefix} ")) {
+            return false;
+        }
+    }
+    if condition.operator != "exact"
+        && program_base(&pattern.program) == "git"
+        && git_runs_given_program(&shell_words(&normalized))
+    {
+        return false;
+    }
     matches_expression(&pattern.expression, &normalized).unwrap_or(false)
+}
+
+/// Whether a git command's words carry an option that runs a program or code
+/// they name, as `git push --receive-pack='sh -c id' .` does. An exact rule
+/// names the option, so only a wildcard or prefix is checked.
+fn git_runs_given_program(words: &[String]) -> bool {
+    let subcommand = words.get(1).map(String::as_str).unwrap_or_default();
+    let short: &[char] = GIT_EXEC_SHORT_OPTIONS
+        .iter()
+        .find(|(name, _)| *name == subcommand)
+        .map_or(&[], |(_, letters)| letters);
+    words.iter().skip(1).any(|word| {
+        if let Some(long) = word.strip_prefix("--") {
+            let name = long.split('=').next().unwrap_or_default();
+            return !name.is_empty()
+                && GIT_EXEC_LONG_OPTIONS
+                    .iter()
+                    .any(|option| option.starts_with(name));
+        }
+        word.strip_prefix('-')
+            .is_some_and(|cluster| cluster.chars().any(|letter| short.contains(&letter)))
+    })
+}
+
+/// The words of a simple command as the shell passes them on: quotes and
+/// escapes removed.
+fn shell_words(command: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut started = false;
+    let mut single = false;
+    let mut double = false;
+    let mut characters = command.chars();
+    while let Some(character) = characters.next() {
+        if single {
+            if character == '\'' {
+                single = false;
+            } else {
+                word.push(character);
+            }
+            continue;
+        }
+        match character {
+            '\'' if !double => {
+                single = true;
+                started = true;
+            }
+            '"' => {
+                double = !double;
+                started = true;
+            }
+            '\\' => {
+                let escaped = characters.next().unwrap_or_default();
+                if double && !matches!(escaped, '"' | '\\' | '$' | '`') {
+                    word.push('\\');
+                }
+                word.push(escaped);
+                started = true;
+            }
+            ' ' | '\t' if !double => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            _ => {
+                word.push(character);
+                started = true;
+            }
+        }
+    }
+    if started {
+        words.push(word);
+    }
+    words
 }
 
 /// A pattern Allow read from a policy document's `match.commands` object.

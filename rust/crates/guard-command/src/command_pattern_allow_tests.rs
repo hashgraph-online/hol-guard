@@ -252,3 +252,106 @@ fn comments_and_expansions_never_match() {
     assert!(allows(&rule, "gh pr view \\#1 --repo owner/name"));
     assert!(allows(&rule, "gh pr view '$PR' --repo owner/name"));
 }
+
+#[test]
+fn whitespace_the_shell_does_not_split_on_never_matches() {
+    let rule = glob("bash scripts/approve.sh *");
+    for command in [
+        "bash scripts/approve.sh\u{b}malicious 1",
+        "bash scripts/approve.sh\u{c}malicious 1",
+        "bash scripts/approve.sh\u{a0}malicious 1",
+        "bash scripts/approve.sh\u{2003}malicious 1",
+        "bash scripts/approve.sh\u{85}malicious 1",
+        "bash scripts/approve.sh 'a\u{b}b'",
+        "bash scripts/approve.sh a\\\u{b}b",
+        "bash scripts/approve.sh 1\u{1b}[2K",
+    ] {
+        assert!(!allows(&rule, command), "{command:?} was allowed");
+    }
+    assert!(allows(&rule, "bash scripts/approve.sh\t1"));
+}
+
+#[test]
+fn a_prefix_ends_at_a_word_boundary() {
+    let rule = pattern("startsWith", "bash scripts/approve.sh").unwrap();
+    assert!(allows(&rule, "bash scripts/approve.sh"));
+    assert!(allows(&rule, "bash scripts/approve.sh 1"));
+    assert!(allows(&rule, "bash  scripts/approve.sh   1"));
+    for command in [
+        "bash scripts/approve.sh.evil",
+        "bash scripts/approve.sh2 1",
+        "bash scripts/approve.sh-x",
+    ] {
+        assert!(!allows(&rule, command), "{command:?} was allowed");
+    }
+}
+
+#[test]
+fn a_git_wildcard_never_covers_an_option_that_runs_a_program() {
+    let push = glob("git push *");
+    for command in [
+        "git push --receive-pack='sh -c id' .",
+        "git push --receive-pack 'sh -c id' .",
+        "git push --rec='sh -c id' .",
+        "git push --exec='sh -c id' .",
+        "git push '--receive-pack=sh -c id' .",
+        "git push \"--receive-pack\"='sh -c id' .",
+        "git push --rec\\eive-pack='sh -c id' .",
+        "git push origin --upload-pack=x",
+    ] {
+        assert!(!allows(&push, command), "{command:?} was allowed");
+    }
+    assert!(allows(&push, "git push origin feature"));
+    assert!(allows(&push, "git push --force-with-lease origin feature"));
+    assert!(allows(&push, "git push -u origin feature"));
+    assert!(allows(&push, "git push --tags"));
+    for (rule, command) in [
+        ("git fetch *", "git fetch --upload-pack='sh -c id' origin"),
+        ("git clone *", "git clone -u 'sh -c id' x y"),
+        ("git clone *", "git clone -c core.sshCommand=id x y"),
+        ("git clone *", "git clone -qc core.sshCommand=id x y"),
+        ("git clone *", "git clone --template=/tmp/hooks x y"),
+        ("git clone *", "git clone --conf core.sshCommand=id x y"),
+        ("git rebase *", "git rebase -x id main"),
+        ("git rebase *", "git rebase --exec id main"),
+        ("git rebase *", "git rebase -ix id main"),
+        ("git grep *", "git grep -Ovim pattern"),
+        ("git grep *", "git grep --open-files-in-pager=vim pattern"),
+        ("git ls-remote *", "git ls-remote -u 'sh -c id' origin"),
+        (
+            "git archive *",
+            "git archive --remote=x --exec='sh -c id' HEAD",
+        ),
+        ("git log *", "git log --output=/home/user/.bashrc"),
+    ] {
+        assert!(!allows(&glob(rule), command), "{command:?} was allowed");
+    }
+    assert!(allows(&glob("git commit *"), "git commit -c HEAD"));
+    assert!(allows(&glob("git log *"), "git log --oneline -5"));
+    // An exact rule names the option a person read.
+    let exact = pattern("exact", "git push --receive-pack=git-receive-pack origin").unwrap();
+    assert!(allows(
+        &exact,
+        "git push --receive-pack=git-receive-pack origin"
+    ));
+}
+
+#[test]
+fn git_subcommands_that_run_a_program_cannot_open_a_wildcard() {
+    for value in [
+        "git bisect *",
+        "git config *",
+        "git difftool *",
+        "git filter-branch *",
+        "git instaweb *",
+        "git mergetool *",
+        "git send-email *",
+        "git submodule *",
+    ] {
+        assert_eq!(
+            pattern("glob", value).map(|_| ()),
+            Err("command_pattern_allow_runner".to_owned()),
+            "{value}"
+        );
+    }
+}
