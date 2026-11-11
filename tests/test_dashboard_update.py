@@ -972,7 +972,7 @@ def test_runner_bootstrap_ignores_project_import_hooks_and_uses_guard_owned_cwd(
 ) -> None:
     trusted_root = tmp_path / "trusted-root"
     trusted_package = trusted_root / "codex_plugin_scanner"
-    runner_script = trusted_package / "guard" / "daemon" / "dashboard_update_runner.py"
+    runner_script = trusted_package / "guard" / "updates" / "dashboard_update_runner.py"
     runner_script.parent.mkdir(parents=True)
     (trusted_package / "__init__.py").write_text("SOURCE = 'trusted'\n", encoding="utf-8")
     observed_path = tmp_path / "runner-observed.json"
