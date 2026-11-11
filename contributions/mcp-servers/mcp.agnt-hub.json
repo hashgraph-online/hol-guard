@@ -29,10 +29,10 @@
   ],
   "tools": [
     { "name": "hub_whoami", "state": "inherit" },
-    { "name": "hub_heartbeat", "state": "inherit" },
+    { "name": "hub_heartbeat", "state": "review" },
     { "name": "hub_list_tasks", "state": "inherit" },
     { "name": "hub_get_task", "state": "inherit" },
-    { "name": "hub_read_inbox", "state": "inherit" },
+    { "name": "hub_read_inbox", "state": "review" },
     { "name": "hub_claim_task", "state": "review" },
     { "name": "hub_update_task_status", "state": "review" },
     { "name": "hub_create_task", "state": "review" },
