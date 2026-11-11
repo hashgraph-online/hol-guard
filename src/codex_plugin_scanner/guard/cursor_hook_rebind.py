@@ -6,15 +6,15 @@ import json
 import sys
 from pathlib import Path
 
-from .adapters._modules.cursor.cursor_hook_command_line import split_cursor_hook_command
-from .adapters._modules.cursor.cursor_hook_native import NATIVE_CURSOR_HOOK_COMMAND, native_cursor_hook_bridge
+from .adapters._modules.cursor.cursor_hook_native import native_cursor_hook_bridge
 from .adapters.base import HarnessContext
 from .adapters.cursor_hook_config import (
+    _ask,
+    _flag,
     _hooks_state_path,
     _is_managed_hook_script,
+    _live_managed_commands,
     isolated_cursor_hook_python,
-    live_cursor_hooks_use_frozen_control_plane,
-    managed_cursor_hook_commands,
 )
 from .adapters.cursor_hooks import (
     cursor_hook_script_path,
@@ -25,7 +25,6 @@ from .adapters.cursor_hooks import (
 )
 from .adapters.guard_cli_attestation import resolve_attested_guard_cli
 from .stable_guard_cli import (
-    argv0_is_ephemeral_desktop_cli,
     frozen_cli_path_is_runnable,
     frozen_launcher_is_prune_safe,
     resolve_frozen_guard_cli,
@@ -34,31 +33,10 @@ from .stable_guard_cli import (
 _READ_ERRORS = (OSError, UnicodeError)
 
 
-def _assignment_argv(source: str, name: str) -> list[str] | None:
-    prefix = f"{name} = "
-    for line in source.splitlines():
-        if not line.startswith(prefix):
-            continue
-        try:
-            payload = json.loads(line[len(prefix) :])
-        except json.JSONDecodeError:
-            return None
-        if isinstance(payload, list) and all(isinstance(item, str) for item in payload):
-            return payload
-        return None
-    return None
-
-
 def cursor_hook_script_bakes_ephemeral_cli(source: str) -> bool:
     """Return whether a managed Cursor hook script still bakes a versions/ Core path."""
 
-    if not _is_managed_hook_script(source):
-        return False
-    for name in ("GUARD_CLI", "GUARD_RECOVERY_COMMAND"):
-        argv = _assignment_argv(source, name)
-        if argv and argv0_is_ephemeral_desktop_cli(argv[0]):
-            return True
-    return False
+    return _flag(_ask("ephemeral", source=source), "ephemeral")
 
 
 def can_rebind_to_stable_frozen_cli() -> bool:
@@ -117,17 +95,22 @@ def rebind_stale_cursor_hooks(guard_home: Path, *, home_dir: Path) -> dict[str, 
         expected_source = cursor_hook_script_source(context)
     except RuntimeError as error:
         return {"rebound": False, "reason": "cursor_hook_script_rebind_failed", "error": str(error)}
-    needs_rebind = live_source != expected_source or cursor_hook_script_bakes_ephemeral_cli(live_source)
-    if managed_source is not None:
-        needs_rebind = (
-            needs_rebind or managed_source != expected_source or cursor_hook_script_bakes_ephemeral_cli(managed_source)
+    try:
+        commands = _live_managed_commands(_live_hooks(context))
+        needs_rebind = _flag(
+            _ask(
+                "rebind",
+                live=live_source,
+                managed=managed_source,
+                expected=expected_source,
+                commands=[[command, frozen] for command, frozen in commands],
+                isolated_python=isolated_cursor_hook_python() is not None,
+                native_bridge=native_cursor_hook_bridge(guard_home) is not None,
+            ),
+            "rebind",
         )
-    hooks_obj = _live_hooks(context)
-    if hooks_obj is not None:
-        if isolated_cursor_hook_python() is not None and live_cursor_hooks_use_frozen_control_plane(hooks_obj):
-            needs_rebind = True
-        if _live_hooks_skip_native_bridge(hooks_obj, guard_home):
-            needs_rebind = True
+    except RuntimeError as error:
+        return {"rebound": False, "reason": "cursor_hook_script_rebind_failed", "error": str(error)}
     if not needs_rebind and _state_matches_attested_cli(context):
         return {"rebound": False, "reason": "cursor_hook_script_current"}
     try:
@@ -146,19 +129,6 @@ def _live_hooks(context: HarnessContext) -> dict[str, object] | None:
         return None
     nested = payload.get("hooks")
     return nested if isinstance(nested, dict) else payload
-
-
-def _live_hooks_skip_native_bridge(hooks: dict[str, object], guard_home: Path) -> bool:
-    """True when a managed command starts the client directly although the native bridge can answer."""
-
-    commands = managed_cursor_hook_commands(hooks)
-    if not commands or native_cursor_hook_bridge(guard_home) is None:
-        return False
-    for command in commands:
-        tokens = split_cursor_hook_command(command) or []
-        if len(tokens) < 2 or tokens[1] != NATIVE_CURSOR_HOOK_COMMAND:
-            return True
-    return False
 
 
 __all__ = [
