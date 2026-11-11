@@ -19,39 +19,88 @@ pub(super) fn inplace_edit_reason(model: &CanonicalCommandV1) -> Option<String> 
     ))
 }
 
-fn inplace_editor(segment: &CommandSegmentV1) -> Option<&'static str> {
-    let executable = segment.executable.as_deref()?;
-    // A short flag that takes a value ends the cluster: the rest is its value.
-    let (editor, value_flags): (_, &[char]) = match executable.rsplit(['/', '\\']).next()? {
-        "sed" | "gsed" => ("sed", &['e', 'f', 'l']),
-        "perl" => (
-            "perl",
-            &['e', 'E', 'I', 'M', 'm', 'x', '0', 'C', 'd', 'D', 'l'],
-        ),
-        _ => return None,
-    };
-    segment
-        .arguments
-        .iter()
-        .take_while(|argument| argument.as_str() != "--")
-        .any(|argument| in_place_flag(argument, value_flags))
-        .then_some(editor)
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Editor {
+    Sed,
+    Perl,
 }
 
-/// `-i`, `-i.bak`, `--in-place[=SUFFIX]`, or a short-flag cluster such as
-/// `-pi` or `-Ei` that sets `-i` before any flag that takes a value.
-fn in_place_flag(argument: &str, value_flags: &[char]) -> bool {
-    if argument == "--in-place" || argument.starts_with("--in-place=") {
-        return true;
-    }
-    let Some(cluster) = argument.strip_prefix('-') else {
-        return false;
+enum Cluster {
+    InPlace,
+    ValueNext,
+    Done,
+}
+
+fn inplace_editor(segment: &CommandSegmentV1) -> Option<&'static str> {
+    let executable = segment.executable.as_deref()?;
+    let (editor, name) = match executable.rsplit(['/', '\\']).next()? {
+        "sed" | "gsed" => (Editor::Sed, "sed"),
+        "perl" => (Editor::Perl, "perl"),
+        _ => return None,
     };
-    !cluster.starts_with('-')
-        && cluster
-            .chars()
-            .take_while(|flag| !value_flags.contains(flag))
-            .any(|flag| flag == 'i')
+    let mut value_next = false;
+    for argument in &segment.arguments {
+        if std::mem::take(&mut value_next) {
+            continue;
+        }
+        if argument == "--" {
+            break;
+        }
+        let Some(flags) = argument.strip_prefix('-').filter(|flags| !flags.is_empty()) else {
+            // An operand. Perl stops reading its own switches at the first one
+            // (the script, or an argument after `-e`), so a later `-i` belongs
+            // to the script. GNU sed reads options anywhere on the line.
+            if editor == Editor::Perl {
+                break;
+            }
+            continue;
+        };
+        if let Some(long) = flags.strip_prefix('-') {
+            if editor == Editor::Sed {
+                if long == "in-place" || long.starts_with("in-place=") {
+                    return Some(name);
+                }
+                value_next = matches!(long, "expression" | "file" | "line-length");
+            }
+            continue;
+        }
+        match scan_cluster(editor, flags) {
+            Cluster::InPlace => return Some(name),
+            Cluster::ValueNext => value_next = true,
+            Cluster::Done => {}
+        }
+    }
+    None
+}
+
+/// Reads one short-flag cluster such as `-pi`, `-Ei.orig` or `-0pi`. A flag
+/// that takes a value ends the cluster: the rest, or the next argument when
+/// nothing is left, is that value. Perl's `-0` and `-l` take only optional
+/// digits, so the switches after those digits still count.
+fn scan_cluster(editor: Editor, flags: &str) -> Cluster {
+    let mut chars = flags.char_indices().peekable();
+    while let Some((index, flag)) = chars.next() {
+        let last = index + flag.len_utf8() == flags.len();
+        match (editor, flag) {
+            (_, 'i') => return Cluster::InPlace,
+            (Editor::Sed, 'e' | 'f' | 'l') | (Editor::Perl, 'e' | 'E' | 'I' | 'M' | 'm') => {
+                return if last {
+                    Cluster::ValueNext
+                } else {
+                    Cluster::Done
+                };
+            }
+            (Editor::Perl, 'x' | 'C' | 'd' | 'D') => return Cluster::Done,
+            (Editor::Perl, '0') if chars.next_if(|(_, c)| *c == 'x').is_some() => {
+                while chars.next_if(|(_, c)| c.is_ascii_hexdigit()).is_some() {}
+            }
+            (Editor::Perl, '0' | 'l') => {
+                while chars.next_if(|(_, c)| ('0'..='7').contains(c)).is_some() {}
+            }
+            _ => {}
+        }
+    }
+    Cluster::Done
 }
 
 #[cfg(test)]

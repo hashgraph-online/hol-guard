@@ -39,6 +39,11 @@ fn an_in_place_edit_points_the_agent_at_its_file_edit_tool() {
             true,
         ),
         ("sed --in-place -e 's/a/b/' src/lib.rs", "sed", false),
+        ("sed 's/a/b/' -i src/lib.rs", "sed", false),
+        ("perl -0pi -e 's/a/b/g' src/lib.rs", "perl", false),
+        ("perl -0777 -lpi -e 's/a/b/g' src/lib.rs", "perl", false),
+        ("perl -I lib -pi -e 's/a/b/' src/lib.rs", "perl", false),
+        ("perl -e 's/a/b/' -i src/lib.rs", "perl", false),
     ];
     for (command, editor, chain) in cases {
         let (action, code, reason) = decision(command);
@@ -66,6 +71,11 @@ fn other_sed_and_perl_runs_keep_their_reason() {
         "perl -e 'print 1' && make build",
         "sed -e 's/i/j/' src/lib.rs > out.txt",
         "perl -I lib script.pl",
+        "perl tools/rename.pl -i src/lib.rs",
+        "sed -f -i src/lib.rs",
+        "sed --file -i src/lib.rs",
+        "perl -e 'print 1' src/lib.rs -i",
+        "perl -0777 -ne 'print' src/lib.rs",
     ] {
         let (_, _, reason) = decision(command);
         assert!(
