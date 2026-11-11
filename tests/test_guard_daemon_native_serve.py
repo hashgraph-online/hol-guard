@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import native_serve
+from codex_plugin_scanner.guard.cli import daemon_serve as native_serve
 
 
 def test_native_serve_is_the_default_unless_opted_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -87,7 +87,7 @@ def test_exec_hands_the_launch_line_to_the_runtime_on_stdin(monkeypatch: pytest.
 
 
 def test_windows_launcher_hands_the_line_over_and_returns_the_daemon_exit() -> None:
-    from codex_plugin_scanner.guard.daemon.native_serve import _run_native_daemon
+    from codex_plugin_scanner.guard.cli.daemon_serve import _run_native_daemon
 
     child = "import sys\nline = sys.stdin.readline()\nsys.exit(7 if line == '{\"x\":1}\\n' else 1)"
     assert _run_native_daemon([sys.executable, "-c", child], b'{"x":1}\n') == 7

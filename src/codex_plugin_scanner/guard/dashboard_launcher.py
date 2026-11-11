@@ -33,9 +33,9 @@ if TYPE_CHECKING:
 from ..version import __version__
 from .browser_opener import open_browser_url
 from .cli.update_desktop_core_start import wait_for_started_core
-from .daemon.start_classification import GuardDaemonStillStartingError
 from .local_dashboard_session import build_local_dashboard_session_token
 from .native_daemon_manage import (
+    GuardDaemonStillStartingError,
     desktop_preflight_requested,
     ensure_guard_daemon,
     load_guard_daemon_auth_token,

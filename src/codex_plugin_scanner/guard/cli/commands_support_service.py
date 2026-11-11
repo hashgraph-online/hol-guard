@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_artifacts import _optional_string
 
 from ..native_daemon_peer import load_guard_daemon_endpoint_url
-from ..daemon.start_classification import GuardDaemonStillStartingError
+from ..native_daemon_manage import GuardDaemonStillStartingError
 from ._commands_shared import *
 from .commands_parser_helpers import *
 

@@ -20,7 +20,6 @@ from typing import Any, TypeAlias, TypedDict
 from ..daemon.audit_persistence import AuditPersistence
 from ..daemon.diagnostics import DaemonDiagnostics
 from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
-from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
 from ..native_daemon_manage import (
     write_guard_daemon_state,
 )
@@ -112,13 +111,6 @@ class _GuardDaemonHTTPServer:
     daemon_discovery_challenges_lock: threading.Lock
     dashboard_reconnect_lock: threading.Lock
     dashboard_reconnect_consumed_challenges: dict[str, int]
-    containment_health_cache: dict[str, object] | None
-    containment_health_cache_monotonic: float
-    containment_health_cache_lock: threading.Lock
-    containment_health_refreshing: bool
-    containment_health_refresh_event: threading.Event
-    containment_health_generation: int
-    containment_health_completed_generation: int
     network_supervisor: NetworkSupervisor
     runtime_hook_evidence_writer: NativeHookEvidenceWriter
     runtime_hook_evidence_dispatch: HookEvidenceDispatch
@@ -141,7 +133,6 @@ class _GuardDaemonHTTPServer:
     pending_classifications: dict[int, tuple[tuple[str, int], float]]
     saturation_probes: dict[int, tuple[socket.socket, tuple[str, int], float]]
     unclassified_connections_lock: threading.Lock
-    runtime_heartbeat: RuntimeHeartbeatWriter
     diagnostics: DaemonDiagnostics
     auth_audit_lock: threading.Lock
     denial_audit_lock: threading.Lock

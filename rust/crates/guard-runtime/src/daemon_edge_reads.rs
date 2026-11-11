@@ -1070,6 +1070,11 @@ mod settings;
 
 #[path = "daemon_edge_dashboard.rs"]
 mod dashboard;
+
+/// The fingerprint of the dashboard bundle under `static_dir`.
+pub(super) fn dashboard_build_id(static_dir: &Path) -> Option<String> {
+    dashboard::build_id(static_dir)
+}
 #[path = "daemon_edge_discovery.rs"]
 mod discovery;
 #[path = "daemon_edge_network.rs"]

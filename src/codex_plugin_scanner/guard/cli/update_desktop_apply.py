@@ -11,8 +11,8 @@ from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
-from ..daemon.start_classification import GuardDaemonStillStartingError
 from ..mdm.contracts import ManagedNetworkPolicy
+from ..native_daemon_manage import GuardDaemonStillStartingError
 from ..native_daemon_peer import (
     daemon_refresh_outcome_succeeded,
     retained_desktop_owner_note,

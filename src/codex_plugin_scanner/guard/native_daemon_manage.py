@@ -393,7 +393,7 @@ def _ensure_request_extra(
 ) -> dict[str, object]:
     """The launch configuration and environment `daemon-manage` starts a daemon with."""
 
-    from .daemon.native_serve import launch_configuration, native_serve_executable
+    from .cli.daemon_serve import launch_configuration, native_serve_executable
 
     serve_executable = native_serve_executable(guard_home) if executable is None else None
     if executable is None and serve_executable is None:
@@ -441,6 +441,10 @@ def recovery_host_payload(guard_home: Path, *, home_dir: Path | None) -> dict[st
     return payload
 
 
+class GuardDaemonStillStartingError(RuntimeError):
+    """The daemon accepted the start but has not answered yet."""
+
+
 def _daemon_url_from_answer(answer: Mapping[str, object] | None, deadline: float) -> str:
     if answer is None:
         if time.monotonic() >= deadline:
@@ -453,6 +457,9 @@ def _daemon_url_from_answer(answer: Mapping[str, object] | None, deadline: float
     text = message if isinstance(message, str) and message else "Guard approval center did not start."
     if answer.get("kind") == "value":
         raise ValueError(text)
+    if answer.get("kind") == "timeout":
+        # Another launcher holds the start lock: the daemon is still starting.
+        raise GuardDaemonStillStartingError(text)
     raise RuntimeError(text)
 
 

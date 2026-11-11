@@ -99,6 +99,11 @@ pub(super) fn respond(
     Some(shell(static_dir, dashboard_build))
 }
 
+/// The pinned bundle's fingerprint, or `None` when no dashboard is bundled.
+pub(super) fn build_id(static_dir: &Path) -> Option<String> {
+    pinned(static_dir).build.clone()
+}
+
 fn pinned(static_dir: &Path) -> &'static Bundle {
     let mut pinned = PINNED
         .lock()

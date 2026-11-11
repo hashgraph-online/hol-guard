@@ -169,7 +169,6 @@ def runtime_snapshot(store: GuardStore, args: Mapping[str, Any]) -> dict[str, ob
     from ..config import load_guard_config
     from ..daemon.command_activity_health_repair import auto_repair_command_activity_health_if_degraded
     from ..daemon.server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
-    from ..daemon.server_control_health import cached_containment_health
     from ..models import format_local_http_origin
     from ..native_daemon_manage import current_guard_daemon_runtime_fingerprint
     from ..runtime.containment_health import probe_containment_health
@@ -177,14 +176,13 @@ def runtime_snapshot(store: GuardStore, args: Mapping[str, Any]) -> dict[str, ob
     with control_server(store, args) as server:
         _maybe_queue_first_cloud_sync(store=store, managed_controls_publish=_managed_controls_publish_for(server))
         auto_repair_command_activity_health_if_degraded(store)
-        containment = cached_containment_health(
-            server,
-            force_refresh=False,
-            probe=lambda: probe_containment_health(
+        try:
+            containment: dict[str, object] | None = probe_containment_health(
                 daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
                 guard_home=store.guard_home,
-            ).to_dict(),
-        )
+            ).to_dict()
+        except (OSError, RuntimeError, TypeError, ValueError):
+            containment = None
         active_request_id = args.get("active_request_id")
         snapshot = build_runtime_snapshot(
             store=store,

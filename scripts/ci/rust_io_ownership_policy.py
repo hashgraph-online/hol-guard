@@ -301,7 +301,6 @@ _SERVICE_PATHS: Final = frozenset(
         # Retained Python: daemon supervision/lifecycle, cloud/OAuth/network
         # services, publication, and install support.
         "src/codex_plugin_scanner/guard/native_daemon_manage.py",
-        "src/codex_plugin_scanner/guard/daemon/start_classification.py",
         "src/codex_plugin_scanner/guard/frozen_daemon_runtime.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
         "src/codex_plugin_scanner/guard/extension_builder/io.py",

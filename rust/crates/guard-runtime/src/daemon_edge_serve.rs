@@ -23,7 +23,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::reads::{NativeReads, HANDSHAKE_SCHEMA};
+use super::reads::{dashboard_build_id, NativeReads, HANDSHAKE_SCHEMA};
 use super::{serve, MAX_ACTIVE_CONNECTIONS, STALLED_WRITE_TIMEOUT};
 use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_raw};
 
@@ -149,7 +149,13 @@ impl LaunchConfig {
         let optional = [
             (
                 "dashboard_build",
-                self.dashboard_build.clone().map(Value::from),
+                self.dashboard_build
+                    .clone()
+                    .or_else(|| {
+                        let dir = self.dashboard_dir.as_deref()?;
+                        dashboard_build_id(Path::new(dir))
+                    })
+                    .map(Value::from),
             ),
             ("dashboard_dir", self.dashboard_dir.clone().map(Value::from)),
             ("user_home", self.user_home.clone().map(Value::from)),

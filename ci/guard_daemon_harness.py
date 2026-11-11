@@ -37,7 +37,7 @@ class _LibraryCallServer:
         import json
         import sys
 
-        from codex_plugin_scanner.guard.daemon.native_edge_handshake import guard_cli_command
+        from codex_plugin_scanner.guard.cli.daemon_serve import guard_cli_command
 
         bridge = Path(__file__).with_name("native_library_bridge.py").resolve()
         cli = guard_cli_command() or [sys.executable, "-m", "codex_plugin_scanner.cli"]

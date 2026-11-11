@@ -92,7 +92,7 @@ def test_daemon_serve_cli_treats_home_as_guard_home_override(
     def fake_exec(guard_home: Path, port: int, *, user_home: Path | None = None) -> None:
         captured.update(guard_home=guard_home, port=port, user_home=user_home)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.native_serve.exec_native_daemon", fake_exec)
+    monkeypatch.setattr("codex_plugin_scanner.guard.cli.daemon_serve.exec_native_daemon", fake_exec)
 
     code = daemon_serve.run_daemon_serve_cli(["daemon", "--serve", "--home", str(explicit_home)])
 

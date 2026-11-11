@@ -857,7 +857,7 @@ def _patch_slow_core_start(
     package_version: str = "3.59.0a24",
 ) -> _FakeClock:
     from codex_plugin_scanner.guard.cli import update_desktop_core_start
-    from codex_plugin_scanner.guard.daemon.start_classification import GuardDaemonStillStartingError
+    from codex_plugin_scanner.guard.native_daemon_manage import GuardDaemonStillStartingError
 
     clock, _launched = _patch_daemon_refresh(monkeypatch, retirement_completes_after=0, desktop_respawn_after=None)
 

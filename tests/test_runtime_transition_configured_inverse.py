@@ -74,7 +74,7 @@ class OwnedDaemonLifecycle:
         self.native_retired = []
 
     def start(self, deadline):
-        from codex_plugin_scanner.guard.daemon.native_serve import launch_configuration
+        from codex_plugin_scanner.guard.cli.daemon_serve import launch_configuration
 
         assert self.child is None
         self.log = tempfile.TemporaryFile()  # noqa: SIM115 -- closed with the child

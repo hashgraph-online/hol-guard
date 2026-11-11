@@ -26,7 +26,7 @@ _HOST_IS_LINUX = hasattr(os, "uname") and os.uname().sysname == "Linux"
 
 
 def _runtime_binary(guard_home: Path) -> Path:
-    from codex_plugin_scanner.guard.daemon.native_serve import native_serve_executable
+    from codex_plugin_scanner.guard.cli.daemon_serve import native_serve_executable
 
     configured = os.environ.get("HOL_GUARD_NATIVE_BINARY", "").strip()
     if configured:
@@ -90,7 +90,7 @@ class NativeGuardDaemon:
         return f"http://127.0.0.1:{self.port}"
 
     def start(self) -> None:
-        from codex_plugin_scanner.guard.daemon.native_serve import launch_configuration
+        from codex_plugin_scanner.guard.cli.daemon_serve import launch_configuration
 
         if self._process is not None:
             return

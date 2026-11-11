@@ -17,7 +17,6 @@ import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import store_review_event_outbox, store_storage_gate
-from codex_plugin_scanner.guard.daemon.runtime_heartbeat import RuntimeHeartbeatWriter
 from codex_plugin_scanner.guard.native_daemon_route import _MAX_CONCURRENT_ASKS, native_route_facts
 from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_connect_timeout_override,
@@ -116,52 +115,6 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         assert resumed_elapsed < 1.0
     finally:
         daemon.stop()
-
-
-def test_runtime_heartbeat_writer_coalesces_pending_updates() -> None:
-    @final
-    class DelayedStore:
-        def __init__(self) -> None:
-            self.attempts: list[str] = []
-            self.allow_write: bool = False
-
-        def try_touch_runtime_state(
-            self,
-            *,
-            session_id: str,
-            last_heartbeat_at: str,
-            timeout_seconds: float,
-            registration: object = None,
-        ) -> bool:
-            assert session_id == "session"
-            assert timeout_seconds == 0.01
-            self.attempts.append(last_heartbeat_at)
-            return self.allow_write
-
-    store = DelayedStore()
-    writer = RuntimeHeartbeatWriter(
-        store=store,
-        session_id="session",
-        write_timeout_seconds=0.01,
-        retry_interval_seconds=0.01,
-    )
-    writer.start()
-    try:
-        for index in range(100):
-            writer.touch(f"heartbeat-{index}")
-        deadline = time.monotonic() + 1
-        while not store.attempts and time.monotonic() < deadline:
-            time.sleep(0.005)
-        store.allow_write = True
-        writer.touch("heartbeat-final")
-        deadline = time.monotonic() + 1
-        while (not store.attempts or store.attempts[-1] != "heartbeat-final") and time.monotonic() < deadline:
-            time.sleep(0.005)
-    finally:
-        writer.stop()
-
-    assert store.attempts[-1] == "heartbeat-final"
-    assert len(store.attempts) < 20
 
 
 def test_bounded_runtime_heartbeat_connection_closes_after_write_error(

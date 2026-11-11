@@ -149,13 +149,6 @@ def _replay_server_class() -> type:
                 self._replay_state, "dashboard_reconnect_consumed_challenges"
             )
             self.dashboard_reconnect_lock = _SyncedLock(state_file, self.dashboard_reconnect_consumed_challenges)  # pyright: ignore[reportAttributeAccessIssue]
-            self.containment_health_cache = None
-            self.containment_health_cache_monotonic = 0.0
-            self.containment_health_cache_lock = threading.Lock()
-            self.containment_health_refreshing = False
-            self.containment_health_refresh_event = threading.Event()
-            self.containment_health_generation = 0
-            self.containment_health_completed_generation = 0
             self.request_capacity_limit = daemon_server._MAX_CONCURRENT_DAEMON_REQUESTS
             self.request_capacity = threading.BoundedSemaphore(self.request_capacity_limit)
             self.connection_capacity_limit = daemon_server._MAX_CONCURRENT_DAEMON_CONNECTIONS
@@ -205,17 +198,6 @@ def _replay_server_class() -> type:
             from ..runtime.network_supervisor import NetworkSupervisor
 
             return NetworkSupervisor()
-
-        @cached_property
-        def runtime_heartbeat(self) -> Any:  # pyright: ignore[reportIncompatibleVariableOverride]
-            from ..daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-
-            return RuntimeHeartbeatWriter(
-                store=self.store,
-                session_id=self.runtime_session_id,
-                write_timeout_seconds=0.05,
-                retry_interval_seconds=0.05,
-            )
 
         # The extension-control service is the resident's, one per Guard home.
         @property
