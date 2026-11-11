@@ -163,15 +163,15 @@ enum RustupSettings {
     /// stored selects a toolchain, so the proxy runs whichever toolchain the
     /// rest of this proof accounts for.
     Absent,
-    /// A settings file that carries no directory override and whose default,
-    /// where it names one, is an official channel. `default_named` says
+    /// A settings file whose default, where it names one, and whose every
+    /// directory override are official channels. `default_named` says
     /// whether a default was there at all, because a file that names none
     /// selects no toolchain: rustup stops with its own error instead of
     /// running one, which answers a query but is not the positive proof a
     /// command that writes files asks for.
     Official { default_named: bool },
-    /// Anything else: a custom default, a directory override, or a file this
-    /// proof could not read or parse.
+    /// Anything else: a custom default, a directory override naming a custom
+    /// toolchain, or a file this proof could not read or parse.
     Unproven,
 }
 
@@ -207,14 +207,20 @@ fn rustup_settings(home: &Path) -> RustupSettings {
         None => true,
         Some(value) => value.as_str().is_some_and(official_channel),
     };
-    // Directory overrides live outside the repository. Until their exact
-    // precedence and destination can be proven, any override keeps review.
-    let no_directory_overrides = match settings.get("overrides") {
+    // `rustup override set` stores a toolchain name per directory. Which
+    // entry wins for the working directory does not matter when every entry
+    // names an official channel: rustup will not link a custom toolchain
+    // under such a name, so whichever one applies is downloaded and verified
+    // by rustup, exactly like the default above. A custom name, or a value
+    // that is not a name, keeps the review.
+    let overrides_are_official = match settings.get("overrides") {
         None => true,
-        Some(toml::Value::Table(paths)) => paths.is_empty(),
+        Some(toml::Value::Table(paths)) => paths
+            .values()
+            .all(|value| value.as_str().is_some_and(official_channel)),
         _ => false,
     };
-    if default_is_official && no_directory_overrides {
+    if default_is_official && overrides_are_official {
         RustupSettings::Official {
             default_named: default.is_some(),
         }
@@ -615,7 +621,7 @@ mod tests {
     }
 
     #[test]
-    fn formatter_requires_official_default_and_no_directory_overrides() {
+    fn formatter_requires_official_default_and_official_directory_overrides() {
         let root = std::env::temp_dir().join(format!(
             "guard-rustfmt-settings-{}-{}",
             std::process::id(),
@@ -644,6 +650,35 @@ mod tests {
         assert!(!rustup_settings_only_official(Path::new(&root)));
         std::fs::write(&settings, "default_toolchain = \"stable\"\n").unwrap();
         assert!(rustup_settings_only_official(Path::new(&root)));
+
+        // `rustup override set nightly` in another checkout stores an
+        // official channel, which can only select a toolchain rustup verified.
+        std::fs::write(
+            &settings,
+            "default_toolchain = \"stable\"\n[overrides]\n\"/tmp/a\" = \"nightly-aarch64-apple-darwin\"\n\"/tmp/b\" = \"1.88.0\"\n",
+        )
+        .unwrap();
+        assert!(rustup_settings_only_official(Path::new(&root)));
+        // One custom entry among official ones, or a value that is not a
+        // name, keeps the review.
+        std::fs::write(
+            &settings,
+            "default_toolchain = \"stable\"\n[overrides]\n\"/tmp/a\" = \"nightly\"\n\"/tmp/b\" = \"nightly-custom\"\n",
+        )
+        .unwrap();
+        assert!(!rustup_settings_only_official(Path::new(&root)));
+        std::fs::write(
+            &settings,
+            "default_toolchain = \"stable\"\n[overrides]\n\"/tmp/a\" = { path = \"/tmp/cargo\" }\n",
+        )
+        .unwrap();
+        assert!(!rustup_settings_only_official(Path::new(&root)));
+        std::fs::write(
+            &settings,
+            "default_toolchain = \"stable\"\noverrides = \"nightly\"\n",
+        )
+        .unwrap();
+        assert!(!rustup_settings_only_official(Path::new(&root)));
 
         // A settings file that names no default selects no toolchain at all.
         // A query reads that as nothing stored, because rustup stops with its
@@ -700,6 +735,16 @@ mod tests {
         )
         .unwrap();
         assert!(!safe_cargo_probe(&query, context()));
+
+        // A directory override that names an official channel selects a
+        // toolchain rustup downloaded and verified, wherever it applies.
+        std::fs::write(
+            &settings,
+            "default_toolchain = \"stable\"\n[overrides]\n\"/tmp/project\" = \"nightly\"\n",
+        )
+        .unwrap();
+        assert!(safe_cargo_probe(&query, context()));
+        assert!(super::safe_version_probe(&words("--version"), context()));
 
         std::fs::write(&settings, "default_toolchain = \"stable\"\n").unwrap();
         assert!(safe_cargo_probe(&query, context()));
