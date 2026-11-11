@@ -249,6 +249,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
         "neg-grep-credential-bare-wildcard-pattern",
+        # A worktree read whose wildcard directory also matches a directory keeps
+        # its review. A contained run reads only the workspace copy the sandbox
+        # already holds, with no home or network reach.
+        "neg-read-glob-wildcard-directory-matches-a-directory",
         # The pattern exemption's own negatives: the producer opens a dotenv
         # file, dumps the environment, or names one as a pathspec, so the
         # credential word is never the only signal. A contained run has no home
