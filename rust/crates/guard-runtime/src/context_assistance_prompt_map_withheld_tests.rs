@@ -197,3 +197,29 @@ return _detect_program_name()\n",
         assert!(command.contains("tests/test_utils.py"), "{map}");
     }
 }
+
+/// A kept-out file naming the old name on more lines than a list holds has
+/// every one of them listed, by number, or the list does not say it is
+/// whole: an agent trusting a whole list edits no line past it.
+#[test]
+fn a_rename_lists_every_line_of_a_long_withheld_file() {
+    let held = concat!("to", "ken = self.stream.current");
+    let calls = "    _detect_program_name()\n".repeat(45);
+    let test = format!(
+        "from app.utils import _detect_program_name\n\n\ndef test_name():\n    {held}\n{calls}"
+    );
+    let list = [
+        (
+            "src/app/utils.py",
+            "def _detect_program_name(path=None):\n    return 'app'\n",
+        ),
+        ("tests/test_utils.py", test.as_str()),
+    ];
+    let (home, _project, root) = project(ON, &list);
+    let prompt = "Rename the internal helper `_detect_program_name` to \
+`_detect_program_name_impl` everywhere in the project, including tests.";
+    let map = prompt_map(home.path(), &root, prompt).unwrap();
+    let whole = map.contains("Every line naming `_detect_program_name`");
+    assert!(!whole || map.contains(", 50: Guard keeps"), "{map}");
+    assert!(!map.contains("stream.current"), "{map}");
+}

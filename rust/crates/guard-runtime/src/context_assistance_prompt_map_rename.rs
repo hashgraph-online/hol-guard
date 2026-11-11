@@ -380,7 +380,9 @@ fn line_entry(file: &File, number: usize) -> String {
 
 /// The lines of a file Guard keeps out, by number: the agent opens them.
 fn kept_entry(file: &File, numbers: &[usize]) -> String {
-    let numbers = (numbers.iter().take(MAX_RENAME_LINES))
+    // All of them: the note's length limit, not a cut here, says whether
+    // the list is whole.
+    let numbers = (numbers.iter())
         .map(usize::to_string)
         .collect::<Vec<_>>()
         .join(", ");
